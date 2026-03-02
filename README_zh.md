@@ -91,11 +91,15 @@ make ramdisk_build            # 构建签名的 SSH ramdisk
 make ramdisk_send             # 发送到设备
 ```
 
-连接成功后，安装 CFW：
+当 ramdisk 运行后（输出中应显示 `Running server`），打开**第三个终端**运行 iproxy 隧道，然后在终端 2 安装 CFW：
+
+```bash
+# 终端 3 —— 保持运行
+iproxy 2222 22
+```
 
 ```bash
 # 终端 2
-iproxy 2222 22
 make cfw_install
 ```
 

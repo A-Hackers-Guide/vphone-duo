@@ -91,11 +91,15 @@ make ramdisk_build            # build signed SSH ramdisk
 make ramdisk_send             # send to device
 ```
 
-Once connected, install CFW:
+Once the ramdisk is running (you should see `Running server` in the output), open a **third terminal** for the iproxy tunnel, then install CFW from terminal 2:
+
+```bash
+# terminal 3 — keep running
+iproxy 2222 22
+```
 
 ```bash
 # terminal 2
-iproxy 2222 22
 make cfw_install
 ```
 
