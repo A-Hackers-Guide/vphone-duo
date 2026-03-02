@@ -4,7 +4,7 @@ import Virtualization
 
 class VPhoneAppDelegate: NSObject, NSApplicationDelegate {
     private let cli: VPhoneCLI
-    private var vm: VPhoneVM?
+    private var vm: VPhoneVirtualMachine?
     private var control: VPhoneControl?
     private var windowController: VPhoneWindowController?
     private var menuController: VPhoneMenuController?
@@ -31,7 +31,7 @@ class VPhoneAppDelegate: NSObject, NSApplicationDelegate {
 
         Task { @MainActor in
             do {
-                try await self.startVM()
+                try await self.startVirtualMachine()
             } catch {
                 print("[vphone] Fatal: \(error)")
                 NSApp.terminate(nil)
@@ -40,7 +40,7 @@ class VPhoneAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @MainActor
-    private func startVM() async throws {
+    private func startVirtualMachine() async throws {
         let romURL = URL(fileURLWithPath: cli.rom)
         guard FileManager.default.fileExists(atPath: romURL.path) else {
             throw VPhoneError.romNotFound(cli.rom)
@@ -67,7 +67,7 @@ class VPhoneAppDelegate: NSObject, NSApplicationDelegate {
         print("  rom    : \(cli.sepRom)")
         print("")
 
-        let options = VPhoneVM.Options(
+        let options = VPhoneVirtualMachine.Options(
             romURL: romURL,
             nvramURL: nvramURL,
             machineIDURL: machineIDURL,
@@ -82,7 +82,7 @@ class VPhoneAppDelegate: NSObject, NSApplicationDelegate {
             screenScale: cli.screenScale
         )
 
-        let vm = try VPhoneVM(options: options)
+        let vm = try VPhoneVirtualMachine(options: options)
         self.vm = vm
 
         try await vm.start(forceDFU: cli.dfu)
@@ -96,17 +96,7 @@ class VPhoneAppDelegate: NSObject, NSApplicationDelegate {
             }
 
             let provider = VPhoneLocationProvider(control: control)
-            self.locationProvider = provider
-            control.onConnect = { [weak provider] caps in
-                if caps.contains("location") {
-                    provider?.startForwarding()
-                } else {
-                    print("[location] guest does not support location simulation")
-                }
-            }
-            control.onDisconnect = { [weak provider] in
-                provider?.stopForwarding()
-            }
+            locationProvider = provider
 
             if let device = vm.virtualMachine.socketDevices.first as? VZVirtioSocketDevice {
                 control.connect(device: device)
@@ -134,7 +124,39 @@ class VPhoneAppDelegate: NSObject, NSApplicationDelegate {
                 guard let fileWC, let control else { return }
                 fileWC.showWindow(control: control)
             }
+            if let provider = locationProvider {
+                mc.locationProvider = provider
+            }
             menuController = mc
+
+            // Wire location toggle through onConnect/onDisconnect
+            control.onConnect = { [weak mc, weak provider = locationProvider] caps in
+                if caps.contains("location") {
+                    mc?.updateLocationCapability(available: true)
+                    // Auto-resume if user had toggle on
+                    if mc?.locationMenuItem?.state == .on {
+                        provider?.startForwarding()
+                    }
+                } else {
+                    print("[location] guest does not support location simulation")
+                }
+            }
+            control.onDisconnect = { [weak mc, weak provider = locationProvider] in
+                provider?.stopForwarding()
+                mc?.updateLocationCapability(available: false)
+            }
+        } else if !cli.dfu {
+            // Headless mode: auto-start location as before (no menu exists)
+            control.onConnect = { [weak provider = locationProvider] caps in
+                if caps.contains("location") {
+                    provider?.startForwarding()
+                } else {
+                    print("[location] guest does not support location simulation")
+                }
+            }
+            control.onDisconnect = { [weak provider = locationProvider] in
+                provider?.stopForwarding()
+            }
         }
     }
 

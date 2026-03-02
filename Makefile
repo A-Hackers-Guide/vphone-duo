@@ -9,6 +9,10 @@ MEMORY      ?= 8192
 DISK_SIZE   ?= 64
 CFW_INPUT   ?= cfw_input
 
+# ─── Build info ──────────────────────────────────────────────────
+GIT_HASH    := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_INFO  := sources/vphone-cli/VPhoneBuildInfo.swift
+
 # ─── Paths ────────────────────────────────────────────────────────
 SCRIPTS     := scripts
 BINARY      := .build/release/vphone-cli
@@ -91,7 +95,9 @@ setup_libimobiledevice:
 build: $(BINARY)
 
 $(BINARY): $(SWIFT_SOURCES) Package.swift $(ENTITLEMENTS)
-	@echo "=== Building vphone-cli ==="
+	@echo "=== Building vphone-cli ($(GIT_HASH)) ==="
+	@echo '// Auto-generated — do not edit' > $(BUILD_INFO)
+	@echo 'enum VPhoneBuildInfo { static let commitHash = "$(GIT_HASH)" }' >> $(BUILD_INFO)
 	swift build -c release 2>&1 | tail -5
 	@echo ""
 	@echo "=== Signing with entitlements ==="
@@ -114,15 +120,21 @@ clean:
 	swift package clean
 	rm -rf .build
 	rm -f $(SCRIPTS)/vphoned/vphoned
+	rm -f $(BUILD_INFO)
 
 # Cross-compile vphoned daemon for iOS arm64 (installed into VM by cfw_install)
 .PHONY: vphoned
 vphoned: $(SCRIPTS)/vphoned/vphoned
 
-$(SCRIPTS)/vphoned/vphoned: $(SCRIPTS)/vphoned/vphoned.m
+VPHONED_SRCS := $(addprefix $(SCRIPTS)/vphoned/, \
+	vphoned.m vphoned_protocol.m vphoned_hid.m \
+	vphoned_devmode.m vphoned_location.m vphoned_files.m)
+$(SCRIPTS)/vphoned/vphoned: $(VPHONED_SRCS)
 	@echo "=== Building vphoned (arm64, iphoneos) ==="
 	xcrun -sdk iphoneos clang -arch arm64 -Os -fobjc-arc \
-		-o $@ $< -framework Foundation
+		-I$(SCRIPTS)/vphoned \
+		-DVPHONED_BUILD_HASH='"$(GIT_HASH)"' \
+		-o $@ $(VPHONED_SRCS) -framework Foundation
 	@echo "  built OK"
 
 # Sign vphoned with entitlements using cfw_input tools (requires make cfw_install to have unpacked cfw_input)
