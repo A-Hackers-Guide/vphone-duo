@@ -20,6 +20,8 @@ Virtual iPhone boot tool using Apple's Virtualization.framework with PCC researc
 - If blocked or waiting on user input, write the exact blocker and next action in `/TODO.md`.
 - If not exists, continue existing work until complete. If exists, follow `/TODO.md` instructions.
 
+For any changes applying new patches, also update research/patch_comparison_all_variants.md. Dont forget this.
+
 ## Firmware Variants
 
 | Variant             | Boot Chain |    CFW    | Make Targets                       |
