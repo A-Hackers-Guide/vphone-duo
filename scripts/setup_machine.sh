@@ -395,6 +395,20 @@ wait_for_ramdisk_ssh() {
 
   echo "[*] Waiting for ramdisk SSH on ${RAMDISK_SSH_USER}@127.0.0.1:${RAMDISK_SSH_PORT} (timeout=${RAMDISK_SSH_TIMEOUT}s)..."
   while (( waited < RAMDISK_SSH_TIMEOUT )); do
+    if [[ -f "$DFU_LOG" ]] && grep -Eiq 'panic|kernel panic|stackshot succeeded|panic\.apple\.com' "$DFU_LOG"; then
+      echo "[-] Detected panic markers in boot_dfu log while waiting for ramdisk SSH."
+      echo "[-] boot_dfu log tail:"
+      tail -n 80 "$DFU_LOG" 2>/dev/null || true
+      die "Ramdisk boot appears to have panicked before SSH became ready."
+    fi
+
+    if [[ -n "$DFU_PID" ]] && ! kill -0 "$DFU_PID" 2>/dev/null; then
+      echo "[-] boot_dfu process exited while waiting for ramdisk SSH."
+      echo "[-] boot_dfu log tail:"
+      tail -n 80 "$DFU_LOG" 2>/dev/null || true
+      die "DFU boot exited before ramdisk SSH became ready."
+    fi
+
     if "$sshpass_bin" -p "$RAMDISK_SSH_PASS" ssh \
       -o StrictHostKeyChecking=no \
       -o UserKnownHostsFile=/dev/null \
