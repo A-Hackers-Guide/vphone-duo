@@ -103,7 +103,7 @@ Base-patch verification note (2026-03-05):
 | 26  | Function rewrite             | `AMFIIsCDHashInTrustCache`           | Always return true + store hash            |    —    |  —  |  Y  |
 | 27  | Shellcode + branch           | `_cred_label_update_execve`          | Set cs_flags (platform+entitlements)       |    —    |  —  |  Y  |
 | 28  | `cmp w0,w0`                  | `_postValidation` (additional)       | Force validation pass                      |    —    |  —  |  Y  |
-| 29  | Shellcode + branch           | `_syscallmask_apply_to_proc`         | Patch zalloc_ro_mut for syscall mask (legacy-signature gated, fail-closed on mismatch) |    —    |  —  |  Y  |
+| 29  | Shellcode + branch           | `_syscallmask_apply_to_proc`         | Patch zalloc_ro_mut for syscall mask (legacy-signature mismatch on current fw; temporarily skipped) |    —    |  —  | SKIP |
 | 30  | Inline trampoline + cave     | `_hook_cred_label_update_execve`     | vnode_getattr ownership + suid propagation |    —    |  —  |  Y  |
 | 31  | `mov x0,#0; ret` (20+ hooks) | Sandbox MACF ops (extended)          | Stub remaining 20+ sandbox hooks           |    —    |  —  |  Y  |
 | 32  | `cmp xzr,xzr`                | `_task_conversion_eval_internal`     | Allow task conversion                      |    —    |  —  |  Y  |
@@ -350,6 +350,7 @@ with capstone semantic matching and keystone-generated patch bytes only:
 21. `_cred_label_update_execve` cs_flags shellcode
 22. `_syscallmask_apply_to_proc` filter mask shellcode
     - 2026-03-05 revalidation: locator now rejects low-confidence matches and panic-target helper resolution (fail-closed on signature mismatch).
+    - 2026-03-05 branch `patch-fix-C22`: temporarily commented out in `kernel_jb.py` for safe testing until new target path is re-derived.
 23. `_hook_cred_label_update_execve` inline trampoline + vnode_getattr shellcode
     - Code cave restricted to **TEXT_EXEC only (**PRELINK_TEXT excluded due to KTRR)
     - Inline trampoline (B cave at function entry) replaces ops table pointer rewrite

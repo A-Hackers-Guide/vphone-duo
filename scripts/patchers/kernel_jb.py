@@ -82,7 +82,7 @@ class KernelJBPatcher(
     )
     _GROUP_C_METHODS = (
         "patch_cred_label_update_execve",       # C21
-        "patch_syscallmask_apply_to_proc",      # C22
+        # "patch_syscallmask_apply_to_proc",    # C22 (temporarily skipped on current fw)
         "patch_hook_cred_label_update_execve",  # C23
         "patch_kcall10",                        # C24
     )
