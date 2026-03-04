@@ -20,6 +20,7 @@ Prerequisites:
 import glob
 import gzip
 import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -284,58 +285,66 @@ def main():
     sign_img4(kc_im4p, os.path.join(output_dir, "krnl.img4"), im4m_path)
     print(f"  [+] krnl.img4")
 
-    # ── 8. Empty ramdisk + trustcache ────────────────────────────
+    # ── 8. Base ramdisk + trustcache ─────────────────────────────
     print(f"\n{'=' * 60}")
-    print(f"  8. Empty ramdisk + trustcache")
+    print(f"  8. Base ramdisk + trustcache")
     print(f"{'=' * 60}")
 
-    # Empty ramdisk DMG
-    empty_dmg = os.path.join(temp_dir, "empty.dmg")
-    subprocess.run(
-        [
-            "hdiutil", "create",
-            "-size", "4m",
-            "-imagekey", "diskimage-class=CRawDiskImage",
-            "-format", "UDZO",
-            "-fs", "HFS+",
-            "-layout", "NONE",
-            "-volname", "empty",
-            empty_dmg,
-        ],
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["hdiutil", "resize", "-sectors", "min", empty_dmg],
-        check=True,
-        capture_output=True,
-    )
-    rd_im4p = os.path.join(temp_dir, "ramdisk.im4p")
-    subprocess.run(
-        ["pyimg4", "im4p", "create", "-i", empty_dmg, "-o", rd_im4p, "-f", "rdsk"],
-        check=True,
-        capture_output=True,
-    )
-    sign_img4(rd_im4p, os.path.join(output_dir, "ramdisk.img4"), im4m_path)
-    print(f"  [+] ramdisk.img4 (empty)")
-
-    # Empty trustcache (scan empty directory)
     tc_bin = shutil.which("trustcache")
     if not tc_bin:
         print("[-] trustcache not found. Run: make setup_tools")
         sys.exit(1)
-    empty_dir = os.path.join(temp_dir, "empty_root")
-    os.makedirs(empty_dir, exist_ok=True)
-    tc_raw = os.path.join(temp_dir, "empty.tc")
-    tc_im4p = os.path.join(temp_dir, "trustcache.im4p")
-    subprocess.run([tc_bin, "create", tc_raw, empty_dir], check=True, capture_output=True)
+
+    # Read RestoreRamDisk path from BuildManifest
+    bm_path = os.path.join(restore_dir, "BuildManifest.plist")
+    with open(bm_path, "rb") as f:
+        bm = plistlib.load(f)
+    ramdisk_rel = bm["BuildIdentities"][0]["Manifest"]["RestoreRamDisk"]["Info"]["Path"]
+    ramdisk_src = os.path.join(restore_dir, ramdisk_rel)
+
+    # Extract base ramdisk DMG
+    ramdisk_raw = os.path.join(temp_dir, "ramdisk.raw.dmg")
     subprocess.run(
-        ["pyimg4", "im4p", "create", "-i", tc_raw, "-o", tc_im4p, "-f", "rtsc"],
+        ["pyimg4", "im4p", "extract", "-i", ramdisk_src, "-o", ramdisk_raw],
         check=True,
         capture_output=True,
     )
-    sign_img4(tc_im4p, os.path.join(output_dir, "trustcache.img4"), im4m_path)
-    print(f"  [+] trustcache.img4 (empty)")
+
+    # Mount base ramdisk, build trustcache from its contents
+    mountpoint = os.path.join(vm_dir, "testing_ramdisk_mnt")
+    os.makedirs(mountpoint, exist_ok=True)
+    try:
+        subprocess.run(
+            ["sudo", "hdiutil", "attach", "-mountpoint", mountpoint,
+             ramdisk_raw, "-owners", "off"],
+            check=True,
+        )
+
+        print("  Building trustcache from base ramdisk...")
+        tc_raw = os.path.join(temp_dir, "ramdisk.tc")
+        tc_im4p = os.path.join(temp_dir, "trustcache.im4p")
+        subprocess.run([tc_bin, "create", tc_raw, mountpoint], check=True, capture_output=True)
+        subprocess.run(
+            ["pyimg4", "im4p", "create", "-i", tc_raw, "-o", tc_im4p, "-f", "rtsc"],
+            check=True,
+            capture_output=True,
+        )
+        sign_img4(tc_im4p, os.path.join(output_dir, "trustcache.img4"), im4m_path)
+        print(f"  [+] trustcache.img4")
+    finally:
+        subprocess.run(
+            ["sudo", "hdiutil", "detach", "-force", mountpoint], capture_output=True
+        )
+
+    # Sign base ramdisk as-is
+    rd_im4p = os.path.join(temp_dir, "ramdisk.im4p")
+    subprocess.run(
+        ["pyimg4", "im4p", "create", "-i", ramdisk_raw, "-o", rd_im4p, "-f", "rdsk"],
+        check=True,
+        capture_output=True,
+    )
+    sign_img4(rd_im4p, os.path.join(output_dir, "ramdisk.img4"), im4m_path)
+    print(f"  [+] ramdisk.img4 (base, unmodified)")
 
     # ── Cleanup ──────────────────────────────────────────────────
     print(f"\n[*] Cleaning up {TEMP_DIR}/...")
