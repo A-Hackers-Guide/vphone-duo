@@ -1,10 +1,10 @@
-<div align="right"><strong><a href="./README_ko.md">🇰🇷한국어</a></strong> | <strong><a href="./README_ja.md">🇯🇵日本語</a></strong> | <strong><a href="./README_zh.md">🇨🇳中文</a></strong> | <strong>🇬🇧English</strong></div>
+<div align="right"><strong><a href="./docs/README_ko.md">🇰🇷한국어</a></strong> | <strong><a href="./docs/README_ja.md">🇯🇵日本語</a></strong> | <strong><a href="./docs/README_zh.md">🇨🇳中文</a></strong> | <strong>🇬🇧English</strong></div>
 
 # vphone-cli
 
 Boot a virtual iPhone (iOS 26) via Apple's Virtualization.framework using PCC research VM infrastructure.
 
-![poc](./demo.png)
+![poc](./docs/demo.png)
 
 ## Tested Environments
 
@@ -13,6 +13,18 @@ Boot a virtual iPhone (iOS 26) via Apple's Virtualization.framework using PCC re
 | Mac16,12 26.3 | `17,3_26.1_23B85`  | `26.1-23B85`  |
 | Mac16,12 26.3 | `17,3_26.3_23D127` | `26.1-23B85`  |
 | Mac16,12 26.3 | `17,3_26.3_23D127` | `26.3-23D128` |
+
+## Firmware Variants
+
+Three patch variants are available with increasing levels of security bypass:
+
+| Variant             | Boot Chain |    CFW    | Make Targets                       |
+| ------------------- | :--------: | :-------: | ---------------------------------- |
+| **Regular**         | 38 patches | 10 phases | `fw_patch` + `cfw_install`         |
+| **Development**     | 47 patches | 12 phases | `fw_patch_dev` + `cfw_install_dev` |
+| **Jailbreak (WIP)** | 84 patches | 14 phases | `fw_patch_jb` + `cfw_install_jb`   |
+
+See [research/patch_comparison_all_variants.md](./research/patch_comparison_all_variants.md) for the detailed per-component breakdown.
 
 ## Prerequisites
 
@@ -38,35 +50,31 @@ Restart once more.
 **Install dependencies:**
 
 ```bash
-brew install ideviceinstaller wget gnu-tar openssl@3 ldid-procursus sshpass keystone autoconf automake pkg-config libtool git-lfs
+brew install ideviceinstaller wget gnu-tar openssl@3 ldid-procursus sshpass keystone autoconf automake pkg-config libtool
 ```
 
-**Git LFS** — this repo uses Git LFS for large resource archives. Install and pull before building:
+**Submodules** — this repo uses a git submodule for resource archives. Clone with:
 
 ```bash
-git lfs install
-git lfs pull
+git clone --recurse-submodules https://github.com/Lakr233/vphone-cli.git
 ```
-
-## First setup
-
-```bash
-make setup_machine            # full automation through "First Boot" (includes restore/ramdisk/CFW)
-
-# equivalent manual steps:
-make setup_tools              # install brew deps, build trustcache + libimobiledevice, create Python venv
-source .venv/bin/activate
-```
-
-`make setup_machine` still requires manual **Recovery-mode SIP/research-guest configuration** and an interactive VM console for the First Boot commands it prints. The script does not validate those security settings.
 
 ## Quick Start
 
 ```bash
+make setup_machine            # full automation through "First Boot" (includes restore/ramdisk/CFW)
+```
+
+## Manual Setup
+
+```bash
+make setup_tools              # install brew deps, build trustcache + libimobiledevice, create Python venv
 make build                    # build + sign vphone-cli
 make vm_new                   # create vm/ directory (ROMs, disk, SEP storage)
 make fw_prepare               # download IPSWs, extract, merge, generate manifest
-make fw_patch                 # patch boot chain (6 components, 41+ modifications)
+make fw_patch                 # patch boot chain (regular variant)
+# or: make fw_patch_dev       # dev variant (+ TXM entitlement/debug bypasses)
+# or: make fw_patch_jb        # jailbreak variant (+ full security bypass) (WIP)
 ```
 
 ## Restore
@@ -84,7 +92,7 @@ make restore_get_shsh         # fetch SHSH blob
 make restore                  # flash firmware via idevicerestore
 ```
 
-## Ramdisk and CFW
+## Install Custom Firmware
 
 Stop the DFU boot in terminal 1 (Ctrl+C), then boot into DFU again for the ramdisk:
 
@@ -157,24 +165,6 @@ Connect via:
 - **VNC:** `vnc://127.0.0.1:5901`
 - [**RPC:**](http://github.com/doronz88/rpc-project) `rpcclient -p 5910 127.0.0.1`
 
-## All Make Targets
-
-Run `make help` for the full list. Key targets:
-
-| Target              | Description                  |
-| ------------------- | ---------------------------- |
-| `build`             | Build + sign vphone-cli      |
-| `vm_new`            | Create VM directory          |
-| `fw_prepare`        | Download/merge IPSWs         |
-| `fw_patch`          | Patch boot chain             |
-| `boot` / `boot_dfu` | Boot VM (GUI / DFU headless) |
-| `restore_get_shsh`  | Fetch SHSH blob              |
-| `restore`           | Flash firmware               |
-| `ramdisk_build`     | Build SSH ramdisk            |
-| `ramdisk_send`      | Send ramdisk to device       |
-| `cfw_install`       | Install CFW mods             |
-| `clean`             | Remove build artifacts       |
-
 ## FAQ
 
 > **Before anything else — run `git pull` to make sure you have the latest version.**
@@ -186,6 +176,10 @@ AMFI is not disabled. Set the boot-arg and restart:
 ```bash
 sudo nvram boot-args="amfi_get_out_of_my_way=1 -v"
 ```
+
+**Q: System apps (App Store, Messages, etc.) won't download or install.**
+
+During iOS setup, do **not** select **Japan** or **European Union** as your region. These regions enforce additional regulatory checks (e.g., sideloading disclosures, camera shutter requirements) that the virtual machine cannot satisfy, which prevents system apps from being downloaded and installed. Choose any other region (e.g., United States) to avoid this issue.
 
 **Q: I'm stuck on the "Press home to continue" screen.**
 

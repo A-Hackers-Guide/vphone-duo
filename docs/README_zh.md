@@ -1,4 +1,4 @@
-<div align="right"><strong><a href="./README_ko.md">🇰🇷한국어</a></strong> | <strong><a href="./README_ja.md">🇯🇵日本語</a></strong> | <strong>🇨🇳中文</strong> | <strong><a href="./README.md">🇬🇧English</a></strong></div>
+<div align="right"><strong><a href="./README_ko.md">🇰🇷한국어</a></strong> | <strong><a href="./README_ja.md">🇯🇵日本語</a></strong> | <strong>🇨🇳中文</strong> | <strong><a href="../README.md">🇬🇧English</a></strong></div>
 
 # vphone-cli
 
@@ -13,6 +13,18 @@
 | Mac16,12 26.3 | `17,3_26.1_23B85`  | `26.1-23B85`  |
 | Mac16,12 26.3 | `17,3_26.3_23D127` | `26.1-23B85`  |
 | Mac16,12 26.3 | `17,3_26.3_23D127` | `26.3-23D128` |
+
+## 固件变体
+
+提供三种补丁变体，安全绕过级别逐步递增：
+
+| 变体              | 启动链     | 自定义固件 | Make 目标                          |
+| ----------------- | :--------: | :-------: | ---------------------------------- |
+| **常规版**        | 38 个补丁  | 10 个阶段 | `fw_patch` + `cfw_install`         |
+| **开发版**        | 47 个补丁  | 12 个阶段 | `fw_patch_dev` + `cfw_install_dev` |
+| **越狱版（WIP）** | 84 个补丁  | 14 个阶段 | `fw_patch_jb` + `cfw_install_jb`   |
+
+详见 [research/patch_comparison_all_variants.md](../research/patch_comparison_all_variants.md) 了解各组件的详细分项对比。
 
 ## 先决条件
 
@@ -38,35 +50,31 @@ sudo nvram boot-args="amfi_get_out_of_my_way=1 -v"
 **安装依赖：**
 
 ```bash
-brew install ideviceinstaller wget gnu-tar openssl@3 ldid-procursus sshpass keystone autoconf automake pkg-config libtool git-lfs
+brew install ideviceinstaller wget gnu-tar openssl@3 ldid-procursus sshpass keystone autoconf automake pkg-config libtool
 ```
 
-**Git LFS** —— 本仓库使用 Git LFS 存储大型资源文件。构建前请先安装并拉取：
+**Submodules** —— 本仓库使用 git submodule 存储资源文件。克隆时请使用：
 
 ```bash
-git lfs install
-git lfs pull
+git clone --recurse-submodules https://github.com/Lakr233/vphone-cli.git
 ```
-
-## 第一次设置
-
-```bash
-make setup_machine            # 完全自动化完成“首次启动”流程（包含 restore/ramdisk/CFW）
-
-# 等价的手动步骤：
-make setup_tools              # 安装 brew 依赖、构建 trustcache + libimobiledevice、创建 Python 虚拟环境
-source .venv/bin/activate
-```
-
-`make setup_machine` 仍然要求手动在恢复模式下配置 SIP/research-guest，并在其打印的首次启动命令中使用交互式 VM 控制台。脚本不会验证这些安全设置。
 
 ## 快速开始
 
 ```bash
+make setup_machine            # 完全自动化完成"首次启动"流程（包含 restore/ramdisk/CFW）
+```
+
+## 手动设置
+
+```bash
+make setup_tools              # 安装 brew 依赖、构建 trustcache + libimobiledevice、创建 Python 虚拟环境
 make build                    # 构建并签名 vphone-cli
 make vm_new                   # 创建 vm/ 目录（ROM、磁盘、SEP 存储）
 make fw_prepare               # 下载 IPSWs，提取、合并、生成 manifest
-make fw_patch                 # 修补启动链（6 个组件，41+ 处修改）
+make fw_patch                 # 修补启动链（常规变体）
+# 或：make fw_patch_dev       # 开发变体（+ TXM 权限/调试绕过）
+# 或：make fw_patch_jb        # 越狱变体（+ 完整安全绕过）（WIP）
 ```
 
 ## 恢复过程
@@ -84,7 +92,7 @@ make restore_get_shsh         # 获取 SHSH blob
 make restore                  # 通过 idevicerestore 刷写固件
 ```
 
-## Ramdisk 与 CFW
+## 安装自定义固件
 
 在终端 1 中停止 DFU 引导（Ctrl+C），然后再次进入 DFU，用于 ramdisk：
 
@@ -148,30 +156,14 @@ make boot
 ```bash
 iproxy 22222 22222   # SSH
 iproxy 5901 5901     # VNC
+iproxy 5910 5910     # RPC
 ```
 
 连接方式：
 
 - **SSH：** `ssh -p 22222 root@127.0.0.1`（密码：`alpine`）
 - **VNC：** `vnc://127.0.0.1:5901`
-
-## 所有 Make 目标
-
-运行 `make help` 获取完整列表。关键目标：
-
-| 目标                | 描述                      |
-| ------------------- | ------------------------- |
-| `build`             | 构建并签名 vphone-cli     |
-| `vm_new`            | 创建 VM 目录              |
-| `fw_prepare`        | 下载/合并 IPSWs           |
-| `fw_patch`          | 修补启动链                |
-| `boot` / `boot_dfu` | 启动 VM（GUI / 无头 DFU） |
-| `restore_get_shsh`  | 获取 SHSH blob            |
-| `restore`           | 刷写固件                  |
-| `ramdisk_build`     | 构建 SSH ramdisk          |
-| `ramdisk_send`      | 发送 ramdisk 到设备       |
-| `cfw_install`       | 安装 CFW 修改             |
-| `clean`             | 删除构建产物              |
+- [**RPC：**](http://github.com/doronz88/rpc-project) `rpcclient -p 5910 127.0.0.1`
 
 ## 常见问题（FAQ）
 
@@ -185,7 +177,11 @@ AMFI 未禁用。设置 boot-arg 并重启：
 sudo nvram boot-args="amfi_get_out_of_my_way=1 -v"
 ```
 
-**问：卡在“Press home to continue”屏幕。**
+**问：系统应用（App Store、信息等）无法下载或安装。**
+
+在 iOS 初始设置过程中，请**不要**选择**日本**或**欧盟地区**作为你的国家/地区。这些地区要求额外的合规检查（如侧载披露、相机快门声等），虚拟机无法满足这些要求，因此系统应用无法正常下载安装。请选择其他地区（例如美国）以避免此问题。
+
+**问：卡在"Press home to continue"屏幕。**
 
 通过 VNC (`vnc://127.0.0.1:5901`) 连接，并在屏幕上右键单击任意位置（在 Mac 触控板上双指点击）。这会模拟 Home 按钮按下。
 
