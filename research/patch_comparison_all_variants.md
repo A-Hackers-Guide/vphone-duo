@@ -194,6 +194,8 @@ Regular and Dev share the same 25 base kernel patches. JB adds 34 additional pat
 - `scripts/ramdisk_send.sh` now prefers `krnl.ramdisk.img4` when present, otherwise falls back to `krnl.img4`.
 - Intent: keep restore kernel fully JB-patched while booting the installer ramdisk with a
   more conservative kernel variant to improve `/dev/disk1s1` remount reliability.
+- Investigation details and runtime evidence:
+  - `research/jb_mount_failure_investigation_2026-03-04.md`
 
 ## Dynamic Implementation Log (JB Patchers)
 
