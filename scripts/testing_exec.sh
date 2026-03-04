@@ -54,6 +54,14 @@ log_watch() {
   echo "[testing_exec][watch][$ts] $*" | tee -a "$WATCH_LOG"
 }
 
+dump_boot_tail() {
+  local lines="${1:-100}"
+  local ts
+  ts="$(date '+%Y-%m-%d %H:%M:%S')"
+  log_watch "$ts" "last ${lines} lines from boot log:"
+  tail -n "$lines" "$BOOT_LOG" | sed 's/^/[testing_exec][boot-tail] /' | tee -a "$WATCH_LOG"
+}
+
 cleanup() {
   if [[ -n "${TAIL_PID:-}" ]]; then
     kill "$TAIL_PID" 2>/dev/null || true
@@ -95,6 +103,11 @@ BOOT_PID=$!
 LAST_SIZE="$(stat -f%z "$BOOT_LOG" 2>/dev/null || echo 0)"
 LAST_ACTIVITY="$(date +%s)"
 WATCHDOG_TRIGGERED=0
+SUCCESS_TRIGGERED=0
+SAW_RESTORE_WAIT=0
+SAW_USB_MUX_ACTIVE=0
+SUCCESS_MARK_RESTORE_WAIT="waiting for host to trigger start of restore [timeout of 120 seconds]"
+SUCCESS_MARK_USB_MUX="AppleUSBDeviceMux::message - kMessageInterfaceWasActivated"
 
 while kill -0 "$BOOT_PID" 2>/dev/null; do
   sleep 1
@@ -102,6 +115,27 @@ while kill -0 "$BOOT_PID" 2>/dev/null; do
   if (( CURRENT_SIZE > LAST_SIZE )); then
     LAST_SIZE="$CURRENT_SIZE"
     LAST_ACTIVITY="$(date +%s)"
+
+    if (( SAW_RESTORE_WAIT == 0 )) && grep -Fq "$SUCCESS_MARK_RESTORE_WAIT" "$BOOT_LOG"; then
+      SAW_RESTORE_WAIT=1
+      log_watch "$(date '+%Y-%m-%d %H:%M:%S')" \
+        "success marker seen: restore wait gate"
+    fi
+
+    if (( SAW_USB_MUX_ACTIVE == 0 )) && grep -Fq "$SUCCESS_MARK_USB_MUX" "$BOOT_LOG"; then
+      SAW_USB_MUX_ACTIVE=1
+      log_watch "$(date '+%Y-%m-%d %H:%M:%S')" \
+        "success marker seen: USB mux interface activated"
+    fi
+
+    if (( SAW_RESTORE_WAIT == 1 && SAW_USB_MUX_ACTIVE == 1 )); then
+      SUCCESS_TRIGGERED=1
+      log_watch "$(date '+%Y-%m-%d %H:%M:%S')" \
+        "both success markers matched, killing vphone-cli and boot_dfu"
+      pkill -9 vphone-cli 2>/dev/null || true
+      kill "$BOOT_PID" 2>/dev/null || true
+      break
+    fi
   fi
 
   NOW="$(date +%s)"
@@ -120,11 +154,20 @@ wait "$BOOT_PID" 2>/dev/null || BOOT_STATUS=$?
 
 if (( WATCHDOG_TRIGGERED == 1 )); then
   log_watch "$(date '+%Y-%m-%d %H:%M:%S')" "watchdog timeout exit (124)"
+  dump_boot_tail 100
   exit 124
+fi
+
+if (( SUCCESS_TRIGGERED == 1 )); then
+  log_watch "$(date '+%Y-%m-%d %H:%M:%S')" \
+    "boot success: restore-ready markers reached (mux activated + waiting-for-host gate)"
+  wait "$SEND_PID" 2>/dev/null || true
+  exit 0
 fi
 
 if (( BOOT_STATUS != 0 )); then
   log_watch "$(date '+%Y-%m-%d %H:%M:%S')" "boot_dfu failed with exit code $BOOT_STATUS"
+  dump_boot_tail 100
   exit "$BOOT_STATUS"
 fi
 
