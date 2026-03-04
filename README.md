@@ -1,4 +1,4 @@
-<div align="right"><strong><a href="./README_ja.md">🇯🇵日本語</a></strong> | <strong><a href="./README_zh.md">🇨🇳中文</a></strong> | <strong>🇬🇧English</strong></div>
+<div align="right"><strong><a href="./README_ko.md">🇰🇷한국어</a></strong> | <strong><a href="./README_ja.md">🇯🇵日本語</a></strong> | <strong><a href="./README_zh.md">🇨🇳中文</a></strong> | <strong>🇬🇧English</strong></div>
 
 # vphone-cli
 
@@ -15,6 +15,8 @@ Boot a virtual iPhone (iOS 26) via Apple's Virtualization.framework using PCC re
 | Mac16,12 26.3 | `17,3_26.3_23D127` | `26.3-23D128` |
 
 ## Prerequisites
+
+**Host OS:** macOS 15+ (Sequoia) is required for PV=3 virtualization.
 
 **Disable SIP and AMFI** — required for private Virtualization.framework entitlements.
 
@@ -36,7 +38,7 @@ Restart once more.
 **Install dependencies:**
 
 ```bash
-brew install wget gnu-tar openssl@3 ldid-procursus sshpass keystone autoconf automake pkg-config libtool git-lfs
+brew install ideviceinstaller wget gnu-tar openssl@3 ldid-procursus sshpass keystone autoconf automake pkg-config libtool git-lfs
 ```
 
 **Git LFS** — this repo uses Git LFS for large resource archives. Install and pull before building:

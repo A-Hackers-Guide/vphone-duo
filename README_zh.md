@@ -1,4 +1,4 @@
-<div align="right"><strong><a href="./README_ja.md">🇯🇵日本語</a></strong> | <strong>🇨🇳中文</strong> | <strong><a href="./README.md">🇬🇧English</a></strong></div>
+<div align="right"><strong><a href="./README_ko.md">🇰🇷한국어</a></strong> | <strong><a href="./README_ja.md">🇯🇵日本語</a></strong> | <strong>🇨🇳中文</strong> | <strong><a href="./README.md">🇬🇧English</a></strong></div>
 
 # vphone-cli
 
@@ -15,6 +15,8 @@
 | Mac16,12 26.3 | `17,3_26.3_23D127` | `26.3-23D128` |
 
 ## 先决条件
+
+**主机系统：** PV=3 虚拟化要求 macOS 15+（Sequoia）。
 
 **禁用 SIP 和 AMFI** —— 需要私有的 Virtualization.framework 权限。
 
@@ -36,7 +38,7 @@ sudo nvram boot-args="amfi_get_out_of_my_way=1 -v"
 **安装依赖：**
 
 ```bash
-brew install gnu-tar openssl@3 ldid-procursus sshpass keystone autoconf automake pkg-config libtool git-lfs
+brew install ideviceinstaller wget gnu-tar openssl@3 ldid-procursus sshpass keystone autoconf automake pkg-config libtool git-lfs
 ```
 
 **Git LFS** —— 本仓库使用 Git LFS 存储大型资源文件。构建前请先安装并拉取：
@@ -210,3 +212,9 @@ export CLOUDOS_SOURCE=/path/to/some_os.ipsw
 make fw_prepare
 make fw_patch
 ```
+
+我们的补丁是通过二进制分析（binary analysis）而非静态偏移（static offsets）应用的，因此更新的版本应该也能正常工作。如果出现问题，可以寻求 AI 的帮助。
+
+## 致谢
+
+- [wh1te4ever/super-tart-vphone-writeup](https://github.com/wh1te4ever/super-tart-vphone-writeup)

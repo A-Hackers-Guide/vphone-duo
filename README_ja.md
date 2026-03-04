@@ -1,4 +1,4 @@
-<div align="right"><strong>🇯🇵日本語</strong> | <strong><a href="./README_zh.md">🇨🇳中文</a></strong> | <strong><a href="./README.md">🇬🇧English</a></strong></div>
+<div align="right"><strong><a href="./README_ko.md">🇰🇷한국어</a></strong> | <strong>🇯🇵日本語</strong> | <strong><a href="./README_zh.md">🇨🇳中文</a></strong> | <strong><a href="./README.md">🇬🇧English</a></strong></div>
 
 # vphone-cli
 
@@ -15,6 +15,8 @@ Apple の Virtualization.framework と PCC の研究用 VM インフラを使用
 | Mac16,12 26.3 | `17,3_26.3_23D127` | `26.3-23D128` |
 
 ## 前提条件
+
+**ホストOS:** PV=3 仮想化には macOS 15+（Sequoia）が必要です。
 
 **SIPとAMFIを無効化** — プライベートな Virtualization.framework の entitlement を使うために必要です。
 
@@ -36,7 +38,7 @@ sudo nvram boot-args="amfi_get_out_of_my_way=1 -v"
 **依存関係のインストール:**
 
 ```bash
-brew install gnu-tar openssl@3 ldid-procursus sshpass keystone autoconf automake pkg-config libtool git-lfs
+brew install ideviceinstaller wget gnu-tar openssl@3 ldid-procursus sshpass keystone autoconf automake pkg-config libtool git-lfs
 ```
 
 **Git LFS** — このリポジトリは大きなリソースアーカイブに Git LFS を使用しています。ビルド前にインストールと pull を行ってください：
