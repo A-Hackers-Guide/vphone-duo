@@ -1,10 +1,10 @@
 #!/bin/zsh
-# fw_send_testing_ramdisk.sh — Send testing boot chain to device via irecovery.
+# testing_ramdisk_send.sh — Send testing boot chain to device via irecovery.
 #
-# Usage: ./fw_send_testing_ramdisk.sh [testing_ramdisk_dir]
+# Usage: ./testing_ramdisk_send.sh [testing_ramdisk_dir]
 #
 # Expects device in DFU mode. Loads iBSS/iBEC, then boots with
-# SPTM, TXM, device tree, SEP, and kernel. No ramdisk or trustcache.
+# SPTM, TXM, trustcache, ramdisk, device tree, SEP, and kernel.
 # Kernel will panic after boot (no rootfs — expected).
 set -euo pipefail
 
@@ -21,36 +21,47 @@ echo "[*] Sending testing boot chain from $RAMDISK_DIR ..."
 echo "    (no rootfs — kernel will panic after boot)"
 
 # 1. Load iBSS + iBEC (DFU → recovery)
-echo "  [1/6] Loading iBSS..."
+echo "  [1/8] Loading iBSS..."
 "$IRECOVERY" -f "$RAMDISK_DIR/iBSS.vresearch101.RELEASE.img4"
 
-echo "  [2/6] Loading iBEC..."
+echo "  [2/8] Loading iBEC..."
 "$IRECOVERY" -f "$RAMDISK_DIR/iBEC.vresearch101.RELEASE.img4"
 "$IRECOVERY" -c go
 
 sleep 1
 
 # 2. Load SPTM
-echo "  [3/6] Loading SPTM..."
+echo "  [3/8] Loading SPTM..."
 "$IRECOVERY" -f "$RAMDISK_DIR/sptm.vresearch1.release.img4"
 "$IRECOVERY" -c firmware
 
 # 3. Load TXM
-echo "  [4/6] Loading TXM..."
+echo "  [4/8] Loading TXM..."
 "$IRECOVERY" -f "$RAMDISK_DIR/txm.img4"
 "$IRECOVERY" -c firmware
 
-# 4. Load device tree
-echo "  [5/6] Loading DeviceTree..."
+# 4. Load trustcache
+echo "  [5/8] Loading trustcache..."
+"$IRECOVERY" -f "$RAMDISK_DIR/trustcache.img4"
+"$IRECOVERY" -c firmware
+
+# 5. Load ramdisk
+echo "  [6/8] Loading ramdisk..."
+"$IRECOVERY" -f "$RAMDISK_DIR/ramdisk.img4"
+sleep 2
+"$IRECOVERY" -c ramdisk
+
+# 6. Load device tree
+echo "  [7/8] Loading device tree..."
 "$IRECOVERY" -f "$RAMDISK_DIR/DeviceTree.vphone600ap.img4"
 "$IRECOVERY" -c devicetree
 
-# 5. Load SEP
-echo "  [6/6] Loading SEP..."
+# 7. Load SEP
+echo "  [8/8] Loading SEP..."
 "$IRECOVERY" -f "$RAMDISK_DIR/sep-firmware.vresearch101.RELEASE.img4"
 "$IRECOVERY" -c firmware
 
-# 6. Load kernel and boot
+# 8. Load kernel and boot
 echo "  [*] Booting kernel..."
 "$IRECOVERY" -f "$RAMDISK_DIR/krnl.img4"
 "$IRECOVERY" -c bootx

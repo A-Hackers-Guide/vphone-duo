@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-fw_build_testing_ramdisk.py — Build a minimal signed boot chain for testing.
+testing_ramdisk_build.py — Build a minimal signed boot chain for testing.
 
-Packs only firmware components (iBSS, iBEC, SPTM, DeviceTree, SEP, TXM,
-kernelcache) into signed IMG4 files. No ramdisk, no trustcache.
+Packs firmware components (iBSS, iBEC, SPTM, DeviceTree, SEP, TXM,
+kernelcache) and an empty ramdisk into signed IMG4 files. No trustcache.
 
 The kernel is expected to boot and then panic (no rootfs). This is useful
 for verifying that patched boot-chain components (iBSS/iBEC/LLB/iBoot/TXM/
 kernelcache) work correctly.
 
 Usage:
-    python3 fw_build_testing_ramdisk.py [vm_directory]
+    python3 testing_ramdisk_build.py [vm_directory]
 
 Prerequisites:
     pip install pyimg4
@@ -283,6 +283,59 @@ def main():
     _save_im4p_with_payp(kc_im4p, KERNEL_FOURCC, data, original_raw)
     sign_img4(kc_im4p, os.path.join(output_dir, "krnl.img4"), im4m_path)
     print(f"  [+] krnl.img4")
+
+    # ── 8. Empty ramdisk + trustcache ────────────────────────────
+    print(f"\n{'=' * 60}")
+    print(f"  8. Empty ramdisk + trustcache")
+    print(f"{'=' * 60}")
+
+    # Empty ramdisk DMG
+    empty_dmg = os.path.join(temp_dir, "empty.dmg")
+    subprocess.run(
+        [
+            "hdiutil", "create",
+            "-size", "4m",
+            "-imagekey", "diskimage-class=CRawDiskImage",
+            "-format", "UDZO",
+            "-fs", "HFS+",
+            "-layout", "NONE",
+            "-volname", "empty",
+            empty_dmg,
+        ],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["hdiutil", "resize", "-sectors", "min", empty_dmg],
+        check=True,
+        capture_output=True,
+    )
+    rd_im4p = os.path.join(temp_dir, "ramdisk.im4p")
+    subprocess.run(
+        ["pyimg4", "im4p", "create", "-i", empty_dmg, "-o", rd_im4p, "-f", "rdsk"],
+        check=True,
+        capture_output=True,
+    )
+    sign_img4(rd_im4p, os.path.join(output_dir, "ramdisk.img4"), im4m_path)
+    print(f"  [+] ramdisk.img4 (empty)")
+
+    # Empty trustcache (scan empty directory)
+    tc_bin = shutil.which("trustcache")
+    if not tc_bin:
+        print("[-] trustcache not found. Run: make setup_tools")
+        sys.exit(1)
+    empty_dir = os.path.join(temp_dir, "empty_root")
+    os.makedirs(empty_dir, exist_ok=True)
+    tc_raw = os.path.join(temp_dir, "empty.tc")
+    tc_im4p = os.path.join(temp_dir, "trustcache.im4p")
+    subprocess.run([tc_bin, "create", tc_raw, empty_dir], check=True, capture_output=True)
+    subprocess.run(
+        ["pyimg4", "im4p", "create", "-i", tc_raw, "-o", tc_im4p, "-f", "rtsc"],
+        check=True,
+        capture_output=True,
+    )
+    sign_img4(tc_im4p, os.path.join(output_dir, "trustcache.img4"), im4m_path)
+    print(f"  [+] trustcache.img4 (empty)")
 
     # ── Cleanup ──────────────────────────────────────────────────
     print(f"\n[*] Cleaning up {TEMP_DIR}/...")
