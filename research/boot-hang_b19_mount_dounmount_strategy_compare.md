@@ -235,3 +235,183 @@ Record per run:
 
 Do not mix incremental patching across already-patched binaries when comparing these modes.
 Always regenerate from clean baseline before each combination, otherwise branch-site interactions can mask true causality.
+
+---
+
+## 5) Additional non-equivalent points (beyond B19/B11/B12)
+
+This section answers "还有没有别的不一样的" with boot-impact-focused mismatches.
+
+### 5.1 B13 `_bsd_init auth` is not the same logical site
+
+#### Trigger points
+
+- upstream fixed site: `0x00F6D95C` in `sub_FFFFFE0007F6D2B8`
+- current dynamic site: `0x00FA2A78` in `sub_FFFFFE0007FA2838`
+
+#### Function logic (high level)
+
+- `sub_FFFFFE0007F6D2B8` is a workqueue/thread-call state machine.
+- `sub_FFFFFE0007FA2838` is another lock/CAS-heavy control path.
+
+Neither decompilation corresponds to `_bsd_init` body semantics directly.
+
+#### Pseudocode (site-level)
+
+`0xF6D95C` neighborhood:
+
+```c
+... 
+call unlock_or_wakeup(...);   // BL at 0xF6D95C
+...
+```
+
+`0xFA2A78` neighborhood:
+
+```c
+...
+stats_counter++;
+x2 = x9;                      // MOV at 0xFA2A78
+cas_release(lock, x2, 0);
+...
+```
+
+#### Risk
+
+- This is a strong false-equivalence signal.
+- If this patch is intended as `_bsd_init` auth bypass, current dynamic hit should be treated as suspect.
+
+### 5.2 B14 `_spawn_validate_persona` strategy changed from 2xNOP to forced branch
+
+#### Trigger points
+
+- upstream fixed sites: `0x00FA7024`, `0x00FA702C` (same function `sub_FFFFFE0007FA6F7C`)
+- current dynamic site: `0x00FA694C` (function `sub_FFFFFE0007FA6858`)
+
+#### Function logic and loop relevance
+
+In `sub_FFFFFE0007FA6858`, there is an explicit spin loop:
+
+- `0xFA6ACC`: `LDADD ...`
+- `0xFA6AD4`: `B.EQ 0xFA6ACC` (self-loop)
+
+Pseudocode:
+
+```c
+do {
+    old = atomic_fetch_add(counter, 1);
+} while (old == target);   // tight spin at 0xFA6ACC/0xFA6AD4
+```
+
+And same function calls:
+
+- `sub_FFFFFE0007B034E4` (at `0xFA6A94`)
+- `sub_FFFFFE0007B040CC` (at `0xFA6AA8`)
+
+Your panic signature previously mapped into this call chain, so this mismatch is high-priority for 100% CPU / hang triage.
+
+### 5.3 B9 `_vm_fault_enter_prepare` does not hit the same function
+
+#### Trigger points
+
+- upstream fixed site: `0x00BA9E1C` in `sub_FFFFFE0007BA9C48`
+- current dynamic site: `0x00BA9BB0` in `sub_FFFFFE0007BA9944`
+
+#### Pseudocode (site-level)
+
+`0xBA9E1C`:
+
+```c
+// parameter setup right before BL
+ldp x4, x5, [sp, ...];
+bl helper(...);
+```
+
+`0xBA9BB0`:
+
+```c
+if (w25 == 3) w21 = 2; else w21 = w25;   // csel
+```
+
+These are structurally unrelated.
+
+### 5.4 B10 `_vm_map_protect` site differs in same large function
+
+#### Trigger points
+
+- upstream fixed site: `0x00BC024C`
+- current dynamic site: `0x00BC012C`
+- both inside `sub_FFFFFE0007BBFA48`
+
+#### Pseudocode (site-level)
+
+`0xBC012C`:
+
+```c
+perm = cond ? perm_a : perm_b;   // csel
+```
+
+`0xBC024C`:
+
+```c
+// different control block; not the same selection point
+...
+```
+
+Even in the same function, these are not equivalent branch gates.
+
+### 5.5 B15 `_task_for_pid` and B17 shared-region are also shifted
+
+#### Trigger points
+
+- B15 upstream: `0x00FC383C` (`sub_FFFFFE0007FC34B4`)
+- B15 dynamic: `0x00FFF83C` (`sub_FFFFFE0007FFF824`)
+
+- B17 upstream: `0x010729CC`
+- B17 dynamic: `0x01072A88`
+- both in `sub_FFFFFE000807272C`, but not same instruction role
+
+#### Risk
+
+- These are unlikely to explain early APFS/init mount failure alone, but they are still non-equivalent and should not be assumed interchangeable.
+
+---
+
+## 6) Practical triage order for 100% virtualization CPU
+
+Given current evidence, prioritize:
+
+1. B14 strategy A/B first (upstream `0xFA7024/0xFA702C` vs dynamic `0xFA694C`).
+2. B13 strategy A/B next (`0xF6D95C` vs `0xFA2A78`).
+3. Then B19 and MNT matrix.
+
+Reason: B14 path contains a known tight spin construct and directly calls the function chain previously observed in panic mapping.
+
+---
+
+## 7) Normal boot baseline signature (for pass/fail triage)
+
+Use the following runtime markers as "normal startup reached restore-ready stage" baseline:
+
+1. USB bring-up checkpoint completes:
+   - `CHECKPOINT END: MAIN:[0x040E] enable_usb`
+2. Network checkpoint enters and exits without device requirement:
+   - `CHECKPOINT BEGIN: MAIN:[0x0411] config_network_interface`
+   - `no device required to enable network interface, skipping`
+   - `CHECKPOINT END: MAIN:[0x0411] config_network_interface`
+3. Restore daemon enters host-wait state:
+   - `waiting for host to trigger start of restore [timeout of 120 seconds]`
+4. USB/NCM path activates and host loopback socket churn appears:
+   - `IOUSBDeviceController::setupDeviceSetConfiguration: configuration 0 -> 1`
+   - `AppleUSBDeviceMux::message - kMessageInterfaceWasActivated`
+   - repeated `sock ... accepted ... 62078 ...` then `sock ... closed`
+5. BSD network interface bring-up for `anpi0` succeeds:
+   - `configureDatagramSizeOnBSDInterface() [anpi0] ... returning 0x00000000`
+   - `enableBSDInterface() [anpi0], returning 0x00000000`
+   - `configureIPv6LLOnBSDInterface() [anpi0], IPv6 enable returning 0x00000000`
+   - `disableTrafficShapingOnBSDInterface() [anpi0], disable traffic shaping returning 0x00000000`
+
+Practical rule:
+
+- If A/B variant run reaches marker #3 and then shows #4/#5 progression, treat it as "boot path not stuck in early kernel loop".
+- If run stalls before marker #1/#2 completion or never reaches #3, prioritize kernel-side loop/panic investigation.
