@@ -3,11 +3,8 @@
 testing_ramdisk_build.py — Build a minimal signed boot chain for testing.
 
 Packs firmware components (iBSS, iBEC, SPTM, DeviceTree, SEP, TXM,
-kernelcache) and an empty ramdisk into signed IMG4 files. No trustcache.
-
-The kernel is expected to boot and then panic (no rootfs). This is useful
-for verifying that patched boot-chain components (iBSS/iBEC/LLB/iBoot/TXM/
-kernelcache) work correctly.
+kernelcache) with the stock ramdisk into signed IMG4 files. No SSH
+tools or CFW — just the base boot chain for quick patch verification.
 
 Usage:
     python3 testing_ramdisk_build.py [vm_directory]
@@ -151,7 +148,7 @@ def main():
             shutil.rmtree(d)
         os.makedirs(d)
 
-    print(f"[*] Testing ramdisk — boot chain only (no rootfs, kernel will panic)")
+    print(f"[*] Testing ramdisk — boot chain only (no SSH, no CFW)")
     print(f"[*] VM directory:      {vm_dir}")
     print(f"[*] Restore directory: {restore_dir}")
     print(f"[*] SHSH blob:         {shsh_path}")
@@ -354,7 +351,7 @@ def main():
     print(f"\n{'=' * 60}")
     print(f"  Testing ramdisk build complete!")
     print(f"  Output: {output_dir}/")
-    print(f"  Note: kernel will panic after boot (no rootfs — expected)")
+    print(f"  Note: boot chain only — no SSH, no CFW")
     print(f"{'=' * 60}")
     for f in sorted(os.listdir(output_dir)):
         size = os.path.getsize(os.path.join(output_dir, f))

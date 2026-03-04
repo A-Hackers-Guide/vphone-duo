@@ -71,7 +71,7 @@ help:
 	@echo "Ramdisk:"
 	@echo "  make ramdisk_build           Build signed SSH ramdisk"
 	@echo "  make ramdisk_send            Send ramdisk to device"
-	@echo "  make testing_ramdisk_build   Build boot chain only (no rootfs, kernel will panic)"
+	@echo "  make testing_ramdisk_build   Build boot chain only (no SSH, no CFW)"
 	@echo "  make testing_ramdisk_send    Send testing boot chain to device"
 	@echo ""
 	@echo "CFW:"

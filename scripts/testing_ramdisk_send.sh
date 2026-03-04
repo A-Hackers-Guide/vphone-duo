@@ -5,7 +5,7 @@
 #
 # Expects device in DFU mode. Loads iBSS/iBEC, then boots with
 # SPTM, TXM, trustcache, ramdisk, device tree, SEP, and kernel.
-# Kernel will panic after boot (no rootfs — expected).
+# Boot chain only — no SSH, no CFW.
 set -euo pipefail
 
 IRECOVERY="${IRECOVERY:-irecovery}"
@@ -18,7 +18,7 @@ if [[ ! -d "$RAMDISK_DIR" ]]; then
 fi
 
 echo "[*] Sending testing boot chain from $RAMDISK_DIR ..."
-echo "    (no rootfs — kernel will panic after boot)"
+echo "    (boot chain only — no SSH, no CFW)"
 
 # 1. Load iBSS + iBEC (DFU → recovery)
 echo "  [1/8] Loading iBSS..."
@@ -66,4 +66,4 @@ echo "  [*] Booting kernel..."
 "$IRECOVERY" -f "$RAMDISK_DIR/krnl.img4"
 "$IRECOVERY" -c bootx
 
-echo "[+] Boot sequence sent. Kernel should boot and then panic (no rootfs)."
+echo "[+] Boot sequence sent."
