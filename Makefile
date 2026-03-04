@@ -233,6 +233,9 @@ testing_ramdisk_build:
 testing_ramdisk_send:
 	cd $(VM_DIR) && IRECOVERY="$(CURDIR)/$(IRECOVERY)" zsh "$(CURDIR)/$(SCRIPTS)/testing_ramdisk_send.sh"
 
+testing_do:
+	zsh "$(CURDIR)/$(SCRIPTS)/testing_do.sh"
+
 # ═══════════════════════════════════════════════════════════════════
 # CFW
 # ═══════════════════════════════════════════════════════════════════
