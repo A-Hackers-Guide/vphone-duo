@@ -18,11 +18,11 @@ Apple の Virtualization.framework と PCC の研究用 VM インフラを使用
 
 セキュリティバイパスのレベルが異なる3つのパッチバリアントが利用可能です：
 
-| バリアント            | ブートチェーン | CFW       | Make ターゲット                    |
-| -------------------- | :----------: | :-------: | ---------------------------------- |
-| **通常版**           | 38 パッチ    | 10 フェーズ | `fw_patch` + `cfw_install`         |
-| **開発版**           | 47 パッチ    | 12 フェーズ | `fw_patch_dev` + `cfw_install_dev` |
-| **脱獄版（WIP）**    | 84 パッチ    | 14 フェーズ | `fw_patch_jb` + `cfw_install_jb`   |
+| バリアント        | ブートチェーン |     CFW     | Make ターゲット                    |
+| ----------------- | :------------: | :---------: | ---------------------------------- |
+| **通常版**        |   38 パッチ    | 10 フェーズ | `fw_patch` + `cfw_install`         |
+| **開発版**        |   47 パッチ    | 12 フェーズ | `fw_patch_dev` + `cfw_install_dev` |
+| **脱獄版（WIP）** |   84 パッチ    | 14 フェーズ | `fw_patch_jb` + `cfw_install_jb`   |
 
 詳細なコンポーネントごとの内訳については [research/patch_comparison_all_variants.md](../research/patch_comparison_all_variants.md) を参照してください。
 

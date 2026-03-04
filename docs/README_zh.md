@@ -18,11 +18,11 @@
 
 提供三种补丁变体，安全绕过级别逐步递增：
 
-| 变体              | 启动链     | 自定义固件 | Make 目标                          |
-| ----------------- | :--------: | :-------: | ---------------------------------- |
-| **常规版**        | 38 个补丁  | 10 个阶段 | `fw_patch` + `cfw_install`         |
-| **开发版**        | 47 个补丁  | 12 个阶段 | `fw_patch_dev` + `cfw_install_dev` |
-| **越狱版（WIP）** | 84 个补丁  | 14 个阶段 | `fw_patch_jb` + `cfw_install_jb`   |
+| 变体              |  启动链   | 自定义固件 | Make 目标                          |
+| ----------------- | :-------: | :--------: | ---------------------------------- |
+| **常规版**        | 38 个补丁 | 10 个阶段  | `fw_patch` + `cfw_install`         |
+| **开发版**        | 47 个补丁 | 12 个阶段  | `fw_patch_dev` + `cfw_install_dev` |
+| **越狱版（WIP）** | 84 个补丁 | 14 个阶段  | `fw_patch_jb` + `cfw_install_jb`   |
 
 详见 [research/patch_comparison_all_variants.md](../research/patch_comparison_all_variants.md) 了解各组件的详细分项对比。
 

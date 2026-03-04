@@ -42,7 +42,10 @@ Three firmware variants are available, each building on the previous:
 
 ### TXM
 
-The three variants use different TXM patchers. Regular uses `txm.py` (1 patch), Dev uses `txm_dev.py` (10 patches), JB uses `txm_jb.py` (12 patches).
+TXM patch composition by variant:
+- Regular: `txm.py` (1 patch).
+- Dev: `txm_dev.py` (10 patches total).
+- JB: base `txm.py` (1 patch) + `txm_jb.py` extension (11 patches) = 12 total.
 
 | #   | Patch                                             | Purpose                                                     | Regular | Dev | JB  |
 | --- | ------------------------------------------------- | ----------------------------------------------------------- | :-----: | :-: | :-: |

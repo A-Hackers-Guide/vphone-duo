@@ -10,7 +10,7 @@ set -euo pipefail
 IRECOVERY="${IRECOVERY:-irecovery}"
 RAMDISK_DIR="${1:-Ramdisk}"
 
-if [ ! -d "$RAMDISK_DIR" ]; then
+if [[ ! -d "$RAMDISK_DIR" ]]; then
     echo "[-] Ramdisk directory not found: $RAMDISK_DIR"
     echo "    Run 'make ramdisk_build' first."
     exit 1

@@ -20,16 +20,16 @@ BREW_PACKAGES=(gnu-tar openssl@3 ldid-procursus sshpass)
 BREW_MISSING=()
 
 for pkg in "${BREW_PACKAGES[@]}"; do
-  if ! brew list "$pkg" &>/dev/null; then
-    BREW_MISSING+=("$pkg")
-  fi
+    if ! brew list "$pkg" &>/dev/null; then
+        BREW_MISSING+=("$pkg")
+    fi
 done
 
 if ((${#BREW_MISSING[@]} > 0)); then
-  echo "  Installing: ${BREW_MISSING[*]}"
-  brew install "${BREW_MISSING[@]}"
+    echo "  Installing: ${BREW_MISSING[*]}"
+    brew install "${BREW_MISSING[@]}"
 else
-  echo "  All brew packages installed"
+    echo "  All brew packages installed"
 fi
 
 # ── Trustcache ─────────────────────────────────────────────────
@@ -38,24 +38,24 @@ echo "[2/4] trustcache"
 
 TRUSTCACHE_BIN="$TOOLS_PREFIX/bin/trustcache"
 if [[ -x "$TRUSTCACHE_BIN" ]]; then
-  echo "  Already built: $TRUSTCACHE_BIN"
+    echo "  Already built: $TRUSTCACHE_BIN"
 else
-  echo "  Building from source (CRKatri/trustcache)..."
-  BUILD_DIR=$(mktemp -d)
-  trap "rm -rf '$BUILD_DIR'" EXIT
+    echo "  Building from source (CRKatri/trustcache)..."
+    BUILD_DIR=$(mktemp -d)
+    trap "rm -rf '$BUILD_DIR'" EXIT
 
-  git clone --depth 1 https://github.com/CRKatri/trustcache.git "$BUILD_DIR/trustcache" --quiet
+    git clone --depth 1 https://github.com/CRKatri/trustcache.git "$BUILD_DIR/trustcache" --quiet
 
-  OPENSSL_PREFIX="$(brew --prefix openssl@3)"
-  make -C "$BUILD_DIR/trustcache" \
-    OPENSSL=1 \
-    CFLAGS="-I$OPENSSL_PREFIX/include -DOPENSSL -w" \
-    LDFLAGS="-L$OPENSSL_PREFIX/lib" \
-    -j"$(sysctl -n hw.logicalcpu)" >/dev/null 2>&1
+    OPENSSL_PREFIX="$(brew --prefix openssl@3)"
+    make -C "$BUILD_DIR/trustcache" \
+        OPENSSL=1 \
+        CFLAGS="-I$OPENSSL_PREFIX/include -DOPENSSL -w" \
+        LDFLAGS="-L$OPENSSL_PREFIX/lib" \
+        -j"$(sysctl -n hw.logicalcpu)" >/dev/null 2>&1
 
-  mkdir -p "$TOOLS_PREFIX/bin"
-  cp "$BUILD_DIR/trustcache/trustcache" "$TRUSTCACHE_BIN"
-  echo "  Installed: $TRUSTCACHE_BIN"
+    mkdir -p "$TOOLS_PREFIX/bin"
+    cp "$BUILD_DIR/trustcache/trustcache" "$TRUSTCACHE_BIN"
+    echo "  Installed: $TRUSTCACHE_BIN"
 fi
 
 # ── Libimobiledevice ──────────────────────────────────────────

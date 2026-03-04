@@ -227,13 +227,13 @@ deterministic nonce behavior for restore/research scenarios.
 Both variants work with all dynamic patches. Offsets differ but the patcher
 finds them by pattern matching:
 
-| Patch                            | RELEASE offset | RESEARCH offset |
-| -------------------------------- | -------------- | --------------- |
-| Serial label 1                   | `0x084549`     | `0x0861C9`      |
-| Serial label 2                   | `0x0845F4`     | `0x086274`      |
-| image4 callback (nop)            | `0x009D14`     | `0x00A0DC`      |
-| image4 callback (mov)            | `0x009D18`     | `0x00A0E0`      |
-| Skip generate_nonce _(JB patch)_ | `0x00B7B8`     | `0x00BC08`      |
+| Patch                             | RELEASE offset | RESEARCH offset |
+| --------------------------------- | -------------- | --------------- |
+| Serial label 1                    | `0x084549`     | `0x0861C9`      |
+| Serial label 2                    | `0x0845F4`     | `0x086274`      |
+| image4 callback (nop)             | `0x009D14`     | `0x00A0DC`      |
+| image4 callback (mov)             | `0x009D18`     | `0x00A0E0`      |
+| Skip generate*nonce *(JB patch)\_ | `0x00B7B8`     | `0x00BC08`      |
 
 `fw_patch.py` targets RELEASE, matching the BuildManifest identity
 (PCC RELEASE for LLB/iBSS/iBEC). The reference script used RESEARCH_RELEASE.

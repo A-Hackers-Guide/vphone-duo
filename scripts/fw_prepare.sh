@@ -69,7 +69,6 @@ CLOUDOS_CACHE="${IPSW_DIR}/${CLOUDOS_DIR}"
 
 extract() {
     local zip="$1" cache="$2" out="$3"
-    # Extract to cache if not already done
     if [[ -d "$cache" && -n "$(ls -A "$cache" 2>/dev/null)" ]]; then
         echo "==> Cached: ${cache##*/}"
     else
@@ -91,17 +90,17 @@ extract "$CLOUDOS_IPSW_PATH" "$CLOUDOS_CACHE" "$CLOUDOS_DIR"
 # ── Merge cloudOS firmware into iPhone restore directory ──────────────
 echo "==> Importing cloudOS firmware components ..."
 
-cp ${CLOUDOS_DIR}/kernelcache.* "$IPHONE_DIR"/
+cp "${CLOUDOS_DIR}"/kernelcache.* "$IPHONE_DIR"/
 
 for sub in agx all_flash ane dfu pmp; do
-    cp ${CLOUDOS_DIR}/Firmware/${sub}/* "$IPHONE_DIR/Firmware/${sub}"/
+    cp "${CLOUDOS_DIR}/Firmware/${sub}"/* "$IPHONE_DIR/Firmware/${sub}"/
 done
 
-cp ${CLOUDOS_DIR}/Firmware/*.im4p "$IPHONE_DIR/Firmware"/
+cp "${CLOUDOS_DIR}"/Firmware/*.im4p "$IPHONE_DIR/Firmware"/
 
 # CloudOS ramdisk DMGs and trustcaches (RestoreRamDisk / RestoreTrustCache)
-cp -n ${CLOUDOS_DIR}/*.dmg "$IPHONE_DIR"/ 2>/dev/null || true
-cp -n ${CLOUDOS_DIR}/Firmware/*.dmg.trustcache "$IPHONE_DIR/Firmware"/ 2>/dev/null || true
+cp -n "${CLOUDOS_DIR}"/*.dmg "$IPHONE_DIR"/ 2>/dev/null || true
+cp -n "${CLOUDOS_DIR}"/Firmware/*.dmg.trustcache "$IPHONE_DIR/Firmware"/ 2>/dev/null || true
 
 # ── Preserve original iPhone BuildManifest (cfw_install.sh reads Cryptex paths) ──
 cp "$IPHONE_DIR/BuildManifest.plist" "$IPHONE_DIR/BuildManifest-iPhone.plist"

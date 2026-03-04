@@ -42,7 +42,7 @@ pip install -r "${REQUIREMENTS}"
 echo ""
 echo "=== Building keystone dylib ==="
 KEYSTONE_DIR="/opt/homebrew/Cellar/keystone"
-if [ ! -d "${KEYSTONE_DIR}" ]; then
+if [[ ! -d "${KEYSTONE_DIR}" ]]; then
     echo "Error: keystone not found. Install with: brew install keystone"
     exit 1
 fi

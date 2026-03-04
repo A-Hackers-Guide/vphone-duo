@@ -23,8 +23,13 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
 
     // MARK: - Event Handling
 
-    override var acceptsFirstResponder: Bool { true }
-    override func acceptsFirstMouse(for _: NSEvent?) -> Bool { true }
+    override var acceptsFirstResponder: Bool {
+        true
+    }
+
+    override func acceptsFirstMouse(for _: NSEvent?) -> Bool {
+        true
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
