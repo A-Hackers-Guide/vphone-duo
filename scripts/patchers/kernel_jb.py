@@ -67,9 +67,9 @@ class KernelJBPatcher(
 
         # Group B: Simple patches (string-anchored / pattern-matched)
         self.patch_post_validation_additional()           # B5
-        # self.patch_proc_security_policy()               # B6 (PANIC)
+        self.patch_proc_security_policy()                # B6 (fixed: was patching copyio)
         self.patch_proc_pidinfo()                        # B7
-        # self.patch_convert_port_to_map()                # B8 (PANIC)
+        self.patch_convert_port_to_map()                 # B8 (fixed: was patching PAC check)
         self.patch_vm_fault_enter_prepare()              # B9
         self.patch_vm_map_protect()                      # B10
         self.patch_mac_mount()                           # B11

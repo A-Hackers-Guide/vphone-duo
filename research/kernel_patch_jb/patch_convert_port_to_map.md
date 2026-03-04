@@ -1,34 +1,48 @@
 # B8 `patch_convert_port_to_map`
 
-## How the patch works
-- Source: `scripts/patchers/kernel_jb_patch_port_to_map.py`.
-- Locator strategy:
-  1. Anchor panic string: `"userspace has control access to a kernel map"`.
-  2. Find xref to that string and nearby `BL _panic`.
-  3. Walk backward to locate the conditional branch entering the panic block.
-- Patch action:
-  - Replace that conditional branch with unconditional `B` to `resume_off` (`bl_panic + 4`), so execution skips the panic call.
+## Status: FIXED (was PANIC)
 
-## Expected outcome
-- Kernel no longer panics on this convert-port-to-map control-access check path.
+## Root cause of failure
+The patcher's backward branch search found the **wrong branch** to redirect:
+- Walked backward from panic string ADRP looking for a branch targeting the "error region"
+- Found PAC validation `B.EQ` at `0xFFFFFE0007B06E80` (checks PAC auth succeeded)
+- Its target (`0xB06E88`, the ADRL for kernel_map) happened to fall within the error
+  region range `[adrp-0x40, bl_panic+4]` — a false positive
+- Patching this B.EQ to `B resume_off` caused ALL port-to-map conversions to skip the
+  map lookup entirely, returning NULL for every task's vm_map
+- Result: "initproc failed to start -- exit reason namespace 2 subcode 0x6"
 
-## Target
-- The panic edge in `_convert_port_to_map_with_flavor` (or equivalent stripped function), specifically the branch feeding the panic block.
+## Actual code flow in `_convert_port_to_map_with_flavor`
+```
+0xB06E7C: CMP  X16, X17      ; PAC validation check
+0xB06E80: B.EQ 0xB06E88      ; if PAC valid → continue ← patcher incorrectly patched this
+0xB06E84: BRK  #0xC472       ; PAC failure trap
+0xB06E88: ADRL X8, kernel_map ; load kernel_map address
+0xB06E90: CMP  X16, X8       ; compare map ptr with kernel_map
+0xB06E94: B.NE 0xB06EE8      ; if NOT kernel_map → normal path ← correct target
+0xB06E98: ... set up panic args ...
+0xB06EAC: ADRL X0, "userspace has control access..."
+0xB06EB4: BL   _panic        ; noreturn
+```
+
+## Fix applied
+Completely new approach — instead of backward branch search:
+1. Walk backward from string ADRP to find `CMP + B.cond` pattern
+2. The `CMP Xn, Xm` followed by `B.NE target` (where target > adrp_off) is the guard
+3. Replace `B.NE` with unconditional `B` to same target
+4. This makes the kernel_map case take the normal path instead of panicking
+
+The fixed patch changes `B.NE 0xB06EE8` at `0xB06E94` to `B 0xB06EE8`:
+- If map == kernel_map: now takes normal path (was: panic)
+- If map != kernel_map: unchanged (takes normal path)
 
 ## IDA MCP evidence
-- Panic string: `0xfffffe0007040701`
-- String xref site: `0xfffffe0007b06eac`
-- Containing function start: `0xfffffe0007b06db8`
-
-## Full call-stack sample (static, from IDA xrefs)
-- This is one complete observed caller chain down to the patched function:
-  1. data dispatch ref: `0xfffffe00078ee8c8` -> function `sub_FFFFFE00089B17E0` (`0xfffffe00089b17e0`)
-  2. call at `0xfffffe00089b1c50`: `BL sub_FFFFFE0008A1F0A0`
-  3. call at `0xfffffe0008a1f31c`: `BL sub_FFFFFE0008A19DC8`
-  4. call at `0xfffffe0008a19e34`: `BL sub_FFFFFE0008A2D948`
-  5. call at `0xfffffe0008a2d9a4`: `BL sub_FFFFFE0007BD2544`
-  6. call at `0xfffffe0007bd2694`: `B sub_FFFFFE0007B06DB8`
-  7. panic-log reference inside target function: `0xfffffe0007b06eac`
+- Panic string: `0xfffffe0007040701` "userspace has control access to a kernel map %p through task %p @%s:%d"
+- String xref: `0xfffffe0007b06eac`
+- Function: `sub_FFFFFE0007B06DB8` (size 0x154)
+- `sub_FFFFFE00082FA814` at BL target is `_panic` (calls itself with "Assertion failed", never returns)
+- Code after BL _panic (0xB06EB8) is dead code containing a TBNZ→BRK trap
 
 ## Risk
-- This converts a hard fail (panic) into continue-execution behavior; if downstream invariants were relying on panic-stop, memory safety assumptions may no longer hold.
+- Allows userspace to obtain a reference to the kernel vm_map through IPC
+- Required for JB: enables kernel memory access from userspace

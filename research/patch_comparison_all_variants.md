@@ -232,10 +232,14 @@ with capstone semantic matching and keystone-generated patch bytes only:
 1. `AMFIIsCDHashInTrustCache` function rewrite
    - Locator: semantic function-body matcher in AMFI text.
    - Patch: `mov x0,#1 ; cbz x2,+8 ; str x0,[x2] ; ret`.
-2. AMFI execve kill path bypass (2 BL sites)
+2. AMFI execve kill path bypass (shared return value)
    - Locator: string xref to `"AMFI: hook..execve() killing"` (fallback `"execve() killing"`),
-     then function-local early `bl` + `cbz/cbnz w0` pair matcher.
-   - Patch: `bl -> mov x0,#0` at two helper callsites.
+     then backward scan from function end for `MOV W0, #1` + `LDP x29, x30` epilogue.
+   - Patch: `MOV W0, #1 -> MOV W0, #0` at the shared kill-return instruction.
+   - All kill paths (unsigned code, restricted exec mode, VPN plugin, dyld sig, etc.)
+     converge on this single return value.
+   - Previous approach (BL→MOV X0,#0 at two early sites) was patching vnode-type
+     precondition assertions, not the actual kill checks — caused CBZ→panic.
 3. `task_conversion_eval_internal` guard bypass
    - Locator: unique cmp/branch motif:
      `ldr xN,[xN,#imm] ; cmp xN,x0 ; b.eq ; cmp xN,x1 ; b.eq`.
@@ -248,9 +252,9 @@ with capstone semantic matching and keystone-generated patch bytes only:
 **Group B: Simple patches (string-anchored / pattern-matched)**
 
 5. `_postValidation` additional CMP bypass
-6. `_proc_security_policy` stub (mov x0,#0; ret)
+6. `_proc_security_policy` stub (mov x0,#0; ret) — FIXED: was patching copyio instead
 7. `_proc_pidinfo` pid-0 guard NOP (2 sites)
-8. `_convert_port_to_map_with_flavor` panic skip
+8. `_convert_port_to_map_with_flavor` panic skip — FIXED: was patching PAC check instead
 9. `_vm_fault_enter_prepare` PMAP check NOP
 10. `_vm_map_protect` permission check skip
 11. `___mac_mount` MAC check bypass (NOP + mov x8,xzr)
@@ -269,6 +273,7 @@ with capstone semantic matching and keystone-generated patch bytes only:
 21. `_cred_label_update_execve` cs_flags shellcode
 22. `_syscallmask_apply_to_proc` filter mask shellcode
 23. `_hook_cred_label_update_execve` ops table + vnode_getattr shellcode
+       - Code cave restricted to __TEXT_EXEC only (__PRELINK_TEXT excluded due to KTRR)
 24. `kcall10` syscall 439 replacement shellcode
 
 ## Cross-Version Dynamic Snapshot
