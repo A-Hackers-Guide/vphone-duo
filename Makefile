@@ -71,11 +71,6 @@ help:
 	@echo "Ramdisk:"
 	@echo "  make ramdisk_build           Build signed SSH ramdisk"
 	@echo "  make ramdisk_send            Send ramdisk to device"
-	@echo "  make testing_ramdisk_build   Build boot chain only (no SSH, no CFW)"
-	@echo "  make testing_ramdisk_send    Send testing boot chain to device"
-	@echo "  make testing_do_save        Full pipeline + save base kernel backup"
-	@echo "  make testing_do_patch PATCH=name  Test single JB kernel patch (fast)"
-	@echo "  make testing_kernel_patch PATCH=name  Restore+patch kernel only (no boot)"
 	@echo ""
 	@echo "CFW:"
 	@echo "  make cfw_install             Install CFW mods via SSH"
@@ -222,37 +217,13 @@ restore:
 # Ramdisk
 # ═══════════════════════════════════════════════════════════════════
 
-.PHONY: ramdisk_build ramdisk_send testing_ramdisk_build testing_ramdisk_send testing_do testing_do_save testing_kernel_patch testing_do_patch testing_c23_bisect
+.PHONY: ramdisk_build ramdisk_send
 
 ramdisk_build:
 	cd $(VM_DIR) && $(PYTHON) "$(CURDIR)/$(SCRIPTS)/ramdisk_build.py" .
 
 ramdisk_send:
 	cd $(VM_DIR) && IRECOVERY="$(CURDIR)/$(IRECOVERY)" zsh "$(CURDIR)/$(SCRIPTS)/ramdisk_send.sh"
-
-testing_ramdisk_build:
-	cd $(VM_DIR) && $(PYTHON) "$(CURDIR)/$(SCRIPTS)/testing_ramdisk_build.py" .
-
-testing_ramdisk_send:
-	cd $(VM_DIR) && IRECOVERY="$(CURDIR)/$(IRECOVERY)" zsh "$(CURDIR)/$(SCRIPTS)/testing_ramdisk_send.sh"
-
-testing_do:
-	zsh "$(CURDIR)/$(SCRIPTS)/testing_do.sh"
-
-testing_do_save:
-	zsh "$(CURDIR)/$(SCRIPTS)/testing_do_save.sh"
-
-testing_kernel_patch:
-	cd $(VM_DIR) && $(PYTHON) "$(CURDIR)/$(SCRIPTS)/testing_kernel_patch.py" . $(PATCH)
-
-testing_do_patch:
-	zsh "$(CURDIR)/$(SCRIPTS)/testing_do_patch.sh" $(PATCH)
-
-testing_batch:
-	zsh "$(CURDIR)/$(SCRIPTS)/testing_batch.sh" $(PATCHES)
-
-testing_c23_bisect:
-	cd $(VM_DIR) && $(PYTHON) "$(CURDIR)/$(SCRIPTS)/testing_c23_bisect.py" . $(VARIANT)
 
 # ═══════════════════════════════════════════════════════════════════
 # CFW
