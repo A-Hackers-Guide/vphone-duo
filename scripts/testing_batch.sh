@@ -165,8 +165,8 @@ for i in {1..$TOTAL}; do
         make -C "$PROJECT_DIR" testing_ramdisk_send VM_DIR="$VM_DIR" 2>&1
     } >> "$LOG" 2>&1 || true
 
-    # ─── Monitor for panic or timeout ──────────────────────────────
-    echo "  [*] Monitoring for ${TIMEOUT_SECS}s (panic or timeout)..."
+    # ─── Monitor for panic / success / timeout ─────────────────────
+    echo "  [*] Monitoring for ${TIMEOUT_SECS}s..."
 
     RESULT="TIMEOUT"
     START_TIME=$SECONDS
@@ -180,9 +180,14 @@ for i in {1..$TOTAL}; do
 
         # Check log for panic
         if grep -qi 'panic' "$LOG" 2>/dev/null; then
-            # Give a few more seconds for full panic log to flush
-            sleep 5
+            sleep 5  # let full panic log flush
             RESULT="PANIC"
+            break
+        fi
+
+        # Check log for successful boot (lockdownd socket accepted)
+        if grep -q 'sock.*accepted.*62078' "$LOG" 2>/dev/null; then
+            RESULT="BOOT_OK"
             break
         fi
 
@@ -207,6 +212,11 @@ for i in {1..$TOTAL}; do
 
     # Record
     case "$RESULT" in
+        BOOT_OK)
+            echo "  [+] BOOT OK after ${ELAPSED}s → $LOG"
+            echo "$PATCH  BOOT_OK  ${ELAPSED}s" >> "$SUMMARY"
+            PASS_COUNT=$(( PASS_COUNT + 1 ))
+            ;;
         PANIC)
             echo "  [X] PANIC after ${ELAPSED}s → $LOG"
             echo "$PATCH  PANIC  ${ELAPSED}s" >> "$SUMMARY"
@@ -218,9 +228,9 @@ for i in {1..$TOTAL}; do
             FAIL_COUNT=$(( FAIL_COUNT + 1 ))
             ;;
         TIMEOUT)
-            echo "  [+] No panic in ${TIMEOUT_SECS}s (likely OK) → $LOG"
-            echo "$PATCH  OK  ${TIMEOUT_SECS}s" >> "$SUMMARY"
-            PASS_COUNT=$(( PASS_COUNT + 1 ))
+            echo "  [?] TIMEOUT after ${TIMEOUT_SECS}s → $LOG"
+            echo "$PATCH  TIMEOUT  ${TIMEOUT_SECS}s" >> "$SUMMARY"
+            ERROR_COUNT=$(( ERROR_COUNT + 1 ))
             ;;
     esac
 
