@@ -1,12 +1,22 @@
 """Mixin: KernelJBPatchAmfiExecveMixin."""
 
-from .kernel_jb_base import MOV_X0_0
+from .kernel_jb_base import MOV_W0_0, _rd32
 
 
 class KernelJBPatchAmfiExecveMixin:
     def patch_amfi_execve_kill_path(self):
-        """Bypass AMFI execve kill helpers (string xref -> function local pair)."""
-        self._log("\n[JB] AMFI execve kill path: BL -> mov x0,#0 (2 sites)")
+        """Bypass AMFI execve kill by changing the shared kill return value.
+
+        All kill paths in the AMFI execve hook converge on a shared epilogue
+        that does ``MOV W0, #1`` (kill) then returns.  We change that single
+        instruction to ``MOV W0, #0`` (allow), which converts every kill path
+        to a success return without touching the rest of the function.
+
+        Previous approach (patching early BL+CBZ/CBNZ sites) was incorrect:
+        those are vnode-type precondition assertions, not the actual kill
+        checks.  Replacing BL with MOV X0,#0 triggered the CBZ → panic.
+        """
+        self._log("\n[JB] AMFI execve kill path: shared MOV W0,#1 → MOV W0,#0")
 
         str_off = self.find_string(b"AMFI: hook..execve() killing")
         if str_off < 0:
@@ -37,31 +47,41 @@ class KernelJBPatchAmfiExecveMixin:
                     func_end = p
                     break
 
-            early_window_end = min(func_start + 0x120, func_end)
-            hits = []
-            for off in range(func_start, early_window_end - 4, 4):
-                d0 = self._disas_at(off)
+            # Scan backward from function end for MOV W0, #1 (0x52800020)
+            # followed by LDP x29, x30 (epilogue start).
+            MOV_W0_1_ENC = 0x52800020
+            target_off = -1
+            for off in range(func_end - 8, func_start, -4):
+                if _rd32(self.raw, off) != MOV_W0_1_ENC:
+                    continue
+                # Verify next instruction is LDP x29, x30, [sp, #imm]
                 d1 = self._disas_at(off + 4)
-                if not d0 or not d1:
+                if not d1:
                     continue
-                i0, i1 = d0[0], d1[0]
-                if i0.mnemonic != "bl":
-                    continue
-                if i1.mnemonic in ("cbz", "cbnz") and i1.op_str.startswith("w0,"):
-                    hits.append(off)
+                i1 = d1[0]
+                if i1.mnemonic == "ldp" and "x29, x30" in i1.op_str:
+                    target_off = off
+                    break
 
-            if len(hits) != 2:
+            if target_off < 0:
                 self._log(
-                    f"  [-] execve helper at 0x{func_start:X}: "
-                    f"expected 2 early BL+W0-branch sites, found {len(hits)}"
+                    f"  [-] MOV W0,#1 + epilogue not found in "
+                    f"func 0x{func_start:X}"
                 )
                 continue
 
-            self.emit(hits[0], MOV_X0_0, "mov x0,#0 [AMFI execve helper A]")
-            self.emit(hits[1], MOV_X0_0, "mov x0,#0 [AMFI execve helper B]")
+            self.emit(
+                target_off,
+                MOV_W0_0,
+                "mov w0,#0 [AMFI kill return → allow]",
+            )
+            self._log(
+                f"  [+] Patched kill return at 0x{target_off:X} "
+                f"(func 0x{func_start:X})"
+            )
             patched = True
             break
 
         if not patched:
-            self._log("  [-] AMFI execve helper patch sites not found")
+            self._log("  [-] AMFI execve kill return not found")
         return patched
