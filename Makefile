@@ -71,6 +71,8 @@ help:
 	@echo "Ramdisk:"
 	@echo "  make ramdisk_build           Build signed SSH ramdisk"
 	@echo "  make ramdisk_send            Send ramdisk to device"
+	@echo "  make testing_ramdisk_build   Build boot chain only (no rootfs, kernel will panic)"
+	@echo "  make testing_ramdisk_send    Send testing boot chain to device"
 	@echo ""
 	@echo "CFW:"
 	@echo "  make cfw_install             Install CFW mods via SSH"
@@ -217,13 +219,19 @@ restore:
 # Ramdisk
 # ═══════════════════════════════════════════════════════════════════
 
-.PHONY: ramdisk_build ramdisk_send
+.PHONY: ramdisk_build ramdisk_send testing_ramdisk_build testing_ramdisk_send
 
 ramdisk_build:
 	cd $(VM_DIR) && $(PYTHON) "$(CURDIR)/$(SCRIPTS)/ramdisk_build.py" .
 
 ramdisk_send:
 	cd $(VM_DIR) && IRECOVERY="$(CURDIR)/$(IRECOVERY)" zsh "$(CURDIR)/$(SCRIPTS)/ramdisk_send.sh"
+
+testing_ramdisk_build:
+	cd $(VM_DIR) && $(PYTHON) "$(CURDIR)/$(SCRIPTS)/testing_ramdisk_build.py" .
+
+testing_ramdisk_send:
+	cd $(VM_DIR) && IRECOVERY="$(CURDIR)/$(IRECOVERY)" zsh "$(CURDIR)/$(SCRIPTS)/testing_ramdisk_send.sh"
 
 # ═══════════════════════════════════════════════════════════════════
 # CFW
