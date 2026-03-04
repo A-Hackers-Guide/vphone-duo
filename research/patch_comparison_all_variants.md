@@ -227,6 +227,10 @@ keystone/capstone-encoded instructions only.
 All 24 kernel JB patch methods are implemented in `scripts/patchers/kernel_jb.py`
 with capstone semantic matching and keystone-generated patch bytes only:
 
+- Runtime dispatch status: `KernelJBPatcher.find_all()` now enables the full A1-C24
+  set (including A2/C23/C24), so JB patch application matches the documented 34
+  JB-only kernel patches.
+
 **Group A: Core patches**
 
 1. `AMFIIsCDHashInTrustCache` function rewrite

@@ -57,11 +57,9 @@ class KernelJBPatcher(
     def find_all(self):
         self.patches = []
 
-        # Commented patches are broken to boot into panic.
-
         # Group A: Existing patches
         self.patch_amfi_cdhash_in_trustcache()          # A1
-        # self.patch_amfi_execve_kill_path()              # A2 (PANIC)
+        self.patch_amfi_execve_kill_path()              # A2
         self.patch_task_conversion_eval_internal()      # A3
         self.patch_sandbox_hooks_extended()             # A4
 
@@ -86,8 +84,8 @@ class KernelJBPatcher(
         # Group C: Complex shellcode patches
         self.patch_cred_label_update_execve()            # C21
         self.patch_syscallmask_apply_to_proc()           # C22
-        # self.patch_hook_cred_label_update_execve()      # C23 (PANIC)
-        # self.patch_kcall10()                            # C24 (NOT_BOOT)
+        self.patch_hook_cred_label_update_execve()      # C23
+        self.patch_kcall10()                            # C24
 
         return self.patches
 
