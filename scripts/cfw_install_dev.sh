@@ -97,6 +97,13 @@ ldid_sign() {
     ldid "${args[@]}" "$file"
 }
 
+ldid_sign_ent() {
+    local file="$1" entitlements_plist="$2" bundle_id="${3:-}"
+    local args=("-S$entitlements_plist" "-K$VM_DIR/$CFW_INPUT/signcert.p12")
+    [[ -n "$bundle_id" ]] && args+=("-I$bundle_id")
+    ldid "${args[@]}" "$file"
+}
+
 # Detach a DMG mountpoint if currently mounted, ignore errors
 safe_detach() {
     local mnt="$1"
@@ -255,6 +262,20 @@ scp_to "$TEMP_DIR/launchd" "/mnt1/sbin/launchd"
 ssh_cmd "/bin/chmod 0755 /mnt1/sbin/launchd"
 
 echo "  [+] launchd patched"
+
+# remove seatbelt profile and add task_for_pid-allow for debugserver
+echo ""
+echo "  Patch debugserver entitlements..."
+
+scp_from "/mnt1/usr/libexec/debugserver" "$TEMP_DIR/debugserver"
+ldid -e "$TEMP_DIR/debugserver" > "$TEMP_DIR/debugserver-entitlements.plist"
+plutil -remove seatbelt-profiles "$TEMP_DIR/debugserver-entitlements.plist"
+plutil -insert task_for_pid-allow -bool YES "$TEMP_DIR/debugserver-entitlements.plist"
+ldid_sign_ent "$TEMP_DIR/debugserver" "$TEMP_DIR/debugserver-entitlements.plist"
+scp_to "$TEMP_DIR/debugserver" "/mnt1/usr/libexec/debugserver"
+ssh_cmd "/bin/chmod 0755 /mnt1/usr/libexec/debugserver"
+
+echo "  [+] debugserver entitlements patched"
 
 # Rename APFS update snapshot to orig-fs (idempotent)
 echo "  Checking APFS snapshots..."
@@ -428,10 +449,7 @@ if [[ "$needs_vphoned_build" == "1" ]]; then
         -framework Foundation
 fi
 cp "$VPHONED_BIN" "$TEMP_DIR/vphoned"
-ldid \
-    -S"$VPHONED_SRC/entitlements.plist" \
-    -M "-K$VM_DIR/$CFW_INPUT/signcert.p12" \
-    "$TEMP_DIR/vphoned"
+ldid_sign_ent "$TEMP_DIR/vphoned" "$VPHONED_SRC/entitlements.plist"
 scp_to "$TEMP_DIR/vphoned" "/mnt1/usr/bin/vphoned"
 ssh_cmd "/bin/chmod 0755 /mnt1/usr/bin/vphoned"
 # Keep a copy of the signed binary for host-side auto-update
