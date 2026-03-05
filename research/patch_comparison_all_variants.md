@@ -137,6 +137,9 @@ Base-patch verification note (2026-03-05):
 | 5   | `b` (skip jetsam guard) | launchd              | Prevent jetsam panic on boot              |    —    |  Y  |  Y  |
 | 6   | LC_LOAD_DYLIB injection | launchd              | Load `/cores/launchdhook.dylib` at launch |    —    |  —  |  Y  |
 
+Signing note (Dev install path):
+- `scripts/cfw_install_dev.sh` now uses `ldid_sign_ent <file> <entitlements.plist> [bundle_id]` for binaries requiring explicit entitlements (for example `vphoned`), which signs with `-K.../signcert.p12`.
+
 ### Installed components
 
 | #   | Component                | Description                                                       | Regular | Dev | JB  |
