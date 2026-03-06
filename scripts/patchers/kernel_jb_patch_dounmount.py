@@ -1,74 +1,106 @@
 """Mixin: KernelJBPatchDounmountMixin."""
 
-from .kernel_jb_base import asm
+from capstone.arm64_const import ARM64_OP_IMM, ARM64_OP_REG
+
+from .kernel_jb_base import NOP
 
 
 class KernelJBPatchDounmountMixin:
     def patch_dounmount(self):
-        """NOP a MAC check in _dounmount (strict matching only).
-        Pattern: mov w1,#0; mov x2,#0; bl TARGET (MAC policy check pattern).
+        """Match the known-good upstream cleanup call in dounmount.
+
+        Anchor class: string anchor. Recover the dounmount body through the
+        stable panic string `dounmount:` and patch the unique near-tail 4-arg
+        zeroed cleanup call used by `/Users/qaq/Desktop/patch_fw.py`:
+
+            mov x0, xMountLike
+            mov w1, #0
+            mov w2, #0
+            mov w3, #0
+            bl  target
+            mov x0, xMountLike
+            bl  target2
+            cbz x19, ...
+
+        This intentionally rejects the later `mov w1,#0x10 ; mov x2,#0 ; bl`
+        site because that drifted away from upstream and represents a different
+        call signature/control-flow path.
         """
-        self._log("\n[JB] _dounmount: strict MAC check NOP")
+        self._log("\n[JB] _dounmount: upstream cleanup-call NOP")
 
-        # Try symbol first
-        foff = self._resolve_symbol("_dounmount")
-        if foff >= 0:
-            func_end = self._find_func_end(foff, 0x1000)
-            result = self._find_mac_check_bl(foff, func_end)
-            if result:
-                nop_patch = asm("nop")
-                self._assert_patch_decode(nop_patch, "nop")
-                self.emit(result, nop_patch, "NOP [_dounmount MAC check]")
-                return True
+        foff = self._find_func_by_string(b"dounmount:", self.kern_text)
+        if foff < 0:
+            self._log("  [-] 'dounmount:' anchor not found")
+            return False
 
-        # String anchor: resolve the actual dounmount function and patch in-function only.
-        # We intentionally avoid broad scan fallbacks to prevent false-positive patching.
-        str_off = self.find_string(b"dounmount:")
-        if str_off >= 0:
-            refs = self.find_string_refs(str_off)
-            for adrp_off, _, _ in refs:
-                caller = self.find_function_start(adrp_off)
-                if caller < 0:
-                    continue
-                caller_end = self._find_func_end(caller, 0x2000)
-                result = self._find_mac_check_bl(caller, caller_end)
-                if result:
-                    nop_patch = asm("nop")
-                    self._assert_patch_decode(nop_patch, "nop")
-                    self.emit(result, nop_patch, "NOP [_dounmount MAC check]")
-                    return True
+        func_end = self._find_func_end(foff, 0x4000)
+        patch_off = self._find_upstream_cleanup_call(foff, func_end)
+        if patch_off is None:
+            self._log("  [-] upstream dounmount cleanup call not found")
+            return False
 
-        self._log("  [-] patch site not found (unsafe fallback disabled)")
-        return False
+        self.emit(patch_off, NOP, "NOP [_dounmount upstream cleanup call]")
+        return True
 
-    def _find_mac_check_bl(self, start, end):
-        """Find mov w1,#0; mov x2,#0; bl TARGET pattern. Returns BL offset or None."""
-        for off in range(start, end - 8, 4):
-            d = self._disas_at(off, 3)
-            if len(d) < 3:
+    def _find_upstream_cleanup_call(self, start, end):
+        hits = []
+        for off in range(start, end - 0x1C, 4):
+            d = self._disas_at(off, 8)
+            if len(d) < 8:
                 continue
-            i0, i1, i2 = d[0], d[1], d[2]
-            if i0.mnemonic != "mov" or i1.mnemonic != "mov" or i2.mnemonic != "bl":
+            i0, i1, i2, i3, i4, i5, i6, i7 = d
+            if i0.mnemonic != "mov" or i1.mnemonic != "mov" or i2.mnemonic != "mov" or i3.mnemonic != "mov":
                 continue
-            # Check: mov w1, #0; mov x2, #0
-            if "w1" in i0.op_str and "#0" in i0.op_str:
-                if "x2" in i1.op_str and "#0" in i1.op_str:
-                    return off + 8
-            # Also match: mov x2, #0; mov w1, #0
-            if "x2" in i0.op_str and "#0" in i0.op_str:
-                if "w1" in i1.op_str and "#0" in i1.op_str:
-                    return off + 8
+            if i4.mnemonic != "bl" or i5.mnemonic != "mov" or i6.mnemonic != "bl":
+                continue
+            if i7.mnemonic != "cbz":
+                continue
+
+            src_reg = self._mov_reg_reg(i0, "x0")
+            if src_reg is None:
+                continue
+            if not self._mov_imm_zero(i1, "w1"):
+                continue
+            if not self._mov_imm_zero(i2, "w2"):
+                continue
+            if not self._mov_imm_zero(i3, "w3"):
+                continue
+            if not self._mov_reg_reg(i5, "x0", src_reg):
+                continue
+            if not self._cbz_uses_xreg(i7):
+                continue
+            hits.append(i4.address)
+
+        if len(hits) == 1:
+            return hits[0]
         return None
 
-    def _assert_patch_decode(self, patch_bytes, expect_mnemonic, expect_op_str=None):
-        insns = self._disas_n(patch_bytes, 0, 1)
-        assert insns, "capstone decode failed for patch bytes"
-        ins = insns[0]
-        assert ins.mnemonic == expect_mnemonic, (
-            f"patch decode mismatch: expected {expect_mnemonic}, got {ins.mnemonic}"
+    def _mov_reg_reg(self, insn, dst_name, src_name=None):
+        if insn.mnemonic != "mov" or len(insn.operands) != 2:
+            return None
+        dst, src = insn.operands
+        if dst.type != ARM64_OP_REG or src.type != ARM64_OP_REG:
+            return None
+        if insn.reg_name(dst.reg) != dst_name:
+            return None
+        src_reg = insn.reg_name(src.reg)
+        if src_name is not None and src_reg != src_name:
+            return None
+        return src_reg
+
+    def _mov_imm_zero(self, insn, dst_name):
+        if insn.mnemonic != "mov" or len(insn.operands) != 2:
+            return False
+        dst, src = insn.operands
+        return (
+            dst.type == ARM64_OP_REG
+            and insn.reg_name(dst.reg) == dst_name
+            and src.type == ARM64_OP_IMM
+            and src.imm == 0
         )
-        if expect_op_str is not None:
-            assert ins.op_str == expect_op_str, (
-                f"patch decode mismatch: expected op_str '{expect_op_str}', "
-                f"got '{ins.op_str}'"
-            )
+
+    def _cbz_uses_xreg(self, insn):
+        if len(insn.operands) != 2:
+            return False
+        reg_op, imm_op = insn.operands
+        return reg_op.type == ARM64_OP_REG and imm_op.type == ARM64_OP_IMM and insn.reg_name(reg_op.reg).startswith("x")

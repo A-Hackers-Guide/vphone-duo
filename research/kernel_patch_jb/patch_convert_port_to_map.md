@@ -151,3 +151,9 @@ goto normal_path;   // unconditional branch
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.json`
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.md`
 <!-- END_RUNTIME_IDA_VERIFICATION_2026_03_05 -->
+
+## 2026-03-06 Upstream Rework Review
+
+- `patch_fw.py` targets the kernel-map panic bypass at `0x00B02E94`; release lands at `0x00AC6E94`. The current string-backed matcher still lands on those exact branch sites.
+- IDA confirms the upstream block shape at `0xFFFFFE0007B06E94`: `cmp X16, X8 ; b.ne normal ; ... panic("userspace has control access to a kernel map...")`. This matches the kernel-map panic path in `research/reference/xnu/osfmk/kern/ipc_tt.c`.
+- No code change was needed in this pass. Focused dry-run (`2026-03-06`): research `0x00B02E94`; release `0x00AC6E94`.

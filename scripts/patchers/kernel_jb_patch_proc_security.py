@@ -15,13 +15,6 @@ class KernelJBPatchProcSecurityMixin:
         """
         self._log("\n[JB] _proc_security_policy: mov x0,#0; ret")
 
-        # Try symbol first
-        foff = self._resolve_symbol("_proc_security_policy")
-        if foff >= 0:
-            self.emit(foff, MOV_X0_0, "mov x0,#0 [_proc_security_policy]")
-            self.emit(foff + 4, RET, "ret [_proc_security_policy]")
-            return True
-
         # Find _proc_info by switch pattern:
         # sub wN,wM,#1 ; cmp wN,#0x21
         proc_info_func, switch_off = self._find_proc_info_anchor()

@@ -92,17 +92,21 @@ Current default schedule note (2026-03-06): `patch_cred_label_update_execve` rem
 | JB-12 | B     | `patch_proc_pidinfo`                  | `_proc_pidinfo`                                                                                      | Allow pid 0 info                                                                                                                                                                     |     Y      |
 | JB-13 | B     | `patch_convert_port_to_map`           | `_convert_port_to_map_with_flavor`                                                                   | Skip kernel map panic                                                                                                                                                                |     Y      |
 | JB-14 | B     | `patch_bsd_init_auth`                 | `_bsd_init` rootauth-failure branch                                                                  | Ignore `FSIOC_KERNEL_ROOTAUTH` failure in `bsd_init`; same gate as base patch #3 when layered                                                                                        |     Y      |
-| JB-15 | B     | `patch_dounmount`                     | `_dounmount`                                                                                         | Allow unmount (strict in-function match)                                                                                                                                             |     Y      |
+| JB-15 | B     | `patch_dounmount`                     | `_dounmount`                                                                                         | Allow unmount via upstream coveredvp cleanup-call NOP                                                                                                                                |     Y      |
 | JB-16 | B     | `patch_io_secure_bsd_root`            | `AppleARMPE::callPlatformFunction` (`"SecureRootName"` return select), called from `IOSecureBSDRoot` | Force `"SecureRootName"` policy return to success without altering callback flow; implementation retargeted 2026-03-06                                                               |     Y      |
 | JB-17 | B     | `patch_load_dylinker`                 | `_load_dylinker`                                                                                     | Skip strict `LC_LOAD_DYLINKER == "/usr/lib/dyld"` gate                                                                                                                               |     Y      |
-| JB-18 | B     | `patch_mac_mount`                     | `___mac_mount`                                                                                       | Bypass MAC mount deny path (strict site)                                                                                                                                             |     Y      |
+| JB-18 | B     | `patch_mac_mount`                     | `___mac_mount`                                                                                       | Upstream mount-role wrapper bypass (`tbnz` NOP + role-byte zeroing)                                                                                                                  |     Y      |
 | JB-19 | B     | `patch_nvram_verify_permission`       | `_verifyPermission` (NVRAM)                                                                          | Allow NVRAM writes                                                                                                                                                                   |     Y      |
-| JB-20 | B     | `patch_shared_region_map`             | `_shared_region_map_and_slide_setup`                                                                 | Force shared region path                                                                                                                                                             |     Y      |
-| JB-21 | B     | `patch_spawn_validate_persona`        | `_spawn_validate_persona`                                                                            | Skip persona validation                                                                                                                                                              |     Y      |
-| JB-22 | B     | `patch_task_for_pid`                  | `_task_for_pid`                                                                                      | Allow task_for_pid                                                                                                                                                                   |     Y      |
+| JB-20 | B     | `patch_shared_region_map`             | `_shared_region_map_and_slide_setup`                                                                 | Force root-vs-process-root mount compare to succeed before Cryptex fallback                                                                                                          |     Y      |
+| JB-21 | B     | `patch_spawn_validate_persona`        | `_spawn_validate_persona`                                                                            | Upstream dual-`cbz` persona helper bypass                                                                                                                                            |     Y      |
+| JB-22 | B     | `patch_task_for_pid`                  | `_task_for_pid`                                                                                      | Allow task_for_pid via upstream early `pid == 0` gate NOP                                                                                                                            |     Y      |
 | JB-23 | B     | `patch_thid_should_crash`             | `_thid_should_crash`                                                                                 | Prevent GUARD_TYPE_MACH_PORT crash                                                                                                                                                   |     Y      |
 | JB-24 | B     | `patch_vm_fault_enter_prepare`        | `_vm_fault_enter_prepare`                                                                            | Force `cs_bypass` fast path in runtime fault validation                                                                                                                              |     Y      |
-| JB-25 | B     | `patch_vm_map_protect`                | `_vm_map_protect`                                                                                    | Allow VM protect                                                                                                                                                                     |     Y      |
+| JB-25 | B     | `patch_vm_map_protect`                | `_vm_map_protect`                                                                                    | Skip upstream write-downgrade gate in `vm_map_protect`                                                                                                                               |     Y      |
+
+JB rework note (2026-03-06, remaining active methods): `JB-01`, `JB-08`, `JB-09`, `JB-06`, `JB-11`, `JB-12`, `JB-13`, `JB-17`, `JB-19`, and `JB-23` have now also been rechecked against `/Users/qaq/Desktop/patch_fw.py`, IDA PCC 26.1 research, `research/reference/xnu`, and focused dry-runs on both PCC 26.1 research/release. Of these, `JB-09` was materially pulled back to the upstream `mac_policy_ops` table-entry rewrite model (common allow stub retarget, matching `patch_fw.py` offsets) instead of per-hook body stubs; `JB-06` dropped its broad AMFI-text fallback; `JB-12` tightened to the exact early `ldr/cbz/bl/cbz` guard pair; and `JB-19` now requires a unique `krn.`-anchored verifyPermission gate across all string refs. The remaining six (`JB-01`, `JB-08`, `JB-11`, `JB-13`, `JB-17`, `JB-23`) matched upstream offsets and semantics without further retarget.
+
+JB retarget note (2026-03-06): `JB-15`, `JB-18`, `JB-20`, `JB-21`, `JB-22`, and `JB-25` were rechecked against `/Users/qaq/Desktop/patch_fw.py`, IDA PCC 26.1 research, and `research/reference/xnu`. Current preferred runtime behavior is to match the known-good upstream semantic gate unless binary+source evidence clearly disproves it. In this pass, `JB-22` was pulled back from a helper-return rewrite to the upstream early `pid == 0` gate, and `JB-20` was pulled back from the later preboot-fallback compare to the upstream first root-mount compare.
 
 JB-24 note (2026-03-06): the old derived matcher hit the `VM_PAGE_CONSUME_CLUSTERED()` lock/unlock sequence inside `vm_fault_enter_prepare`, i.e. `pmap_lock_phys_page()` / `pmap_unlock_phys_page()`. The implementation is now retargeted to the upstream PCC 26.1 research `cs_bypass` gate at `0x00BA9E1C` / `0xFFFFFE0007BADE1C`.
 
@@ -110,43 +114,42 @@ JB-24 note (2026-03-06): the old derived matcher hit the `VM_PAGE_CONSUME_CLUSTE
 
 ### Binary Patches Applied Over SSH Ramdisk
 
-| #   | Patch                     | Binary                 | Purpose                                   | Regular | Dev | JB  |
-| --- | ------------------------- | ---------------------- | ----------------------------------------- | :-----: | :-: | :-: |
-| 1   | `/%s.gl` -> `/AA.gl`      | `seputil`              | Gigalocker UUID fix                       |    Y    |  Y  |  Y  |
-| 2   | NOP cache validation      | `launchd_cache_loader` | Allow modified `launchd.plist`            |    Y    |  Y  |  Y  |
-| 3   | `mov x0,#1; ret`          | `mobileactivationd`    | Activation bypass                         |    Y    |  Y  |  Y  |
-| 4   | Plist injection           | `launchd.plist`        | bash/dropbear/trollvnc/vphoned daemons    |    Y    |  Y  |  Y  |
-| 5   | `b` (skip jetsam guard)   | `launchd`              | Prevent jetsam panic on boot              |    -    |  Y  |  Y  |
-| 6   | `LC_LOAD_DYLIB` injection | `launchd`              | Load `/cores/launchdhook.dylib` at launch |    -    |  -  |  Y  |
+| #   | Patch                     | Binary                 | Purpose                                                       | Regular | Dev | JB  |
+| --- | ------------------------- | ---------------------- | ------------------------------------------------------------- | :-----: | :-: | :-: |
+| 1   | `/%s.gl` -> `/AA.gl`      | `seputil`              | Gigalocker UUID fix                                           |    Y    |  Y  |  Y  |
+| 2   | NOP cache validation      | `launchd_cache_loader` | Allow modified `launchd.plist`                                |    Y    |  Y  |  Y  |
+| 3   | `mov x0,#1; ret`          | `mobileactivationd`    | Activation bypass                                             |    Y    |  Y  |  Y  |
+| 4   | Plist injection           | `launchd.plist`        | bash/dropbear/trollvnc/vphoned daemons                        |    Y    |  Y  |  Y  |
+| 5   | `b` (skip jetsam guard)   | `launchd`              | Prevent jetsam panic on boot                                  |    -    |  Y  |  Y  |
+| 6   | `LC_LOAD_DYLIB` injection | `launchd`              | Load short alias `/b` (copy of `launchdhook.dylib`) at launch |    -    |  -  |  Y  |
 
 ### Installed Components
 
-| #   | Component                  | Description                                                                | Regular | Dev | JB  |
-| --- | -------------------------- | -------------------------------------------------------------------------- | :-----: | :-: | :-: |
-| 1   | Cryptex SystemOS + AppOS   | Decrypt AEA + mount + copy to device                                       |    Y    |  Y  |  Y  |
-| 2   | GPU driver                 | AppleParavirtGPUMetalIOGPUFamily bundle                                    |    Y    |  Y  |  Y  |
-| 3   | `iosbinpack64`             | Jailbreak tools (base set)                                                 |    Y    |  Y  |  Y  |
-| 4   | `iosbinpack64` dev overlay | Replace `rpcserver_ios` with dev build                                     |    -    |  Y  |  -  |
-| 5   | `vphoned`                  | vsock HID/control daemon (built + signed)                                  |    Y    |  Y  |  Y  |
-| 6   | LaunchDaemons              | bash/dropbear/trollvnc/rpcserver_ios/vphoned plists                        |    Y    |  Y  |  Y  |
-| 7   | Procursus bootstrap        | Bootstrap filesystem + optional Sileo deb                                  |    -    |  -  |  Y  |
-| 8   | BaseBin hooks              | `systemhook.dylib` / `launchdhook.dylib` / `libellekit.dylib` -> `/cores/` |    -    |  -  |  Y  |
+| #   | Component                  | Description                                                                                                        | Regular | Dev | JB  |
+| --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------ | :-----: | :-: | :-: |
+| 1   | Cryptex SystemOS + AppOS   | Decrypt AEA + mount + copy to device                                                                               |    Y    |  Y  |  Y  |
+| 2   | GPU driver                 | AppleParavirtGPUMetalIOGPUFamily bundle                                                                            |    Y    |  Y  |  Y  |
+| 3   | `iosbinpack64`             | Jailbreak tools (base set)                                                                                         |    Y    |  Y  |  Y  |
+| 4   | `iosbinpack64` dev overlay | Replace `rpcserver_ios` with dev build                                                                             |    -    |  Y  |  -  |
+| 5   | `vphoned`                  | vsock HID/control daemon (built + signed)                                                                          |    Y    |  Y  |  Y  |
+| 6   | LaunchDaemons              | bash/dropbear/trollvnc/rpcserver_ios/vphoned plists                                                                |    Y    |  Y  |  Y  |
+| 7   | Procursus bootstrap        | Bootstrap filesystem + optional Sileo deb                                                                          |    -    |  -  |  Y  |
+| 8   | BaseBin hooks              | `systemhook.dylib` / `launchdhook.dylib` / `libellekit.dylib` -> `/cores/` plus `/b` alias for `launchdhook.dylib` |    -    |  -  |  Y  |
 
 ### CFW Installer Flow Matrix (Script-Level)
 
-| Flow Item                                                         | Regular (`cfw_install.sh`)                    | Dev (`cfw_install_dev.sh`)                      | JB (`cfw_install_jb.sh`)                      |
-| ----------------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------- | --------------------------------------------- | ------ | --------------------------------------------- |
-| Base CFW phases (1/7 -> 7/7)                                      | Runs directly                                 | Runs directly                                   | Runs via `CFW_SKIP_HALT=1 zsh cfw_install.sh` |
-| Dev overlay (`rpcserver_ios` replacement)                         | -                                             | Y (`apply_dev_overlay`)                         | -                                             |
-| SSH readiness wait before install                                 | Y (`wait_for_device_ssh_ready`)               | -                                               | Y (inherited from base run)                   |
-| `remote_mount` behavior                                           | Ensures mountpoint and verifies mount success | Best-effort mount only (`mount_apfs ...         |                                               | true`) | Ensures mountpoint and verifies mount success |
-| launchd jetsam patch (`patch-launchd-jetsam`)                     | -                                             | Y (base-flow injection)                         | Y (JB-1)                                      |
-| launchd dylib injection (`inject-dylib /cores/launchdhook.dylib`) | -                                             | -                                               | Y (JB-1)                                      |
-| Procursus bootstrap deployment                                    | -                                             | -                                               | Y (JB-2)                                      |
-| BaseBin hook deployment (`*.dylib` -> `/mnt1/cores`)              | -                                             | -                                               | Y (JB-3)                                      |
-| Additional input resources                                        | `cfw_input`                                   | `cfw_input` + `resources/cfw_dev/rpcserver_ios` | `cfw_input` + `cfw_jb_input`                  |
-| Extra tool requirement beyond base                                | -                                             | -                                               | `zstd`                                        |
-| Halt behavior                                                     | Halts unless `CFW_SKIP_HALT=1`                | Halts unless `CFW_SKIP_HALT=1`                  | Always halts after JB phases                  |
+| Flow Item                                            | Regular (`cfw_install.sh`)      | Dev (`cfw_install_dev.sh`)                      | JB (`cfw_install_jb.sh`)                      |
+| ---------------------------------------------------- | ------------------------------- | ----------------------------------------------- | --------------------------------------------- |
+| Base CFW phases (1/7 -> 7/7)                         | Runs directly                   | Runs directly                                   | Runs via `CFW_SKIP_HALT=1 zsh cfw_install.sh` |
+| Dev overlay (`rpcserver_ios` replacement)            | -                               | Y (`apply_dev_overlay`)                         | -                                             |
+| SSH readiness wait before install                    | Y (`wait_for_device_ssh_ready`) | -                                               | Y (inherited from base run)                   |
+| launchd jetsam patch (`patch-launchd-jetsam`)        | -                               | Y (base-flow injection)                         | Y (JB-1)                                      |
+| launchd dylib injection (`inject-dylib /b`)          | -                               | -                                               | Y (JB-1)                                      |
+| Procursus bootstrap deployment                       | -                               | -                                               | Y (JB-2)                                      |
+| BaseBin hook deployment (`*.dylib` -> `/mnt1/cores`) | -                               | -                                               | Y (JB-3)                                      |
+| Additional input resources                           | `cfw_input`                     | `cfw_input` + `resources/cfw_dev/rpcserver_ios` | `cfw_input` + `cfw_jb_input`                  |
+| Extra tool requirement beyond base                   | -                               | -                                               | `zstd`                                        |
+| Halt behavior                                        | Halts unless `CFW_SKIP_HALT=1`  | Halts unless `CFW_SKIP_HALT=1`                  | Always halts after JB phases                  |
 
 ## Summary
 

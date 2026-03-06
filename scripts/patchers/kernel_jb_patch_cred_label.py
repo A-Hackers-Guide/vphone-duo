@@ -243,6 +243,13 @@ class KernelJBPatchCredLabelMixin:
             self._log("  [-] shared deny return not found")
             return False
 
+        deny_already_allowed = _rd32(self.data, deny_off) == self._MOV_W0_0_U32
+        if deny_already_allowed:
+            self._log(
+                f"  [=] shared deny return at 0x{deny_off:X} already forces allow; "
+                "skipping deny trampoline hook"
+            )
+
         success_exits = self._find_cred_label_success_exits(func_off, epilogue_off)
         if not success_exits:
             self._log("  [-] success exits not found")
@@ -253,27 +260,31 @@ class KernelJBPatchCredLabelMixin:
             self._log("  [-] csflags stack reload not found")
             return False
 
-        deny_cave = self._find_code_cave(8)
-        if deny_cave < 0:
-            self._log("  [-] no code cave found for C21-v3 deny trampoline")
-            return False
+        deny_cave = -1
+        if not deny_already_allowed:
+            deny_cave = self._find_code_cave(8)
+            if deny_cave < 0:
+                self._log("  [-] no code cave found for C21-v3 deny trampoline")
+                return False
 
         success_cave = self._find_code_cave(32)
         if success_cave < 0 or success_cave == deny_cave:
             self._log("  [-] no code cave found for C21-v3 success trampoline")
             return False
 
-        deny_branch_back = self._encode_b(deny_cave + 4, epilogue_off)
-        if not deny_branch_back:
-            self._log("  [-] branch from deny trampoline back to epilogue is out of range")
-            return False
+        deny_branch_back = b""
+        if not deny_already_allowed:
+            deny_branch_back = self._encode_b(deny_cave + 4, epilogue_off)
+            if not deny_branch_back:
+                self._log("  [-] branch from deny trampoline back to epilogue is out of range")
+                return False
 
         success_branch_back = self._encode_b(success_cave + 28, epilogue_off)
         if not success_branch_back:
             self._log("  [-] branch from success trampoline back to epilogue is out of range")
             return False
 
-        deny_shellcode = asm("mov w0, #0") + deny_branch_back
+        deny_shellcode = asm("mov w0, #0") + deny_branch_back if not deny_already_allowed else b""
         success_shellcode = (
             asm(f"ldr x26, {csflags_mem_op}")
             + asm("cbz x26, #0x10")
@@ -299,15 +310,16 @@ class KernelJBPatchCredLabelMixin:
                 f"success_trampoline+{index} [_cred_label_update_execve C21-v3]",
             )
 
-        deny_branch_to_cave = self._encode_b(deny_off, deny_cave)
-        if not deny_branch_to_cave:
-            self._log(f"  [-] branch from 0x{deny_off:X} to deny trampoline is out of range")
-            return False
-        self.emit(
-            deny_off,
-            deny_branch_to_cave,
-            f"b deny cave [_cred_label_update_execve C21-v3 exit @ 0x{deny_off:X}]",
-        )
+        if not deny_already_allowed:
+            deny_branch_to_cave = self._encode_b(deny_off, deny_cave)
+            if not deny_branch_to_cave:
+                self._log(f"  [-] branch from 0x{deny_off:X} to deny trampoline is out of range")
+                return False
+            self.emit(
+                deny_off,
+                deny_branch_to_cave,
+                f"b deny cave [_cred_label_update_execve C21-v3 exit @ 0x{deny_off:X}]",
+            )
 
         for off in success_exits:
             branch_to_cave = self._encode_b(off, success_cave)

@@ -1,192 +1,118 @@
-# B11 `patch_mac_mount` (full static re-validation, 2026-03-05)
+# B11 `patch_mac_mount` (`2026-03-06` rework)
 
-## Scope and method
+## Verdict
 
-- Re-done from scratch with static analysis only (IDA MCP), treating prior notes as untrusted.
-- Verified function flow, callers, syscall-entry reachability, and patch-site semantics on the current kernel image in IDA.
+- Final result: **match upstream** `/Users/qaq/Desktop/patch_fw.py`.
+- Upstream reference patches the PCC 26.1 research kernel at:
+  - `0xFFFFFE0007CA9D54` / file offset `0x00CA5D54`
+  - `0xFFFFFE0007CA9D88` / file offset `0x00CA5D88`
+- Reworked runtime matcher now lands on those same two sites again.
+- Previous local drift to `0xFFFFFE0007CA8EAC` / `0x00CA4EAC` is now treated as **wrong for this patch**: that site is inside the lower `prepare_coveredvp()` helper and corresponds to the ownership / `EPERM` gate, not the upstream mount-role wrapper gate.
 
-## Patched function and exact gate
+## Anchor class
 
-- Patched function (`patched` group):
-  - `patch_mac_mount__patched_fn_mount_gate` @ `0xFFFFFE0007CA8E08`
-- Critical sequence:
-  - `0xFFFFFE0007CA8EA8`: `BL patch_mac_mount__supp_mount_ctx_prepare`
-  - `0xFFFFFE0007CA8EAC`: `CBNZ W0, 0xFFFFFE0007CA8EC8` **(patch target)**
-  - `0xFFFFFE0007CA8EC8`: `MOV W0, #1` (deny/error return path)
-- Meaning:
-  - This gate consumes return code from the context/policy-prep call and forces immediate failure (`W0=1`) on non-zero.
-  - `patch_mac_mount` must neutralize the deny branch, not the BL call.
+- Primary runtime anchor class: **string anchor**.
+- String used: `"mount_common()"`.
+- Why this anchor: it is present in the same VFS syscall compilation unit on the stripped PCC kernels, survives the empty embedded symtable case (`0 []`), and gives a stable way to recover the local `mount_common` function without IDA names or external symbol dumps.
+- Secondary discovery after the string anchor: **semantic control-flow search** over nearby callers of the recovered `mount_common` function.
 
-## Why this function is called (full trace from mount entry paths)
+## Where the patch lands
 
-- IDA-marked `supplement` functions:
-  - `patch_mac_mount__supp_sys_mount_adapter` @ `0xFFFFFE0007CA9AF8`
-  - `patch_mac_mount__supp_sys_mount_core` @ `0xFFFFFE0007CA9B38`
-  - `patch_mac_mount__supp_sys_fmount` @ `0xFFFFFE0007CAA924`
-  - `patch_mac_mount__supp_sys_fs_snapshot` @ `0xFFFFFE0007CBE51C`
-  - `patch_mac_mount__supp_snapshot_mount_core` @ `0xFFFFFE0007CBED28`
-  - `patch_mac_mount__supp_mount_common` @ `0xFFFFFE0007CA7868`
-  - `patch_mac_mount__supp_mount_ctx_prepare` @ `0xFFFFFE0007CCD1B4`
-- Syscall-table-backed handlers (data pointers observed in `__const`):
-  - `0xFFFFFE0007740800` -> `patch_mac_mount__supp_sys_mount_adapter`
-  - `0xFFFFFE0007742018` -> `patch_mac_mount__supp_sys_mount_core`
-  - `0xFFFFFE00077429A8` -> `patch_mac_mount__supp_sys_fmount`
-  - `0xFFFFFE00077428E8` -> `patch_mac_mount__supp_sys_fs_snapshot`
-- Reachability into patched gate:
-  - `patch_mac_mount__supp_mount_common` calls patched gate at `0xFFFFFE0007CA79F4`
-  - `patch_mac_mount__supp_sys_mount_core` also directly calls patched gate at `0xFFFFFE0007CAA03C`
-  - `patch_mac_mount__supp_sys_fmount` enters via `mount_common` (`0xFFFFFE0007CAAA3C`)
-  - `patch_mac_mount__supp_snapshot_mount_core` enters via `mount_common` (`0xFFFFFE0007CBEF5C`)
+### Site 1 — preboot-role reject gate
 
-## Purpose of the patch (why required for unsigned payload + launchd hook workflow)
+- Match site: `0xFFFFFE0007CA9D54` / `0x00CA5D54`
+- Stock instruction: `tbnz w28, #5, ...`
+- Patched instruction: `nop`
+- Upstream relation: **exact match** to `/Users/qaq/Desktop/patch_fw.py` `patch(0xCA5D54, 0xD503201F)`.
 
-- This gate is in the mount authorization/preflight path; deny branch returns early before normal mount completion path.
-- Downstream mount path is only reached if this gate does not abort (e.g., later call to `sub_FFFFFE00082E11E4` in the patched function).
-- Project install/runtime dependency on successful mounts is explicit:
-  - `scripts/cfw_install.sh` and `scripts/cfw_install_jb.sh` require `mount_apfs` success and hard-fail on mount failure.
-  - JB flow writes unsigned payload binaries under mounted rootfs paths and deploys hook dylibs under `/mnt1/cores/...`.
-  - JB-1 modifies launchd to load `/cores/launchdhook.dylib`; if mount path is blocked, required filesystem state/artifacts are not reliably available.
-- Therefore this patch is a mount-authorization bypass needed to keep the mount pipeline alive for:
-  1. installing/using unsigned payload binaries, and
-  2. making launchd dylib injection path viable.
+### Site 2 — role-state byte gate
 
-## Correctness note on patch style
+- Match site: `0xFFFFFE0007CA9D88` / `0x00CA5D88`
+- Stock instruction: `ldrb w8, [x8, #1]`
+- Patched instruction: `mov x8, xzr`
+- Upstream relation: **exact match** to `/Users/qaq/Desktop/patch_fw.py` `patch(0xCA5D88, 0xAA1F03E8)`.
 
-- Correct implementation: patch deny branch (`CBNZ W0`) to `NOP`.
-- Incorrect/old style: NOP the preceding `BL` can leave stale `W0` and spuriously force deny.
-- Current code path is aligned with correct style (branch patch).
+## Why these are the correct semantic gates
 
-## IDA markings applied (requested two groups)
+## Facts from IDA MCP on PCC 26.1 research
 
-- `patched` group:
-  - `patch_mac_mount__patched_fn_mount_gate`
-  - patch-point comment at `0xFFFFFE0007CA8EAC`
-- `supplement` group:
-  - `patch_mac_mount__supp_*` functions listed above
-  - patch context comments at `0xFFFFFE0007CA8EA8` and `0xFFFFFE0007CA8EC8`
+- The `mount_common()` string xref recovers the main mount flow function at `0xFFFFFE0007CA7868`.
+- The upstream-matching wrapper candidate is a nearby caller that itself calls back into that `mount_common` function.
+- In that wrapper, the first patch site is the sequence:
+  - `tbnz w28, #5, loc_fail`
+  - then, on the fail target, `mov w25, #1 ; b ...`
+- In `research/reference/xnu/bsd/sys/mount_internal.h`, bit `0x20` is `KERNEL_MOUNT_PREBOOTVOL`.
+- In the same wrapper, the second patch site is the sequence:
+  - `add x8, x16, #0x70`
+  - `ldrb w8, [x8, #1]`
+  - `tbz w8, #6, loc_continue_to_mount_common`
+  - `orr w8, w28, #0x10000`
+  - `tbnz w28, #0, ...`
+  - `mov w25, #1`
+- The `tbz w8, #6` target flows into the block that calls back into the recovered `mount_common` function.
 
-## Security impact
+## Source-backed interpretation
 
-- This bypass weakens MAC enforcement in mount flow and expands what mount operations can proceed.
-- It is functional for JB bring-up but should be treated as a high-impact policy bypass.
+- Fact: `KERNEL_MOUNT_PREBOOTVOL` is bit 5 in `mount_internal.h`.
+- Inference: the first gate is the early Preboot-volume reject path in the mount-role wrapper; NOPing it matches the known-to-work upstream behavior.
+- Fact: the second gate tests a byte-derived bit before the wrapper continues into the `mount_common` call path.
+- Inference: forcing that loaded byte to zero reproduces the upstream intent of always taking the stock `tbz ..., #6, continue` path.
+- Because both patched sites are in the wrapper that selects whether execution can even reach `mount_common`, they are a better semantic fit for `patch_mac_mount` than the previously drifted lower helper branch.
 
-## Symbol Consistency Audit (2026-03-05)
+## Why the previous local drift was rejected
 
-- Status: `partial`
-- Recovered symbol `__mac_mount` exists at `0xfffffe0007cb4eec`.
-- This document traces a deeper mount-policy path and uses analyst labels for internal helpers; those names are only partially represented in recovered symbol JSON.
+- Previous local matcher patched `0xFFFFFE0007CA8EAC` / `0x00CA4EAC`.
+- IDA + XNU correlation shows that sequence belongs to the lower `prepare_coveredvp()` helper.
+- That helper sequence matches the source shape of the ownership / `EPERM` preflight:
+  - `vnode_getattr(...)`
+  - compare owner uid vs credential uid / root
+  - on failure set `W0 = 1`
+- That is **not** the same gate as the upstream B11 design target.
+- Since `/Users/qaq/Desktop/patch_fw.py` is known-to-work and the upstream sites still exist on PCC 26.1 research, keeping the drift would be a red flag; the rework therefore restores upstream semantics.
 
-## Patch Metadata
+## Runtime matcher design
 
-- Patch document: `patch_mac_mount.md` (B11).
-- Primary patcher module: `scripts/patchers/kernel_jb_patch_mac_mount.py`.
-- Analysis mode: static binary analysis (IDA-MCP + disassembly + recovered symbols), no runtime patch execution.
+- Step 1: recover `mount_common` via the `"mount_common()"` string anchor.
+- Step 2: scan only a local window around that function for callers that branch-link into it.
+- Step 3: among those callers, require the unique paired shape:
+  - a `tbnz <flags>, #5 -> mov #1` reject gate, and
+  - a later `add ..., #0x70 ; ldrb ; tbz #6 -> block that calls mount_common` gate.
+- Step 4: patch exactly those two instructions.
 
-## Patch Goal
+## Why this should generalize to PCC 26.1 release / likely 26.3 release
 
-Bypass the mount-policy deny branch in MAC mount flow so jailbreak filesystem setup can continue.
+- It does not depend on IDA names, embedded symbols, or fixed addresses.
+- The primary anchor is a diagnostic string already used elsewhere in the same VFS syscall unit and expected to survive stripped release kernels.
+- The secondary matcher keys off stable semantics from XNU source and local control flow:
+  - `KERNEL_MOUNT_PREBOOTVOL` bit test,
+  - the nearby role-state byte test,
+  - and the wrapper-to-`mount_common` call relationship.
+- This is more likely to survive research vs release layout drift than the previous shallow “first callee with `bl ; cbnz w0`” heuristic.
 
-## Target Function(s) and Binary Location
+## Performance notes
 
-- Primary target: mount gate function at `0xfffffe0007ca8e08` (`CBNZ W0` deny branch site).
-- Patchpoint: `0xfffffe0007ca8eac` (`cbnz` -> `nop`).
+- Runtime cost stays bounded:
+  - one string lookup,
+  - one local scan window around the recovered `mount_common` function,
+  - semantic inspection of only the small set of nearby caller functions.
+- It avoids whole-kernel heuristic sweeps and does not require expensive external symbol processing.
 
-## Kernel Source File Location
+## Focused dry-run (`2026-03-06`)
 
-- Expected XNU source family: `security/mac_vfs.c` / `bsd/vfs/vfs_syscalls.c` mount policy bridge.
-- Confidence: `medium`.
+- Kernel: extracted PCC 26.1 research raw Mach-O `/tmp/vphone-kcache-research-26.1.raw`
+- Result: `method_return=True`
+- Emitted writes:
+  - `0x00CA5D54` — `NOP [___mac_mount preboot-role reject]`
+  - `0x00CA5D88` — `mov x8, xzr [___mac_mount role-state gate]`
+- Upstream comparison: **exact offset match** with `/Users/qaq/Desktop/patch_fw.py`.
 
-## Function Call Stack
+## 2026-03-06 Rework
 
-- Primary traced chain (from `Why this function is called (full trace from mount entry paths)`):
-- IDA-marked `supplement` functions:
-- `patch_mac_mount__supp_sys_mount_adapter` @ `0xFFFFFE0007CA9AF8`
-- `patch_mac_mount__supp_sys_mount_core` @ `0xFFFFFE0007CA9B38`
-- `patch_mac_mount__supp_sys_fmount` @ `0xFFFFFE0007CAA924`
-- `patch_mac_mount__supp_sys_fs_snapshot` @ `0xFFFFFE0007CBE51C`
-- The upstream entry(s) and patched decision node are linked by direct xref/callsite evidence in this file.
+- Upstream target (`/Users/qaq/Desktop/patch_fw.py`): `match`.
+- Final research sites: `0x00CA5D54` (`0xFFFFFE0007CA9D54`) and `0x00CA5D88` (`0xFFFFFE0007CA9D88`).
+- Anchor class: `mixed string+heuristic`. Runtime reveal uses the stable `"mount_common()"` string only to bound the surrounding `vfs_syscalls.c` neighborhood, then picks the unique nearby function that contains both upstream local gates: the early `tbnz wFlags,#5` branch and the later `add xN,#0x70 ; ldrb wN,[xN,#1] ; tbz wN,#6` policy-byte test.
+- Why these sites: they are the exact upstream dual-site bypass. The earlier drift to `0x00CA4EAC` patched a different `cbnz w0` gate in another helper and is therefore rejected as an upstream mismatch.
+- Release/generalization rationale: the string keeps the search local to the right source module, while the paired semantic patterns identify the same function without relying on symbols. That combination should survive 26.1 release / likely 26.3 release better than a raw offset.
+- Performance note: one string anchor plus a bounded neighborhood scan (~`0x9000` bytes) instead of a whole-kernel semantic walk.
+- Focused PCC 26.1 research dry-run: `hit`, 2 writes at `0x00CA5D54` and `0x00CA5D88`.
 
-## Patch Hit Points
-
-- Patch hitpoint is selected by contextual matcher and verified against local control-flow.
-- Before/after instruction semantics are captured in the patch-site evidence above.
-
-## Current Patch Search Logic
-
-- Implemented in `scripts/patchers/kernel_jb_patch_mac_mount.py`.
-- Site resolution uses anchor + opcode-shape + control-flow context; ambiguous candidates are rejected.
-- The patch is applied only after a unique candidate is confirmed in-function.
-- Uses string anchors + instruction-pattern constraints + structural filters (for example callsite shape, branch form, register/imm checks).
-
-## Pseudocode (Before)
-
-```c
-rc = mount_ctx_prepare(...);
-if (rc != 0) {
-    return 1;
-}
-```
-
-## Pseudocode (After)
-
-```c
-rc = mount_ctx_prepare(...);
-/* deny branch skipped */
-```
-
-## Validation (Static Evidence)
-
-- Verified with IDA-MCP disassembly/decompilation, xrefs, and callgraph context for the selected site.
-- Cross-checked against recovered symbols in `research/kernel_info/json/kernelcache.research.vphone600.bin.symbols.json`.
-- Address-level evidence in this document is consistent with patcher matcher intent.
-
-## Expected Failure/Panic if Unpatched
-
-- MAC mount precheck deny branch returns error early, causing mount pipeline failure during CFW/JB install steps.
-
-## Risk / Side Effects
-
-- This patch weakens a kernel policy gate by design and can broaden behavior beyond stock security assumptions.
-- Potential side effects include reduced diagnostics fidelity and wider privileged surface for patched workflows.
-
-## Symbol Consistency Check
-
-- Recovered-symbol status in `kernelcache.research.vphone600.bin.symbols.json`: `match`.
-- Canonical symbol hit(s): `__mac_mount`.
-- Where canonical names are absent, this document relies on address-level control-flow and instruction evidence; analyst aliases are explicitly marked as aliases.
-- IDA-MCP lookup snapshot (2026-03-05): `0xfffffe0007ca8e08` currently resolves to `sub_FFFFFE0007CA8C90` (size `0x1a4`).
-
-## Open Questions and Confidence
-
-- Open question: verify future firmware drift does not move this site into an equivalent but semantically different branch.
-- Overall confidence for this patch analysis: `high` (symbol match + control-flow/byte evidence).
-
-## Evidence Appendix
-
-- Detailed addresses, xrefs, and rationale are preserved in the existing analysis sections above.
-- For byte-for-byte patch details, refer to the patch-site and call-trace subsections in this file.
-
-## Runtime + IDA Verification (2026-03-05)
-
-- Verification timestamp (UTC): `2026-03-05T14:55:58.795709+00:00`
-- Kernel input: `/Users/qaq/Documents/Firmwares/PCC-CloudOS-26.3-23D128/kernelcache.research.vphone600`
-- Base VA: `0xFFFFFE0007004000`
-- Runtime status: `hit` (1 patch writes, method_return=True)
-- Included in `KernelJBPatcher.find_all()`: `False`
-- IDA mapping: `1/1` points in recognized functions; `0` points are code-cave/data-table writes.
-- IDA mapping status: `ok` (IDA runtime mapping loaded.)
-- Call-chain mapping status: `ok` (IDA call-chain report loaded.)
-- Call-chain validation: `1` function nodes, `1` patch-point VAs.
-- IDA function sample: `prepare_coveredvp`
-- Chain function sample: `prepare_coveredvp`
-- Caller sample: `__mac_mount`, `mount_common`
-- Callee sample: `buf_invalidateblks`, `enablequotas`, `prepare_coveredvp`, `sub_FFFFFE0007B1B508`, `sub_FFFFFE0007B1C348`, `sub_FFFFFE0007B1C590`
-- Verdict: `questionable`
-- Recommendation: Hit is valid but patch is inactive in find_all(); enable only after staged validation.
-- Key verified points:
-- `0xFFFFFE0007CB4260` (`prepare_coveredvp`): NOP [___mac_mount deny branch] | `e0000035 -> 1f2003d5`
-- Artifacts: `research/kernel_patch_jb/runtime_verification/runtime_verification_report.json`
-- Artifacts: `research/kernel_patch_jb/runtime_verification/ida_runtime_patch_points.json`
-- Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.json`
-- Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.md`
-<!-- END_RUNTIME_IDA_VERIFICATION_2026_03_05 -->

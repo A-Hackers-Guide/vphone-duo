@@ -149,3 +149,10 @@ if (pid_or_flavor_guard == 0) return EINVAL;
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.json`
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.md`
 <!-- END_RUNTIME_IDA_VERIFICATION_2026_03_05 -->
+
+## 2026-03-06 Upstream Rework Review
+
+- `patch_fw.py` patches the two early guards at `0x01060A90` and `0x01060A98`; release lands at `0x01024A90` and `0x01024A98`.
+- In this pass the runtime matcher was tightened from “first two early CBZ/CBNZ” to the precise local shape recovered from the `_proc_info` anchor: `ldr x0, [x0,#0x18] ; cbz x0, fail ; bl ... ; cbz/cbnz wN, fail`.
+- This keeps the patch on the same upstream sites but removes ambiguity for later stripped release kernels.
+- Focused dry-run (`2026-03-06`): research `0x01060A90/98`; release `0x01024A90/98`.

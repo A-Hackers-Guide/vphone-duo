@@ -200,3 +200,10 @@ if (hash_type != hash_type) {
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.json`
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.md`
 <!-- END_RUNTIME_IDA_VERIFICATION_2026_03_05 -->
+
+## 2026-03-06 Upstream Rework Review
+
+- `patch_fw.py` patches the SHA256-only reject compare at `0x016405AC`; release lands at `0x015BAE8C`. The current matcher still lands on exactly those sites.
+- In this pass the runtime reveal was tightened to a single string-backed path: `"AMFI: code signature validation failed"` -> caller -> BL target -> unique `cmp w0,#imm ; b.ne` reject gate.
+- The old broad fallback (`first cmp w0,#imm in AMFI text`) was removed because it was not a justified cross-build matcher under the current rules.
+- Focused dry-run (`2026-03-06`): research `0x016405AC`; release `0x015BAE8C`.

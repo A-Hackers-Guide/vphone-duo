@@ -5,30 +5,14 @@ class KernelJBPatchLoadDylinkerMixin:
     def patch_load_dylinker(self):
         """Bypass load_dylinker policy gate in the dyld path.
 
-        Strict selector:
-        1. Anchor function by '/usr/lib/dyld' string reference.
+        Raw PCC 26.1 kernels resolve this patch through a single runtime path:
+        1. Anchor the containing function by a kernel-text reference to
+           '/usr/lib/dyld'.
         2. Inside that function, find BL <check>; CBZ W0, <allow>.
         3. Replace BL with unconditional B to <allow>.
         """
         self._log("\n[JB] _load_dylinker: skip dyld policy check")
 
-        # Try symbol first
-        foff = self._resolve_symbol("_load_dylinker")
-        if foff >= 0:
-            func_end = self._find_func_end(foff, 0x2000)
-            result = self._find_bl_cbz_gate(foff, func_end)
-            if result:
-                bl_off, allow_target = result
-                b_bytes = self._encode_b(bl_off, allow_target)
-                if b_bytes:
-                    self.emit(
-                        bl_off,
-                        b_bytes,
-                        f"b #0x{allow_target - bl_off:X} [_load_dylinker]",
-                    )
-                    return True
-
-        # Fallback: strict dyld-anchor function profile.
         str_off = self.find_string(b"/usr/lib/dyld")
         if str_off < 0:
             self._log("  [-] '/usr/lib/dyld' string not found")
@@ -37,9 +21,7 @@ class KernelJBPatchLoadDylinkerMixin:
         kstart, kend = self._get_kernel_text_range()
         refs = self.find_string_refs(str_off, kstart, kend)
         if not refs:
-            refs = self.find_string_refs(str_off)
-        if not refs:
-            self._log("  [-] no code refs to '/usr/lib/dyld'")
+            self._log("  [-] no kernel-text code refs to '/usr/lib/dyld'")
             return False
 
         for adrp_off, _, _ in refs:
@@ -65,7 +47,7 @@ class KernelJBPatchLoadDylinkerMixin:
             )
             return True
 
-        self._log("  [-] dyld policy gate not found")
+        self._log("  [-] dyld policy gate not found in dyld-anchored function")
         return False
 
     def _find_bl_cbz_gate(self, start, end):

@@ -1,131 +1,166 @@
 """Mixin: KernelJBPatchMacMountMixin."""
 
-from .kernel_jb_base import ARM64_OP_IMM, asm
+from .kernel_asm import _cs
+from .kernel_jb_base import ARM64_OP_IMM, ARM64_OP_MEM, ARM64_OP_REG, asm
 
 
 class KernelJBPatchMacMountMixin:
     def patch_mac_mount(self):
-        """Bypass MAC mount check in ___mac_mount-like flow.
+        """Apply the upstream twin bypasses in the mount-role wrapper.
 
-        Old kernels may expose ___mac_mount/__mac_mount symbols directly.
-        Stripped kernels are resolved via mount_common() call graph.
-        We patch the conditional deny branch (`cbnz w0, ...`) rather than
-        NOP'ing the BL itself, to avoid stale register state forcing errors.
+        Preferred design target is `/Users/qaq/Desktop/patch_fw.py`, which
+        patches two sites in the wrapper that decides whether execution can
+        continue into `mount_common()`:
+
+        - `tbnz wFlags, #5, deny` -> `nop`
+        - `ldrb w8, [xTmp, #1]` -> `mov x8, xzr`
+
+        Runtime design avoids unstable symbols by:
+        1. recovering `mount_common` from the in-image `"mount_common()"`
+           string,
+        2. scanning only a bounded neighborhood for local callers of that
+           recovered function,
+        3. selecting the unique caller that contains both upstream gates.
         """
-        self._log("\n[JB] ___mac_mount: bypass deny branch")
+        self._log("\n[JB] ___mac_mount: upstream twin bypass")
 
-        # Try symbol first
-        foff = self._resolve_symbol("___mac_mount")
-        if foff < 0:
-            foff = self._resolve_symbol("__mac_mount")
-        strict = False
-        if foff < 0:
-            strict = True
-            # Find via 'mount_common()' string → function area
-            str_off = self.find_string(b"mount_common()")
-            if str_off >= 0:
-                refs = self.find_string_refs(str_off, *self.kern_text)
-                if refs:
-                    mount_common_func = self.find_function_start(refs[0][0])
-                    if mount_common_func >= 0:
-                        mc_end = self._find_func_end(mount_common_func, 0x2000)
-                        for off in range(mount_common_func, mc_end, 4):
-                            target = self._is_bl(off)
-                            if (
-                                target >= 0
-                                and self.kern_text[0] <= target < self.kern_text[1]
-                            ):
-                                te = self._find_func_end(target, 0x1000)
-                                site = self._find_mac_deny_site(
-                                    target, te, require_error_return=True
-                                )
-                                if site:
-                                    foff = target
-                                    break
-
-        if foff < 0:
-            self._log("  [-] function not found")
+        mount_common = self._find_func_by_string(b"mount_common()", self.kern_text)
+        if mount_common < 0:
+            self._log("  [-] mount_common anchor function not found")
             return False
 
-        func_end = self._find_func_end(foff, 0x1000)
-        site = self._find_mac_deny_site(
-            foff,
-            func_end,
-            require_error_return=strict,
-        )
-        if not site and strict:
-            # Last-resort in stripped builds: still require the BL+CBNZ(w0) shape.
-            site = self._find_mac_deny_site(foff, func_end, require_error_return=False)
-        if not site:
-            self._log("  [-] patch sites not found")
-            return False
-
-        bl_off, cb_off = site
-        nop_patch = asm("nop")
-        self._assert_patch_decode(nop_patch, "nop")
-        self.emit(cb_off, nop_patch, "NOP [___mac_mount deny branch]")
-
-        # Legacy companion tweak, kept for older layouts where x8 carries policy state.
-        for off2 in range(bl_off + 8, min(bl_off + 0x60, func_end), 4):
-            d2 = self._disas_at(off2)
-            if not d2:
+        search_start = max(self.kern_text[0], mount_common - 0x5000)
+        search_end = min(self.kern_text[1], mount_common + 0x5000)
+        candidates = {}
+        for off in range(search_start, search_end, 4):
+            target = self._is_bl(off)
+            if target != mount_common:
                 continue
-            if d2[0].mnemonic == "mov" and d2[0].op_str.startswith("x8,"):
-                if d2[0].op_str != "x8, xzr":
-                    mov_patch = asm("mov x8, xzr")
-                    self._assert_patch_decode(mov_patch, "mov", "x8, xzr")
-                    self.emit(off2, mov_patch, "mov x8,xzr [___mac_mount]")
-                break
+            caller = self.find_function_start(off)
+            if caller < 0 or caller == mount_common or caller in candidates:
+                continue
+            caller_end = self._find_func_end(caller, 0x1200)
+            sites = self._match_upstream_mount_wrapper(caller, caller_end, mount_common)
+            if sites is not None:
+                candidates[caller] = sites
+
+        if len(candidates) != 1:
+            self._log(f"  [-] expected 1 upstream mac_mount candidate, found {len(candidates)}")
+            return False
+
+        branch_off, mov_off = next(iter(candidates.values()))
+        self.emit(branch_off, asm("nop"), "NOP [___mac_mount upstream flag gate]")
+        self.emit(mov_off, asm("mov x8, xzr"), "mov x8,xzr [___mac_mount upstream state clear]")
         return True
 
-    def _find_mac_deny_site(self, start, end, require_error_return):
-        for off in range(start, end - 8, 4):
-            d0 = self._disas_at(off)
-            if not d0 or d0[0].mnemonic != "bl":
-                continue
-            d1 = self._disas_at(off + 4)
-            if not d1 or d1[0].mnemonic != "cbnz":
-                continue
-            if not d1[0].op_str.replace(" ", "").startswith("w0,"):
-                continue
-            if require_error_return:
-                branch_target = self._branch_target(off + 4)
-                if branch_target is None or not (off < branch_target < end):
-                    continue
-                if not self._looks_like_error_return(branch_target):
-                    continue
-            return (off, off + 4)
-        return None
-
-    def _branch_target(self, off):
-        d = self._disas_at(off)
-        if not d:
+    def _match_upstream_mount_wrapper(self, start, end, mount_common):
+        call_sites = []
+        for off in range(start, end, 4):
+            if self._is_bl(off) == mount_common:
+                call_sites.append(off)
+        if not call_sites:
             return None
-        for op in reversed(d[0].operands):
-            if op.type == ARM64_OP_IMM:
-                return op.imm
+
+        flag_gate = self._find_flag_gate(start, end)
+        if flag_gate is None:
+            return None
+
+        state_gate = self._find_state_gate(start, end, call_sites)
+        if state_gate is None:
+            return None
+
+        return (flag_gate, state_gate)
+
+    def _find_flag_gate(self, start, end):
+        hits = []
+        for off in range(start, end - 4, 4):
+            d = self._disas_at(off)
+            if not d:
+                continue
+            insn = d[0]
+            if insn.mnemonic != "tbnz" or not self._is_bit_branch(insn, "w", 5):
+                continue
+            target = insn.operands[2].imm
+            if not (start <= target < end):
+                continue
+            td = self._disas_at(target)
+            if not td or not self._is_mov_w_imm_value(td[0], 1):
+                continue
+            hits.append(off)
+        if len(hits) == 1:
+            return hits[0]
         return None
 
-    def _looks_like_error_return(self, target):
-        d = self._disas_at(target)
-        if not d or d[0].mnemonic != "mov":
-            return False
-        op = d[0].op_str.replace(" ", "")
-        if op.startswith("w0,#") and op != "w0,#0":
-            return True
-        if op.startswith("x0,#") and op != "x0,#0":
-            return True
-        return False
+    def _find_state_gate(self, start, end, call_sites):
+        hits = []
+        for off in range(start, end - 8, 4):
+            d = self._disas_at(off, 3)
+            if len(d) < 3:
+                continue
+            i0, i1, i2 = d
+            if not self._is_add_x_imm(i0, 0x70):
+                continue
+            if not self._is_ldrb_same_base_plus_1(i1, i0.operands[0].reg):
+                continue
+            if i2.mnemonic != "tbz" or not self._is_bit_branch(i2, self._reg_name(i1.operands[0].reg), 6):
+                continue
+            target = i2.operands[2].imm
+            if not any(target <= call_off <= target + 0x80 for call_off in call_sites):
+                continue
+            hits.append(i1.address)
+        if len(hits) == 1:
+            return hits[0]
+        return None
 
-    def _assert_patch_decode(self, patch_bytes, expect_mnemonic, expect_op_str=None):
-        insns = self._disas_n(patch_bytes, 0, 1)
-        assert insns, "capstone decode failed for patch bytes"
-        ins = insns[0]
-        assert ins.mnemonic == expect_mnemonic, (
-            f"patch decode mismatch: expected {expect_mnemonic}, got {ins.mnemonic}"
+    def _is_bit_branch(self, insn, reg_prefix_or_name, bit):
+        if len(insn.operands) != 3:
+            return False
+        reg_op, bit_op, target_op = insn.operands
+        if reg_op.type != ARM64_OP_REG or bit_op.type != ARM64_OP_IMM or target_op.type != ARM64_OP_IMM:
+            return False
+        reg_name = self._reg_name(reg_op.reg)
+        if len(reg_prefix_or_name) == 1:
+            if not reg_name.startswith(reg_prefix_or_name):
+                return False
+        elif reg_name != reg_prefix_or_name:
+            return False
+        return bit_op.imm == bit
+
+    def _is_mov_w_imm_value(self, insn, imm):
+        if insn.mnemonic != "mov" or len(insn.operands) != 2:
+            return False
+        dst, src = insn.operands
+        return (
+            dst.type == ARM64_OP_REG
+            and src.type == ARM64_OP_IMM
+            and self._reg_name(dst.reg).startswith("w")
+            and src.imm == imm
         )
-        if expect_op_str is not None:
-            assert ins.op_str == expect_op_str, (
-                f"patch decode mismatch: expected op_str '{expect_op_str}', "
-                f"got '{ins.op_str}'"
-            )
+
+    def _is_add_x_imm(self, insn, imm):
+        if insn.mnemonic != "add" or len(insn.operands) != 3:
+            return False
+        dst, src, imm_op = insn.operands
+        return (
+            dst.type == ARM64_OP_REG
+            and src.type == ARM64_OP_REG
+            and imm_op.type == ARM64_OP_IMM
+            and self._reg_name(dst.reg).startswith("x")
+            and self._reg_name(src.reg).startswith("x")
+            and imm_op.imm == imm
+        )
+
+    def _is_ldrb_same_base_plus_1(self, insn, base_reg):
+        if insn.mnemonic != "ldrb" or len(insn.operands) < 2:
+            return False
+        dst, src = insn.operands[:2]
+        return (
+            dst.type == ARM64_OP_REG
+            and src.type == ARM64_OP_MEM
+            and src.mem.base == base_reg
+            and src.mem.disp == 1
+            and self._reg_name(dst.reg).startswith("w")
+        )
+
+    def _reg_name(self, reg):
+        return _cs.reg_name(reg)

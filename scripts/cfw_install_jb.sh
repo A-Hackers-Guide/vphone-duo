@@ -159,10 +159,13 @@ fi
 
 scp_from "/mnt1/sbin/launchd.bak" "$TEMP_DIR/launchd"
 
-# Inject launchdhook.dylib load command (idempotent — skips if already present)
+# Inject launchdhook via short root alias to avoid Mach-O header overflow.
+# Keep the full /cores/launchdhook.dylib copy on disk for compatibility, but
+# load /b from launchd because this launchd sample only has room for a 32-byte
+# LC_LOAD_DYLIB command after stripping LC_CODE_SIGNATURE.
 if [[ -d "$JB_INPUT_DIR/basebin" ]]; then
-    echo "  Injecting LC_LOAD_DYLIB for /cores/launchdhook.dylib..."
-    python3 "$SCRIPT_DIR/patchers/cfw.py" inject-dylib "$TEMP_DIR/launchd" "/cores/launchdhook.dylib"
+    echo "  Injecting LC_LOAD_DYLIB for /b (short launchdhook alias)..."
+    python3 "$SCRIPT_DIR/patchers/cfw.py" inject-dylib "$TEMP_DIR/launchd" "/b"
 fi
 
 python3 "$SCRIPT_DIR/patchers/cfw.py" patch-launchd-jetsam "$TEMP_DIR/launchd"
@@ -224,6 +227,12 @@ if [[ -d "$BASEBIN_DIR" ]]; then
         ldid_sign "$dylib"
         scp_to "$dylib" "/mnt1/cores/$dylib_name"
         ssh_cmd "/bin/chmod 0755 /mnt1/cores/$dylib_name"
+
+        if [[ "$dylib_name" == "launchdhook.dylib" ]]; then
+            echo "  Installing short launchdhook alias at /b..."
+            scp_to "$dylib" "/mnt1/b"
+            ssh_cmd "/bin/chmod 0755 /mnt1/b"
+        fi
     done
 
     echo "  [+] BaseBin hooks deployed"

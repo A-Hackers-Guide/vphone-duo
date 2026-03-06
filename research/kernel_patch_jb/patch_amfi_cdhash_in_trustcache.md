@@ -221,3 +221,10 @@ return 1;
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.json`
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.md`
 <!-- END_RUNTIME_IDA_VERIFICATION_2026_03_05 -->
+
+## 2026-03-06 Upstream Rework Review
+
+- `patch_fw.py` target remains authoritative here: research rewrites the function entry at `0x01633880` (`mov x0,#1 ; cbz x2,+8 ; str x0,[x2] ; ret`), and release lands at `0x015AE160`.
+- IDA on `kernelcache.research.vphone600` confirms that `0xFFFFFE0008637880` is the entry of the tiny AMFI trustcache helper and that the first 12 bytes match the upstream patch body exactly.
+- Runtime matcher stays structural instead of string-anchored because this helper does not expose a stable in-function string anchor on the stripped raw kernel. The retained reveal uses a tight in-function instruction shape inside `AppleMobileFileIntegrity::__text`, and focused dry-runs on both PCC 26.1 research/release remain unique.
+- Focused dry-run (`2026-03-06`): research hits `0x01633880/84/88/8C`; release hits `0x015AE160/64/68/6C`.

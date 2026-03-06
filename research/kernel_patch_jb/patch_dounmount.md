@@ -1,151 +1,178 @@
 # B12 `patch_dounmount`
 
-## Patch Goal
+## Goal
 
-Bypass a MAC authorization call in `dounmount` by NOP-ing a strict `mov w1,#0 ; mov x2,#0 ; bl ...` callsite.
+Keep the jailbreak `dounmount` patch aligned with the known-good upstream design in `/Users/qaq/Desktop/patch_fw.py`.
 
-## Binary Targets (IDA + Recovered Symbols)
+- Preferred upstream target: `patch(0xCA8134, 0xD503201F)`.
+- Current rework result: `match`.
+- PCC 26.1 research hit: file offset `0x00CA8134`, VA `0xFFFFFE0007CAC134`.
+- PCC 26.1 release hit: file offset `0x00C6C134`.
 
-- Recovered symbols:
-  - `dounmount` at `0xfffffe0007cb6ea0`
-  - `safedounmount` at `0xfffffe0007cb6cec`
-- Anchor string: `"dounmount: no coveredvp @%s:%d"` at `0xfffffe0007056950`.
-- Anchor xref: `0xfffffe0007cb7700` in `sub_FFFFFE0007CB6EA0`.
+## What Gets Patched
 
-## Call-Stack Analysis
+The patch NOPs the first BL in the `coveredvp` success-tail cleanup sequence inside `dounmount`:
 
-- Static callers into `dounmount` include:
-  - `sub_FFFFFE0007CA45E4`
-  - `sub_FFFFFE0007CAAE28`
-  - `sub_FFFFFE0007CB6CEC`
-  - `sub_FFFFFE0007CB770C`
-- This confirms the expected unmount path context.
+```asm
+mov x0, coveredvp_reg
+mov w1, #0
+mov w2, #0
+mov w3, #0
+bl  <target>        ; patched to NOP
+mov x0, coveredvp_reg
+bl  <target>
+```
 
-## Patch-Site / Byte-Level Change
+On PCC 26.1 research the validated sequence is:
 
-- Intended matcher requires exact pair:
-  - `mov w1, #0`
-  - `mov x2, #0`
-  - `bl ...`
-- In current IDA state, the close callsite is:
-  - `mov w1, #0x10 ; mov x2, #0 ; bl sub_FFFFFE0007CAB27C` at `0xfffffe0007cb75b0`
-- Therefore strict matcher is not satisfied in this image state.
-- Fail-closed behavior is correct: no patch should be emitted here unless exact semantics are revalidated.
+```asm
+0xFFFFFE0007CAC124  mov x0, x26
+0xFFFFFE0007CAC128  mov w1, #0
+0xFFFFFE0007CAC12C  mov w2, #0
+0xFFFFFE0007CAC130  mov w3, #0
+0xFFFFFE0007CAC134  bl  #0xC92AD8   ; patched
+0xFFFFFE0007CAC138  mov x0, x26
+0xFFFFFE0007CAC13C  bl  #0xC947E8
+```
 
-## Pseudocode (Before)
+## Upstream Match vs Divergence
+
+### Final status: `match`
+
+- Upstream `patch_fw.py` uses file offset `0xCA8134`.
+- The reworked matcher now emits exactly `0xCA8134` on PCC 26.1 research.
+- The corresponding PCC 26.1 release hit is `0xC6C134`, which is the expected variant-shifted analogue of the same in-function sequence.
+
+### Rejected drift site
+
+The previous repo matcher had drifted to `0xCA81FC` on research.
+
+That drift was treated as a red flag because:
+- it did **not** match upstream,
+- it matched a later teardown sequence with shape `mov x0, #0 ; mov w1, #0x10 ; mov x2, #0 ; bl ...`,
+- that later sequence does **not** correspond to the upstream `coveredvp` cleanup gate in either IDA or XNU source structure.
+
+Conclusion: the drifted site was incorrect and has been removed.
+
+## Why This Site Is Correct
+
+### Facts from XNU
+
+From `research/reference/xnu/bsd/vfs/vfs_syscalls.c`, the successful `coveredvp != NULLVP` tail of `dounmount()` is:
 
 ```c
-rc = mac_check(..., 0, 0);
-if (rc != 0) {
-    return rc;
+if (!error) {
+    if ((coveredvp != NULLVP)) {
+        vnode_getalways(coveredvp);
+
+        mount_dropcrossref(mp, coveredvp, 0);
+        if (!vnode_isrecycled(coveredvp)) {
+            pvp = vnode_getparent(coveredvp);
+            ...
+        }
+
+        vnode_rele(coveredvp);
+        vnode_put(coveredvp);
+        coveredvp = NULLVP;
+
+        if (pvp) {
+            lock_vnode_and_post(pvp, NOTE_WRITE);
+            vnode_put(pvp);
+        }
+    }
+    ...
 }
 ```
 
-## Pseudocode (After)
+### Facts from IDA / disassembly
 
-```c
-// BL mac_check replaced by NOP
-// execution continues as if check passed
-```
+Inside the `dounmount` function recovered from the in-function panic anchor `"dounmount: no coveredvp"`, the validated research sequence is:
 
-## Symbol Consistency
+- optional call on the same `coveredvp` register just before the patch site,
+- `mov x0, coveredvp_reg ; mov w1,#0 ; mov w2,#0 ; mov w3,#0 ; bl`,
+- immediate follow-up `mov x0, coveredvp_reg ; bl`,
+- optional parent-vnode post path immediately after.
 
-- `dounmount` symbol resolution is consistent.
-- Pattern-level mismatch indicates prior hardcoded assumptions are not universally valid.
+This is the exact control-flow shape expected for the source-level `vnode_rele(coveredvp); vnode_put(coveredvp);` pair.
 
-## Patch Metadata
+### Inference
 
-- Patch document: `patch_dounmount.md` (B12).
-- Primary patcher module: `scripts/patchers/kernel_jb_patch_dounmount.py`.
-- Analysis mode: static binary analysis (IDA-MCP + disassembly + recovered symbols), no runtime patch execution.
+The first BL is the upstream gate worth neutralizing because it is the only BL in that local cleanup pair that takes the covered vnode plus three zeroed scalar arguments, immediately followed by a second BL on the same vnode register. That shape matches the source-level release/put tail and matches the known-good upstream patch location.
 
-## Target Function(s) and Binary Location
+## Anchor Class
 
-- Primary target: `dounmount` deny branch in VFS unmount path.
-- Exact patch site (NOP on strict in-function match) is documented in this file.
+- Primary runtime anchor class: `string anchor`.
+- Concrete anchor: `"dounmount: no coveredvp"`.
+- Why this anchor was chosen: the embedded symbol table is effectively empty on the local stripped payloads, IDA names are not stable, and this panic string lives inside the target function on both current research and release images.
+- Release-kernel survivability: the patcher does not require recovered names or repo-exported symbol JSON at runtime; it only needs the in-image string reference plus the surrounding decoded control-flow shape.
 
-## Kernel Source File Location
+## Runtime Matcher Design
 
-- Expected XNU source: `bsd/vfs/vfs_syscalls.c` (`dounmount`).
-- Confidence: `high`.
+The runtime matcher is intentionally single-path and source-backed:
 
-## Function Call Stack
+1. Find the panic string `"dounmount: no coveredvp"`.
+2. Recover the containing function (`dounmount`) from its string xref.
+3. Scan only that function for the unique 8-instruction sequence:
+   - `mov x0, <reg>`
+   - `mov w1, #0`
+   - `mov w2, #0`
+   - `mov w3, #0`
+   - `bl`
+   - `mov x0, <same reg>`
+   - `bl`
+   - `cbz x?, ...`
+4. Patch the first `bl` with `NOP`.
 
-- Primary traced chain (from `Call-Stack Analysis`):
-- Static callers into `dounmount` include:
-- `sub_FFFFFE0007CA45E4`
-- `sub_FFFFFE0007CAAE28`
-- `sub_FFFFFE0007CB6CEC`
-- `sub_FFFFFE0007CB770C`
-- The upstream entry(s) and patched decision node are linked by direct xref/callsite evidence in this file.
+The matcher now also fixes the ABI argument registers exactly (`x0`, `w1`, `w2`, `w3`) instead of accepting arbitrary zeroing moves, which makes the reveal path closer to the upstream call shape without depending on unstable symbol names.
 
-## Patch Hit Points
+## Why This Should Generalize
 
-- Key patchpoint evidence (from `Patch-Site / Byte-Level Change`):
-- `mov w1, #0x10 ; mov x2, #0 ; bl sub_FFFFFE0007CAB27C` at `0xfffffe0007cb75b0`
-- The before/after instruction transform is constrained to this validated site.
+This matcher should survive PCC 26.1 research, PCC 26.1 release, and likely later close variants such as 26.3 release because it anchors on:
 
-## Current Patch Search Logic
+- an in-function panic string that is tightly coupled to `dounmount`, and
+- a local cleanup sequence derived from stable VFS semantics (`coveredvp` release then put),
+- using decoded register/immediate/control-flow structure rather than fixed offsets.
 
-- Implemented in `scripts/patchers/kernel_jb_patch_dounmount.py`.
-- Site resolution uses anchor + opcode-shape + control-flow context; ambiguous candidates are rejected.
-- The patch is applied only after a unique candidate is confirmed in-function.
-- Anchor string: `"dounmount: no coveredvp @%s:%d"` at `0xfffffe0007056950`.
-- Anchor xref: `0xfffffe0007cb7700` in `sub_FFFFFE0007CB6EA0`.
+The pattern is also cheap:
 
-## Validation (Static Evidence)
+- one string lookup,
+- one xref-to-function recovery,
+- one linear scan over a single function body,
+- one 7-instruction decode window per candidate.
 
-- Verified with IDA-MCP disassembly/decompilation, xrefs, and callgraph context for the selected site.
-- Cross-checked against recovered symbols in `research/kernel_info/json/kernelcache.research.vphone600.bin.symbols.json`.
-- Address-level evidence in this document is consistent with patcher matcher intent.
+So it remains robust without becoming an expensive whole-image search.
 
-## Expected Failure/Panic if Unpatched
+## Validation
 
-- Unmount requests remain blocked by guarded deny branch, breaking workflows that require controlled remount/unmount transitions.
+### Focused dry-run
 
-## Risk / Side Effects
+Validated locally on extracted raw kernels:
 
-- This patch weakens a kernel policy gate by design and can broaden behavior beyond stock security assumptions.
-- Potential side effects include reduced diagnostics fidelity and wider privileged surface for patched workflows.
+- PCC 26.1 research: `hit` at `0x00CA8134`
+- PCC 26.1 release: `hit` at `0x00C6C134`
 
-## Symbol Consistency Check
+Both variants emit exactly one patch:
 
-- Recovered-symbol status in `kernelcache.research.vphone600.bin.symbols.json`: `match`.
-- Canonical symbol hit(s): `dounmount`.
-- Where canonical names are absent, this document relies on address-level control-flow and instruction evidence; analyst aliases are explicitly marked as aliases.
-- IDA-MCP lookup snapshot (2026-03-05): `dounmount` -> `dounmount` at `0xfffffe0007cb6ea0`.
+- `NOP [_dounmount upstream cleanup call]`
 
-## Open Questions and Confidence
+### Match verdict
 
-- Open question: verify future firmware drift does not move this site into an equivalent but semantically different branch.
-- Overall confidence for this patch analysis: `high` (symbol match + control-flow/byte evidence).
+- Upstream reference `/Users/qaq/Desktop/patch_fw.py`: `match`
+- IDA PCC 26.1 research control-flow: `match`
+- XNU `dounmount` success-tail semantics: `match`
 
-## Evidence Appendix
+## Files
 
-- Detailed addresses, xrefs, and rationale are preserved in the existing analysis sections above.
-- For byte-for-byte patch details, refer to the patch-site and call-trace subsections in this file.
+- Patcher: `scripts/patchers/kernel_jb_patch_dounmount.py`
+- Analysis doc: `research/kernel_patch_jb/patch_dounmount.md`
 
-## Runtime + IDA Verification (2026-03-05)
+## 2026-03-06 Rework
 
-- Verification timestamp (UTC): `2026-03-05T14:55:58.795709+00:00`
-- Kernel input: `/Users/qaq/Documents/Firmwares/PCC-CloudOS-26.3-23D128/kernelcache.research.vphone600`
-- Base VA: `0xFFFFFE0007004000`
-- Runtime status: `hit` (1 patch writes, method_return=True)
-- Included in `KernelJBPatcher.find_all()`: `False`
-- IDA mapping: `1/1` points in recognized functions; `0` points are code-cave/data-table writes.
-- IDA mapping status: `ok` (IDA runtime mapping loaded.)
-- Call-chain mapping status: `ok` (IDA call-chain report loaded.)
-- Call-chain validation: `1` function nodes, `1` patch-point VAs.
-- IDA function sample: `dounmount`
-- Chain function sample: `dounmount`
-- Caller sample: `safedounmount`, `sub_FFFFFE0007CAAE28`, `sub_FFFFFE0007CB770C`, `vfs_mountroot`
-- Callee sample: `dounmount`, `lck_mtx_destroy`, `lck_rw_done`, `mount_dropcrossref`, `mount_iterdrain`, `mount_refdrain`
-- Verdict: `questionable`
-- Recommendation: Hit is valid but patch is inactive in find_all(); enable only after staged validation.
-- Key verified points:
-- `0xFFFFFE0007CB75B0` (`dounmount`): NOP [_dounmount MAC check] | `33cfff97 -> 1f2003d5`
-- Artifacts: `research/kernel_patch_jb/runtime_verification/runtime_verification_report.json`
-- Artifacts: `research/kernel_patch_jb/runtime_verification/ida_runtime_patch_points.json`
-- Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.json`
-- Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.md`
-<!-- END_RUNTIME_IDA_VERIFICATION_2026_03_05 -->
+- Upstream target (`/Users/qaq/Desktop/patch_fw.py`): `match`.
+- Final research site: `0x00CA8134` (`0xFFFFFE0007CAC134`).
+- Anchor class: `string`. Runtime reveal starts from the in-image `"dounmount:"` panic string, resolves the enclosing function, then finds the unique near-tail `mov x0,<coveredvp> ; mov w1,#0 ; mov w2,#0 ; mov w3,#0 ; bl ; mov x0,<coveredvp> ; bl ; cbz x?` cleanup-call block.
+- Why this site: it is the exact known-good upstream 4-arg zeroed callsite. The previously drifted `0x00CA81FC` call uses a different signature (`w1 = 0x10`) and a different control-flow region, so it is treated as a red-flag divergence and removed.
+- Release/generalization rationale: the panic string is stable in stripped kernels, and the local 8-instruction shape is tight enough to stay cheap and robust across PCC 26.1 release / likely 26.3 release.
+- Performance note: one string-xref resolution plus a single function-local linear scan.
+- Focused PCC 26.1 research dry-run: `hit`, 1 write at `0x00CA8134`.
+

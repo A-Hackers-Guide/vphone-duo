@@ -63,7 +63,7 @@ class KernelJBPatcher(
     # Group A: Core gate-bypass methods.
     _GROUP_A_METHODS = (
         "patch_amfi_cdhash_in_trustcache",  # JB-01 / A1
-        "patch_amfi_execve_kill_path",  # JB-02 / A2
+        # "patch_amfi_execve_kill_path",  # JB-02 / A2 (superseded by C21 on current PCC 26.1 path; keep standalone only)
         "patch_task_conversion_eval_internal",  # JB-08 / A3
         "patch_sandbox_hooks_extended",  # JB-09 / A4
         "patch_iouc_failed_macf",  # JB-10 / A5

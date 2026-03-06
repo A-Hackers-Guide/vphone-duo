@@ -213,3 +213,9 @@ int proc_security_policy(...) {
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.json`
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.md`
 <!-- END_RUNTIME_IDA_VERIFICATION_2026_03_05 -->
+
+## 2026-03-06 Upstream Rework Review
+
+- `patch_fw.py` remains correct here: the function entry rewrite still lands at `0x01063148/4C` on research and `0x01027148/4C` on release.
+- The reveal path remains structural from the shared `_proc_info` switch anchor into the small repeated BL target used by the switch cases. IDA/XNU review still matches `proc_security_policy()` semantics in `research/reference/xnu/bsd/kern/proc_info.c`.
+- No retarget was needed in this pass; the matcher stays fail-closed and focused dry-runs remain unique on both kernels.

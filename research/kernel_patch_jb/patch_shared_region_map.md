@@ -1,194 +1,146 @@
 # B17 `patch_shared_region_map`
 
-## Re-validated from static analysis (IDA MCP)
+## Goal
 
-All checks below were redone from disassembly/decompilation; old assumptions were not trusted.
+Keep the jailbreak `shared_region_map` patch aligned with the known-good upstream design in `/Users/qaq/Desktop/patch_fw.py` unless IDA + XNU clearly prove upstream is wrong.
 
-### 1) Real call chain (why this path executes)
+- Preferred upstream target: `patch(0x10729cc, 0xeb00001f)`.
+- Final rework result: `match`.
+- PCC 26.1 research hit: file offset `0x010729CC`, VA `0xFFFFFE00080769CC`.
+- PCC 26.1 release hit: file offset `0x010369CC`.
 
-`shared_region_map_and_slide_2_np` syscall path:
+## What Gets Patched
 
-1. Syscall entry points to `0xfffffe0008075560`
-   (`jb17_supplement_shared_region_map_and_slide_2_np_syscall`).
-2. It calls `0xfffffe0008075F98`
-   (`jb17_supplement_shared_region_map_and_slide_locked`).
-3. That calls `0xfffffe0008076260`
-   (`jb17_patched_fn_shared_region_map_and_slide_setup`), the function containing the patch site.
+The patch rewrites the first mount-comparison gate in `shared_region_map_and_slide_setup()` so the shared-cache vnode is treated as if it were already on the process root mount:
 
-This is the shared-region map+slide setup path used during dyld shared cache mapping for process startup.
+```asm
+cmp mount_reg, root_mount_reg   ; patched to cmp x0, x0
+b.eq skip_preboot_lookup
+str xzr, [state,...]
+adrp/add ... "/private/preboot/Cryptexes"
+```
 
-### 2) The exact guard being bypassed
+On PCC 26.1 research the validated sequence is:
 
-Inside `jb17_patched_fn_shared_region_map_and_slide_setup`:
+```asm
+0xFFFFFE00080769CC  cmp x8, x16          ; patched
+0xFFFFFE00080769D0  b.eq 0xFFFFFE0008076A98
+0xFFFFFE00080769D4  str xzr, [x23,#0x1d0]
+0xFFFFFE00080769DC  adrl x0, "/private/preboot/Cryptexes"
+0xFFFFFE00080769F0  bl  <vnode_lookup-like helper>
+0xFFFFFE00080769F4  cbnz w0, 0xFFFFFE0008076D84
+```
 
-- First mount check:
-  - `0xfffffe00080769CC` (`jb17_supplement_patchpoint_cmp_mount_vs_process_root`)
-  - `cmp x8, x16 ; b.eq ...`
-- If that fails, it enters fallback:
-  - lookup `"/private/preboot/Cryptexes"` at `0xfffffe00080769DC`
-  - if lookup fails: `cbnz w0, 0xfffffe0008076D84`
-- Second mount check (the patched one):
-  - `0xfffffe0008076A88` (`jb17_patched_fn_patchpoint_cmp_mount_vs_preboot_mount`)
-  - original: `cmp x8, x16`
-  - followed by `b.ne 0xfffffe0008076D84`
+## Upstream Match vs Divergence
 
-Fail target:
+### Final status: `match`
 
-- `0xfffffe0008076D84` (`jb17_supplement_patchpoint_fail_not_root_or_preboot`)
-- reaches `mov w25, #1` (EPERM) and exits through cleanup.
+- Upstream `patch_fw.py` uses file offset `0x10729CC`.
+- The reworked matcher now emits exactly `0x10729CC` on PCC 26.1 research.
+- The corresponding PCC 26.1 release hit is `0x10369CC`, the expected variant-shifted analogue of the same first-compare gate.
 
-So this guard is specifically "shared cache vnode mount must match either process root mount or preboot Cryptex mount".
+### Rejected drift site
 
-### 3) What the patch changes
+The older local analysis focused on a later fallback compare after the preboot lookup succeeded.
 
-At `0xfffffe0008076A88`:
+That older focus is rejected because:
+- it did **not** match the known-good upstream site,
+- XNU source first checks `srfmp->vp->v_mount != rdir_vp->v_mount` before any preboot lookup,
+- IDA on PCC 26.1 research still shows that first root-vs-process-root compare exactly at the upstream offset,
+- matching the first compare is both narrower and more faithful to the upstream patch semantics.
 
-- before: `cmp x8, x16`
-- after: `cmp x0, x0`
+## XNU Cross-Reference
 
-Effect:
-
-- The following `b.ne` is never taken.
-- If preboot lookup succeeded, the "mount mismatch vs preboot Cryptex" rejection is neutralized.
-- The lookup-failure branch at `0xfffffe00080769F4` is unchanged.
-
-## Why this is needed for unsigned binaries / launchd dylib flow
-
-In this jailbreak flow, process startup still needs successful shared-region map+slide. If this mount policy returns EPERM, dyld shared cache setup fails before normal userland execution continues. That blocks practical launch of unsigned/injected workflows (including launchd dylib-injection scenarios that depend on early process bring-up).
-
-So B17 is not "generic code-sign bypass"; it is a targeted bypass of a mount-origin policy in shared-region setup that otherwise rejects the map request.
-
-## IDA rename markers added
-
-Two groups requested were applied in IDA:
-
-- `supplement` group:
-  - `jb17_supplement_shared_region_map_and_slide_2_np_syscall`
-  - `jb17_supplement_shared_region_map_and_slide_locked`
-  - `jb17_supplement_patchpoint_cmp_mount_vs_process_root`
-  - `jb17_supplement_patchpoint_preboot_lookup_begin`
-  - `jb17_supplement_patchpoint_fail_not_root_or_preboot`
-- `patched function` group:
-  - `jb17_patched_fn_shared_region_map_and_slide_setup`
-  - `jb17_patched_fn_patchpoint_cmp_mount_vs_preboot_mount`
-  - `jb17_patched_fn_patchpoint_bne_fail_preboot_mount`
-
-## Risk
-
-This weakens a kernel policy that constrains shared-cache mapping source mounts, so it broadens accepted mapping contexts and may reduce expected filesystem trust boundaries.
-
-## Symbol Consistency Audit (2026-03-05)
-
-- Status: `partial`
-- Recovered symbols include `_shared_region_map_and_slide` family, but not every internal setup helper name used in this doc.
-- Path-level conclusions remain based on disassembly/xref consistency.
-
-## Patch Metadata
-
-- Patch document: `patch_shared_region_map.md` (B17).
-- Primary patcher module: `scripts/patchers/kernel_jb_patch_shared_region.py`.
-- Analysis mode: static binary analysis (IDA-MCP + disassembly + recovered symbols), no runtime patch execution.
-
-## Patch Goal
-
-Neutralize a shared-region mount-origin comparison guard that returns EPERM in map-and-slide setup.
-
-## Target Function(s) and Binary Location
-
-- Primary target: shared-region setup at `0xfffffe0008076260` (analyst label).
-- Patchpoint: `0xfffffe0008076a88` (`cmp x8,x16` -> `cmp x0,x0`).
-
-## Kernel Source File Location
-
-- Expected XNU source: `osfmk/vm/vm_shared_region.c` (shared region map-and-slide setup path).
-- Confidence: `high`.
-
-## Function Call Stack
-
-- Call-path evidence is derived from IDA xrefs and callsite traversal in this document.
-- The patched node sits on the documented execution-critical branch for this feature path.
-
-## Patch Hit Points
-
-- Patch hitpoint is selected by contextual matcher and verified against local control-flow.
-- Before/after instruction semantics are captured in the patch-site evidence above.
-
-## Current Patch Search Logic
-
-- Implemented in `scripts/patchers/kernel_jb_patch_shared_region.py`.
-- Site resolution uses anchor + opcode-shape + control-flow context; ambiguous candidates are rejected.
-- The patch is applied only after a unique candidate is confirmed in-function.
-- Uses string anchors + instruction-pattern constraints + structural filters (for example callsite shape, branch form, register/imm checks).
-
-## Pseudocode (Before)
+Source: `research/reference/xnu/bsd/vm/vm_unix.c:1472`
 
 ```c
-if (mount != proc_root_mount && mount != preboot_mount) {
-    return EPERM;
+assert(rdir_vp != NULL);
+if (srfmp->vp->v_mount != rdir_vp->v_mount) {
+    vnode_t preboot_vp = NULL;
+    error = vnode_lookup(PREBOOT_CRYPTEX_PATH, 0, &preboot_vp, vfs_context_current());
+    if (error || srfmp->vp->v_mount != preboot_vp->v_mount) {
+        error = EPERM;
+        ...
+        goto done;
+    }
 }
 ```
 
-## Pseudocode (After)
+### Fact
 
-```c
-if (mount != mount) {
-    return EPERM;
-}
-```
+- The first policy gate is the direct root-mount comparison.
+- Only if that comparison fails does the code fall into the `PREBOOT_CRYPTEX_PATH` lookup and later preboot-mount comparison.
+- The validated PCC 26.1 research instruction at `0xFFFFFE00080769CC` is the binary analogue of the first `srfmp->vp->v_mount != rdir_vp->v_mount` check.
 
-## Validation (Static Evidence)
+### Inference
 
-- Verified with IDA-MCP disassembly/decompilation, xrefs, and callgraph context for the selected site.
-- Cross-checked against recovered symbols in `research/kernel_info/json/kernelcache.research.vphone600.bin.symbols.json`.
-- Address-level evidence in this document is consistent with patcher matcher intent.
+Patching the first compare to `cmp x0, x0` is the narrowest upstream-compatible bypass because it skips the entire fallback preboot lookup path while leaving the rest of the shared-region setup logic intact.
 
-## Expected Failure/Panic if Unpatched
+## Anchor Class
 
-- Shared-region setup returns EPERM on mount-origin mismatch; dyld shared cache mapping for startup can fail.
+- Primary runtime anchor class: `string + local CFG`.
+- Concrete string anchor: `"/private/preboot/Cryptexes"`.
+- Why this anchor was chosen: the embedded symtable is effectively empty on stripped kernels, but this path string lives inside the exact helper that contains the mount-origin policy.
+- Why the local CFG matters: the runtime matcher selects the compare immediately preceding the Cryptexes lookup block by requiring `cmp reg,reg ; b.eq forward ; str xzr, [...]` right before the string reference.
 
-## Risk / Side Effects
+## Runtime Matcher Design
 
-- This patch weakens a kernel policy gate by design and can broaden behavior beyond stock security assumptions.
-- Potential side effects include reduced diagnostics fidelity and wider privileged surface for patched workflows.
+The runtime matcher is intentionally single-path and upstream-aligned:
 
-## Symbol Consistency Check
+1. Recover the helper from the in-image string `"/private/preboot/Cryptexes"`.
+2. Find the string reference(s) inside that function.
+3. For the local window immediately preceding the string reference, match:
+   - `cmp x?, x?`
+   - `b.eq forward`
+   - `str xzr, [...]`
+4. Patch that `cmp` to `cmp x0, x0`.
 
-- Recovered-symbol status in `kernelcache.research.vphone600.bin.symbols.json`: `partial`.
-- Canonical symbol hit(s): none (alias-based static matching used).
-- Where canonical names are absent, this document relies on address-level control-flow and instruction evidence; analyst aliases are explicitly marked as aliases.
-- IDA-MCP lookup snapshot (2026-03-05): `0xfffffe0008075560` currently resolves to `eventhandler_prune_list` (size `0x140`).
+This reproduces the exact upstream site without relying on IDA names or runtime symbol tables.
 
-## Open Questions and Confidence
+## Why This Should Generalize
 
-- Open question: symbol recovery is incomplete for this path; aliases are still needed for parts of the call chain.
-- Overall confidence for this patch analysis: `medium` (address-level semantics are stable, symbol naming is partial).
+This matcher should survive PCC 26.1 research, PCC 26.1 release, and likely nearby stripped releases such as 26.3 because it relies on:
 
-## Evidence Appendix
+- a stable embedded preboot-Cryptexes path string,
+- the source-backed control-flow shape directly before that lookup,
+- a local window rather than a whole-kernel heuristic scan.
 
-- Detailed addresses, xrefs, and rationale are preserved in the existing analysis sections above.
-- For byte-for-byte patch details, refer to the patch-site and call-trace subsections in this file.
+Runtime cost remains modest:
 
-## Runtime + IDA Verification (2026-03-05)
+- one string lookup,
+- one xref-to-function recovery,
+- one very small local scan around the string reference.
 
-- Verification timestamp (UTC): `2026-03-05T14:55:58.795709+00:00`
-- Kernel input: `/Users/qaq/Documents/Firmwares/PCC-CloudOS-26.3-23D128/kernelcache.research.vphone600`
-- Base VA: `0xFFFFFE0007004000`
-- Runtime status: `hit` (1 patch writes, method_return=True)
-- Included in `KernelJBPatcher.find_all()`: `False`
-- IDA mapping: `1/1` points in recognized functions; `0` points are code-cave/data-table writes.
-- IDA mapping status: `ok` (IDA runtime mapping loaded.)
-- Call-chain mapping status: `ok` (IDA call-chain report loaded.)
-- Call-chain validation: `1` function nodes, `1` patch-point VAs.
-- IDA function sample: `sub_FFFFFE000807F5F4`
-- Chain function sample: `sub_FFFFFE000807F5F4`
-- Caller sample: `_shared_region_map_and_slide`
-- Callee sample: `mac_file_check_mmap`, `sub_FFFFFE0007AC5540`, `sub_FFFFFE0007B15AFC`, `sub_FFFFFE0007B84334`, `sub_FFFFFE0007B84C5C`, `sub_FFFFFE0007C11F88`
-- Verdict: `questionable`
-- Recommendation: Hit is valid but patch is inactive in find_all(); enable only after staged validation.
-- Key verified points:
-- `0xFFFFFE000807FE1C` (`sub_FFFFFE000807F5F4`): cmp x0,x0 [_shared_region_map_and_slide_setup] | `1f0110eb -> 1f0000eb`
-- Artifacts: `research/kernel_patch_jb/runtime_verification/runtime_verification_report.json`
-- Artifacts: `research/kernel_patch_jb/runtime_verification/ida_runtime_patch_points.json`
-- Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.json`
-- Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.md`
-<!-- END_RUNTIME_IDA_VERIFICATION_2026_03_05 -->
+## Validation
+
+### Focused dry-run
+
+Validated locally on extracted raw kernels:
+
+- PCC 26.1 research: `hit` at `0x010729CC`
+- PCC 26.1 release: `hit` at `0x010369CC`
+
+Both variants emit exactly one patch:
+
+- `cmp x0,x0 [_shared_region_map_and_slide_setup]`
+
+### Match verdict
+
+- Upstream reference `/Users/qaq/Desktop/patch_fw.py`: `match`
+- IDA PCC 26.1 research control-flow: `match`
+- XNU shared-region mount-origin semantics: `match`
+
+## Files
+
+- Patcher: `scripts/patchers/kernel_jb_patch_shared_region.py`
+- Analysis doc: `research/kernel_patch_jb/patch_shared_region_map.md`
+
+## 2026-03-06 Rework
+
+- Upstream target (`/Users/qaq/Desktop/patch_fw.py`): `match`.
+- Final research site: `0x010729CC` (`0xFFFFFE00080769CC`).
+- Anchor class: `string + local CFG`. Runtime reveal starts from the in-image `"/private/preboot/Cryptexes"` string and patches the first local `cmp ... ; b.eq` mount gate immediately before the lookup block.
+- Why this site: it is the exact known-good upstream root-vs-process-root compare. The older focus on the later preboot-fallback compare is treated as stale divergence and is no longer accepted.
+- Release/generalization rationale: the path string and the immediate compare/branch/zero-store scaffold are source-backed and should survive stripped release kernels.
+- Performance note: one string-xref resolution plus a tiny local scan near the string reference.
+- Focused PCC 26.1 research dry-run: `hit`, 1 write at `0x010729CC`.

@@ -163,3 +163,9 @@ This gate executes early in image loading. Without bypassing it, binaries can fa
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.json`
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.md`
 <!-- END_RUNTIME_IDA_VERIFICATION_2026_03_05 -->
+
+## 2026-03-06 Upstream Rework Review
+
+- `patch_fw.py` continues to be the right target: research patches `0x01052A28`; release patches `0x01016A28`.
+- IDA still shows the same upstream gate shape in the `/usr/lib/dyld`-anchored function: `bl policy_check ; cbz w0, allow ; mov w0,#2`. The current matcher keeps this one string-backed reveal and no longer carries any symbol-first branch.
+- No retarget was needed in this pass; focused dry-run (`2026-03-06`) remains exact on both kernels.

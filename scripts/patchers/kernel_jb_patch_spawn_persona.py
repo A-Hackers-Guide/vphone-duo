@@ -1,113 +1,140 @@
 """Mixin: KernelJBPatchSpawnPersonaMixin."""
 
-from .kernel_jb_base import ARM64_OP_IMM, NOP
+from .kernel_jb_base import ARM64_OP_IMM, ARM64_OP_MEM, ARM64_OP_REG, NOP
 
 
 class KernelJBPatchSpawnPersonaMixin:
     def patch_spawn_validate_persona(self):
-        """NOP persona validation: LDR + TBNZ sites.
-        Pattern: ldr wN, [xN, #0x600] (unique struct offset) followed by
-        cbz wN then tbnz wN, #1 — NOP both the LDR and the TBNZ.
+        """Restore the upstream dual-CBZ bypass in the persona helper.
+
+        Preferred design target is `/Users/qaq/Desktop/patch_fw.py`, which NOPs
+        two sibling `cbz w?, deny` guards in the small helper reached from the
+        entitlement-string-driven spawn policy wrapper.
+
+        Runtime design intentionally avoids unstable symbols:
+        1. recover the outer spawn policy function from the embedded
+           `com.apple.private.spawn-panic-crash-behavior` string,
+        2. enumerate its local BL callees,
+        3. choose the unique small callee whose local CFG matches the upstream
+           helper shape (`ldr [arg,#8] ; cbz deny ; ldr [arg,#0xc] ; cbz deny`),
+        4. NOP both `cbz` guards at the upstream sites.
         """
-        self._log("\n[JB] _spawn_validate_persona: NOP (2 sites)")
+        self._log("\n[JB] _spawn_validate_persona: upstream dual-CBZ bypass")
 
-        # Try symbol first
-        foff = self._resolve_symbol("_spawn_validate_persona")
-        if foff >= 0:
-            func_end = self._find_func_end(foff, 0x800)
-            result = self._find_persona_pattern(foff, func_end)
-            if result:
-                self.emit(result[0], NOP, "NOP [_spawn_validate_persona LDR]")
-                self.emit(result[1], NOP, "NOP [_spawn_validate_persona TBNZ]")
-                return True
-
-        anchor_func = self._find_spawn_anchor_func()
-        if anchor_func < 0:
-            self._log("  [-] spawn anchor function not found")
-            return False
-        anchor_end = self._find_func_end(anchor_func, 0x4000)
-
-        # Legacy pattern, but restricted to spawn anchor function only.
-        result = self._find_persona_pattern(anchor_func, anchor_end)
-        if result:
-            self.emit(result[0], NOP, "NOP [_spawn_validate_persona LDR]")
-            self.emit(result[1], NOP, "NOP [_spawn_validate_persona TBNZ]")
-            return True
-
-        # Newer layout: `ldr x?, [x?, #0x2b8] ; ldrh wN, [sp, #imm] ; tbz wN,#1,target`
-        # -> force skip of validation block by rewriting TBZ/TBNZ to unconditional branch.
-        gate = self._find_persona_gate_branch(anchor_func, anchor_end)
-        if gate:
-            br_off, target = gate
-            b_bytes = self._encode_b(br_off, target)
-            if b_bytes:
-                self.emit(
-                    br_off,
-                    b_bytes,
-                    f"b #0x{target - br_off:X} [_spawn_validate_persona gate]",
-                )
-                return True
-
-        self._log("  [-] pattern not found in spawn anchor (fail-closed)")
-        return False
-
-    def _find_persona_pattern(self, start, end):
-        """Find ldr wN,[xN,#0x600] + tbnz wN,#1 pattern. Returns (ldr_off, tbnz_off)."""
-        for off in range(start, end - 0x30, 4):
-            d = self._disas_at(off)
-            if not d or d[0].mnemonic != "ldr":
-                continue
-            if "#0x600" not in d[0].op_str or not d[0].op_str.startswith("w"):
-                continue
-            for delta in range(4, 0x30, 4):
-                d2 = self._disas_at(off + delta)
-                if d2 and d2[0].mnemonic == "tbnz" and "#1" in d2[0].op_str:
-                    if d2[0].op_str.startswith("w"):
-                        return (off, off + delta)
-        return None
-
-    def _find_spawn_anchor_func(self):
-        primary = self._find_func_by_string(
+        anchor_func = self._find_func_by_string(
             b"com.apple.private.spawn-panic-crash-behavior", self.kern_text
         )
-        if primary >= 0:
-            return primary
-        return self._find_func_by_string(
-            b"com.apple.private.spawn-subsystem-root", self.kern_text
-        )
+        if anchor_func < 0:
+            self._log("  [-] spawn entitlement anchor not found")
+            return False
 
-    def _find_persona_gate_branch(self, start, end):
+        anchor_end = self._find_func_end(anchor_func, 0x4000)
+        sites = self._find_upstream_persona_cbz_sites(anchor_func, anchor_end)
+        if sites is None:
+            self._log("  [-] upstream persona helper not found from string anchor")
+            return False
+
+        first_cbz, second_cbz = sites
+        self.emit(first_cbz, NOP, "NOP [_spawn_validate_persona pid-slot guard]")
+        self.emit(second_cbz, NOP, "NOP [_spawn_validate_persona persona-slot guard]")
+        return True
+
+    def _find_upstream_persona_cbz_sites(self, anchor_start, anchor_end):
+        matches = []
+        seen = set()
+        for off in range(anchor_start, anchor_end, 4):
+            target = self._is_bl(off)
+            if target < 0 or target in seen:
+                continue
+            if not (self.kern_text[0] <= target < self.kern_text[1]):
+                continue
+            seen.add(target)
+            func_end = self._find_func_end(target, 0x400)
+            sites = self._match_persona_helper(target, func_end)
+            if sites is not None:
+                matches.append(sites)
+
+        if len(matches) == 1:
+            return matches[0]
+        if matches:
+            self._log(
+                "  [-] ambiguous persona helper candidates: "
+                + ", ".join(f"0x{a:X}/0x{b:X}" for a, b in matches)
+            )
+        return None
+
+    def _match_persona_helper(self, start, end):
         hits = []
-        for off in range(start, end - 8, 4):
-            d0 = self._disas_at(off)
-            d1 = self._disas_at(off + 4)
-            d2 = self._disas_at(off + 8)
-            if not d0 or not d1 or not d2:
+        for off in range(start, end - 0x14, 4):
+            d = self._disas_at(off, 6)
+            if len(d) < 6:
                 continue
-            i0, i1, i2 = d0[0], d1[0], d2[0]
-            if i0.mnemonic != "ldr" or "#0x2b8" not in i0.op_str:
+            i0, i1, i2, i3, i4, i5 = d[:6]
+            if not self._is_ldr_mem(i0, disp=8):
                 continue
-            if not i0.op_str.startswith("x"):
+            if not self._is_cbz_w_same_reg(i1, i0.operands[0].reg):
                 continue
-            if i1.mnemonic != "ldrh" or not i1.op_str.startswith("w"):
+            if not self._is_ldr_mem_same_base(i2, i0.operands[1].mem.base, disp=0xC):
                 continue
-            reg = i1.op_str.split(",", 1)[0].strip()
-            if i2.mnemonic not in ("tbz", "tbnz"):
+            if not self._is_cbz_w_same_reg(i3, i2.operands[0].reg):
                 continue
-            if not i2.op_str.startswith(f"{reg},"):
+            deny_target = i1.operands[1].imm
+            if i3.operands[1].imm != deny_target:
                 continue
-            if "#1" not in i2.op_str:
+            if not self._looks_like_errno_return(deny_target, 1):
                 continue
-
-            target = None
-            for op in reversed(i2.operands):
-                if op.type == ARM64_OP_IMM:
-                    target = op.imm
-                    break
-            if target is None or not (off + 8 < target < end):
+            if not self._is_mov_x_imm_zero(i4):
                 continue
-            hits.append((off + 8, target))
+            if not self._is_ldr_mem(i5, disp=0x490):
+                continue
+            hits.append((i1.address, i3.address))
 
         if len(hits) == 1:
             return hits[0]
         return None
+
+    def _looks_like_errno_return(self, target, errno_value):
+        d = self._disas_at(target, 2)
+        return len(d) >= 1 and self._is_mov_w_imm_value(d[0], errno_value)
+
+    def _is_ldr_mem(self, insn, disp):
+        if insn.mnemonic != "ldr" or len(insn.operands) < 2:
+            return False
+        dst, src = insn.operands[:2]
+        return dst.type == ARM64_OP_REG and src.type == ARM64_OP_MEM and src.mem.disp == disp
+
+    def _is_ldr_mem_same_base(self, insn, base_reg, disp):
+        return self._is_ldr_mem(insn, disp) and insn.operands[1].mem.base == base_reg
+
+    def _is_cbz_w_same_reg(self, insn, reg):
+        if insn.mnemonic != "cbz" or len(insn.operands) != 2:
+            return False
+        op0, op1 = insn.operands
+        return (
+            op0.type == ARM64_OP_REG
+            and op0.reg == reg
+            and op1.type == ARM64_OP_IMM
+            and insn.reg_name(op0.reg).startswith("w")
+        )
+
+    def _is_mov_x_imm_zero(self, insn):
+        if insn.mnemonic != "mov" or len(insn.operands) != 2:
+            return False
+        dst, src = insn.operands
+        return (
+            dst.type == ARM64_OP_REG
+            and src.type == ARM64_OP_IMM
+            and src.imm == 0
+            and insn.reg_name(dst.reg).startswith("x")
+        )
+
+    def _is_mov_w_imm_value(self, insn, imm):
+        if insn.mnemonic != "mov" or len(insn.operands) != 2:
+            return False
+        dst, src = insn.operands
+        return (
+            dst.type == ARM64_OP_REG
+            and src.type == ARM64_OP_IMM
+            and src.imm == imm
+            and insn.reg_name(dst.reg).startswith("w")
+        )

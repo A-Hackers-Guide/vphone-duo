@@ -108,7 +108,7 @@ This preserves AMFI's normal validation / entitlement work while removing the st
 
 This is intentionally the smallest credible C21-only design:
 
-- it does not depend on `patch_amfi_execve_kill_path`;
+- it no longer needs `patch_amfi_execve_kill_path` in the same default schedule; on PCC 26.1 they overlap on the same shared deny-return site, so C21 supersedes A2 there;
 - it does not patch function entry;
 - it does not forge `CS_VALID`, `CS_PLATFORM_BINARY`, `CS_ADHOC`, or other
   high-risk identity bits;
@@ -229,9 +229,10 @@ This is a much narrower and more defensible jailbreak patch than forcing an unco
 
 ## Current Status
 
+- Scheduler note (`2026-03-06`): C21 and A2 both target the shared deny-return site `0x0163C0FC` on the extracted PCC 26.1 research kernel (`0xFFFFFE00086400FC` VA). C21 is treated as the superset patch on this path, so A2 is removed from the default schedule instead of being stacked with C21.
 - Patch implementation updated in `scripts/patchers/kernel_jb_patch_cred_label.py` as C21-v3.
 - C21-v1 has already booted successfully in restore testing.
-- Default schedule remains disabled in `scripts/patchers/kernel_jb.py` until C21-v3 restore / boot validation is rerun.
+- Default schedule now keeps C21 enabled on the current PCC 26.1 path while removing A2 from the same default list, because C21 supersedes A2 at the shared deny-return site.
 - Expected dry-run patch shape for C21-v3 is:
   - 1 deny cave;
   - 1 success cave;

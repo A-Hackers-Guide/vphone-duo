@@ -201,3 +201,11 @@ Interpretation:
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.json`
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.md`
 <!-- END_RUNTIME_IDA_VERIFICATION_2026_03_05 -->
+
+## 2026-03-06 Upstream Rework Review
+
+- This patch was materially reworked in this pass to match `/Users/qaq/Desktop/patch_fw.py`: it now rewrites the `mac_policy_ops` entries directly instead of patching each hook body.
+- Runtime reveal is still string-backed (`"Sandbox"` + `"Seatbelt sandbox policy"` -> `mac_policy_conf` -> `mpc_ops`), but the final writes now land on the table entries themselves, matching upstream semantics and offsets.
+- The shared allow target is recovered structurally from Sandbox text as the higher-address `mov x0,#0 ; ret` stub (`0x023B73BC` research, `0x022A78BC` release), matching the stub used by upstream `patch_fw.py`.
+- Focused dry-run (`2026-03-06`): research now emits 36 `ops[idx] -> allow stub` writes at the upstream table-entry offsets (for example `0x00A54C30`, `0x00A54C50`, `0x00A54CE0`, `0x00A54E68`); release emits the analogous table-entry writes (`0x00A1C0B0`, `0x00A1C0D0`, `0x00A1C160`, `0x00A1C2E8`).
+- This supersedes the earlier repo-local body-stub strategy for A4.

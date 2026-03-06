@@ -158,3 +158,10 @@ if (true) goto allow;   // compare neutralized
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.json`
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.md`
 <!-- END_RUNTIME_IDA_VERIFICATION_2026_03_05 -->
+
+## 2026-03-06 Upstream Rework Review
+
+- `patch_fw.py` patches `0x00B01194`, and the current matcher still lands there on research; release lands at `0x00AC5194`.
+- IDA confirms the exact upstream gate at `0xFFFFFE0007B05194`: `cmp Xn, X0 ; b.eq allow ; cmp Xn, X1 ; b.eq deny ; ... ; bl ... ; cbz w0,...`. This matches `task_conversion_eval_internal()` semantics in `research/reference/xnu/osfmk/kern/ipc_tt.c`.
+- No code-path retarget was needed in this pass. The fast matcher already fails closed and the slow fallback stays disabled unless explicitly opted in with `VPHONE_TASK_CONV_ALLOW_SLOW_FALLBACK=1`.
+- Focused dry-run (`2026-03-06`): research `0x00B01194`; release `0x00AC5194`.

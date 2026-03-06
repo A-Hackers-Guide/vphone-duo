@@ -192,3 +192,10 @@ return 1;
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.json`
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.md`
 <!-- END_RUNTIME_IDA_VERIFICATION_2026_03_05 -->
+
+## 2026-03-06 Upstream Rework Review
+
+- `patch_fw.py` directly zeros `0x0067EB50`; release lands at `0x0066AB50`. The current patcher still recovers and zeros that same variable on both kernels.
+- Runtime reveal remains string/data anchored (`"thid_should_crash"` -> adjacent `sysctl_oid` -> backing variable in `__DATA`/`__DATA_CONST`), which is preferable to any symbol-based path on the stripped raw kernels.
+- IDA re-check (`2026-03-06`) confirms the backing variable is live and currently nonzero (`1`) before patching on research.
+- Focused dry-run (`2026-03-06`): research `0x0067EB50`; release `0x0066AB50`.

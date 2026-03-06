@@ -92,6 +92,13 @@ The earlier BL/CBZ-site patching hit vnode-type assertion checks near function s
 - `_hook_cred_label_update_execve` and related execve symbols are recovered, but several AMFI callback wrapper addresses in this doc remain unlabeled in `kernel_info`.
 - Address-level control-flow evidence is still valid; symbol names are partially recovered only.
 
+## Scheduler Status (2026-03-06)
+
+- For the current PCC 26.1 `_cred_label_update_execve` path, A2 and C21 both land on the same shared deny-return site: `0xFFFFFE00086400FC`.
+- That means enabling both in the same default JB schedule is redundant and produces a real patch-site conflict, not just a conceptual overlap.
+- Current policy: keep A2 as a standalone / fallback patch for isolated testing, but remove it from the default schedule when C21 is enabled.
+- Rationale: C21 preserves the same deny→allow effect at the shared return site and additionally handles the late success exits plus success-only `csflags` relaxation.
+
 ## Patch Metadata
 
 - Patch document: `patch_amfi_execve_kill_path.md` (A2).

@@ -151,3 +151,10 @@ if ((perm_flags & BIT0) == 0) {
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.json`
 - Artifacts: `research/kernel_patch_jb/runtime_verification/ida_patch_chain_report.md`
 <!-- END_RUNTIME_IDA_VERIFICATION_2026_03_05 -->
+
+## 2026-03-06 Upstream Rework Review
+
+- `patch_fw.py` patches the NVRAM gate at `0x01234034`; release lands at `0x011F8034`.
+- In this pass the runtime reveal was tightened to enumerate all `"krn."` refs and require a unique preceding `tbz/tbnz` gate, instead of trusting the first ref only.
+- IDA still confirms the patched site as the early verifyPermission guard immediately before the `"krn."` key-prefix check.
+- Focused dry-run (`2026-03-06`): research `0x01234034`; release `0x011F8034`.
