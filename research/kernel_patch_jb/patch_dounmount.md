@@ -48,6 +48,7 @@ On PCC 26.1 research the validated sequence is:
 The previous repo matcher had drifted to `0xCA81FC` on research.
 
 That drift was treated as a red flag because:
+
 - it did **not** match upstream,
 - it matched a later teardown sequence with shape `mov x0, #0 ; mov w1, #0x10 ; mov x2, #0 ; bl ...`,
 - that later sequence does **not** correspond to the upstream `coveredvp` cleanup gate in either IDA or XNU source structure.
@@ -175,4 +176,3 @@ Both variants emit exactly one patch:
 - Release/generalization rationale: the panic string is stable in stripped kernels, and the local 8-instruction shape is tight enough to stay cheap and robust across PCC 26.1 release / likely 26.3 release.
 - Performance note: one string-xref resolution plus a single function-local linear scan.
 - Focused PCC 26.1 research dry-run: `hit`, 1 write at `0x00CA8134`.
-

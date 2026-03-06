@@ -62,6 +62,7 @@ This helper is a compact persona validation subroutine in the spawn/exec policy 
 ### Conclusion
 
 The upstream pair is the correct semantic gate because:
+
 - it is the exact pair patched by the known-good upstream tool,
 - both branches converge on the helper's deny path,
 - they live in the small validation helper reached from the outer spawn entitlement wrapper,
@@ -105,4 +106,3 @@ The upstream pair is the correct semantic gate because:
 - Release/generalization rationale: entitlement strings are stable across stripped kernels, and the dual-load/dual-cbz shape is tiny and source-backed.
 - Performance note: one string-xref resolution plus a very small helper-local scan.
 - Focused PCC 26.1 research dry-run: `hit`, 2 writes at `0x00FA7024` and `0x00FA702C`.
-

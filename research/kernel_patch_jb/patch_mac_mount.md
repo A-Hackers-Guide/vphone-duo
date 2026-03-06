@@ -115,4 +115,3 @@
 - Release/generalization rationale: the string keeps the search local to the right source module, while the paired semantic patterns identify the same function without relying on symbols. That combination should survive 26.1 release / likely 26.3 release better than a raw offset.
 - Performance note: one string anchor plus a bounded neighborhood scan (~`0x9000` bytes) instead of a whole-kernel semantic walk.
 - Focused PCC 26.1 research dry-run: `hit`, 2 writes at `0x00CA5D54` and `0x00CA5D88`.
-

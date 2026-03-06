@@ -40,6 +40,7 @@ On PCC 26.1 research the validated sequence is:
 The previous local rework had diverged to two later deny-return rewrites in small helper functions.
 
 That divergence is rejected because:
+
 - it does **not** match the known-good upstream site,
 - the XNU source still explicitly says `/* Always check if pid == 0 */` and immediately returns failure,
 - IDA on PCC 26.1 research still shows the same early `cbz wPid, fail` gate at the exact upstream offset,

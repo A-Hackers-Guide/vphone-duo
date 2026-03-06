@@ -44,6 +44,7 @@ On PCC 26.1 research the validated sequence is:
 The older local analysis focused on a later fallback compare after the preboot lookup succeeded.
 
 That older focus is rejected because:
+
 - it did **not** match the known-good upstream site,
 - XNU source first checks `srfmp->vp->v_mount != rdir_vp->v_mount` before any preboot lookup,
 - IDA on PCC 26.1 research still shows that first root-vs-process-root compare exactly at the upstream offset,

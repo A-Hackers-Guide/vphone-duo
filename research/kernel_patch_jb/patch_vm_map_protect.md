@@ -23,7 +23,7 @@
 - Nearby validated block in IDA:
   - `mov w9, #6`
   - `bics wzr, w9, w20`
-  - `b.ne #0xbc0274`  ← patched
+  - `b.ne #0xbc0274` ← patched
   - `tbnz w8, #0x16, #0xbc0274`
   - ...
   - `and w20, w20, #0xfffffffb`
@@ -243,4 +243,3 @@ goto guarded_path;   // unconditional
 - Release/generalization rationale: the panic string and the local BICS/TBNZ/write-clear shape are source-backed and should survive stripped release kernels with low matcher cost.
 - Performance note: one string-xref resolution and one function-local scan with a short semantic confirmation window.
 - Focused PCC 26.1 research dry-run: `hit`, 1 write at `0x00BC024C`.
-
