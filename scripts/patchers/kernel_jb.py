@@ -59,16 +59,6 @@ class KernelJBPatcher(
     KernelJBPatcherBase,
 ):
     _TIMING_LOG_MIN_SECONDS = 10.0
-
-    # Manual single-method validation status (DEV=1 + setup_machine + PATCH=<method>).
-    # This is documentation-only metadata and does not affect scheduling/runtime behavior.
-    _DEV_SINGLE_WORKING_METHODS = (
-        "patch_amfi_cdhash_in_trustcache",
-        "patch_amfi_execve_kill_path",
-        "patch_task_conversion_eval_internal",
-        "patch_sandbox_hooks_extended",
-        "patch_post_validation_additional",
-    )
     
     # Group A: Core gate-bypass methods.
     _GROUP_A_METHODS = (
