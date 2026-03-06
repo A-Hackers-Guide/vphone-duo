@@ -170,9 +170,9 @@
 
 ### Ramdisk Build-Time Identity Patch
 
-| # | Patch Site                                           | Purpose                                                                 | Regular | Dev | JB  |
-| - | ---------------------------------------------------- | ----------------------------------------------------------------------- | :-----: | :-: | :-: |
-| 1 | `ramdisk_input/ssh/usr/local/bin/restored_external` | Replace default USBMux serial label (`SSHRD_Script ...`) with `UDID`   |    Y    |  Y  |  Y  |
+| # | Patch Site                                           | Purpose                                                               | Regular | Dev | JB  |
+| - | ---------------------------------------------------- | --------------------------------------------------------------------- | :-----: | :-: | :-: |
+| 1 | `ramdisk_input/ssh/usr/local/bin/restored_external` | Replace default USBMux serial label (`SSHRD_Script ...`) with `UDID` |    Y    |  Y  |  Y  |
 
 ## Cross-Version Dynamic Snapshot
 

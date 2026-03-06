@@ -36,6 +36,8 @@ RAMDISK_SSH_PORT="${RAMDISK_SSH_PORT:-}"
 RAMDISK_SSH_USER="${RAMDISK_SSH_USER:-root}"
 RAMDISK_SSH_PASS="${RAMDISK_SSH_PASS:-alpine}"
 IPROXY_UDID="${IPROXY_UDID:-}"
+IPROXY_DEVICE_WAIT_TIMEOUT="${IPROXY_DEVICE_WAIT_TIMEOUT:-45}"
+IPROXY_DEVICE_WAIT_INTERVAL="${IPROXY_DEVICE_WAIT_INTERVAL:-1}"
 RAMDISK_SSH_PORT_EXPLICIT=0
 if [[ -n "$RAMDISK_SSH_PORT" ]]; then
   RAMDISK_SSH_PORT_EXPLICIT=1
@@ -44,6 +46,7 @@ fi
 DEVICE_UDID=""
 DEVICE_ECID=""
 IPROXY_TARGET_UDID=""
+IPROXY_RESOLVE_REASON=""
 JB_MODE=0
 DEV_MODE=0
 SKIP_PROJECT_SETUP=0
@@ -139,30 +142,31 @@ print_usbmux_udids() {
   done
 }
 
-resolve_iproxy_target_udid() {
+try_resolve_iproxy_target_udid() {
   local -a usbmux_udids ecid_matches
   local udid
   local ecid_lower
 
+  IPROXY_TARGET_UDID=""
+  IPROXY_RESOLVE_REASON=""
+
   if [[ -n "$IPROXY_UDID" ]]; then
     IPROXY_TARGET_UDID="$IPROXY_UDID"
-    echo "[*] Using explicit IPROXY_UDID override: ${IPROXY_TARGET_UDID}"
-    return
+    IPROXY_RESOLVE_REASON="override"
+    return 0
   fi
 
   usbmux_udids=(${(@f)$(list_usbmux_udids)})
-
-  echo "[*] USBMux IDs currently visible:"
-  print_usbmux_udids
-
-  (( ${#usbmux_udids[@]} > 0 )) \
-    || die "No USBMux devices detected for iproxy. Ensure ramdisk has fully booted USB stack."
+  if (( ${#usbmux_udids[@]} == 0 )); then
+    IPROXY_RESOLVE_REASON="none"
+    return 1
+  fi
 
   for udid in "${usbmux_udids[@]}"; do
     if [[ "$udid" == "$DEVICE_UDID" ]]; then
       IPROXY_TARGET_UDID="$udid"
-      echo "[+] iproxy target UDID matched restore UDID: ${IPROXY_TARGET_UDID}"
-      return
+      IPROXY_RESOLVE_REASON="restore_match"
+      return 0
     fi
   done
 
@@ -176,18 +180,75 @@ resolve_iproxy_target_udid() {
 
   if (( ${#ecid_matches[@]} == 1 )); then
     IPROXY_TARGET_UDID="${ecid_matches[1]}"
-    echo "[+] iproxy target UDID matched ECID substring: ${IPROXY_TARGET_UDID}"
-    return
+    IPROXY_RESOLVE_REASON="ecid_match"
+    return 0
   fi
 
   if (( ${#usbmux_udids[@]} == 1 )); then
     IPROXY_TARGET_UDID="${usbmux_udids[1]}"
-    echo "[!] Restore UDID (${DEVICE_UDID}) is not visible in ramdisk USBMux enumeration."
-    echo "[!] Falling back to the only available USBMux ID: ${IPROXY_TARGET_UDID}"
-    return
+    IPROXY_RESOLVE_REASON="single_fallback"
+    return 0
   fi
 
-  die "Could not resolve iproxy target UDID from USBMux IDs. Set IPROXY_UDID explicitly."
+  IPROXY_RESOLVE_REASON="ambiguous"
+  return 2
+}
+
+wait_for_iproxy_target_udid() {
+  local timeout interval waited rc
+
+  timeout="$IPROXY_DEVICE_WAIT_TIMEOUT"
+  interval="$IPROXY_DEVICE_WAIT_INTERVAL"
+  waited=0
+
+  [[ "$timeout" == <-> ]] || die "IPROXY_DEVICE_WAIT_TIMEOUT must be an integer (seconds)"
+  [[ "$interval" == <-> ]] || die "IPROXY_DEVICE_WAIT_INTERVAL must be an integer (seconds)"
+  (( timeout > 0 )) || die "IPROXY_DEVICE_WAIT_TIMEOUT must be > 0"
+  (( interval > 0 )) || die "IPROXY_DEVICE_WAIT_INTERVAL must be > 0"
+
+  echo "[*] Resolving iproxy target UDID (timeout=${timeout}s)..."
+  while (( waited < timeout )); do
+    if try_resolve_iproxy_target_udid; then
+      echo "[*] USBMux IDs currently visible:"
+      print_usbmux_udids
+      case "$IPROXY_RESOLVE_REASON" in
+        override)
+          echo "[*] Using explicit IPROXY_UDID override: ${IPROXY_TARGET_UDID}"
+          ;;
+        restore_match)
+          echo "[+] iproxy target UDID matched restore UDID: ${IPROXY_TARGET_UDID}"
+          ;;
+        ecid_match)
+          echo "[+] iproxy target UDID matched ECID substring: ${IPROXY_TARGET_UDID}"
+          ;;
+        single_fallback)
+          echo "[!] Restore UDID (${DEVICE_UDID}) is not visible in ramdisk USBMux enumeration."
+          echo "[!] Falling back to the only available USBMux ID: ${IPROXY_TARGET_UDID}"
+          ;;
+      esac
+      return
+    fi
+    rc=$?
+
+    if (( waited == 0 || waited % 5 == 0 )); then
+      if [[ "$rc" == "2" ]]; then
+        echo "  waiting for USBMux disambiguation... ${waited}s elapsed"
+      else
+        echo "  waiting for USBMux device... ${waited}s elapsed"
+      fi
+    fi
+
+    sleep "$interval"
+    (( waited += interval ))
+  done
+
+  echo "[-] Timed out resolving iproxy target UDID after ${timeout}s."
+  echo "[-] USBMux IDs currently visible:"
+  print_usbmux_udids
+  if [[ "$IPROXY_RESOLVE_REASON" == "ambiguous" ]]; then
+    die "Multiple USBMux devices detected and none uniquely matched restore UDID/ECID. Set IPROXY_UDID explicitly."
+  fi
+  die "No USBMux devices detected for iproxy. Ensure ramdisk has fully booted USB stack."
 }
 
 port_is_listening() {
@@ -533,7 +594,7 @@ start_iproxy() {
   [[ -n "$DEVICE_UDID" ]] || die "Device UDID is empty; cannot resolve iproxy target"
 
   choose_ramdisk_ssh_port
-  resolve_iproxy_target_udid
+  wait_for_iproxy_target_udid
 
   if port_is_listening "$RAMDISK_SSH_PORT"; then
     if [[ "$RAMDISK_SSH_PORT_EXPLICIT" == "1" ]]; then
