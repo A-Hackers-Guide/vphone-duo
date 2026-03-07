@@ -144,6 +144,21 @@ else
     echo "  [*] prep_bootstrap.sh already ran (deleted itself), skipping"
 fi
 
+# Re-discover PATH after prep_bootstrap.sh may have changed the login shell.
+# The shell switch (chsh) can alter which profile scripts run on subsequent SSH
+# sessions, so we must refresh RENV to ensure dpkg/apt/uicache are reachable.
+echo "[*] Re-discovering remote PATH after bootstrap prep..."
+DISCOVERED_PATH=$(ssh_raw 'P=""; \
+    for d in \
+        /var/jb/usr/bin /var/jb/bin /var/jb/sbin /var/jb/usr/sbin \
+        /iosbinpack64/bin /iosbinpack64/usr/bin /iosbinpack64/sbin /iosbinpack64/usr/sbin \
+        /usr/bin /usr/sbin /bin /sbin; do \
+        [ -d "$d" ] && P="$P:$d"; \
+    done; \
+    echo "${P#:}"')
+RENV="export PATH='$DISCOVERED_PATH' TERM='xterm-256color';"
+echo "  PATH=$DISCOVERED_PATH"
+
 # ═══════════ 4/6 CREATE MARKER FILES ═════════════════════════
 echo ""
 echo "[4/6] Creating marker files..."
