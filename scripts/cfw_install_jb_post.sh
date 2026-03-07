@@ -159,6 +159,19 @@ DISCOVERED_PATH=$(ssh_raw 'P=""; \
 RENV="export PATH='$DISCOVERED_PATH' TERM='xterm-256color';"
 echo "  PATH=$DISCOVERED_PATH"
 
+# Fix interactive SSH environment.
+# dropbear uses --shell /iosbinpack64/bin/bash and ignores /etc/passwd.
+# /iosbinpack64/etc/profile spawns a non-login subshell that only reads ~/.bashrc.
+# prep_bootstrap.sh's chsh has no effect because dropbear doesn't consult passwd.
+# Create ~/.bashrc so the interactive subshell sources /var/jb/etc/profile (full PATH).
+echo "[*] Setting up shell profile for interactive SSH..."
+if ! ssh_cmd "test -f /var/root/.bashrc"; then
+    ssh_cmd "printf '%s\n' '# Source JB environment' '[ -r /var/jb/etc/profile ] && . /var/jb/etc/profile' > /var/root/.bashrc"
+    echo "  [+] /var/root/.bashrc created"
+else
+    echo "  [*] /var/root/.bashrc already exists, skipping"
+fi
+
 # ═══════════ 4/6 CREATE MARKER FILES ═════════════════════════
 echo ""
 echo "[4/6] Creating marker files..."
