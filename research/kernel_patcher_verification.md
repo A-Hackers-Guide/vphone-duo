@@ -51,8 +51,8 @@ apply the dynamic patcher to a freshly extracted vresearch101 kernelcache.
 
 Result: **byte-identical** output between hardcoded and dynamic patching.
 
-- `KernelPatcher` patches found: 25
-- Hardcoded patches applied: 25
+- `KernelPatcher` patches found: 26
+- Hardcoded patches applied: 26
 - `cmp -l /tmp/kc_vphone600_upstream.raw /tmp/kc_vphone600_dynamic.raw`:
   no output (files identical)
 
@@ -77,16 +77,17 @@ Offsets and 32-bit patch values, taken from `patch_fw.py`:
 | 13  |    0x2475044 |  0xEB00001F | \_apfs_vfsop_mount cmp x0,x0               |
 | 14  |    0x2476C00 |  0x52800000 | \_apfs_mount_upgrade_checks mov w0,#0      |
 | 15  |    0x248C800 |  0x52800000 | \_handle_fsioc_graft mov w0,#0             |
-| 16  |    0x23AC528 |  0xD2800000 | \_hook_file_check_mmap mov x0,#0           |
-| 17  |    0x23AC52C |  0xD65F03C0 | \_hook_file_check_mmap ret                 |
-| 18  |    0x23AAB58 |  0xD2800000 | \_hook_mount_check_mount mov x0,#0         |
-| 19  |    0x23AAB5C |  0xD65F03C0 | \_hook_mount_check_mount ret               |
-| 20  |    0x23AA9A0 |  0xD2800000 | \_hook_mount_check_remount mov x0,#0       |
-| 21  |    0x23AA9A4 |  0xD65F03C0 | \_hook_mount_check_remount ret             |
-| 22  |    0x23AA80C |  0xD2800000 | \_hook_mount_check_umount mov x0,#0        |
-| 23  |    0x23AA810 |  0xD65F03C0 | \_hook_mount_check_umount ret              |
-| 24  |    0x23A5514 |  0xD2800000 | \_hook_vnode_check_rename mov x0,#0        |
-| 25  |    0x23A5518 |  0xD65F03C0 | \_hook_vnode_check_rename ret              |
+| 16  |              |             | \_handle_get_dev_by_role entitlement bypass |
+| 17  |    0x23AC528 |  0xD2800000 | \_hook_file_check_mmap mov x0,#0           |
+| 18  |    0x23AC52C |  0xD65F03C0 | \_hook_file_check_mmap ret                 |
+| 19  |    0x23AAB58 |  0xD2800000 | \_hook_mount_check_mount mov x0,#0         |
+| 20  |    0x23AAB5C |  0xD65F03C0 | \_hook_mount_check_mount ret               |
+| 21  |    0x23AA9A0 |  0xD2800000 | \_hook_mount_check_remount mov x0,#0       |
+| 22  |    0x23AA9A4 |  0xD65F03C0 | \_hook_mount_check_remount ret             |
+| 23  |    0x23AA80C |  0xD2800000 | \_hook_mount_check_umount mov x0,#0        |
+| 24  |    0x23AA810 |  0xD65F03C0 | \_hook_mount_check_umount ret              |
+| 25  |    0x23A5514 |  0xD2800000 | \_hook_vnode_check_rename mov x0,#0        |
+| 26  |    0x23A5518 |  0xD65F03C0 | \_hook_vnode_check_rename ret              |
 
 ## TXM Patch Details
 
@@ -125,7 +126,7 @@ pyimg4 im4p extract \
 
 Dynamic patcher results:
 
-- Patches found/applied: 25
+- Patches found/applied: 26
 - TXM patch location: `0xFA6B98` (NOP `tbnz w8, #0, #0xfa6c80`)
 - Patched output: `/tmp/kc_vresearch1_dynamic.raw`
 
@@ -134,7 +135,7 @@ Dynamic patcher results:
 For vphone600, the dynamic patcher output is byte-identical to the legacy
 hardcoded patch list, indicating functional equivalence on this kernelcache.
 The same dynamic patcher also successfully patches the freshly extracted
-vresearch101 kernelcache with the expected TXM NOP and a full 25-patch set.
+vresearch101 kernelcache with the expected TXM NOP and a full 26-patch set.
 
 ## Targeted Re-Verification (2026-03-05)
 

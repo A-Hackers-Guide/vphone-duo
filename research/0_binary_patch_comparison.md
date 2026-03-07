@@ -77,7 +77,7 @@
 | #     | Group | Method                                | Function                                                                                             | Purpose                                                                                                                                                                              | JB Enabled |
 | ----- | ----- | ------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :--------: |
 | JB-01 | A     | `patch_amfi_cdhash_in_trustcache`     | `AMFIIsCDHashInTrustCache`                                                                           | Always return true + store hash                                                                                                                                                      |     Y      |
-| JB-02 | A     | `patch_amfi_execve_kill_path`         | AMFI execve kill return site                                                                         | Convert shared kill return from deny to allow                                                                                                                                        |     Y      |
+| JB-02 | A     | `patch_amfi_execve_kill_path`         | AMFI execve kill return site                                                                         | Convert shared kill return from deny to allow (superseded by C21; standalone only)                                                                                                                                        |     N      |
 | JB-03 | C     | `patch_cred_label_update_execve`      | `_cred_label_update_execve`                                                                          | Reworked C21-v3: C21-v1 already boots; v3 keeps split late exits and additionally ORs success-only helper bits `0xC` after clearing `0x3F00`; still disabled pending boot validation |     N      |
 | JB-04 | C     | `patch_hook_cred_label_update_execve` | sandbox `mpo_cred_label_update_execve` wrapper (`ops[18]` -> `sub_FFFFFE00093BDB64`)                 | Faithful upstream C23 trampoline: copy `VSUID`/`VSGID` owner state into pending cred, set `P_SUGID`, then branch back to wrapper                                                     |     Y      |
 | JB-05 | C     | `patch_kcall10`                       | `sysent[439]` (`SYS_kas_info` replacement)                                                           | Rebuilt ABI-correct kcall cave: `target + 7 args -> uint64 x0`; re-enabled after focused dry-run validation                                                                          |     Y      |
@@ -153,12 +153,13 @@
 | iBEC                     |       3 |   3 |   3 |
 | LLB                      |       6 |   6 |   6 |
 | TXM                      |       1 |  12 |  12 |
-| Kernel                   |      28 |  28 |  53 |
-| Boot chain total         |      41 |  52 |  78 |
+| Kernel (base)            |      28 |  28 |  28 |
+| Kernel (JB methods)      |       - |   - |  59 |
+| Boot chain total         |      41 |  52 | 112 |
 | CFW binary patches       |       4 |   5 |   6 |
 | CFW installed components |       6 |   7 |   8 |
 | CFW total                |      10 |  12 |  14 |
-| Grand total              |      51 |  64 |  92 |
+| Grand total              |      51 |  64 | 126 |
 
 ## Ramdisk Variant Matrix
 
@@ -166,7 +167,7 @@
 | ------------- | ------------------- | -------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------- | --------------------------------------------------- |
 | `RAMDISK`     | `make fw_patch`     | release TXM + base TXM patch (1) | base kernel (28), legacy `*.ramdisk` preferred else derive from pristine CloudOS | restore kernel from `fw_patch` (28)     | `krnl.ramdisk.img4` preferred, fallback `krnl.img4` |
 | `DEV+RAMDISK` | `make fw_patch_dev` | release TXM + base TXM patch (1) | base kernel (28), same derivation rule                                           | restore kernel from `fw_patch_dev` (28) | `krnl.ramdisk.img4` preferred, fallback `krnl.img4` |
-| `JB+RAMDISK`  | `make fw_patch_jb`  | release TXM + base TXM patch (1) | base kernel (28), same derivation rule                                           | restore kernel from `fw_patch_jb` (53)  | `krnl.ramdisk.img4` preferred, fallback `krnl.img4` |
+| `JB+RAMDISK`  | `make fw_patch_jb`  | release TXM + base TXM patch (1) | base kernel (28), same derivation rule                                           | restore kernel from `fw_patch_jb` (28+59)  | `krnl.ramdisk.img4` preferred, fallback `krnl.img4` |
 
 ## Cross-Version Dynamic Snapshot
 
