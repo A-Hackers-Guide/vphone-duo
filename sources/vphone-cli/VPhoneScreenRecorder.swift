@@ -286,9 +286,10 @@ class VPhoneScreenRecorder {
             return nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
         }
 
-        let cfObject = unsafeBitCast(imageObject, to: CFTypeRef.self)
+        let cfObject = imageObject as CFTypeRef
         if CFGetTypeID(cfObject) == CGImage.typeID {
-            return unsafeBitCast(cfObject, to: CGImage.self)
+            // CGImage is a CF type, not a Swift class — unsafeDowncast cannot be used here.
+            return (cfObject as! CGImage) // swiftlint:disable:this force_cast
         }
 
         return nil

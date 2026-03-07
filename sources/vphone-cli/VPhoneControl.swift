@@ -126,7 +126,7 @@ class VPhoneControl {
                 case let .success(conn):
                     self?.connection = conn
                     self?.performHandshake(fd: conn.fileDescriptor)
-                case let .failure(error):
+                case .failure:
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                         self?.attemptConnect()
                     }
