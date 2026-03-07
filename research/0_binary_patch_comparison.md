@@ -177,3 +177,47 @@
 | PCC 26.3 (`23D128`) |             14 |                59 |
 | iOS 26.1 (`23B85`)  |             14 |                59 |
 | iOS 26.3 (`23D127`) |             14 |                59 |
+
+## Automation Notes (2026-03-06)
+
+- `scripts/setup_machine.sh` non-interactive flow fix: renamed local variable `status` to `boot_state` in first-boot log wait and boot-analysis wait helpers to avoid zsh `status` read-only special parameter collision.
+- `scripts/setup_machine.sh` non-interactive first-boot wait fix: replaced `(( waited++ ))` with `(( ++waited ))` in `monitor_boot_log_until` to avoid `set -e` abort when arithmetic expression evaluates to `0`.
+- `scripts/jb_patch_autotest.sh` loop fix for sweep stability under `set -e`: replaced `((idx++))` with `(( ++idx ))`.
+- `scripts/jb_patch_autotest.sh` zsh compatibility fix: renamed per-case result variable `status` to `case_status` to avoid `status` read-only special parameter collision.
+- `scripts/jb_patch_autotest.sh` selection logic update:
+  - default run now excludes methods listed in `KernelJBPatcher._DEV_SINGLE_WORKING_METHODS` (pending-only sweep).
+  - set `JB_AUTOTEST_INCLUDE_WORKING=1` to include already-working methods and run the full list.
+- Sweep run record:
+  - `setup_logs/jb_patch_tests_20260306_114417` (2026-03-06): aborted at `[1/20]` with `read-only variable: status` in `jb_patch_autotest.sh`.
+  - `setup_logs/jb_patch_tests_20260306_115027` (2026-03-06): rerun after `status` fix, pending-only mode (`Total methods: 19`).
+- Final run result from `jb_patch_tests_20260306_115027` at `2026-03-06 13:17`:
+  - Finished: 19/19 (`PASS=15`, `FAIL=4`, all fails `rc=2`).
+  - Failing methods at that time: `patch_bsd_init_auth`, `patch_io_secure_bsd_root`, `patch_vm_fault_enter_prepare`, `patch_cred_label_update_execve`.
+  - 2026-03-06 follow-up: `patch_io_secure_bsd_root` failure is now attributed to a wrong-site patch in `AppleARMPE::callPlatformFunction` (`"SecureRoot"` gate at `0xFFFFFE000836E1F0`), not the intended `"SecureRootName"` deny-return path. The code was retargeted the same day to `0xFFFFFE000836E464` and re-enabled for the next restore/boot check.
+  - 2026-03-06 follow-up: `patch_bsd_init_auth` was retargeted after confirming the old matcher was hitting unrelated code; keep disabled in default schedule until a fresh clean-baseline boot test passes.
+  - Final case: `[19/19] patch_syscallmask_apply_to_proc` (`PASS`).
+  - 2026-03-06 re-analysis: that historical `PASS` is now treated as a false positive for functionality, because the recorded bytes landed at `0xfffffe00093ae6e4`/`0xfffffe00093ae6e8` inside `_profile_syscallmask_destroy` underflow handling, not in `_proc_apply_syscall_masks`.
+  - 2026-03-06 code update: `scripts/patchers/kernel_jb_patch_syscallmask.py` was rebuilt to target the real syscallmask apply wrapper structurally and now dry-runs on `PCC-CloudOS-26.1-23B85 kernelcache.research.vphone600` with 3 writes: `0x02395530`, `0x023955E8`, and cave `0x00AB1720`. User-side boot validation succeeded the same day.
+- 2026-03-06 follow-up: `patch_kcall10` was rebuilt from the old ABI-unsafe pseudo-10-arg design into an ABI-correct `sysent[439]` cave. Focused dry-run on `PCC-CloudOS-26.1-23B85 kernelcache.research.vphone600` now emits 4 writes: cave `0x00AB1720`, `sy_call` `0x0073E180`, `sy_arg_munge32` `0x0073E188`, and metadata `0x0073E190`; the method was re-enabled in `_GROUP_C_METHODS`.
+  - Observed failure symptom in current failing set: first boot panic before command injection (or boot process early exit).
+- Post-run schedule change (per user request):
+  - commented out failing methods from default `KernelJBPatcher._PATCH_METHODS` schedule in `scripts/patchers/kernel_jb.py`:
+    - `patch_bsd_init_auth`
+    - `patch_io_secure_bsd_root`
+    - `patch_vm_fault_enter_prepare`
+    - `patch_cred_label_update_execve`
+- 2026-03-06 re-research note for `patch_cred_label_update_execve`:
+  - old entry-time early-return strategy was identified as boot-unsafe because it skipped AMFI exec-time `csflags` and entitlement propagation entirely.
+  - implementation was reworked to a success-tail trampoline that preserves normal AMFI processing and only clears restrictive `csflags` bits on the success path.
+  - default JB schedule still keeps the method disabled until the reworked strategy is boot-validated.
+- Manual DEV+single (`setup_machine` + `PATCH=<method>`) working set now includes:
+  - `patch_amfi_cdhash_in_trustcache`
+  - `patch_amfi_execve_kill_path`
+  - `patch_task_conversion_eval_internal`
+  - `patch_sandbox_hooks_extended`
+  - `patch_post_validation_additional`
+- 2026-03-07 host-side note:
+  - reviewed private Virtualization.framework display APIs against the recorder pipeline in `sources/vphone-cli/VPhoneScreenRecorder.swift`.
+  - replaced the old AppKit-first recorder path with a private-display-only implementation built around hidden `VZGraphicsDisplay._takeScreenshotWithCompletionHandler:` capture.
+  - added still screenshot actions that can copy the captured image to the pasteboard or save a PNG to disk using the same private capture path.
+  - `make build` is used as the sanity check path; live VM validation is still needed to confirm the exact screenshot object type returned on macOS 15.
