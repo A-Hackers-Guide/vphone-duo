@@ -59,7 +59,7 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         platform.machineIdentifier = machineIdentifier
 
         if let identity = Self.resolveDeviceIdentity(machineIdentifier: machineIdentifier) {
-            ecidHex = "0x\(identity.ecidHex)"
+            ecidHex = identity.ecidHex
             print("[vphone] ECID: \(ecidHex!)")
             print("[vphone] Predicted UDID: \(identity.udid)")
             do {
