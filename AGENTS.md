@@ -29,10 +29,10 @@ For any changes applying new patches, also update research/0_binary_patch_compar
 
 ## Firmware Variants
 
-| Variant             | Boot Chain |    CFW    | Make Targets                       |
-| ------------------- | :--------: | :-------: | ---------------------------------- |
-| **Regular**         | 51 patches | 10 phases | `fw_patch` + `cfw_install`         |
-| **Development**     | 64 patches | 12 phases | `fw_patch_dev` + `cfw_install_dev` |
+| Variant             | Boot Chain  |    CFW    | Make Targets                       |
+| ------------------- | :---------: | :-------: | ---------------------------------- |
+| **Regular**         | 51 patches  | 10 phases | `fw_patch` + `cfw_install`         |
+| **Development**     | 64 patches  | 12 phases | `fw_patch_dev` + `cfw_install_dev` |
 | **Jailbreak (WIP)** | 126 patches | 14 phases | `fw_patch_jb` + `cfw_install_jb`   |
 
 See `research/` for detailed firmware pipeline, component origins, patch breakdowns, and boot flow documentation.

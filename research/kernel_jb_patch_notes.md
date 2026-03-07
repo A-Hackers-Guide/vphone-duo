@@ -13,6 +13,7 @@ Two methods added since initial document: `patch_shared_region_map`, `patch_io_s
 Three previously failing patches (`patch_nvram_verify_permission`, `patch_thid_should_crash`, `patch_hook_cred_label_update_execve`) have been implemented — see details below.
 
 On 2026-03-06, three patches were retargeted after IDA-MCP re-analysis revealed their matchers were hitting wrong sites:
+
 - `patch_bsd_init_auth` — was hitting `exec_handle_sugid` instead of the real `bsd_init` rootauth gate
 - `patch_io_secure_bsd_root` — was patching the `"SecureRoot"` dispatch branch instead of the `"SecureRootName"` deny-return
 - `patch_vm_fault_enter_prepare` — was NOPing a `pmap_lock_phys_page()` call instead of the upstream `cs_bypass` gate
