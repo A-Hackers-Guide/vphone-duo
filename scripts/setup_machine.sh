@@ -1048,11 +1048,35 @@ main() {
       die "JB finalize boot failed."
     fi
 
-    wait_for_device_ssh 22222 120
+    local jb_ssh_port jb_iproxy_pid jb_iproxy_log
+    local iproxy_bin="${PROJECT_ROOT}/.limd/bin/iproxy"
 
-    run_make "JB finalize" cfw_install_jb_finalize SSH_PORT=22222
+    jb_ssh_port="$(pick_random_ssh_port)" \
+      || die "Failed to allocate a random local SSH port for JB finalize"
 
-    halt_device_ssh 22222
+    jb_iproxy_log="${LOG_DIR}/iproxy_jb_${jb_ssh_port}.log"
+    : > "$jb_iproxy_log"
+
+    echo "[*] Waiting for device UDID=${DEVICE_UDID} on USBMux..."
+    wait_for_iproxy_target_udid
+
+    echo "[*] Starting iproxy ${jb_ssh_port} -> 22222 (target_udid=${IPROXY_TARGET_UDID})..."
+    ("$iproxy_bin" -u "$IPROXY_TARGET_UDID" "$jb_ssh_port" 22222 >"$jb_iproxy_log" 2>&1) &
+    jb_iproxy_pid=$!
+    sleep 1
+    if ! kill -0 "$jb_iproxy_pid" 2>/dev/null; then
+      echo "[-] iproxy exited early. Log:"
+      tail -n 40 "$jb_iproxy_log" || true
+      die "iproxy for JB finalize failed to start."
+    fi
+    echo "[+] iproxy running (pid=$jb_iproxy_pid, log=$jb_iproxy_log)"
+
+    wait_for_device_ssh "$jb_ssh_port" 120
+
+    run_make "JB finalize" cfw_install_jb_finalize SSH_PORT="$jb_ssh_port"
+
+    halt_device_ssh "$jb_ssh_port"
+    stop_process_tree "$jb_iproxy_pid" 2>/dev/null || true
     echo "[*] Waiting for VM shutdown..."
     wait "$BOOT_PID" || true
     BOOT_PID=""
