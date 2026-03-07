@@ -550,6 +550,52 @@ wait_for_first_boot_prompt_auto() {
   esac
 }
 
+wait_for_device_ssh() {
+  local port="${1:-22222}"
+  local timeout="${2:-120}"
+  local pass="${3:-alpine}"
+  local sshpass_bin waited=0
+
+  sshpass_bin="$(command -v sshpass || true)"
+  [[ -x "$sshpass_bin" ]] || die "sshpass not found (run: make setup_tools)"
+
+  echo "[*] Waiting for device SSH on localhost:${port} (timeout=${timeout}s)..."
+  while (( waited < timeout )); do
+    if [[ -n "$BOOT_PID" ]] && ! kill -0 "$BOOT_PID" 2>/dev/null; then
+      die "VM exited while waiting for device SSH."
+    fi
+    if "$sshpass_bin" -p "$pass" ssh \
+      -o StrictHostKeyChecking=no \
+      -o UserKnownHostsFile=/dev/null \
+      -o PreferredAuthentications=password \
+      -o ConnectTimeout=5 -q \
+      -p "$port" root@localhost "echo ready" >/dev/null 2>&1; then
+      echo "[+] Device SSH is ready on port ${port}"
+      return
+    fi
+    if (( waited == 0 || waited % 10 == 0 )); then
+      echo "  waiting... ${waited}s elapsed"
+    fi
+    sleep 2
+    (( waited += 2 ))
+  done
+  die "Device SSH not ready after ${timeout}s"
+}
+
+halt_device_ssh() {
+  local port="${1:-22222}"
+  local pass="${2:-alpine}"
+  local sshpass_bin
+  sshpass_bin="$(command -v sshpass)"
+  echo "[*] Halting device via SSH..."
+  "$sshpass_bin" -p "$pass" ssh \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -o PreferredAuthentications=password \
+    -o ConnectTimeout=10 -q \
+    -p "$port" root@localhost "halt" 2>/dev/null || true
+}
+
 run_boot_analysis() {
   local boot_state
 
@@ -983,6 +1029,34 @@ main() {
   BOOT_FIFO_FD=""
   rm -f "$BOOT_FIFO" || true
   BOOT_FIFO=""
+
+  if [[ "$JB_MODE" -eq 1 ]]; then
+    echo ""
+    echo "=== JB Finalize ==="
+    echo "[*] Booting VM normally for JB bootstrap finalization..."
+
+    check_vm_storage_locks
+    mkdir -p "$LOG_DIR"
+    : > "$BOOT_LOG"
+    (make boot >"$BOOT_LOG" 2>&1) &
+    BOOT_PID=$!
+
+    sleep 2
+    if ! kill -0 "$BOOT_PID" 2>/dev/null; then
+      echo "[-] make boot exited early during JB finalize stage."
+      tail -n 40 "$BOOT_LOG" 2>/dev/null || true
+      die "JB finalize boot failed."
+    fi
+
+    wait_for_device_ssh 22222 120
+
+    run_make "JB finalize" cfw_install_jb_finalize SSH_PORT=22222
+
+    halt_device_ssh 22222
+    echo "[*] Waiting for VM shutdown..."
+    wait "$BOOT_PID" || true
+    BOOT_PID=""
+  fi
 
   echo ""
   echo "=== Done ==="
