@@ -4,7 +4,7 @@
 
 Boot a virtual iPhone (iOS 26) via Apple's Virtualization.framework using PCC research VM infrastructure.
 
-![poc](./docs/demo.png)
+![poc](./docs/demo.jpeg)
 
 ## Tested Environments
 
@@ -22,7 +22,7 @@ Three patch variants are available with increasing levels of security bypass:
 | ------------------- | :-------------: | :-------: | ---------------------------------- |
 | **Regular**         |   41 patches    | 10 phases | `fw_patch` + `cfw_install`         |
 | **Development**     |   52 patches    | 12 phases | `fw_patch_dev` + `cfw_install_dev` |
-| **Jailbreak (WIP)** | 66 / 78 patches | 14 phases | `fw_patch_jb` + `cfw_install_jb`   |
+| **Jailbreak**       | 66 / 78 patches | 14 phases | `fw_patch_jb` + `cfw_install_jb`   |
 
 `66` = default JB kernel method plan; `78` = default + optional kernel methods (`VPHONE_JB_ENABLE_OPTIONAL=1`).
 
@@ -97,7 +97,7 @@ make vm_new                   # create vm/ directory (ROMs, disk, SEP storage)
 make fw_prepare               # download IPSWs, extract, merge, generate manifest
 make fw_patch                 # patch boot chain (regular variant)
 # or: make fw_patch_dev       # dev variant (+ TXM entitlement/debug bypasses)
-# or: make fw_patch_jb        # jailbreak variant (+ full security bypass) (WIP)
+# or: make fw_patch_jb        # jailbreak variant (+ full security bypass)
 ```
 
 ## Restore

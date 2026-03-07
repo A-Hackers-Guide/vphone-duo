@@ -4,7 +4,7 @@
 
 通过 Apple 的 Virtualization.framework 使用 PCC 研究虚拟机基础设施引导虚拟 iPhone（iOS 26）。
 
-![poc](./demo.png)
+![poc](./demo.jpeg)
 
 ## 测试环境
 
@@ -22,7 +22,7 @@
 | ----------------- | :------------: | :--------: | ---------------------------------- |
 | **常规版**        |   41 个补丁    | 10 个阶段  | `fw_patch` + `cfw_install`         |
 | **开发版**        |   52 个补丁    | 12 个阶段  | `fw_patch_dev` + `cfw_install_dev` |
-| **越狱版（WIP）** | 66 / 78 个补丁 | 14 个阶段  | `fw_patch_jb` + `cfw_install_jb`   |
+| **越狱版**       | 66 / 78 个补丁 | 14 个阶段  | `fw_patch_jb` + `cfw_install_jb`   |
 
 `66` 表示 JB 默认内核补丁计划；`78` 表示默认 + 可选内核补丁（`VPHONE_JB_ENABLE_OPTIONAL=1`）。
 
@@ -76,7 +76,7 @@ make vm_new                   # 创建 vm/ 目录（ROM、磁盘、SEP 存储）
 make fw_prepare               # 下载 IPSWs，提取、合并、生成 manifest
 make fw_patch                 # 修补启动链（常规变体）
 # 或：make fw_patch_dev       # 开发变体（+ TXM 权限/调试绕过）
-# 或：make fw_patch_jb        # 越狱变体（+ 完整安全绕过）（WIP）
+# 或：make fw_patch_jb        # 越狱变体（+ 完整安全绕过）
 ```
 
 ## 恢复过程

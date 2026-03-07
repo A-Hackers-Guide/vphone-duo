@@ -4,7 +4,7 @@
 
 PCC 리서치 VM 인프라와 Apple의 Virtualization.framework를 사용하여 가상 iPhone(iOS 26)을 부팅합니다.
 
-![poc](./demo.png)
+![poc](./demo.jpeg)
 
 ## 테스트된 환경
 
@@ -22,7 +22,7 @@ PCC 리서치 VM 인프라와 Apple의 Virtualization.framework를 사용하여 
 | -------------- | :----------: | :-------: | ---------------------------------- |
 | **일반**       |   41 패치    | 10 페이즈 | `fw_patch` + `cfw_install`         |
 | **개발**       |   52 패치    | 12 페이즈 | `fw_patch_dev` + `cfw_install_dev` |
-| **탈옥 (WIP)** | 66 / 78 패치 | 14 페이즈 | `fw_patch_jb` + `cfw_install_jb`   |
+| **탈옥**       | 66 / 78 패치 | 14 페이즈 | `fw_patch_jb` + `cfw_install_jb`   |
 
 `66`은 JB 기본 커널 패치 플랜, `78`은 기본 + 선택 커널 패치(`VPHONE_JB_ENABLE_OPTIONAL=1`)입니다.
 
@@ -76,7 +76,7 @@ make vm_new                   # vm/ 디렉토리 생성 (ROM, 디스크, SEP 저
 make fw_prepare               # IPSW 다운로드, 추출, 병합, manifest 생성
 make fw_patch                 # 부트 체인 패치 (일반 변형)
 # 또는: make fw_patch_dev     # 개발 변형 (+ TXM 권한/디버그 우회)
-# 또는: make fw_patch_jb      # 탈옥 변형 (+ 전체 보안 우회) (WIP)
+# 또는: make fw_patch_jb      # 탈옥 변형 (+ 전체 보안 우회)
 ```
 
 ## 복원
