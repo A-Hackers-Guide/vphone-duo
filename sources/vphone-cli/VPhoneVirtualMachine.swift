@@ -6,6 +6,8 @@ import Virtualization
 @MainActor
 class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
     let virtualMachine: VZVirtualMachine
+    /// ECID hex string resolved from machineIdentifier (e.g. "0x0012345678ABCDEF").
+    let ecidHex: String?
     /// Read handle for VM serial output.
     private var serialOutputReadHandle: FileHandle?
     /// Synthetic battery source for runtime charge/connectivity updates.
@@ -57,7 +59,8 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         platform.machineIdentifier = machineIdentifier
 
         if let identity = Self.resolveDeviceIdentity(machineIdentifier: machineIdentifier) {
-            print("[vphone] ECID: 0x\(identity.ecidHex)")
+            ecidHex = "0x\(identity.ecidHex)"
+            print("[vphone] ECID: \(ecidHex!)")
             print("[vphone] Predicted UDID: \(identity.udid)")
             do {
                 let outputURL = try Self.writeUDIDPrediction(
@@ -68,6 +71,7 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
                 print("[vphone] Warning: failed to write udid-prediction.txt: \(error)")
             }
         } else {
+            ecidHex = nil
             print("[vphone] Warning: failed to resolve ECID from machineIdentifier")
         }
 

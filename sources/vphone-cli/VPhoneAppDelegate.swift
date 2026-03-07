@@ -118,7 +118,8 @@ class VPhoneAppDelegate: NSObject, NSApplicationDelegate {
                 screenHeight: cli.screenHeight,
                 screenScale: cli.screenScale,
                 keyHelper: keyHelper,
-                control: control
+                control: control,
+                ecid: vm.ecidHex
             )
             windowController = wc
 
