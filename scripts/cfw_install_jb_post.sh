@@ -152,7 +152,7 @@ for marker in .procursus_strapped .installed_dopamine; do
     if ssh_cmd "test -f /var/jb/$marker"; then
         echo "  [*] $marker already exists, skipping"
     else
-        ssh_cmd "touch /var/jb/$marker && chown 0:0 /var/jb/$marker && chmod 0644 /var/jb/$marker"
+        ssh_cmd ": > /var/jb/$marker && chown 0:0 /var/jb/$marker && chmod 0644 /var/jb/$marker"
         echo "  [+] $marker created"
     fi
 done
