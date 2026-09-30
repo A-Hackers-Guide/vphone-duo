@@ -164,22 +164,17 @@ struct VPhoneCustomFirmwareInjectDylibCommand: ParsableCommand {
     @Argument(help: "Path the guest will load the dylib from (e.g. /b)")
     var dylibPath: String
 
-    @Flag(help: "Drop LC_SOURCE_VERSION when the header has no room for the command and the re-signed signature")
-    var reclaimSourceVersion = false
-
     func run() throws {
         let injections = try CustomFirmwareInjectDylib.inject(
             dylibPath: dylibPath,
             into: binary,
             weak: true,
             policy: .strip,
-            reclaimsSourceVersion: reclaimSourceVersion,
         )
         for injection in injections {
             let stripped = injection.removedCodeSignature ? ", signature stripped" : ""
-            let reclaimed = injection.removedSourceVersion ? ", LC_SOURCE_VERSION dropped" : ""
             print("  [+] LC_LOAD_WEAK_DYLIB \(dylibPath) -> \(binary.lastPathComponent) "
-                + "(slice +0x\(String(injection.sliceOffset, radix: 16))\(stripped)\(reclaimed))")
+                + "(slice +0x\(String(injection.sliceOffset, radix: 16))\(stripped))")
         }
     }
 }

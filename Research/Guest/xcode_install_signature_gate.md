@@ -136,7 +136,10 @@ linked call, no options -> 0x0        (0xE8008014 without the hook)
 
 `system-installd-cfw-adhoc_signature` — `VPhoneGuestComponents/MISFix/MISFix-vphone.c`,
 built as `/usr/lib/libmisfix.dylib`, attached to `/usr/libexec/installd` by a
-`LC_LOAD_WEAK_DYLIB` that `cfw install` inserts. It interposes
+`LC_LOAD_WEAK_DYLIB` that `cfw install` inserts. (Superseded 2026-09-30: the
+declaration is gone, and the spawn hooks insert libmisfix into installd,
+misagent and SpringBoard — see "One route for libmisfix" in
+`Research/0_binary_patch_comparison.md`.) It interposes
 `MISValidateSignatureAndCopyInfo` and
 `MISValidateSignatureAndCopyInfoWithProgress`, adds `AllowAdHocSigning` to the
 caller's options, and calls through. Nothing in the dyld shared cache is
@@ -252,7 +255,8 @@ again.
 ## What was built
 
 `system-misagent-cfw-device_identity` — the same `libmisfix.dylib`, attached to
-`/usr/libexec/misagent`, interposing `MGCopyAnswer` and `MGCopyAnswerWithError`
+`/usr/libexec/misagent` (now inserted at spawn, like installd's; the
+declaration is gone), interposing `MGCopyAnswer` and `MGCopyAnswerWithError`
 and answering `UniqueDeviceID` with the value in `libmisfix.plist`. Set it to a
 device the team has already registered and that team's profiles install here,
 with no portal round trip and nothing to redo after a rebuild. Absent or empty,

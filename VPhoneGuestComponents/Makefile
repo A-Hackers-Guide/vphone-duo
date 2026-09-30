@@ -80,7 +80,7 @@ GPU_PROVENANCE := $(STAGE)/gpu/README.md
 
 # Directory timestamps also catch files removed from the wildcard inputs.
 
-.PHONY: all gpu package test-loader-links test-vcam-dataplane clean
+.PHONY: all gpu package test-loader-links test-injection-environment test-vcam-dataplane clean
 
 all: $(ARTIFACTS) $(PLISTS) $(GPU_PROVENANCE)
 
@@ -96,6 +96,12 @@ test-loader-links:
 	/usr/bin/clang -Wall -Wextra -Werror -o $(OUT)/RootHideLoaderLinksTests \
 		Tests/RootHideLoaderLinksTests.c Shared/RootHideLoaderLinks.c
 	@$(OUT)/RootHideLoaderLinksTests
+
+test-injection-environment:
+	@mkdir -p $(OUT)
+	/usr/bin/clang -Wall -Wextra -Werror -Wno-unused-function -Wno-write-strings \
+		-o $(OUT)/InjectionEnvironmentTests Tests/InjectionEnvironmentTests.c
+	@$(OUT)/InjectionEnvironmentTests
 
 # Host proof harness for the camera data plane the guest hooks share.
 test-vcam-dataplane:

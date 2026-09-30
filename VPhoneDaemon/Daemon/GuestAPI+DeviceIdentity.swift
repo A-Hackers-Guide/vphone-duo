@@ -24,7 +24,7 @@ import Foundation
 /// `+[MICodeSigningVerifier _validateSignatureAndCopyInfoForURL:withOptions:error:]`
 /// inside installd, which calls `MISValidateSignatureAndCopyInfo` and evaluates
 /// the profile's `ProvisionedDevices` itself. Two processes answer the UDID
-/// question independently — which is why `cfw install` injects libmisfix into
+/// question independently — which is why the spawn hooks insert libmisfix into
 /// both — so refreshing one and not the other leaves them disagreeing.
 ///
 /// Measured on test-26.4 (2026-09-30): with the override changed to a UDID in
@@ -43,12 +43,11 @@ extension GuestAPI {
     static let udidConfigPaths = ["/var/db/vphone/misfix.plist", "/usr/lib/libmisfix.plist"]
     static let udidConfigKey = "UniqueDeviceID"
 
-    /// The daemons `cfw install` injects libmisfix into, and so the ones holding
-    /// a UDID answer that a change has to invalidate. Keep in step with the
-    /// `injectedDylibPath: "/usr/lib/libmisfix.dylib"` call sites in
-    /// `VPhoneCustomFirmwareInstaller`, bar SpringBoard: it carries the hook
-    /// for the launch check alone, never asks for the UDID, and stopping it
-    /// would take the home screen down with it.
+    /// The daemons libmisfix is inserted into, and so the ones holding a UDID
+    /// answer that a change has to invalidate. Keep in step with
+    /// `vpIsMISFixTarget` in `VPhoneGuestComponents/Shared/InjectionEnvironment.h`,
+    /// bar SpringBoard: it carries the hook for the launch check alone, never
+    /// asks for the UDID, and stopping it would take the home screen down with it.
     static let udidHookedDaemons = ["misagent", "installd"]
 
     static func executeDeviceIdentity(_ method: String, _ params: [String: Any]) throws -> [String: Any]? {

@@ -569,8 +569,8 @@ struct VPhoneCustomFirmwareInstaller {
         }
         // Version-agnostic: the guest is hacktivated on every base, so the
         // profile check this opens fails on every base too. Off in `standard`,
-        // because libmisfix declines the same check from userspace in installd
-        // and misagent without touching the cache — see
+        // because libmisfix declines the same check from userspace in installd,
+        // misagent and SpringBoard without touching the cache — see
         // FirmwarePatchSetCatalog.misTrustAuthPatch for why editing the cache
         // is the worse trade on 27.
         if on(FirmwarePatchSetCatalog.misTrustAuthPatch) {
@@ -655,46 +655,7 @@ struct VPhoneCustomFirmwareInstaller {
                 injectedDylibPath: "/vh",
             )
         }
-        if on("system-installd-cfw-adhoc_signature") {
-            // No bytes of installd's own change: the hook rides in on a weak
-            // load command and does its work through dyld interposition.
-            try patchMachO(
-                system: system,
-                work: work,
-                path: "usr/libexec/installd",
-                identifier: "com.apple.installd",
-                preserveEntitlements: true,
-                injectedDylibPath: "/usr/lib/libmisfix.dylib",
-            )
-        }
-        if on("system-misagent-cfw-device_identity") {
-            try patchMachO(
-                system: system,
-                work: work,
-                path: "usr/libexec/misagent",
-                identifier: "com.apple.misagent",
-                preserveEntitlements: true,
-                injectedDylibPath: "/usr/lib/libmisfix.dylib",
-            )
-        }
-        if on("system-springboard-cfw-launch_authorization") {
-            // SpringBoard asks MIS again before it launches an app, and no
-            // spawn hook reaches it: launchd starts it directly, in its
-            // conclave, and it never carries SystemHook. A load command is the
-            // one route that always holds.
-            // Its header has 16 spare bytes, so the command names the short
-            // alias and LC_SOURCE_VERSION makes room for the new signature.
-            try installLibraryAlias(system: system, alias: "mf", target: "/usr/lib/libmisfix.dylib")
-            try patchMachO(
-                system: system,
-                work: work,
-                path: "System/Library/CoreServices/SpringBoard.app/SpringBoard",
-                identifier: "com.apple.springboard",
-                preserveEntitlements: true,
-                injectedDylibPath: "/mf",
-                reclaimsSourceVersion: true,
-            )
-        }
+        try restoreMISFixTargets(system: system)
         if on("system-debugserver-cfw-install") {
             try patchDebugserver(system: system, work: work)
         }
@@ -955,6 +916,29 @@ struct VPhoneCustomFirmwareInstaller {
         }
     }
 
+    /// Put back the Apple binaries earlier installs linked libmisfix into.
+    ///
+    /// installd, misagent and SpringBoard now get the hook the way every other
+    /// guest process gets SystemHook: the spawn hooks insert it (see
+    /// `vpIsMISFixTarget` in `VPhoneGuestComponents/Shared/InjectionEnvironment.h`).
+    /// A guest installed before that still carries a load command in each, and
+    /// `patchMachO` left the original beside it as `.bak`. The `/mf` alias
+    /// existed only for SpringBoard's.
+    private func restoreMISFixTargets(system: VPhoneConfinedDirectory) throws {
+        let targets = [
+            "usr/libexec/installd",
+            "usr/libexec/misagent",
+            "System/Library/CoreServices/SpringBoard.app/SpringBoard",
+        ]
+        for path in targets where try system.isRegularFile("\(path).bak") {
+            try system.rename("\(path).bak", to: path)
+            print("  [+] \(path): restored the original, libmisfix is inserted at spawn")
+        }
+        if try system.isSymlink("mf"), try system.readLink("mf") == "/usr/lib/libmisfix.dylib" {
+            try system.removeItem("mf")
+        }
+    }
+
     /// libmisfix's settings file, and only when the guest has none.
     ///
     /// Unlike the libraries above this is not the bundle's to own: it carries a
@@ -1081,7 +1065,6 @@ struct VPhoneCustomFirmwareInstaller {
         identifier: String? = nil,
         preserveEntitlements: Bool = false,
         injectedDylibPath: String? = nil,
-        reclaimsSourceVersion: Bool = false,
     ) throws {
         let backup = "\(path).bak"
         if try !system.exists(backup) {
@@ -1099,10 +1082,7 @@ struct VPhoneCustomFirmwareInstaller {
             try patch(verb, [staged.path])
         }
         if let injectedDylibPath {
-            try patch(
-                "inject-dylib",
-                [staged.path, injectedDylibPath] + (reclaimsSourceVersion ? ["--reclaim-source-version"] : []),
-            )
+            try patch("inject-dylib", [staged.path, injectedDylibPath])
         }
         try VPhoneSigner.sign(
             fileAt: staged,

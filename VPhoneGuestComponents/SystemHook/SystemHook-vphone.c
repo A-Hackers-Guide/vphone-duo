@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int vpInXPCProxy;
@@ -45,51 +46,21 @@ static int vpIsInjectionTarget(const char *path) {
            (vpInBootstrap && path[0] != '/');
 }
 
-static int vpPathHasSuffix(const char *path, const char *suffix) {
-    size_t length = path ? strlen(path) : 0;
-    size_t want = strlen(suffix);
-    return length >= want && strcmp(path + length - want, suffix) == 0;
-}
-
-// The processes that evaluate a code signature or a provisioning profile, and
-// so the ones that have to agree about what device this is and what signatures
-// are acceptable. Everything else spawns without libmisfix.
-//
-//   installd   runs `+[MICodeSigningVerifier
-//              _validateSignatureAndCopyInfoForURL:withOptions:error:]`, which
-//              is in MobileInstallation and calls libmis. This is the install.
-//   misagent   installs the embedded profile and checks ProvisionedDevices.
-//   SpringBoard asks MIS again at launch, which is the half neither daemon
-//              covers: an installed app is refused at launch with 0xE8008026.
-//
-// Matched on the end of the path so a bootstrap or cryptex copy of the same
-// binary is caught too.
-//
-// This list is a second route, not the one the hook depends on. `cfw install`
-// links libmisfix into all three with a load command, and for SpringBoard
-// that is the only route that works: SpringBoard never carries this dylib.
-// Measured on test-27.0 (2026-09-30): launchd starts it without an xpcproxy
-// (the launchd hook's spawn log has every neighbouring child pid but not
-// SpringBoard's), and SpringBoard's own constructor line, which any `.app/`
-// path would write to vphone-systemhook.log, never appears. Its job runs in a
-// conclave (`_Conclave` in com.apple.SpringBoard.plist); whether the insert
-// is dropped there or never made is not settled.
-static int vpIsMISFixTarget(const char *path) {
-    if (!path)
-        return 0;
-    return vpPathHasSuffix(path, "/usr/libexec/installd") ||
-           vpPathHasSuffix(path, "/usr/libexec/misagent") ||
-           vpPathHasSuffix(path, "/SpringBoard.app/SpringBoard");
-}
-
+// Every process loads this hook, root or not, so its logs must be writable by
+// all of them. The first writer is always a root xpcproxy, and a file it
+// creates 0644 silently drops every line from a mobile process — SpringBoard
+// and every app looked as though they never carried the hook. The owner makes
+// it world-writable on each open; for anyone else fchmod fails harmlessly.
 static int vpOpenLog(const char *name) {
     char path[PATH_MAX];
     int used = snprintf(path, sizeof(path), "/var/mobile/Library/Caches/%s", name);
     int fd = used > 0 && (size_t)used < sizeof(path)
-                 ? open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644)
+                 ? open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0666)
                  : -1;
-    if (fd >= 0)
+    if (fd >= 0) {
+        fchmod(fd, 0666);
         return fd;
+    }
     const char *home = getenv("CFFIXED_USER_HOME");
     if (!home)
         home = getenv("HOME");
@@ -128,8 +99,7 @@ static void vpPrepareLoaderLink(const char *path) {
 // get their loader links prepared.
 static VPInjectionEnvironment vpPrepareChild(const char *path, char *const envp[], const char *kind) {
     const int misFix = vpIsMISFixTarget(path);
-    VPInjectionEnvironment injected =
-        vpInsertHooks(envp, getenv("VPHONE_JB_ROOT"), misFix ? VP_MIS_FIX : NULL);
+    VPInjectionEnvironment injected = vpInsertHooks(envp, getenv("VPHONE_JB_ROOT"), vpMISFixFor(path));
     if (vpIsInjectionTarget(path) || misFix) {
         vpPrepareLoaderLink(path);
         char decision[80];

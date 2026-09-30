@@ -4,25 +4,55 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define VP_SYSTEM_HOOK "/usr/lib/SystemHook-vphone.dylib"
 
 // The MIS hook. Inserted only into the processes that evaluate a code
-// signature or a provisioning profile — see `vpIsMISFixTarget` in
-// SystemHook-vphone.c — rather than carried by every spawn.
-//
-// It is inserted rather than linked, and that distinction is the point.
-// `cfw install` used to give installd and misagent an LC_LOAD_WEAK_DYLIB, which
-// makes the hook a dependency of the main executable. That is enough to
-// interpose calls the main executable makes itself, which is why misagent's
-// UDID override worked, and it is *not* enough for a call made between two
-// shared-cache images: installd's profile check is
-// `+[MICodeSigningVerifier _validateSignatureAndCopyInfoForURL:withOptions:error:]`
-// in MobileInstallation calling libmis, with installd's own image not involved,
-// and that one kept seeing the guest's real UDID. DYLD_INSERT_LIBRARIES loads
-// the hook ahead of everything else, which is where an interpose covers the
-// cache's own uses of a symbol too.
+// signature or a provisioning profile — see `vpIsMISFixTarget` below —
+// rather than carried by every spawn. This insertion is the only way it gets
+// there: no guest binary carries a load command for it.
 #define VP_MIS_FIX "/usr/lib/libmisfix.dylib"
+
+static int vpPathHasSuffix(const char *path, const char *suffix) {
+    size_t length = path ? strlen(path) : 0;
+    size_t want = strlen(suffix);
+    return length >= want && strcmp(path + length - want, suffix) == 0;
+}
+
+// The processes that evaluate a code signature or a provisioning profile, and
+// so the ones that have to agree about what device this is and what signatures
+// are acceptable. Everything else spawns without libmisfix.
+//
+//   installd    runs `+[MICodeSigningVerifier
+//               _validateSignatureAndCopyInfoForURL:withOptions:error:]`, which
+//               is in MobileInstallation and calls libmis. This is the install.
+//   misagent    installs the embedded profile and checks ProvisionedDevices.
+//   SpringBoard asks MIS again at launch; without the hook an installed app is
+//               refused there with 0xE8008026.
+//
+// Both spawn hooks ask this, because the targets do not share a parent:
+// installd and misagent are started through xpcproxy, which carries
+// SystemHook, and SpringBoard (`POSIXSpawnType` App) is started by launchd
+// itself, which carries only the launchd hook. Asking in one of them alone is
+// what left SpringBoard without libmisfix.
+//
+// Matched on the end of the path so a bootstrap or cryptex copy of the same
+// binary is caught too.
+static int vpIsMISFixTarget(const char *path) {
+    if (!path)
+        return 0;
+    return vpPathHasSuffix(path, "/usr/libexec/installd") ||
+           vpPathHasSuffix(path, "/usr/libexec/misagent") ||
+           vpPathHasSuffix(path, "/SpringBoard.app/SpringBoard");
+}
+
+// The library to insert alongside SystemHook for `path`, or NULL. NULL as well
+// when the dylib is not installed, so a guest without it never gets a
+// DYLD_INSERT_LIBRARIES entry naming a missing file.
+static const char *vpMISFixFor(const char *path) {
+    return vpIsMISFixTarget(path) && access(VP_MIS_FIX, R_OK) == 0 ? VP_MIS_FIX : NULL;
+}
 
 typedef struct {
     char **values;
@@ -130,7 +160,10 @@ static VPInjectionEnvironment vpInsertHooks(char *const env[], const char *root,
         }
         snprintf(result.root, size, "VPHONE_JB_ROOT=%s", root);
     }
-    result.values = calloc(count + (addHook && dyld == (size_t)-1) +
+    // Either addition rewrites the whole DYLD_INSERT_LIBRARIES entry, so an
+    // environment that already names SystemHook still gets the extra library.
+    const int addLibraries = addHook || addExtra;
+    result.values = calloc(count + (addLibraries && dyld == (size_t)-1) +
                                (addRoot && jbRoot == (size_t)-1) + 1, sizeof(char *));
     if (!result.values) {
         free(result.hook);
@@ -138,18 +171,13 @@ static VPInjectionEnvironment vpInsertHooks(char *const env[], const char *root,
         return (VPInjectionEnvironment){0};
     }
     for (size_t i = 0; i < count; i++)
-        result.values[i] = addHook && i == dyld ? result.hook :
+        result.values[i] = addLibraries && i == dyld ? result.hook :
                            addRoot && i == jbRoot ? result.root : env[i];
-    if (addHook && dyld == (size_t)-1)
+    if (addLibraries && dyld == (size_t)-1)
         result.values[count++] = result.hook;
     if (addRoot && jbRoot == (size_t)-1)
         result.values[count] = result.root;
     return result;
-}
-
-// The system hook alone, which is what every spawn gets.
-static VPInjectionEnvironment vpInsertHook(char *const env[], const char *root) {
-    return vpInsertHooks(env, root, NULL);
 }
 
 static void vpFreeEnvironment(VPInjectionEnvironment *environment) {

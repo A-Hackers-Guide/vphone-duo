@@ -91,10 +91,14 @@ static int vpSpawnWith(VPSpawnFunction spawn, pid_t *restrict pid, const char *r
     // loading ElleKit. Only launchd re-executing itself is left alone.
     if (!path || strcmp(path, "/sbin/launchd") == 0)
         return spawn(pid, path, actions, attributes, argv, envp);
-    VPInjectionEnvironment injected = vpInsertHook(envp, vpBootRoot);
+    // launchd starts some jobs itself rather than through xpcproxy — SpringBoard
+    // is one — so the MIS hook has to be decided here as well as in SystemHook.
+    const char *misFix = vpMISFixFor(path);
+    VPInjectionEnvironment injected = vpInsertHooks(envp, vpBootRoot, misFix);
     int status = spawn(pid, path, actions, attributes, argv, injected.values ? injected.values : envp);
-    if (bootstrapProgram || appProgram || strcmp(path, "/usr/libexec/xpcproxy") == 0) {
+    if (bootstrapProgram || appProgram || misFix || strcmp(path, "/usr/libexec/xpcproxy") == 0) {
         const char *event = !injected.values ? "unchanged" :
+                            misFix ? "inserted+misfix" :
                             vpInjectionDisabled(envp) ? "inserted-tweaks-disabled" : "inserted";
         vpLogInjection(event, path, status);
         vpLogSpawn(event, path, status == 0 && pid ? *pid : -1, status);

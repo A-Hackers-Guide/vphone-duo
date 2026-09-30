@@ -22,13 +22,6 @@
 // `ncmds` / `sizeofcmds` in the header change. What *does* move is the code
 // signature — `.strip` removes it and truncates the slice, which is why the
 // policy is part of this API rather than a separate pass.
-//
-// Some binaries leave almost no padding. SpringBoard on 24A435 has 16 bytes:
-// even after `.strip` frees its 16-byte LC_CODE_SIGNATURE, a 32-byte command
-// fits only by leaving the re-signer no room to put the signature back. For
-// those, `reclaimsSourceVersion` drops LC_SOURCE_VERSION — a version stamp
-// nothing reads at load time — and moves the commands after it up. Opt-in,
-// because it is the one case where an existing command is removed.
 
 import Foundation
 import VPhonePatchKit
@@ -69,10 +62,6 @@ private extension Data {
         replaceSubrange(offset ..< offset + count, with: Data(repeating: 0, count: count))
     }
 
-    func isZero(_ range: Range<Int>) -> Bool {
-        !self[range].contains(where: { $0 != 0 })
-    }
-
     func holds(_ offset: Int, _ length: Int) -> Bool {
         offset >= 0 && length >= 0 && offset + length <= count
     }
@@ -94,8 +83,6 @@ public struct CustomFirmwareDylibInjection: Sendable {
     public let isWeak: Bool
     /// True when LC_CODE_SIGNATURE and its blob were removed.
     public let removedCodeSignature: Bool
-    /// True when LC_SOURCE_VERSION was dropped to make room.
-    public let removedSourceVersion: Bool
     /// Slots re-hashed under `.keepAndReattest`. Empty under `.strip`.
     public let rehashedSlots: [CustomFirmwareSlotRehash]
 }
@@ -127,9 +114,6 @@ public enum CustomFirmwareInjectDylib {
     static let lcSegment64: UInt32 = 0x19
     static let lcSymtab: UInt32 = 0x02
     static let lcCodeSignature: UInt32 = 0x1D
-    static let lcSourceVersion: UInt32 = 0x2A
-    /// sizeof(struct linkedit_data_command): what a re-signer adds back after `.strip`.
-    static let codeSignatureCommandSize = 16
     static let lcLoadDylib: UInt32 = 0x0C
     static let lcLoadWeakDylib: UInt32 = 0x8000_0018
 
@@ -150,7 +134,6 @@ public enum CustomFirmwareInjectDylib {
         weak: Bool = true,
         policy: CodeSignaturePolicy = .strip,
         allowNonEmptyPadding: Bool = false,
-        reclaimsSourceVersion: Bool = false,
     ) throws -> [CustomFirmwareDylibInjection] {
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw PatcherError.fileNotFound(url.path)
@@ -162,7 +145,6 @@ public enum CustomFirmwareInjectDylib {
             weak: weak,
             policy: policy,
             allowNonEmptyPadding: allowNonEmptyPadding,
-            reclaimsSourceVersion: reclaimsSourceVersion,
         )
         try data.write(to: url)
         return injections
@@ -176,7 +158,6 @@ public enum CustomFirmwareInjectDylib {
         weak: Bool = true,
         policy: CodeSignaturePolicy = .strip,
         allowNonEmptyPadding: Bool = false,
-        reclaimsSourceVersion: Bool = false,
     ) throws -> [CustomFirmwareDylibInjection] {
         if data.startIndex != 0 {
             data = Data(data)
@@ -188,7 +169,6 @@ public enum CustomFirmwareInjectDylib {
             weak: weak,
             policy: policy,
             allowNonEmptyPadding: allowNonEmptyPadding,
-            reclaimsSourceVersion: reclaimsSourceVersion,
         )
         switch data.loadBEValue(UInt32.self, at: 0) {
         case fatMagic:
@@ -216,7 +196,6 @@ public enum CustomFirmwareInjectDylib {
         let weak: Bool
         let policy: CodeSignaturePolicy
         let allowNonEmptyPadding: Bool
-        let reclaimsSourceVersion: Bool
     }
 
     // MARK: Universal Binaries
@@ -332,27 +311,6 @@ public enum CustomFirmwareInjectDylib {
         let pathBytes = Array(options.dylibPath.utf8)
         let paddedPathSize = (pathBytes.count & ~(pathPadding - 1)) + pathPadding
         let commandSize = dylibCommandSize + paddedPathSize
-
-        // A stripped signature comes back when the binary is re-signed, and
-        // its command needs 16 bytes after ours.
-        var removedSourceVersion = false
-        let needed = commandSize + (removedCodeSignature ? codeSignatureCommandSize : 0)
-        let freeEnd = commandsOffset + sizeofcmds
-        if options.reclaimsSourceVersion,
-           let sourceVersion = layout.sourceVersion,
-           !data.isZero(freeEnd ..< Swift.min(freeEnd + needed, data.count))
-        {
-            guard case .strip = options.policy else {
-                throw PatcherError.invalidFormat("reclaiming LC_SOURCE_VERSION needs the .strip signature policy")
-            }
-            let tail = sourceVersion.commandOffset + sourceVersion.commandSize
-            let moved = Data(data[tail ..< freeEnd])
-            data.replaceSubrange(sourceVersion.commandOffset ..< sourceVersion.commandOffset + moved.count, with: moved)
-            data.zeroBytes(at: freeEnd - sourceVersion.commandSize, count: sourceVersion.commandSize)
-            ncmds -= 1
-            sizeofcmds -= sourceVersion.commandSize
-            removedSourceVersion = true
-        }
         let commandOffset = commandsOffset + sizeofcmds
 
         guard data.holds(commandOffset, commandSize), commandOffset + commandSize <= headerOffset + sliceSize else {
@@ -412,7 +370,6 @@ public enum CustomFirmwareInjectDylib {
             loadCommandSize: commandSize,
             isWeak: options.weak,
             removedCodeSignature: removedCodeSignature,
-            removedSourceVersion: removedSourceVersion,
             rehashedSlots: rehashed,
         )
     }
@@ -430,7 +387,6 @@ public enum CustomFirmwareInjectDylib {
     struct SliceLayout {
         var codeSignature: CodeSignatureCommand?
         var codeSignatureIsLast = false
-        var sourceVersion: (commandOffset: Int, commandSize: Int)?
         /// Offset of the __LINKEDIT LC_SEGMENT_64 command, and its slice-relative extent.
         var linkEditCommandOffset: Int?
         var linkEditFileOffset = 0
@@ -468,8 +424,6 @@ public enum CustomFirmwareInjectDylib {
                     dataSize: Int(data.loadLEValue(UInt32.self, at: offset + 12)),
                 )
                 layout.codeSignatureIsLast = index == ncmds - 1
-            case lcSourceVersion:
-                layout.sourceVersion = (offset, cmdsize)
             case lcSegment64:
                 guard data.holds(offset, 72) else {
                     throw PatcherError.invalidFormat("LC_SEGMENT_64 is truncated")

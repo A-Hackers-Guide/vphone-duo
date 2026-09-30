@@ -73,7 +73,7 @@ const char *MISFixCallerImage(const void *address);
 /// Whether this process's executable is named `name`, compared on the last
 /// path component.
 ///
-/// The same dylib is linked into installd, misagent and SpringBoard, and not
+/// The same dylib is inserted into installd, misagent and SpringBoard, and not
 /// every hook belongs in all three: MobileInstallation's policy is installd's
 /// alone, and loading that framework into SpringBoard to swizzle it would
 /// change a process the hook has no business in.
