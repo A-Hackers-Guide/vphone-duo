@@ -171,6 +171,7 @@ struct VPhoneCustomFirmwareCommand: ParsableCommand {
         subcommands: [
             VPhoneCustomFirmwareInstallCommand.self,
             VPhoneCustomFirmwareInstallRootCommand.self,
+            VPhoneCustomFirmwareUpdateEnvironmentCommand.self,
             VPhoneCustomFirmwareFlipSnapshotCommand.self,
             // The per-step patchers the installers used to reach through
             // scripts/patchers/cfw.py for — see VPhoneCustomFirmwarePatchCommand.swift.
@@ -275,5 +276,51 @@ struct VPhoneCustomFirmwareInstallCommand: ParsableCommand {
             // Never fall back to doing this as root.
             fputs("warning: skipped recording the install in \(bundle.url.path): \(error)\n", stderr)
         }
+    }
+}
+
+/// Redeploy this bundle's guest payload into a VM that is already installed.
+///
+/// The gap it fills: `cfw install` needs a prepared restore tree, and the
+/// restore tree is deleted once a VM has booted. So until now an existing
+/// machine could not be given an updated vphoned or guest dylib at all — and
+/// replacing a library in a running guest over the API cannot help either,
+/// because a daemon keeps the copy it mapped at launch.
+///
+/// Deliberately narrow. It writes only the files a full install writes into the
+/// guest, runs no patch, injects nothing, and leaves the recorded variant
+/// alone, so it cannot turn a half-built VM into something that looks
+/// installed. A VM that was never installed is refused rather than half-filled.
+struct VPhoneCustomFirmwareUpdateEnvironmentCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "update-environment",
+        abstract: "Redeploy vphoned and the guest dylibs into an installed VM (VM must be off)",
+        discussion: """
+        Puts back only what this bundle ships into the guest: vphoned and its
+        launch daemon, the guest dylibs in /usr/lib, and the libmisfix defaults
+        if the VM has none. No firmware patch runs, no load command is injected,
+        no cryptex or GPU work happens, and the VM's recorded variant does not
+        change.
+
+        Use it to move an existing VM onto a newer bundle without rebuilding it.
+        A library the VM does not already have is left out, because its absence
+        means the VM's patch plan never selected it.
+
+        Needs root, and the VM must be powered off.
+        """,
+    )
+
+    @OptionGroup var lib: VPhoneLibraryOption
+    @Argument(help: "VM name") var name: String?
+
+    func run() throws {
+        let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
+        let bundle = try lib.library.bundle(named: name)
+        let code = try VPhoneCustomFirmwareInstaller.elevate(
+            bundle: bundle.url,
+            resources: VPhoneResources.resolve(),
+            mode: .environmentOnly,
+        )
+        throw ExitCode(code)
     }
 }
