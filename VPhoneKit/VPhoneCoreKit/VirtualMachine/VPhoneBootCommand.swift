@@ -110,15 +110,15 @@ public struct VPhoneBootCommand: ParsableCommand {
            let existingVariant = VPhoneRestoreInfo.load(fromBundle: bundle)?.variant,
            existingVariant != "jb"
         {
-            throw ValidationError(
+            throw BundleStateError(
                 "This VM was created as '\(existingVariant)', which this build does not support. Create a new VM and try again.",
             )
         }
         // A restored guest without CFW panics at pid 1 and shows only a black
         // screen, so say so before booting it.
         if !dfu, VPhoneRestoreInfo.customFirmwareInstalled(inBundle: bundle) == false {
-            throw ValidationError(
-                "CFW installation on this VM did not complete, so it cannot boot. Stop the VM, run `sudo vphone-cli cfw install \(bundle.name)` again, then launch.",
+            throw BundleStateError(
+                "CFW installation on this VM did not complete, so it cannot boot. Run `sudo vphone-cli cfw install \(bundle.name)`, then launch it again.",
             )
         }
 
@@ -187,5 +187,15 @@ public struct VPhoneBootCommand: ParsableCommand {
             args += ["--install-ipa", ipa.path]
         }
         return args
+    }
+
+    /// The VM folder, not the command line, is what is wrong, so these print
+    /// without the usage text a `ValidationError` brings.
+    struct BundleStateError: Error, CustomStringConvertible {
+        let description: String
+
+        init(_ description: String) {
+            self.description = description
+        }
     }
 }

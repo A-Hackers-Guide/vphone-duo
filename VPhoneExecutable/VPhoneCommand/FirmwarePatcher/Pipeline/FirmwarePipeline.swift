@@ -81,6 +81,18 @@ public final class FirmwarePipeline {
         /// it has to say so rather than leave the component untouched.
         let patcherFactories: [(Data, Bool) throws -> any Patcher]
 
+        /// Whether the pipeline keeps this component's untouched bytes aside and
+        /// re-patches those on every run — see FirmwarePipelineOriginals.swift.
+        ///
+        /// False for the two `.less` components, and only for them. `Filesystem`
+        /// and `Manifest` both name `BuildManifest.plist`, but neither is a patcher
+        /// over that one file: `CryptexFilesystemPatcher` rewrites cryptex images
+        /// across the restore tree, and `ManifestHashPatcher` rewrites hashes to
+        /// match files other steps produced. Putting the manifest back on its own
+        /// would describe a tree that no longer exists, so they keep the old
+        /// in-place behaviour and opt out here.
+        var restorable: Bool = true
+
         /// The same descriptor with more patchers appended after the existing ones.
         func appending(_ factories: [(Data, Bool) throws -> any Patcher]) -> ComponentDescriptor {
             guard !factories.isEmpty else { return self }
@@ -89,6 +101,7 @@ public final class FirmwarePipeline {
                 inRestoreDir: inRestoreDir,
                 searchPatterns: searchPatterns,
                 patcherFactories: patcherFactories + factories,
+                restorable: restorable,
             )
         }
     }
