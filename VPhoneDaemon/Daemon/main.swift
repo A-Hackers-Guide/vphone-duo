@@ -18,6 +18,7 @@ vp_vcam_start()
 // that pays for `dlopen`; a base without the symbols logs and stays a no-op.
 _ = vp_hid_load()
 GuestIrisinInstaller.refreshBootstrapOnStartup()
+GuestAPI.restoreUSBSerialOnStartup()
 
 let group = MultiThreadedEventLoopGroup(numberOfThreads: 2)
 let filePool = NIOThreadPool(numberOfThreads: 2)

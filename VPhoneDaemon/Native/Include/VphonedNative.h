@@ -39,3 +39,11 @@ typedef struct {
 
 /// Identity and resource usage for one process. Returns false when the process is gone.
 bool vp_process_usage(int pid, VPProcessUsage *usage);
+
+/// Make `serial` the USB serial string the host sees, re-enumerating only when
+/// it changes or `force` is set (`*changed`). Returns a malloc-owned error or NULL.
+char *vp_usb_set_serial(const char *serial, bool force, bool *changed);
+
+/// The guest's own USB serial, built from `/chosen` `chip-id` and
+/// `unique-chip-id`. malloc-owned, or NULL when the device tree lacks either.
+char *vp_usb_own_serial(void);

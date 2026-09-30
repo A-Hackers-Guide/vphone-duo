@@ -1,12 +1,13 @@
 import Darwin
 import Foundation
+import VphonedNative
 
 // MARK: - Profile UDID
 
-/// The UDID libmisfix gives the hooked daemons when they check a provisioning
-/// profile's `ProvisionedDevices` (`VPhoneGuestComponents/MISFix`). Lockdown,
-/// Xcode and devicectl keep seeing the guest's own UDID; only the hooked
-/// daemons see this one.
+/// The UDID the guest gives: to the hooked daemons checking a provisioning
+/// profile's `ProvisionedDevices`, and to the host through lockdownd, remoted
+/// and the USB serial string (`VPhoneGuestComponents/MISFix/MISFixDeviceIdentity.c`
+/// has the three routes). TXM and the kernel keep the guest's own.
 ///
 /// The hook reads the first of two files that exists and re-reads it when its
 /// modification time or size changes. vphoned owns the data-volume file.
@@ -15,8 +16,9 @@ import Foundation
 /// cannot take over again.
 ///
 /// A change also stops every daemon that carries the hook, so the next check
-/// runs in a fresh process that has cached nothing. launchd starts them on
-/// demand.
+/// runs in a fresh process that has cached nothing, and takes the USB device
+/// off the bus and back, which relaunches remoted and makes the host read the
+/// identity again. launchd starts the rest on demand.
 ///
 /// That means installd as well as misagent, and it used to mean only misagent.
 /// The reason given was that installd "asks misagent", and it does not: a
@@ -48,7 +50,7 @@ extension GuestAPI {
     /// `vpIsMISFixTarget` in `VPhoneGuestComponents/Shared/InjectionEnvironment.h`,
     /// bar SpringBoard: it carries the hook for the launch check alone, never
     /// asks for the UDID, and stopping it would take the home screen down with it.
-    static let udidHookedDaemons = ["misagent", "installd"]
+    static let udidHookedDaemons = ["misagent", "installd", "lockdownd", "remoted"]
 
     static func executeDeviceIdentity(_ method: String, _ params: [String: Any]) throws -> [String: Any]? {
         switch method {
@@ -74,8 +76,64 @@ extension GuestAPI {
         guard state["path"] as? String == udidConfigPaths[0], state["udid"] as? String == udid else {
             throw GuestAPIError.operationFailed("\(udidConfigPaths[0]) did not read back as written")
         }
-        state["restarted_pids"] = udidHookedDaemons.flatMap { stopProcesses(named: $0) }
+        // SIGKILL: remoted runs with EnableTransactions and outlives a SIGTERM.
+        state["restarted_pids"] = udidHookedDaemons.flatMap { stopProcesses(named: $0, signal: SIGKILL) }
+        // Always off the bus and back, even for an unchanged serial: that is
+        // what launches remoted again (its launch event is the NCM link coming
+        // up), and what makes the host ask lockdown who this is once more.
+        let usb = try applyUSBSerial(udid, reenumerate: true)
+        state["usb_serial"] = usb.serial
+        state["usb_reenumerated"] = usb.changed
         return state
+    }
+
+    /// Shows the host `udid` — or the guest's own UDID when nil — as the USB
+    /// serial string, which is where usbmuxd, and so `idevice_id`, gets it.
+    /// The dashes go, as on a real device: usbmuxd puts one back after the
+    /// eighth character of a 24-character serial. Returns the serial in effect and
+    /// whether the device went off the bus to show it.
+    @discardableResult
+    static func applyUSBSerial(_ udid: String?, reenumerate: Bool = false) throws -> (serial: String, changed: Bool) {
+        let serial: String
+        if let udid {
+            serial = udid.replacingOccurrences(of: "-", with: "")
+        } else {
+            guard let own = vp_usb_own_serial() else {
+                throw GuestAPIError.operationFailed("/chosen has no chip-id or unique-chip-id")
+            }
+            serial = String(cString: own)
+            free(own)
+        }
+        var changed = false
+        if let error = vp_usb_set_serial(serial, reenumerate, &changed) {
+            defer { free(error) }
+            throw GuestAPIError.operationFailed(String(cString: error))
+        }
+        return (serial, changed)
+    }
+
+    /// Puts a configured UDID back on the USB serial after a boot or a vphoned
+    /// restart; the kernel starts from the guest's own every time. A guest with
+    /// no override is left untouched.
+    ///
+    /// vphoned starts before the USB device exists, and until it does the
+    /// controller has no description to change (measured on test-27.0). So this
+    /// retries in the background, every two seconds for five minutes, until the
+    /// serial is set.
+    static func restoreUSBSerialOnStartup(attempt: Int = 0) {
+        guard let udid = udidState()["udid"] as? String else { return }
+        do {
+            let usb = try applyUSBSerial(udid)
+            NSLog("vphoned: USB serial %@ after %d retries", usb.serial, attempt)
+        } catch {
+            guard attempt < 150 else {
+                NSLog("vphoned: USB serial not set: %@", String(describing: error))
+                return
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
+                restoreUSBSerialOnStartup(attempt: attempt + 1)
+            }
+        }
     }
 
     /// The UDID the hook answers with and the file it comes from, resolved the

@@ -271,12 +271,42 @@ re-running the installer never puts an empty file over a UDID someone set.
 
 The VM window sets it from Device › Set UDID… and Reset UDID, through
 vphoned's `udid.set` and `udid.clear` (`Research/vphoned_http_api.md`). vphoned
-writes the data-volume file, reads it back and restarts misagent.
+writes the data-volume file, reads it back and restarts the hooked daemons.
 
-### The inconsistency this creates
+### The host sees it too (2026-09-30)
 
-The guest now answers two ways about which device it is. Xcode, `devicectl`
-and lockdown still see its own UDID; only the processes carrying the hook see
-the configured one. That is deliberate and was accepted explicitly — making
-the two agree would mean a re-restore for a UDID that still could not match a
-real device's.
+This section used to say the host keeps seeing the guest's own UDID, and that
+making the two agree needed a re-restore. It needs neither. The host learns
+the UDID in three places, all of them in userspace or reachable from it:
+
+| Where | Who answers | How the override gets there |
+| --- | --- | --- |
+| usbmuxd, `idevice_id` | the USB serial string | IOUSBDeviceFamily takes a new description from a process holding `com.apple.private.usbdevice.setdescription`; vphoned sets the serial (with `AllowMultipleCreates`, or the controller refuses with `0xe00002e2` once the device exists) and goes off the bus and back |
+| lockdown `GetValue UniqueDeviceID` | lockdownd | libmisfix is inserted into it; it calls `MGCopyAnswer(UniqueDeviceID)` from its main executable |
+| RSD handshake (CoreDevice, Xcode) | remoted | libmisfix is inserted into it; it calls `MGCopyAnswerWithError` with the obfuscated key `re6Zb+zwFKJNlkQTUeT+/w` |
+
+The kernel builds the USB serial itself from `/chosen` `chip-id` and
+`unique-chip-id` (`%08X%016llX`); `IOPlatformSerialNumber` is `vphone-1337`
+and plays no part. vphoned starts before the USB device exists, when the
+controller has no description to change, so it retries in the background
+until it can.
+
+Measured on test-27.0 with `00008150-00112233445566AA`: `idevice_id`,
+`ideviceinfo -k UniqueDeviceID` and `remotectl show` (both the
+`virtualmachine` and the `ncm` transports) all report the override, after
+`udid.set` and after a reboot; `udid.clear` puts all three back.
+`ideviceinstaller list` works under the new identity.
+
+Two things turned up on the way. `MGCopyAnswerWithError` takes three
+arguments (question, options, error), and the hook had declared two; misagent
+never calls that spelling, remoted does, and it crashed at `0xe` until the
+prototype was fixed. And remoted runs with `EnableTransactions`, so SIGTERM
+does not stop it, and it is launched by the NCM link coming up, not on
+demand; vphoned sends SIGKILL and always re-enumerates.
+
+What stays the guest's own is TXM's and the kernel's view, and CoreDevice's
+record of a pairing made under the old UDID. A new UDID is a new device to
+the host, so the guest asks to trust the computer again; it keeps one
+lockdown pair record per host, so switching back asks again too. Pairing
+with `devicectl` itself is not covered here: it times out against vphone
+guests for reasons unrelated to the UDID.

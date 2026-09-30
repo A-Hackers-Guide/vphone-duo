@@ -79,6 +79,11 @@ const char *MISFixCallerImage(const void *address);
 /// change a process the hook has no business in.
 int MISFixProcessIs(const char *name);
 
+/// Whether this is lockdownd or remoted, which carry the dylib only so the host
+/// is told the configured UDID. They never evaluate a signature, so the MIS
+/// detours leave their copy of libmis alone.
+int MISFixProcessOnlyNeedsIdentity(void);
+
 /// The image of whoever called the function this appears in.
 #define MISFixCaller() MISFixCallerImage(__builtin_return_address(0))
 

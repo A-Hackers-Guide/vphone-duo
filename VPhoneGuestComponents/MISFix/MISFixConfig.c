@@ -254,3 +254,7 @@ void MISFixLog(const char *format, ...) {
         return;
     MISFixNote("%s", message);
 }
+
+int MISFixProcessOnlyNeedsIdentity(void) {
+    return MISFixProcessIs("lockdownd") || MISFixProcessIs("remoted");
+}

@@ -22,7 +22,8 @@ static int vpPathHasSuffix(const char *path, const char *suffix) {
 
 // The processes that evaluate a code signature or a provisioning profile, and
 // so the ones that have to agree about what device this is and what signatures
-// are acceptable. Everything else spawns without libmisfix.
+// are acceptable, plus the two that tell the host which device this is.
+// Everything else spawns without libmisfix.
 //
 //   installd    runs `+[MICodeSigningVerifier
 //               _validateSignatureAndCopyInfoForURL:withOptions:error:]`, which
@@ -30,6 +31,10 @@ static int vpPathHasSuffix(const char *path, const char *suffix) {
 //   misagent    installs the embedded profile and checks ProvisionedDevices.
 //   SpringBoard asks MIS again at launch; without the hook an installed app is
 //               refused there with 0xE8008026.
+//   lockdownd   answers lockdown `GetValue UniqueDeviceID` (usbmuxd clients).
+//   remoted     puts `UniqueDeviceID` in the RSD handshake (CoreDevice, Xcode).
+//               These two get the MobileGestalt override only; the MIS detours
+//               stand down in them (`MISFixProcessOnlyNeedsIdentity`).
 //
 // Both spawn hooks ask this, because the targets do not share a parent:
 // installd and misagent are started through xpcproxy, which carries
@@ -44,6 +49,8 @@ static int vpIsMISFixTarget(const char *path) {
         return 0;
     return vpPathHasSuffix(path, "/usr/libexec/installd") ||
            vpPathHasSuffix(path, "/usr/libexec/misagent") ||
+           vpPathHasSuffix(path, "/usr/libexec/lockdownd") ||
+           vpPathHasSuffix(path, "/usr/libexec/remoted") ||
            vpPathHasSuffix(path, "/SpringBoard.app/SpringBoard");
 }
 

@@ -169,12 +169,12 @@ extension GuestAPI {
         }
     }
 
-    /// Sends SIGTERM to every process with this name; launchd starts an
-    /// on-demand daemon again for its next client.
-    static func stopProcesses(named name: String) -> [Int] {
+    /// Sends `signal` (SIGTERM unless told otherwise) to every process with this
+    /// name; launchd starts an on-demand daemon again for its next client.
+    static func stopProcesses(named name: String, signal: Int32 = SIGTERM) -> [Int] {
         let rows = (try? listProcesses(filter: name))?["processes"] as? [[String: Any]] ?? []
         return rows.compactMap { row in
-            guard row["name"] as? String == name, let pid = row["pid"] as? Int, kill(pid_t(pid), SIGTERM) == 0
+            guard row["name"] as? String == name, let pid = row["pid"] as? Int, kill(pid_t(pid), signal) == 0
             else { return nil }
             return pid
         }

@@ -67,6 +67,8 @@ static CFTypeRef vpProfileGetValue(CFTypeRef profile, CFStringRef key) {
 }
 
 __attribute__((constructor)) static void vpInstallProfileScopeHook(void) {
+    if (MISFixProcessOnlyNeedsIdentity())
+        return;
     MISFixDetourResult result = MISFixDetour(
         "MISProfileGetValue",
         (void *)&MISProfileGetValue,

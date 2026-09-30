@@ -303,6 +303,8 @@ static int vpValidateWithProgress(
 /// property of one libmis build and the log is how the next one tells us it
 /// changed.
 __attribute__((constructor)) static void vpInstallSignatureHooks(void) {
+    if (MISFixProcessOnlyNeedsIdentity())
+        return;
     MISFixDetourResult body = MISFixDetour(
         "MISValidateSignatureAndCopyInfoWithProgress",
         (void *)&MISValidateSignatureAndCopyInfoWithProgress,

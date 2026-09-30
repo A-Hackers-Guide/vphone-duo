@@ -286,7 +286,7 @@ request carries `"force": true`.
 | Packages (read-only) | `packages.list`, `status`, `info {path}`, `compare`, `tweaks`, `repos` |
 | Bootstrap | `bootstrap.install {layout}`, `bootstrap.status`, `bootstrap.inspect`, `bootstrap.uninstall {jbroot, force}`, `bootstrap.firmware` (see above) |
 | Environment | `environment.status` (SHA-256 of each vphone library in `/usr/lib`, or null when absent, plus the staging directory), `environment.install {libraries: [{name, sha256}]}` (see below) |
-| Profile UDID | `udid.get`, `udid.set {udid}`, `udid.clear` — each returns `{udid, path}`, the UDID libmisfix gives misagent's profile check (null: the guest's own) and the settings file it came from; `set` and `clear` also return `restarted_pids` (see below) |
+| Profile UDID | `udid.get`, `udid.set {udid}`, `udid.clear` — each returns `{udid, path}`, the UDID the guest gives its profile checks and the host (null: the guest's own) and the settings file it came from; `set` and `clear` also return `restarted_pids`, `usb_serial` and `usb_reenumerated` (see below) |
 | Setup Assistant | `setup.status` (`{pending, running, pid, setup_done, setup_version, current_version}`), `setup.skip` **force** (sets `SetupDone`, `SetupFinishedAllSteps` and `SetupVersion` in `com.apple.purplebuddy`, restarts SpringBoard, returns the status plus `respring`); `/v1/health` carries `setup_pending` — see `Research/Guest/setup_assistant_skip.md` |
 
 `processes.list` joins icli's kernel process list with `proc_pid_rusage`
@@ -319,17 +319,24 @@ camera client loads the new hook. The result lists `installed`,
 `restarted_pids` and `reboot_required`, which is true when the launchd hook
 changed: launchd keeps the copy it mapped at boot.
 
-The profile UDID methods drive `libmisfix.dylib`'s `MGCopyAnswer` interpose
-in misagent (`Research/Guest/xcode_install_signature_gate.md`). The hook reads
+The profile UDID methods drive `libmisfix.dylib`'s MobileGestalt interpose in
+misagent, installd, lockdownd and remoted, and the USB serial string
+(`Research/Guest/xcode_install_signature_gate.md`). The hook reads
 `UniqueDeviceID` from the first of `/var/db/vphone/misfix.plist` and
 `/usr/lib/libmisfix.plist` that exists. vphoned owns the first: `udid.set`
 stores the string exactly as sent, with no format check, so the API and
 `vphone.sock`'s `rpc` verb can try unusual values; `udid.clear` removes the key
 but keeps the file, so a value in the `/usr/lib` copy cannot take over. The file
 is written as a binary plist in one rename and read back, then vphoned sends
-SIGTERM to misagent; launchd starts it again for the next profile check. The
-guest does not restart, and installd is left running so an install in progress
-is not aborted. The VM window's Device › Set UDID… is stricter than the API: it
+SIGKILL to misagent, installd, lockdownd and remoted (remoted outlives
+SIGTERM), sets the USB serial to the UDID without its hyphen (the guest's own
+for `clear`) and takes the USB device off the bus and back. That relaunches
+remoted and makes usbmuxd, lockdown clients and CoreDevice read the identity
+again; `idevice_id` lists the new UDID within seconds. The guest does not
+restart. vphoned reapplies a configured UDID to the USB serial at every boot,
+once the USB device exists. A new UDID is a new device to the host: the guest
+asks to trust the computer again, and keeps one pair record per host, so
+switching back needs trusting again too. The VM window's Device › Set UDID… is stricter than the API: it
 accepts only 8 and 16 hex digits joined by a hyphen (sent upper-case) or 40 hex
 digits (sent lower-case).
 

@@ -169,7 +169,8 @@ public enum FirmwareGuestSystemPatchSet {
                 Installs the launchd environment and plists the guest tools read, and the hooks \
                 launchd and SystemHook insert at spawn. Among them is libmisfix.dylib, inserted \
                 into installd, misagent and SpringBoard, which lets Xcode install and launch an \
-                app signed for someone else's team, or ad hoc, without writing the shared cache.
+                app signed for someone else's team, or ad hoc, without writing the shared cache, \
+                and into lockdownd and remoted, which tell the host a configured UDID.
                 """,
                 target: .guestFile(path: "/Library/LaunchDaemons"),
                 bootEssential: true,

@@ -43,6 +43,8 @@ static void leavesACompleteEnvironmentAlone(void) {
 static void namesTheMISFixTargets(void) {
     assert(vpIsMISFixTarget("/usr/libexec/installd"));
     assert(vpIsMISFixTarget("/usr/libexec/misagent"));
+    assert(vpIsMISFixTarget("/usr/libexec/lockdownd"));
+    assert(vpIsMISFixTarget("/usr/libexec/remoted"));
     assert(vpIsMISFixTarget("/System/Library/CoreServices/SpringBoard.app/SpringBoard"));
     assert(!vpIsMISFixTarget("/usr/libexec/xpcproxy"));
     assert(!vpIsMISFixTarget("/usr/libexec/installdx"));

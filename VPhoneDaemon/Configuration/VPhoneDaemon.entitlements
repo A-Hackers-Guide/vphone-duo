@@ -317,6 +317,8 @@
 	<true/>
 	<key>com.apple.private.system-keychain</key>
 	<true/>
+	<key>com.apple.private.usbdevice.setdescription</key>
+	<true/>
 	<key>com.apple.private.usernotifications.bundle-identifiers</key>
 	<true/>
 	<key>com.apple.private.usernotifications.settings</key>

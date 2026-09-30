@@ -45,9 +45,9 @@
 //
 // ## How far this reaches, measured
 //
-// misagent, and nothing else. Its main executable calls `MGCopyAnswer` itself,
-// so the interpose catches it and a profile naming the configured device
-// installs.
+// misagent, lockdownd and remoted: their main executables call MobileGestalt
+// themselves, so the interpose catches them. In misagent a profile naming the
+// configured device installs.
 //
 // installd does not benefit and no interpose can make it. Its profile check
 // runs MobileInstallation → libmis → libMobileGestalt, all three inside the
@@ -80,19 +80,30 @@
 // for real instead of being skipped, which is closer to what the device would
 // have done.
 //
-// ## The inconsistency this creates, stated plainly
+// ## What the host sees (2026-09-30)
 //
-// The guest gives two different answers about which device it is. What Xcode,
-// `devicectl` and lockdown report is unchanged — that UDID is built by TXM
-// before the kernel runs, out of the device tree's `chip-id` and
-// `unique-chip-id`, and nothing in userspace can alter it. Only the processes
-// carrying this hook see the configured value.
+// The host learns the UDID three ways, and all three now give the configured
+// one, so Xcode signs for a device the team has registered:
 //
-// That is deliberate. Making the two agree would mean rewriting
-// `unique-chip-id`, which is the ECID the guest's SHSH blob is issued against,
-// so the VM would have to be restored again — and `chip-id` is fixed at
-// 0x0000FE01 by the virtual SoC, so a real iPhone's UDID could not be
-// reproduced even then.
+//   usbmuxd (`idevice_id`)   the USB serial string. The kernel builds it from
+//                            `chip-id` and `unique-chip-id`; vphoned replaces it
+//                            (`vphoned_usb.m`) and takes the device off the bus
+//                            and back so the host reads it again.
+//   lockdown `GetValue`      lockdownd carries this hook and asks
+//                            `MGCopyAnswer(UniqueDeviceID)` itself.
+//   RSD handshake            remoted carries this hook and asks through
+//                            `MGCopyAnswerWithError` with the obfuscated key
+//                            (`kMISFixUniqueDeviceIDObfuscatedProperty`).
+//
+// What stays the guest's own: TXM's and the kernel's view (AMFI, codesigning),
+// which is built before any of this runs, and CoreDevice's record of a pairing
+// made under the old UDID, which it keeps until that pairing is removed. The
+// guest keeps one lockdown pair record per host, so switching the UDID asks
+// the host to be trusted again.
+//
+// Matching a real iPhone's UDID in the kernel as well would mean rewriting
+// `unique-chip-id`, the ECID the SHSH blob is issued against, and `chip-id` is
+// fixed at 0x0000FE01 by the virtual SoC. Userspace is where this stops.
 
 #include "MISFixConfig.h"
 #include "MISFixInterpose.h"
@@ -100,7 +111,10 @@
 #include <mach-o/dyld.h>
 
 extern CFTypeRef MGCopyAnswer(CFStringRef property);
-extern CFTypeRef MGCopyAnswerWithError(CFStringRef property, uint32_t *error);
+// Three arguments: the middle one is an options dictionary. Declaring two
+// passed the caller's options through as the error pointer, and remoted — the
+// first hooked process to call this spelling — faulted writing to it.
+extern CFTypeRef MGCopyAnswerWithError(CFStringRef property, CFDictionaryRef options, uint32_t *error);
 
 /// Log every MobileGestalt query this hook sees, and whether it answered.
 ///
@@ -149,13 +163,21 @@ __attribute__((constructor)) static void vpAnnounce(void) {
 /// there is no public header, and this is the literal misagent carries.
 #define kMISFixUniqueDeviceIDProperty CFSTR("UniqueDeviceID")
 
+/// The same key as MobileGestalt also accepts it: base64 of
+/// MD5("MGCopyAnswer" + key), unpadded. remoted asks this way when it builds the
+/// RSD handshake that CoreDevice and Xcode read the UDID from.
+#define kMISFixUniqueDeviceIDObfuscatedProperty CFSTR("re6Zb+zwFKJNlkQTUeT+/w")
+
 /// The configured answer for `property`, already retained for the caller, or
 /// NULL to let MobileGestalt answer.
 static CFTypeRef vpOverrideFor(CFStringRef property) {
     if (property == NULL || CFGetTypeID(property) != CFStringGetTypeID())
         return NULL;
-    if (!CFEqual(property, kMISFixUniqueDeviceIDProperty))
+    if (!CFEqual(property, kMISFixUniqueDeviceIDProperty)
+        && !CFEqual(property, kMISFixUniqueDeviceIDObfuscatedProperty))
+    {
         return NULL;
+    }
 
     CFStringRef configured = MISFixCopyConfiguredDeviceIdentifier();
     if (configured == NULL)
@@ -172,19 +194,18 @@ static CFTypeRef vpMGCopyAnswer(CFStringRef property) {
     return override != NULL ? override : MGCopyAnswer(property);
 }
 
-static CFTypeRef vpMGCopyAnswerWithError(CFStringRef property, uint32_t *error) {
+static CFTypeRef vpMGCopyAnswerWithError(CFStringRef property, CFDictionaryRef options, uint32_t *error) {
     const char *caller = MISFixCaller();
     CFTypeRef override = vpOverrideFor(property);
     vpLogQuery(property, override != NULL, caller);
     if (override == NULL)
-        return MGCopyAnswerWithError(property, error);
+        return MGCopyAnswerWithError(property, options, error);
     if (error != NULL)
         *error = 0;
     return override;
 }
 
-// Both spellings are replaced. misagent imports only the plain one; the
-// variant is covered so a different consumer of this hook cannot read around
-// it by accident.
+// Both spellings are replaced. misagent imports only the plain one;
+// remoted asks for `UniqueDeviceID` through the variant.
 MISFIX_INTERPOSE(vpMGCopyAnswer, MGCopyAnswer);
 MISFIX_INTERPOSE(vpMGCopyAnswerWithError, MGCopyAnswerWithError);
