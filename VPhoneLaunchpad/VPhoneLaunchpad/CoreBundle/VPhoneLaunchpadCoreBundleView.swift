@@ -39,6 +39,11 @@ struct VPhoneLaunchpadCoreBundleView: View {
             }
             .formStyle(.grouped)
         } accessory: {
+            Button("Check for Updates") {
+                Task { await bundles.refresh() }
+            }
+            .help("Reload releases and builds, and run host preflight again.")
+            .disabled(bundles.isInstalling)
             Button("Install Local Build…") {
                 chooseLocalBuild()
             }
@@ -46,11 +51,6 @@ struct VPhoneLaunchpadCoreBundleView: View {
                 ? "Install a VPhone.bundle folder or .zip built on this Mac."
                 : "Installing needs the privileged helper and Developer Tools access.")
             .disabled(!model.canInstallBundles)
-            Button("Check for Updates") {
-                Task { await bundles.refresh() }
-            }
-            .help("Reload releases and builds, and run host preflight again.")
-            .disabled(bundles.isInstalling)
         } actions: {
             Button("Done") { dismiss() }
                 .keyboardShortcut(.defaultAction)
