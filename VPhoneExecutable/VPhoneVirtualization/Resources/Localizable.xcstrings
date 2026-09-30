@@ -21558,6 +21558,108 @@
         }
       }
     },
+    "Skip Setup" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip Setup"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定をスキップ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 건너뛰기"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bỏ qua cài đặt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳过设置"
+          }
+        }
+      }
+    },
+    "Skip Setup Assistant?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip Setup Assistant?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定アシスタントをスキップしますか?"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 지원을 건너뛰시겠습니까?"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bỏ qua Trợ lý cài đặt?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要跳过设置助理吗？"
+          }
+        }
+      }
+    },
+    "Skip Setup Assistant…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip Setup Assistant…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定アシスタントをスキップ…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 지원 건너뛰기…"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bỏ qua Trợ lý cài đặt…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳过设置助理…"
+          }
+        }
+      }
+    },
     "Source: Off" : {
       "localizations" : {
         "en" : {
@@ -23600,6 +23702,40 @@
         }
       }
     },
+    "The guest marks setup as finished and restarts SpringBoard. Use this only on a guest that is already activated. Language, passcode, Apple Account and privacy settings keep their defaults." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The guest marks setup as finished and restarts SpringBoard. Use this only on a guest that is already activated. Language, passcode, Apple Account and privacy settings keep their defaults."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストは設定を完了済みにして SpringBoard を再起動します。アクティベート済みのゲストでのみ使用してください。言語、パスコード、Apple アカウント、プライバシーの設定はデフォルトのままです。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트가 설정을 완료된 것으로 표시하고 SpringBoard를 재시동합니다. 이미 활성화된 게스트에서만 사용하십시오. 언어, 암호, Apple 계정 및 개인정보 보호 설정은 기본값으로 유지됩니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Máy khách sẽ đánh dấu đã hoàn tất cài đặt và khởi động lại SpringBoard. Chỉ dùng trên máy khách đã được kích hoạt. Ngôn ngữ, mật mã, Tài khoản Apple và cài đặt quyền riêng tư giữ giá trị mặc định."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客体会将设置标记为已完成并重启 SpringBoard。仅在已激活的客体上使用。语言、密码、Apple 账户和隐私设置保持默认。"
+          }
+        }
+      }
+    },
     "The guest refused the restart request." : {
       "localizations" : {
         "en" : {
@@ -24876,6 +25012,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法设置 UDID"
+          }
+        }
+      }
+    },
+    "Unable to Skip Setup Assistant" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to Skip Setup Assistant"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定アシスタントをスキップできません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 지원을 건너뛸 수 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể bỏ qua Trợ lý cài đặt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法跳过设置助理"
           }
         }
       }

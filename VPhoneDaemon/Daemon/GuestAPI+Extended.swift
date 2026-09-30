@@ -15,6 +15,7 @@ extension GuestAPI {
             executeFileTool,
             executeEnvironment,
             executeDeviceIdentity,
+            executeSetupAssistant,
         ]
         for area in areas {
             if let result = try area(method, params) {

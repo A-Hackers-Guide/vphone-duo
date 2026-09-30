@@ -61,6 +61,7 @@ enum GuestAPI {
             "binary_hash": binaryHash,
             "ios": "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)",
             "ip": ip ?? "",
+            "setup_pending": setupAssistantPending(),
             "capabilities": [
                 "touch",
                 "touch2",
@@ -94,6 +95,7 @@ enum GuestAPI {
                 "packages",
                 "environment_update",
                 "udid_override",
+                "setup_skip",
             ],
         ]
     }

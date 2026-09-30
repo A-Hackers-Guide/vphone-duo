@@ -287,6 +287,7 @@ request carries `"force": true`.
 | Bootstrap | `bootstrap.install {layout}`, `bootstrap.status`, `bootstrap.inspect`, `bootstrap.uninstall {jbroot, force}`, `bootstrap.firmware` (see above) |
 | Environment | `environment.status` (SHA-256 of each vphone library in `/usr/lib`, or null when absent, plus the staging directory), `environment.install {libraries: [{name, sha256}]}` (see below) |
 | Profile UDID | `udid.get`, `udid.set {udid}`, `udid.clear` — each returns `{udid, path}`, the UDID libmisfix gives misagent's profile check (null: the guest's own) and the settings file it came from; `set` and `clear` also return `restarted_pids` (see below) |
+| Setup Assistant | `setup.status` (`{pending, running, pid, setup_done, setup_version, current_version}`), `setup.skip` **force** (sets `SetupDone`, `SetupFinishedAllSteps` and `SetupVersion` in `com.apple.purplebuddy`, restarts SpringBoard, returns the status plus `respring`); `/v1/health` carries `setup_pending` — see `Research/Guest/setup_assistant_skip.md` |
 
 `processes.list` joins icli's kernel process list with `proc_pid_rusage`
 footprint, resident size and CPU time (`VPhoneDaemon/Native/vphoned_process.m`),
@@ -295,7 +296,7 @@ Account passwords, boot logo rendering and package installation, removal and
 repository changes are deliberately not exposed. `/v1/health` lists the new
 areas in `capabilities` (`device_info`, `display`, `audio`, `input_gestures`,
 `ui_inspection`, `processes`, `services`, `logs`, `network_capture`,
-`app_details`, `system_control`, `file_tools`, `packages`, `environment_update`, `udid_override`) so a host can hide
+`app_details`, `system_control`, `file_tools`, `packages`, `environment_update`, `udid_override`, `setup_skip`) so a host can hide
 panels an older agent cannot serve. icli failures reach the caller with
 icli's own error `code` (`failed`, `unavailable`, `device_locked`, …) and
 message.

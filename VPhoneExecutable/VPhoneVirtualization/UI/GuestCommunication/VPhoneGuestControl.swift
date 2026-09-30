@@ -73,6 +73,22 @@ final class VPhoneGuestControl {
         orientationObservers.append(observer)
     }
 
+    /// True while the guest will show Setup Assistant, from `/v1/health`.
+    /// False when disconnected.
+    private(set) var isSetupAssistantPending = false {
+        didSet {
+            for observer in setupAssistantObservers {
+                observer(isSetupAssistantPending)
+            }
+        }
+    }
+
+    @ObservationIgnored private var setupAssistantObservers: [(Bool) -> Void] = []
+
+    func observeSetupAssistantPending(_ observer: @escaping (Bool) -> Void) {
+        setupAssistantObservers.append(observer)
+    }
+
     /// Turns the guest to the first of `candidates` it accepts. Each is set
     /// before the guest is asked, so the window turns with the guest instead
     /// of after it, and a refused one moves straight on to the next. When
@@ -162,6 +178,10 @@ final class VPhoneGuestControl {
             if ios != guestIOSVersion {
                 guestIOSVersion = ios
             }
+            let setupPending = info["setup_pending"] as? Bool ?? false
+            if setupPending != isSetupAssistantPending {
+                isSetupAssistantPending = setupPending
+            }
             if !isConnected {
                 isConnected = true
                 print("[control] connected to vphoned HTTP API (iOS \(guestIOSVersion ?? "?"))")
@@ -187,6 +207,7 @@ final class VPhoneGuestControl {
         guestIPAddress = nil
         guestIOSVersion = nil
         interfaceOrientation = nil
+        isSetupAssistantPending = false
         if wasConnected {
             onDisconnect?()
         }

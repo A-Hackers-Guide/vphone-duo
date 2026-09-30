@@ -85,6 +85,7 @@ extension VPhoneMenuController {
         menu.addItem(NSMenuItem.separator())
         addUDIDItems(to: menu)
         menu.addItem(NSMenuItem.separator())
+        addSetupAssistantItem(to: menu)
         let restart = makeItem("Restart Guest…", action: #selector(restartGuest), symbol: "arrow.clockwise")
         restart.isEnabled = false
         restartGuestItem = restart
