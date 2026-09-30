@@ -12,6 +12,11 @@
 //                               that team's provisioning profiles install on
 //                               this guest. Empty or absent: the guest answers
 //                               with its own.
+//     LogQueries      (bool)    Log every MobileGestalt query this hook sees.
+//                               Off by default: these daemons are asked a lot.
+//                               For finding out whether a process asks through
+//                               the symbol at all, which is not observable from
+//                               outside — see MISFixDeviceIdentity.c.
 
 #ifndef MISFIX_CONFIG_H
 #define MISFIX_CONFIG_H
@@ -24,5 +29,12 @@
 /// modification time or size changes, so editing the plist takes effect on the
 /// next query without restarting anything.
 CFStringRef MISFixCopyConfiguredDeviceIdentifier(void);
+
+/// Whether `key` is set to true in the configuration.
+///
+/// Reads the same file, through the same staleness check, as
+/// ``MISFixCopyConfiguredDeviceIdentifier``. False when the key is absent, not
+/// a boolean, or no configuration can be read.
+int MISFixConfiguredFlag(CFStringRef key);
 
 #endif

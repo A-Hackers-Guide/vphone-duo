@@ -60,8 +60,37 @@
 #include "MISFixConfig.h"
 #include "MISFixInterpose.h"
 
+#include <os/log.h>
+
 extern CFTypeRef MGCopyAnswer(CFStringRef property);
 extern CFTypeRef MGCopyAnswerWithError(CFStringRef property, uint32_t *error);
+
+/// Log every MobileGestalt query this hook sees, and whether it answered.
+///
+/// Off unless the config sets `LogQueries`, because these daemons are asked a
+/// lot and the log is how a person watches an install. It exists because the
+/// interesting failure is *silence*: on test-26.4 the override reaches misagent
+/// and a profile installs, but installd then refuses the same app with
+/// `0xE8008015`, and the two explanations — installd asking and getting the
+/// wrong answer, versus installd never asking through this symbol at all —
+/// look identical from outside. `MICodeSigningVerifier` lives in
+/// MobileInstallation, not in installd, and it calls `libmis`, so the query
+/// that matters is made cache-to-cache; whether an interpose catches that is
+/// exactly what this answers. If an install produces no line here from
+/// installd, the call is not coming through `MGCopyAnswer` and the hook needs a
+/// different point to stand on.
+static void vpLogQuery(CFStringRef property, int answered) {
+    if (!MISFixConfiguredFlag(CFSTR("LogQueries")))
+        return;
+    char name[128];
+    if (property == NULL
+        || !CFStringGetCString(property, name, sizeof(name), kCFStringEncodingUTF8))
+    {
+        return;
+    }
+    os_log(OS_LOG_DEFAULT, "libmisfix: MGCopyAnswer(%{public}s) %{public}s",
+           name, answered ? "-> override" : "passed through");
+}
 
 /// MobileGestalt's key for the UDID. A plain string, not the SDK constant:
 /// there is no public header, and this is the literal misagent carries.
@@ -85,11 +114,13 @@ static CFTypeRef vpOverrideFor(CFStringRef property) {
 
 static CFTypeRef vpMGCopyAnswer(CFStringRef property) {
     CFTypeRef override = vpOverrideFor(property);
+    vpLogQuery(property, override != NULL);
     return override != NULL ? override : MGCopyAnswer(property);
 }
 
 static CFTypeRef vpMGCopyAnswerWithError(CFStringRef property, uint32_t *error) {
     CFTypeRef override = vpOverrideFor(property);
+    vpLogQuery(property, override != NULL);
     if (override == NULL)
         return MGCopyAnswerWithError(property, error);
     if (error != NULL)

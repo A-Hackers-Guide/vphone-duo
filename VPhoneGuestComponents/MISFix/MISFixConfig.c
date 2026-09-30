@@ -23,7 +23,9 @@ static const size_t kConfigPathCount = sizeof(kConfigPaths) / sizeof(kConfigPath
 // change under a running daemon, or "apply the setting" would mean "reboot".
 // Modification time plus size is enough to notice an edit: the plist is
 // written by replacing it, never by editing bytes in place.
-static CFStringRef gDeviceIdentifier;
+// The whole dictionary is kept, not just the UDID, so a second setting costs
+// no second read and every value stays consistent with the file it came from.
+static CFDictionaryRef gConfiguration;
 static const char *gPath;
 static struct timespec gStamp;
 static off_t gSize;
@@ -66,9 +68,9 @@ static CFPropertyListRef vpCopyConfigurationPlist(const char *path) {
 }
 
 static void vpForget(void) {
-    if (gDeviceIdentifier != NULL) {
-        CFRelease(gDeviceIdentifier);
-        gDeviceIdentifier = NULL;
+    if (gConfiguration != NULL) {
+        CFRelease(gConfiguration);
+        gConfiguration = NULL;
     }
     gPath = NULL;
     gStamp.tv_sec = 0;
@@ -89,18 +91,9 @@ static int vpAdopt(const char *path, const struct stat *info) {
     if (plist == NULL)
         return 0;
 
-    if (gDeviceIdentifier != NULL) {
-        CFRelease(gDeviceIdentifier);
-        gDeviceIdentifier = NULL;
-    }
-
-    CFTypeRef value = CFDictionaryGetValue((CFDictionaryRef)plist, CFSTR("UniqueDeviceID"));
-    if (value != NULL && CFGetTypeID(value) == CFStringGetTypeID()
-        && CFStringGetLength((CFStringRef)value) > 0)
-    {
-        gDeviceIdentifier = CFStringCreateCopy(kCFAllocatorDefault, (CFStringRef)value);
-    }
-    CFRelease(plist);
+    if (gConfiguration != NULL)
+        CFRelease(gConfiguration);
+    gConfiguration = (CFDictionaryRef)plist;
 
     gPath = path;
     gStamp = info->st_mtimespec;
@@ -109,7 +102,8 @@ static int vpAdopt(const char *path, const struct stat *info) {
     return 1;
 }
 
-CFStringRef MISFixCopyConfiguredDeviceIdentifier(void) {
+/// Make `gConfiguration` current, reading again only when the file changed.
+static void vpEnsureLoaded(void) {
     // Fast path: the file chosen last time, still there and unchanged. This is
     // the common case — misagent asks once per profile, installd once per
     // bundle — and it costs one `stat`.
@@ -119,7 +113,7 @@ CFStringRef MISFixCopyConfiguredDeviceIdentifier(void) {
         && info.st_mtimespec.tv_nsec == gStamp.tv_nsec
         && info.st_size == gSize)
     {
-        return gDeviceIdentifier;
+        return;
     }
 
     // Otherwise pick again: the first candidate that is there *and* reads.
@@ -136,11 +130,37 @@ CFStringRef MISFixCopyConfiguredDeviceIdentifier(void) {
         if (stat(kConfigPaths[index], &candidate) != 0)
             continue;
         if (vpAdopt(kConfigPaths[index], &candidate))
-            return gDeviceIdentifier;
+            return;
     }
 
     // Nothing readable anywhere. Forget whatever was cached, so removing the
     // plist turns the override off.
     vpForget();
-    return NULL;
+}
+
+/// The value for `key` in the live configuration, or NULL.
+static CFTypeRef vpConfiguredValue(CFStringRef key) {
+    vpEnsureLoaded();
+    if (gConfiguration == NULL)
+        return NULL;
+    return CFDictionaryGetValue(gConfiguration, key);
+}
+
+CFStringRef MISFixCopyConfiguredDeviceIdentifier(void) {
+    CFTypeRef value = vpConfiguredValue(CFSTR("UniqueDeviceID"));
+    if (value == NULL || CFGetTypeID(value) != CFStringGetTypeID()
+        || CFStringGetLength((CFStringRef)value) == 0)
+    {
+        return NULL;
+    }
+    // Borrowed from the cached dictionary, which outlives the call and is only
+    // replaced when the file changes.
+    return (CFStringRef)value;
+}
+
+int MISFixConfiguredFlag(CFStringRef key) {
+    CFTypeRef value = vpConfiguredValue(key);
+    if (value == NULL || CFGetTypeID(value) != CFBooleanGetTypeID())
+        return 0;
+    return CFBooleanGetValue((CFBooleanRef)value) ? 1 : 0;
 }
