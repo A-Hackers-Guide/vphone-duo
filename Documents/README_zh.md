@@ -46,8 +46,18 @@ Launchpad 会下载固件、打补丁、恢复系统并首次启动。完成后�
 虚拟机默认不带软件包管理器。安装步骤：
 
 1. 在菜单栏选择 **Apps > Install Bootstrap…**，布局选择 **roothide**（**rootless** 已弃用）。虚拟机中会安装 Irisin。
-2. 首次安装时，在 Irisin 中勾选 `apt` 和 `bash`，长按安装按钮，选择 **Bootstrap Install**。`bash` 和 `debianutils` 互相依赖，普通安装无法完成。
-3. 之后使用普通安装即可。
+2. 首次引导安装时，请在 Irisin 中一次性勾选以下软件包，长按安装按钮，选择 **Bootstrap Install**：
+
+   - `apt`
+   - `bash`
+   - `uikittools`
+   - `launchctl`
+   - `openssh-server`
+
+   建议通过一次引导安装完成上述软件包的安装。其中部分软件包相互依赖（例如 `bash` 与 `debianutils`），`openssh-server` 的依赖声明也存在循环或不够规范的情况，逐个进行普通安装可能在中途失败。
+3. 首次安装完成后，其余软件包使用普通安装即可。
+
+如果首次安装失败，或安装后环境状态异常，不建议在原环境上修复。请通过 **Apps > Uninstall Bootstrap…** 删除环境，再从第 1 步重新安装。
 
 要删除环境，选择 **Apps > Uninstall Bootstrap…**，删除后虚拟机会重启。
 

@@ -46,8 +46,18 @@ You can also use your own iPhone and cloudOS IPSWs. For verified pairings, see [
 The VM has no package manager by default. To install one:
 
 1. In the menu bar, choose **Apps > Install Bootstrap…** and select the **roothide** layout (**rootless** is deprecated). This installs Irisin in the VM.
-2. The first time, select `apt` and `bash` in Irisin, press and hold the install button, and choose **Bootstrap Install**. `bash` and `debianutils` depend on each other, so a normal install cannot complete.
-3. After that, use a normal install.
+2. For the first installation, select all of the following packages in Irisin at once, press and hold the install button, and choose **Bootstrap Install**:
+
+   - `apt`
+   - `bash`
+   - `uikittools`
+   - `launchctl`
+   - `openssh-server`
+
+   Installing them together in one bootstrap pass is recommended. Several of these packages depend on one another (for example, `bash` and `debianutils`), and `openssh-server` in particular declares some dependencies circularly or imprecisely, so installing them one by one with a normal install can fail partway.
+3. After the first installation, install further packages normally.
+
+If the first installation fails or leaves the environment in an inconsistent state, do not attempt to repair it in place. Remove the environment with **Apps > Uninstall Bootstrap…** and install it again from step 1.
 
 To remove the environment, choose **Apps > Uninstall Bootstrap…**. The VM restarts after removal.
 
