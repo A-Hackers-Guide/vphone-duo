@@ -58,13 +58,16 @@ final class VPhoneLaunchpadModel {
         panel = nil
     }
 
-    /// Called when a panel's sheet has closed.
+    /// Called when a panel's sheet starts to close. On macOS that is the same
+    /// update that cleared `panel`, while the sheet is still attached; setting
+    /// `next` here would swap it into the closing sheet. The next turn of the
+    /// main actor runs after the sheet has gone.
     func panelDidDismiss() {
         guard let next = queuedPanel else {
             return
         }
         queuedPanel = nil
-        panel = next
+        Task { panel = next }
     }
 
     // MARK: - Attention
