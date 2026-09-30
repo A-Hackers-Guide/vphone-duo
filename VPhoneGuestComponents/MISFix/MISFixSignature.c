@@ -1,4 +1,34 @@
-// MISFixSignature.c — let installd accept an ad-hoc signed app bundle.
+// MISFixSignature.c — widen MIS's idea of an acceptable signature.
+//
+// ## Measured 2026-09-30: this never runs in installd, and cannot
+//
+// Read this first, because the rest of the file was written believing
+// otherwise. A `__DATA,__interpose` replacement is applied to *call sites*, and
+// every call site that matters here is inside the dyld shared cache:
+//
+//     MobileInstallation.framework  →  libmis.dylib        (cache to cache)
+//     libmis.dylib                  →  libMobileGestalt    (cache to cache)
+//
+// Neither is rewritten, whether this dylib arrives as a weak dependency of the
+// main executable or ahead of everything through `DYLD_INSERT_LIBRARIES`. On
+// test-26.4, with `LogQueries` on and the log for `MISValidateSignatureAndCopyInfo`
+// made unconditional, a whole `devicectl device install app` produced exactly
+// one line from installd:
+//
+//     libmisfix[726]: MGCopyAnswer(BuildVersion) from installd passed through
+//
+// `from installd` is the point: the one call this hook catches is the one the
+// main executable makes itself. `+[MICodeSigningVerifier
+// _validateSignatureAndCopyInfoForURL:withOptions:error:]` ran to its line 80
+// and failed, and no line here records it.
+//
+// So the options are never widened in installd. What that daemon actually
+// refuses, and why, is in MISFixDeviceIdentity.c; fixing it means changing the
+// shared cache, not this dylib. misagent is different — its main executable
+// calls `MGCopyAnswer` itself — and the UDID override there does work.
+//
+// The hook is kept because it costs nothing and is correct where it is
+// reached, and because it is the control that measured all of this.
 //
 // A guest restored by this project runs unsigned code happily: the kernel
 // patches (`amfi_trustcache`, `jb.post_validation`, `jb.amfi_execve`) admit it,
@@ -56,10 +86,11 @@
 //
 // ## Mechanism
 //
-// See `MISFixInterpose.h`. The dylib reaches installd through a
-// `LC_LOAD_WEAK_DYLIB` that `cfw install` inserts, the same way the launchd
-// hook is attached — weak, deliberately, so an installd whose libmisfix has
-// been removed still boots.
+// See `MISFixInterpose.h`. SystemHook puts this dylib in
+// `DYLD_INSERT_LIBRARIES` for the processes it recognises by path, so it is
+// loaded ahead of everything — which is the strongest position an interpose
+// can be in, and still not enough to reach the cache-internal call sites
+// above.
 
 #include "MISFixConfig.h"
 #include "MISFixInterpose.h"

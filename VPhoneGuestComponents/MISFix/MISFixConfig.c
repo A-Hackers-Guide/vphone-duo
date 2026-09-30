@@ -188,9 +188,7 @@ const char *MISFixCallerImage(const void *address) {
     return slash != NULL && slash[1] != '\0' ? slash + 1 : info.dli_fname;
 }
 
-void MISFixLog(const char *format, ...) {
-    if (!MISFixConfiguredFlag(kMISFixLogQueriesKey))
-        return;
+void MISFixNote(const char *format, ...) {
     char message[512];
     va_list arguments;
     va_start(arguments, format);
@@ -201,4 +199,17 @@ void MISFixLog(const char *format, ...) {
     // One prefix for every line this dylib writes, so a single predicate finds
     // them whichever process is carrying the hook.
     os_log(OS_LOG_DEFAULT, "libmisfix[%d]: %{public}s", getpid(), message);
+}
+
+void MISFixLog(const char *format, ...) {
+    if (!MISFixConfiguredFlag(kMISFixLogQueriesKey))
+        return;
+    char message[512];
+    va_list arguments;
+    va_start(arguments, format);
+    int written = vsnprintf(message, sizeof(message), format, arguments);
+    va_end(arguments);
+    if (written <= 0)
+        return;
+    MISFixNote("%s", message);
 }

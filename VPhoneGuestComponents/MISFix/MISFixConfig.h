@@ -9,9 +9,14 @@
 //
 //     UniqueDeviceID  (string)  The UDID to answer MobileGestalt with. Set it
 //                               to a device already registered with a team and
-//                               that team's provisioning profiles install on
-//                               this guest. Empty or absent: the guest answers
-//                               with its own.
+//                               that team's profiles install on this guest.
+//                               Empty or absent: the guest answers with its
+//                               own. Reaches misagent only — installd's own
+//                               check is made inside the shared cache, where
+//                               an interpose does not land, so this does not
+//                               by itself make an Xcode install succeed. See
+//                               "How far this reaches" in
+//                               MISFixDeviceIdentity.c.
 //     LogQueries      (bool)    Log every MobileGestalt query this hook sees.
 //                               Off by default: these daemons are asked a lot.
 //                               For finding out whether a process asks through
@@ -43,6 +48,12 @@ int MISFixConfiguredFlag(CFStringRef key);
 /// A no-op unless the flag is set.
 void MISFixLog(const char *format, ...) __attribute__((format(printf, 1, 2)));
 
+/// Log `format` whatever the configuration says, with the same prefix.
+///
+/// For a diagnostic that carries its own switch and would otherwise need two
+/// flags set to say anything.
+void MISFixNote(const char *format, ...) __attribute__((format(printf, 1, 2)));
+
 /// The name of the image `address` belongs to — the last path component of the
 /// Mach-O that contains it, or `"?"` when nothing claims it.
 ///
@@ -64,5 +75,9 @@ const char *MISFixCallerImage(const void *address);
 
 /// The flag every diagnostic in this dylib is behind.
 #define kMISFixLogQueriesKey CFSTR("LogQueries")
+
+/// The flag for the shared-cache write probe. Off by default, and nothing
+/// reads it but ``MISFixCacheWriteProbe.c``.
+#define kMISFixProbeCacheWriteKey CFSTR("ProbeCacheWrite")
 
 #endif

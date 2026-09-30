@@ -43,11 +43,40 @@
 // profiles install here, with no portal round trip and nothing to redo after a
 // rebuild.
 //
+// ## How far this reaches, measured
+//
+// misagent, and nothing else that matters. Its main executable calls
+// `MGCopyAnswer` itself, so the interpose catches it and a profile naming the
+// configured device installs.
+//
+// installd does not benefit, and no version of this dylib can make it. Its
+// profile check runs MobileInstallation → libmis → libMobileGestalt, all three
+// inside the dyld shared cache, and an interpose rewrites call sites in the
+// images dyld links — not the cache's own. Measured on test-26.4 (2026-09-30,
+// `libmisfix[726]`): one `devicectl device install app`, `LogQueries` on, and
+// the only line from installd is `MGCopyAnswer(BuildVersion) from installd`.
+// No `UniqueDeviceID` query, although libmis plainly resolved one — it skipped
+// every installed profile with `0xE8008012` and then returned
+//
+//     +[MICodeSigningVerifier _validateSignatureAndCopyInfoForURL:withOptions:error:]:
+//         80: Failed to verify code signature of …/AirBuild.app : 0xe8008015
+//
+// The signature itself was fine; the same capture has `cdhash: <private> is
+// trusted`. libmis's other route to a UDID is closed too:
+// `amfi_interface_query_bootarg_state returned error Function not implemented`.
+//
+// So an Xcode or `devicectl` install still needs the guest's *own* UDID to be
+// in the profile. Two things could give it that, and neither belongs in this
+// file: a shared-cache patch on libmis, or creating the VM with the ECID of a
+// device the team has already registered — a modern UDID is
+// `<chip-id>-<ECID>`, and the ECID is chosen at `vm create`, so that one needs
+// no hook and tells no lie.
+//
 // ## The inconsistency this creates, stated plainly
 //
-// The guest now gives two different answers about which device it is. What
-// Xcode, `devicectl` and lockdown report is unchanged — that UDID is built by
-// TXM before the kernel runs, out of the device tree's `chip-id` and
+// The guest gives two different answers about which device it is. What Xcode,
+// `devicectl` and lockdown report is unchanged — that UDID is built by TXM
+// before the kernel runs, out of the device tree's `chip-id` and
 // `unique-chip-id`, and nothing in userspace can alter it. Only the processes
 // carrying this hook see the configured value.
 //
@@ -69,24 +98,17 @@ extern CFTypeRef MGCopyAnswerWithError(CFStringRef property, uint32_t *error);
 ///
 /// Off unless the config sets `LogQueries`, because these daemons are asked a
 /// lot and the log is how a person watches an install. It exists because the
-/// interesting failure is *silence*: on test-26.4 the override reaches misagent
-/// and a profile installs, but installd then refuses the same app with
+/// interesting failure is *silence*: the override reaches misagent and a
+/// profile installs, but installd then refuses the same app with
 /// `0xE8008015`, and the two explanations — installd asking and getting the
 /// wrong answer, versus installd never asking through this symbol at all —
-/// look identical from outside. `MICodeSigningVerifier` lives in
-/// MobileInstallation, not in installd, and it calls `libmis`, so the query
-/// that matters is made cache-to-cache; whether an interpose catches that is
-/// exactly what this answers. If an install produces no line here from
-/// installd, the call is not coming through `MGCopyAnswer` and the hook needs a
-/// different point to stand on.
+/// look identical from outside.
 ///
-/// The caller's image is part of the line because the first run answered the
-/// question only halfway: installd logged `MGCopyAnswer(BuildVersion)` and no
-/// `UniqueDeviceID`, while libmis plainly resolved a UDID — it skipped every
-/// profile with `0xE8008012`. Either installd's own code asked for the build
-/// version and the frameworks ask past this interpose, or the interpose does
-/// reach them and libmis finds the UDID somewhere other than MobileGestalt.
-/// `MISFixCallerImage` tells the two apart in one line.
+/// It has now told us which. Each line names the caller's image, and installd
+/// produced exactly one, `MGCopyAnswer(BuildVersion) from installd`: the main
+/// executable's own call and nothing else. The header's "How far this reaches"
+/// has the rest. The instrument stays because the answer is a property of this
+/// cache and this dyld, not a law, and one capture re-checks it.
 static void vpLogQuery(CFStringRef property, int answered, const char *caller) {
     char name[128];
     if (property == NULL
