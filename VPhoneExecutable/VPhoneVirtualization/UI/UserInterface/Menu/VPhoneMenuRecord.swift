@@ -16,14 +16,20 @@ extension VPhoneMenuController {
         recordingItem = toggle
         menu.addItem(toggle)
         menu.addItem(NSMenuItem.separator())
+        // Shift-Command-3 and -4 keep the macOS screenshot muscle memory: the
+        // file first, the clipboard second.
         menu.addItem(makeItem(
             "Copy Screenshot to Mac Clipboard",
             action: #selector(copyScreenshotToClipboard),
+            keyEquivalent: "4",
+            modifiers: [.command, .shift],
             symbol: "camera.viewfinder",
         ))
         menu.addItem(makeItem(
             "Save Screenshot to File",
             action: #selector(saveScreenshotToFile),
+            keyEquivalent: "3",
+            modifiers: [.command, .shift],
             symbol: "square.and.arrow.down",
         ))
         item.submenu = menu
