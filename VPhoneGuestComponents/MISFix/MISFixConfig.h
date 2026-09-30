@@ -70,6 +70,15 @@ void MISFixNote(const char *format, ...) __attribute__((format(printf, 1, 2)));
 /// calls too.
 const char *MISFixCallerImage(const void *address);
 
+/// Whether this process's executable is named `name`, compared on the last
+/// path component.
+///
+/// The same dylib is linked into installd, misagent and SpringBoard, and not
+/// every hook belongs in all three: MobileInstallation's policy is installd's
+/// alone, and loading that framework into SpringBoard to swizzle it would
+/// change a process the hook has no business in.
+int MISFixProcessIs(const char *name);
+
 /// The image of whoever called the function this appears in.
 #define MISFixCaller() MISFixCallerImage(__builtin_return_address(0))
 

@@ -677,6 +677,24 @@ struct VPhoneCustomFirmwareInstaller {
                 injectedDylibPath: "/usr/lib/libmisfix.dylib",
             )
         }
+        if on("system-springboard-cfw-launch_authorization") {
+            // SpringBoard asks MIS again before it launches an app, and no
+            // spawn hook reaches it: launchd starts it directly, in its
+            // conclave, and it never carries SystemHook. A load command is the
+            // one route that always holds.
+            // Its header has 16 spare bytes, so the command names the short
+            // alias and LC_SOURCE_VERSION makes room for the new signature.
+            try installLibraryAlias(system: system, alias: "mf", target: "/usr/lib/libmisfix.dylib")
+            try patchMachO(
+                system: system,
+                work: work,
+                path: "System/Library/CoreServices/SpringBoard.app/SpringBoard",
+                identifier: "com.apple.springboard",
+                preserveEntitlements: true,
+                injectedDylibPath: "/mf",
+                reclaimsSourceVersion: true,
+            )
+        }
         if on("system-debugserver-cfw-install") {
             try patchDebugserver(system: system, work: work)
         }
@@ -921,16 +939,20 @@ struct VPhoneCustomFirmwareInstaller {
         }
         // launchd has little free header space for another load command.
         // /vh fits the same 32-byte command as the old /b without reusing it.
-        let alias = "vh"
-        let target = "/usr/lib/launchdhook-vphone.dylib"
+        try installLibraryAlias(system: system, alias: "vh", target: "/usr/lib/launchdhook-vphone.dylib")
+        try installMISFixDefaults(system: system)
+    }
+
+    /// A symlink at the volume root, so a load command in a binary with little
+    /// header space can name a library in seven bytes or fewer.
+    private func installLibraryAlias(system: VPhoneConfinedDirectory, alias: String, target: String) throws {
         if try system.exists(alias) {
             guard try system.readLink(alias) == target else {
-                throw ValidationError("Another file already uses /vh on the VM system volume. Remove it, then install CFW again.")
+                throw ValidationError("Another file already uses /\(alias) on the VM system volume. Remove it, then install CFW again.")
             }
         } else {
             try system.createSymlink(target: target, at: alias)
         }
-        try installMISFixDefaults(system: system)
     }
 
     /// libmisfix's settings file, and only when the guest has none.
@@ -1059,6 +1081,7 @@ struct VPhoneCustomFirmwareInstaller {
         identifier: String? = nil,
         preserveEntitlements: Bool = false,
         injectedDylibPath: String? = nil,
+        reclaimsSourceVersion: Bool = false,
     ) throws {
         let backup = "\(path).bak"
         if try !system.exists(backup) {
@@ -1076,7 +1099,10 @@ struct VPhoneCustomFirmwareInstaller {
             try patch(verb, [staged.path])
         }
         if let injectedDylibPath {
-            try patch("inject-dylib", [staged.path, injectedDylibPath])
+            try patch(
+                "inject-dylib",
+                [staged.path, injectedDylibPath] + (reclaimsSourceVersion ? ["--reclaim-source-version"] : []),
+            )
         }
         try VPhoneSigner.sign(
             fileAt: staged,

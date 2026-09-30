@@ -614,4 +614,77 @@ struct CustomFirmwareInjectDylibTests {
         try #require(after.status == 0, "injected hello failed: \(after.output)")
         #expect(after.output == "world hello\n")
     }
+
+    /// SpringBoard's shape: room for the command, but not for the signature a
+    /// re-signer puts back after it. Dropping LC_SOURCE_VERSION has to make that
+    /// room, leave every byte past it alone, and leave a binary dyld still runs.
+    @Test func `reclaiming LC_SOURCE_VERSION makes room for the command and the signature`() throws {
+        let fixtures = MachOFixture.repositoryRoot
+            .appending(path: "VPhoneExecutable/VPhoneCommand/FirmwarePatcherTestFixtures/DylibInjection")
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "DylibInjection-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let executable = directory.appending(path: "hello")
+        let dylib = directory.appending(path: "swizzle.dylib")
+        let clang = URL(filePath: "/usr/bin/clang")
+        let buildExecutable = try MachOFixture.run(
+            clang,
+            [
+                "-fobjc-arc", "-framework", "Foundation", "-Wl,-headerpad,0x4000",
+                fixtures.appending(path: "hello.m").path, "-o", executable.path,
+            ],
+        )
+        try #require(buildExecutable.status == 0, "hello fixture: \(buildExecutable.output)")
+        let buildDylib = try MachOFixture.run(
+            clang,
+            [
+                "-dynamiclib", "-fobjc-arc", "-framework", "Foundation",
+                fixtures.appending(path: "swizzle.m").path, "-o", dylib.path,
+            ],
+        )
+        try #require(buildDylib.status == 0, "swizzle fixture: \(buildDylib.output)")
+
+        // Leave exactly enough zero padding for the command once the 16-byte
+        // LC_CODE_SIGNATURE is stripped, and mark the first byte past it.
+        var data = try Data(contentsOf: executable)
+        let ncmds = data.loadLE(UInt32.self, at: 16)
+        let commandsEnd = 32 + Int(data.loadLE(UInt32.self, at: 20))
+        let pathBytes = dylib.path.utf8.count
+        let commandSize = 24 + (pathBytes & ~7) + 8
+        let marker = commandsEnd + commandSize - 16
+        data[marker] = 0xFF
+        try data.write(to: executable)
+
+        let injection = try #require(
+            try CustomFirmwareInjectDylib.inject(
+                dylibPath: dylib.path,
+                into: executable,
+                reclaimsSourceVersion: true,
+            ).first,
+        )
+        #expect(injection.removedCodeSignature)
+        #expect(injection.removedSourceVersion)
+
+        var after = try Data(contentsOf: executable)
+        #expect(after[marker] == 0xFF, "the byte past the reclaimed room must not be written")
+        // Out: LC_CODE_SIGNATURE and LC_SOURCE_VERSION. In: the dylib.
+        #expect(after.loadLE(UInt32.self, at: 16) == ncmds - 1)
+        #expect(Int(after.loadLE(UInt32.self, at: 20)) == commandsEnd - 32 - 16 - 16 + commandSize)
+        #expect(MachOFixture.dylibLoadCommands(in: after).last?.path == dylib.path)
+        #expect(MachOFixture.dylibLoadCommands(in: after).count == MachOFixture.dylibLoadCommands(in: data).count + 1)
+
+        // codesign needs the reserved 16 bytes, and zero ones.
+        after[marker] = 0
+        try after.write(to: executable)
+        let sign = try MachOFixture.run(
+            URL(filePath: "/usr/bin/codesign"),
+            ["--force", "--sign", "-", "--timestamp=none", executable.path],
+        )
+        try #require(sign.status == 0, "signing reclaimed hello: \(sign.output)")
+        let run = try MachOFixture.run(executable, [])
+        try #require(run.status == 0, "reclaimed hello failed: \(run.output)")
+        #expect(run.output == "world hello\n")
+    }
 }

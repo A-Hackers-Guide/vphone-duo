@@ -46,7 +46,9 @@ extension GuestAPI {
     /// The daemons `cfw install` injects libmisfix into, and so the ones holding
     /// a UDID answer that a change has to invalidate. Keep in step with the
     /// `injectedDylibPath: "/usr/lib/libmisfix.dylib"` call sites in
-    /// `VPhoneCustomFirmwareInstaller`.
+    /// `VPhoneCustomFirmwareInstaller`, bar SpringBoard: it carries the hook
+    /// for the launch check alone, never asks for the UDID, and stopping it
+    /// would take the home screen down with it.
     static let udidHookedDaemons = ["misagent", "installd"]
 
     static func executeDeviceIdentity(_ method: String, _ params: [String: Any]) throws -> [String: Any]? {

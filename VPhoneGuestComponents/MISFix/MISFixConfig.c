@@ -2,6 +2,7 @@
 
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <mach-o/dyld.h>
 #include <os/log.h>
 #include <ptrauth.h>
 #include <stdarg.h>
@@ -171,6 +172,15 @@ int MISFixConfiguredFlag(CFStringRef key) {
     if (value == NULL || CFGetTypeID(value) != CFBooleanGetTypeID())
         return 0;
     return CFBooleanGetValue((CFBooleanRef)value) ? 1 : 0;
+}
+
+int MISFixProcessIs(const char *name) {
+    char path[4096];
+    uint32_t size = sizeof(path);
+    if (name == NULL || _NSGetExecutablePath(path, &size) != 0)
+        return 0;
+    const char *slash = strrchr(path, '/');
+    return strcmp(slash != NULL ? slash + 1 : path, name) == 0;
 }
 
 const char *MISFixCallerImage(const void *address) {

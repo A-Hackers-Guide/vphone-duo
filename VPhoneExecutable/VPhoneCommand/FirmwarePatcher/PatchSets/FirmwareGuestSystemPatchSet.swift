@@ -81,11 +81,10 @@ public enum FirmwareGuestSystemPatchSet {
                 summary: """
                 Accepts a provisioning profile that wants online authorization, by short-circuiting \
                 the check in the shared cache. Off by default: libmisfix.dylib already declines the \
-                same check from userspace in installd and misagent, and editing the cache for it \
-                stops an iOS 27 guest booting. Turn it on only on a 26.x base, and only to launch \
-                an app signed with a free personal-team certificate — that launch goes through \
-                SpringBoard, which the hook does not cover. Not offered on iOS 27, where it stops \
-                the guest booting.
+                same check from userspace in installd, misagent and SpringBoard, and editing the \
+                cache for it stops an iOS 27 guest booting. Kept for a 26.x guest whose SpringBoard \
+                was installed without system-springboard-cfw-launch_authorization. Not offered on \
+                iOS 27, where it stops the guest booting.
                 """,
                 target: .dyldSharedCache,
                 applicability: misTrustAuthBases,
@@ -159,6 +158,19 @@ public enum FirmwareGuestSystemPatchSet {
                 until one is set and does not change what Xcode or lockdown report.
                 """,
                 target: .guestExecutable(path: "/usr/libexec/misagent"),
+            ),
+            VPhonePatchDeclaration(
+                identifier: "system-springboard-cfw-launch_authorization",
+                title: "SpringBoard launch authorization",
+                summary: """
+                Lets an installed developer-signed app launch. SpringBoard validates the app \
+                with MIS again before launching it, and MIS asks for online authorization a \
+                guest without an activation record can never get, so the launch is refused \
+                with 0xE8008026 and "Unable to Verify App". The same hook, loaded into \
+                SpringBoard, declines that check the way it does in installd. This replaces \
+                dyld-exp-mis_trust_auth without writing the shared cache.
+                """,
+                target: .guestExecutable(path: "/System/Library/CoreServices/SpringBoard.app/SpringBoard"),
             ),
             VPhonePatchDeclaration(
                 identifier: "system-debugserver-cfw-install",

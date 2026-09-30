@@ -60,11 +60,20 @@ static int vpPathHasSuffix(const char *path, const char *suffix) {
 //              is in MobileInstallation and calls libmis. This is the install.
 //   misagent   installs the embedded profile and checks ProvisionedDevices.
 //   SpringBoard asks MIS again at launch, which is the half neither daemon
-//              covers: an app signed with a free personal-team certificate
-//              could be installed and then refused at launch with 0xE8008026.
+//              covers: an installed app is refused at launch with 0xE8008026.
 //
 // Matched on the end of the path so a bootstrap or cryptex copy of the same
 // binary is caught too.
+//
+// This list is a second route, not the one the hook depends on. `cfw install`
+// links libmisfix into all three with a load command, and for SpringBoard
+// that is the only route that works: SpringBoard never carries this dylib.
+// Measured on test-27.0 (2026-09-30): launchd starts it without an xpcproxy
+// (the launchd hook's spawn log has every neighbouring child pid but not
+// SpringBoard's), and SpringBoard's own constructor line, which any `.app/`
+// path would write to vphone-systemhook.log, never appears. Its job runs in a
+// conclave (`_Conclave` in com.apple.SpringBoard.plist); whether the insert
+// is dropped there or never made is not settled.
 static int vpIsMISFixTarget(const char *path) {
     if (!path)
         return 0;

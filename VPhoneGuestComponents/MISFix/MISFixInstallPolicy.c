@@ -188,7 +188,12 @@ static BOOL vpAllowAdhocSigning(id self, SEL selector) {
     return YES;
 }
 
+/// installd only. The same dylib is linked into misagent and SpringBoard, and
+/// neither runs an install; `vpSwizzle` would dlopen MobileInstallation into
+/// them just to find a class they never use.
 __attribute__((constructor)) static void vpInstallPolicyHooks(void) {
+    if (!MISFixProcessIs("installd"))
+        return;
     vpOriginalInstallProfiles = (MISFixCheckIMP)vpSwizzle(
         "MIInstallableBundle",
         "_installEmbeddedProfilesWithError:",

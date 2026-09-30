@@ -16,8 +16,8 @@
   EXP variant; the camera does not need them, and with the concealment they left
   guests without location (issue #438). The fourth is the MIS
   online-authorization short-circuit: libmisfix.dylib declines the same check from
-  userspace in installd and misagent, so editing the shared cache for it buys
-  nothing there, costs an iOS 27 guest its boot (issue #532), and on 24A435 cannot
+  userspace in installd, misagent and SpringBoard, so editing the shared cache for
+  it buys nothing there, costs an iOS 27 guest its boot (issue #532), and on 24A435 cannot
   even be applied. See FirmwarePatchSetCatalog.misTrustAuthPatch.
 
   Each patch's own version gate still decides whether it lands on this pairing of
