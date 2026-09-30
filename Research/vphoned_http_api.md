@@ -301,6 +301,72 @@ panels an older agent cannot serve. icli failures reach the caller with
 icli's own error `code` (`failed`, `unavailable`, `device_locked`, …) and
 message.
 
+## Nested accessibility snapshots
+
+`ui.tree` (alias `accessibility.tree`) keeps its existing flat result unless
+the RPC params contain `"nested": true`. `nested` must be a JSON boolean.
+For example:
+
+```json
+{"method":"ui.tree","params":{"nested":true,"max_elements":500,"max_depth":32,"timeout_ms":5000}}
+```
+
+Nested snapshots accept only integer bounds: `max_elements` defaults to 500
+(1–2000), `max_depth` to 32 (1–32, with the root at depth 0), and `timeout_ms`
+to 5000 (100–10000). They preserve structural nodes: omit `visible_only` and
+`limit`, and do not enable `clickable_only`; these filters are rejected.
+The daemon verifies the same foreground application and PID before and after
+the snapshot. A changed or unverifiable foreground returns an operation error.
+
+The native walker starts from that application's AX root and reads immediate
+children through private iOS attribute 5001. Attribute 5002 independently
+checks each child's parent; labels, frames and visible/explorer arrays do not
+establish relationships. The result contains `source: "ax"`, `format: "nested"`,
+`relationship_source`, `roots`, and a unique-node `count`. Each node has a
+snapshot-local `id`, `label`, `identifier`, `role`, `frame` (or null), `depth`,
+`children`, `children_status`, `parent_verified`, and `query_errors`.
+Repeated nodes use `ref`; `cycle` distinguishes an active ancestor from a
+shared node. IDs do not persist between snapshots. `action_eligible: false`
+marks the snapshot as diagnostic; its IDs are not tap selectors.
+
+Inspect `status` (`complete`, `partial`, or `unavailable`), `truncated`, and
+`truncation_reasons` before consuming the tree. Element, depth, query and time
+limits produce partial results; the query budget is `max_elements * 8`.
+`limits`, `queries`, `elapsed_ms`, and `parent_checks` (verified, mismatch,
+unavailable) expose the walk's bounds and relationship checks. Per-node errors
+include the attribute number and native error code; optional text or frame
+attributes can be unavailable even when the structural walk is complete.
+`symbols`, `switches_before`, and `switches_after_restore` expose native API
+availability and accessibility switch restoration; `native_exception` is
+included if a native exception prevented the snapshot. `foreground_before`,
+`foreground_after`, and `runtime` identify the verified app and serving daemon.
+
+`readiness` reports `switches_enabled_for_invocation`, `retry_attempted`,
+`retry_resolved`, `wait_ms`, `max_wait_ms`, and `initial_query_errors`.
+Only an invocation that newly enables an AX switch may retry the first root
+label query after error -25215 with no value. It waits once for 400 ms only
+when more than 400 ms remain, sharing the original deadline and query budget.
+Resolved initial errors stay in `readiness.initial_query_errors`; child errors
+do not trigger this retry. Attribute calls request at most a 100 ms messaging
+timeout, but private API calls can exceed it if the OS does not honor it.
+
+This is an opt-in diagnostic path using private iOS AX symbols and attribute
+numbers, whose availability and behavior can change between OS releases.
+Partial checks remain necessary on each snapshot. Run the native walker tests
+from the checkout on a Mac with Xcode tools:
+
+```sh
+VPhoneDaemon/Tests/run-hierarchy-tests.sh
+```
+
+The runner builds in a temporary directory, checks injected child/parent links,
+cycles, malformed values, limits, timeout failures and readiness recovery,
+prints native coverage, and removes its outputs. The script also accepts an
+absolute invocation path from any working directory. It does not require a guest;
+these tests do not establish compatibility with every iOS build.
+
+## Environment and identity updates
+
 The environment update keeps `launchdhook-vphone.dylib`,
 `SystemHook-vphone.dylib`, `libvcamcaptured.dylib` and `libcamfix.dylib` in
 `/usr/lib` in step with the host bundle. After each connection the VM
