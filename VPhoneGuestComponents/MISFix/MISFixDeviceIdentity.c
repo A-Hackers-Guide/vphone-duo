@@ -79,14 +79,27 @@ extern CFTypeRef MGCopyAnswerWithError(CFStringRef property, uint32_t *error);
 /// exactly what this answers. If an install produces no line here from
 /// installd, the call is not coming through `MGCopyAnswer` and the hook needs a
 /// different point to stand on.
-static void vpLogQuery(CFStringRef property, int answered) {
+///
+/// The caller's image is part of the line because the first run answered the
+/// question only halfway: installd logged `MGCopyAnswer(BuildVersion)` and no
+/// `UniqueDeviceID`, while libmis plainly resolved a UDID — it skipped every
+/// profile with `0xE8008012`. Either installd's own code asked for the build
+/// version and the frameworks ask past this interpose, or the interpose does
+/// reach them and libmis finds the UDID somewhere other than MobileGestalt.
+/// `MISFixCallerImage` tells the two apart in one line.
+static void vpLogQuery(CFStringRef property, int answered, const char *caller) {
     char name[128];
     if (property == NULL
         || !CFStringGetCString(property, name, sizeof(name), kCFStringEncodingUTF8))
     {
         return;
     }
-    MISFixLog("MGCopyAnswer(%s) %s", name, answered ? "-> override" : "passed through");
+    MISFixLog(
+        "MGCopyAnswer(%s) from %s %s",
+        name,
+        caller,
+        answered ? "-> override" : "passed through"
+    );
 }
 
 /// Say, once, that this dylib is in this process.
@@ -123,14 +136,16 @@ static CFTypeRef vpOverrideFor(CFStringRef property) {
 }
 
 static CFTypeRef vpMGCopyAnswer(CFStringRef property) {
+    const char *caller = MISFixCaller();
     CFTypeRef override = vpOverrideFor(property);
-    vpLogQuery(property, override != NULL);
+    vpLogQuery(property, override != NULL, caller);
     return override != NULL ? override : MGCopyAnswer(property);
 }
 
 static CFTypeRef vpMGCopyAnswerWithError(CFStringRef property, uint32_t *error) {
+    const char *caller = MISFixCaller();
     CFTypeRef override = vpOverrideFor(property);
-    vpLogQuery(property, override != NULL);
+    vpLogQuery(property, override != NULL, caller);
     if (override == NULL)
         return MGCopyAnswerWithError(property, error);
     if (error != NULL)

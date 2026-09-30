@@ -43,6 +43,25 @@ int MISFixConfiguredFlag(CFStringRef key);
 /// A no-op unless the flag is set.
 void MISFixLog(const char *format, ...) __attribute__((format(printf, 1, 2)));
 
+/// The name of the image `address` belongs to — the last path component of the
+/// Mach-O that contains it, or `"?"` when nothing claims it.
+///
+/// Always safe to print: the result is a pointer into dyld's own image name,
+/// or a static string, never allocated.
+///
+/// This exists to tell two very different worlds apart in one log line. A
+/// `__DATA,__interpose` replacement is applied to a *call site*, and a call
+/// made from inside the shared cache into another cache image may never reach
+/// it. So "installd never logged a query" has two readings — the daemon does
+/// not ask, or the daemon's frameworks ask past us — and the caller's image is
+/// what separates them: `installd` means the main executable asked and the
+/// interpose works, anything under the cache means it reaches cache-to-cache
+/// calls too.
+const char *MISFixCallerImage(const void *address);
+
+/// The image of whoever called the function this appears in.
+#define MISFixCaller() MISFixCallerImage(__builtin_return_address(0))
+
 /// The flag every diagnostic in this dylib is behind.
 #define kMISFixLogQueriesKey CFSTR("LogQueries")
 

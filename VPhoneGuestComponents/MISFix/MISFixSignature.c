@@ -142,11 +142,34 @@ static CFDictionaryRef vpWidenedOptions(CFDictionaryRef options) {
 /// and the `MGCopyAnswer` line does not, the two calls are being treated
 /// differently and the difference is in MobileGestalt, not in whether an
 /// interpose can cross the cache at all.
-static void vpLogValidation(MISPath path, int result) {
+/// Never returns early. A first run logged nothing here from installd, which
+/// was read as "the interpose was not reached" — but a `path` this could not
+/// turn into a C string would have produced exactly the same silence. The line
+/// is unconditional now, and says what the argument was when it is not a
+/// string, so an absent line means one thing only.
+static void vpLogValidation(MISPath path, int result, const char *caller) {
     char buffer[1024];
-    if (path == NULL || !CFStringGetCString(path, buffer, sizeof(buffer), kCFStringEncodingUTF8))
+    if (path == NULL) {
+        MISFixLog("MISValidateSignatureAndCopyInfo(NULL) from %s -> 0x%x", caller, (unsigned)result);
         return;
-    MISFixLog("MISValidateSignatureAndCopyInfo(%s) -> 0x%x", buffer, (unsigned)result);
+    }
+    if (CFGetTypeID(path) != CFStringGetTypeID()
+        || !CFStringGetCString(path, buffer, sizeof(buffer), kCFStringEncodingUTF8))
+    {
+        MISFixLog(
+            "MISValidateSignatureAndCopyInfo(<non-string %lu>) from %s -> 0x%x",
+            (unsigned long)CFGetTypeID(path),
+            caller,
+            (unsigned)result
+        );
+        return;
+    }
+    MISFixLog(
+        "MISValidateSignatureAndCopyInfo(%s) from %s -> 0x%x",
+        buffer,
+        caller,
+        (unsigned)result
+    );
 }
 
 static int vpMISValidateSignatureAndCopyInfo(
@@ -154,13 +177,14 @@ static int vpMISValidateSignatureAndCopyInfo(
     CFDictionaryRef options,
     CFDictionaryRef *info
 ) {
+    const char *caller = MISFixCaller();
     CFDictionaryRef widened = vpWidenedOptions(options);
     // Out of memory: pass the caller's own options through rather than fail.
     if (widened == NULL)
         return MISValidateSignatureAndCopyInfo(path, options, info);
     int result = MISValidateSignatureAndCopyInfo(path, widened, info);
     CFRelease(widened);
-    vpLogValidation(path, result);
+    vpLogValidation(path, result, caller);
     return result;
 }
 
@@ -170,12 +194,13 @@ static int vpMISValidateSignatureAndCopyInfoWithProgress(
     CFDictionaryRef *info,
     void *progress
 ) {
+    const char *caller = MISFixCaller();
     CFDictionaryRef widened = vpWidenedOptions(options);
     if (widened == NULL)
         return MISValidateSignatureAndCopyInfoWithProgress(path, options, info, progress);
     int result = MISValidateSignatureAndCopyInfoWithProgress(path, widened, info, progress);
     CFRelease(widened);
-    vpLogValidation(path, result);
+    vpLogValidation(path, result, caller);
     return result;
 }
 

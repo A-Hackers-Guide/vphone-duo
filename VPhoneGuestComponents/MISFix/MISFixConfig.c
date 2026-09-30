@@ -1,8 +1,11 @@
 #include "MISFixConfig.h"
 
+#include <dlfcn.h>
 #include <os/log.h>
+#include <ptrauth.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -167,6 +170,22 @@ int MISFixConfiguredFlag(CFStringRef key) {
     if (value == NULL || CFGetTypeID(value) != CFBooleanGetTypeID())
         return 0;
     return CFBooleanGetValue((CFBooleanRef)value) ? 1 : 0;
+}
+
+const char *MISFixCallerImage(const void *address) {
+    if (address == NULL)
+        return "?";
+    // A return address on arm64e carries a pointer-authentication code; dladdr
+    // compares it against image ranges as a plain address and would find
+    // nothing.
+    Dl_info info;
+    if (dladdr(ptrauth_strip((void *)address, ptrauth_key_return_address), &info) == 0
+        || info.dli_fname == NULL)
+    {
+        return "?";
+    }
+    const char *slash = strrchr(info.dli_fname, '/');
+    return slash != NULL && slash[1] != '\0' ? slash + 1 : info.dli_fname;
 }
 
 void MISFixLog(const char *format, ...) {
