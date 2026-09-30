@@ -251,6 +251,9 @@ extension FirmwarePipeline {
         ))
 
         // 8. Filesystem
+        //    Not restorable: it reads BuildManifest.plist but writes cryptex images
+        //    all over the restore tree, so putting the manifest back on its own
+        //    would describe a tree that no longer exists. See ComponentDescriptor.
         components.append(ComponentDescriptor(
             name: "Filesystem",
             inRestoreDir: true,
@@ -270,9 +273,12 @@ extension FirmwarePipeline {
                     []
                 }
             }(),
+            restorable: false,
         ))
 
         // 9. Firmware Manifest - Only required when excluding the img4 signature patches.
+        //    Not restorable, for the same reason as Filesystem: the hashes it writes
+        //    describe files other steps produced, not the manifest's own bytes.
         components.append(ComponentDescriptor(
             name: "Manifest",
             inRestoreDir: true,
@@ -287,6 +293,7 @@ extension FirmwarePipeline {
                     []
                 }
             }(),
+            restorable: false,
         ))
 
         return appendingExternalPatchers(to: components, plan: plan, gate: gate, iOSBase: iOSBase)

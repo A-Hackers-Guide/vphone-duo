@@ -87,6 +87,11 @@ public enum VPhoneBundleTransfer {
         var excludes = VPhoneBundleOperations.exportExcludePatterns
         if !includeIPSW {
             excludes.append("*_Restore*")
+            // The kept boot-chain originals go with the restore tree they came
+            // from. On their own they describe firmware the archive does not
+            // carry, and the importer would have to delete them before its first
+            // `fw prepare` could be trusted.
+            excludes.append(VPhoneBundleOperations.firmwareOriginalsDirectoryName)
         }
 
         let total = progress != nil
@@ -132,7 +137,10 @@ public enum VPhoneBundleTransfer {
         for case let url as URL in en {
             guard url.path.count > prefix else { continue }
             let rel = String(url.path.dropFirst(prefix))
-            if !includeIPSW, rel.contains("_Restore") {
+            let originals = VPhoneBundleOperations.firmwareOriginalsDirectoryName
+            if !includeIPSW, rel.contains("_Restore")
+                || rel == originals || rel.hasPrefix(originals + "/")
+            {
                 en.skipDescendants(); continue
             }
             // The same match as VPhoneArchiveWriter's: the relative path or its

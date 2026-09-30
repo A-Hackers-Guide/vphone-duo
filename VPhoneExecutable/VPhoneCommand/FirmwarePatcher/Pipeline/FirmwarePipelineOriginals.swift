@@ -22,13 +22,17 @@
 // the VM root) can resolve a component to its own pristine copy.
 
 import Foundation
+import VPhoneCoreKit
 import VPhonePatchKit
 
 extension FirmwarePipeline {
     // MARK: - Locations
 
     /// The stash directory's name inside the VM bundle.
-    static let originalsDirectoryName = "FirmwareOriginals"
+    ///
+    /// Defined in ``VPhoneBundleOperations`` because `fw prepare` and bundle export
+    /// have to agree about it — see the declaration there.
+    static let originalsDirectoryName = VPhoneBundleOperations.firmwareOriginalsDirectoryName
 
     var originalsDirectory: URL {
         vmDirectory.appendingPathComponent(Self.originalsDirectoryName)

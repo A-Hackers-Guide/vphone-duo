@@ -45,6 +45,19 @@ enum VPhoneFirmwarePreparer {
             }
         }
 
+        // No restore tree, so any kept boot-chain originals describe firmware that
+        // is no longer here. Leaving them would be worse than having none: the
+        // component paths under a same-named restore tree — and `AVPBooter*.bin`
+        // in the bundle root, whose name does not carry a version at all — would
+        // match, and the next `fw patch` would patch last firmware's bytes and
+        // save them over this one's. See FirmwarePipelineOriginals.swift.
+        let staleOriginals = bundle.url
+            .appendingPathComponent(VPhoneBundleOperations.firmwareOriginalsDirectoryName)
+        if fm.fileExists(atPath: staleOriginals.path) {
+            print("[*] Removing boot-chain originals kept for the previous firmware...")
+            try fm.removeItem(at: staleOriginals)
+        }
+
         // Remote IPSWs go to one cache shared by every machine; keeping them
         // inside the machine downloaded both again for each new one (#513).
         // Local IPSWs are read in place and are never copied into the cache.

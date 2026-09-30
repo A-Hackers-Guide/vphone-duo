@@ -1554,3 +1554,74 @@ patches (issue #438), which `standard` now leaves off; see the note at the top.
 SystemHook no longer loads `libvlocation.dylib`, the bundle no longer ships it,
 and vphoned's `location.*` methods call IcliKit directly again. A guest that
 already has `/usr/lib/libvlocation.dylib` keeps the file, but nothing loads it.
+
+## `fw patch` re-patches the originals, not its own output (2026-09-30)
+
+No new Apple binary patch. This changes how every boot-chain patch in this
+document is applied, so it is recorded here.
+
+**The defect.** `FirmwarePipeline` patched each component in place: load the
+file, run the patchers, save over the same path. Run `fw patch` a second time on
+the same VM and the patchers were handed the first run's output, found none of
+the shapes they had already replaced, and the component failed —
+`Patch site not found: iBSS`, taking the whole run down at the second component.
+`fw prepare` refuses to re-extract over an existing restore tree
+("A restore tree already exists at …. Remove it, then prepare the firmware
+again."), so there was no recovery path either: a VM could be patched exactly
+once, for its whole life. Editing a VM's `PatchSelection.plist` to turn a patch
+off and re-running was therefore impossible, which is why the only way to test a
+preset change was to build a new machine, and why hand-editing the recorded
+`PatchPlan.plist` was being used to get around it.
+
+**Not the same defect as issue #532's second failure.** That one was a single
+patcher, `DyldSharedCacheMISTrustAuthPatcher`, not recognising its own post-patch
+shape on 27.0 — a DSC patcher, over a cache `cfw install` handles, fixed on
+2026-09-30 by teaching `locateSite` the `pacibsp ; mov x0,#0 ; retab` form (see
+row 17). This one is structural and sits above every boot-chain patcher: it
+would bite even if each patcher were perfectly self-recognising, because nothing
+kept the bytes they were meant to match against.
+
+**The fix.** `FirmwarePipelineOriginals.swift`. The first run copies each
+boot-chain file into `<vmDirectory>/FirmwareOriginals/`, mirroring its path
+under the VM bundle, before anything is written; every later run loads from that
+copy. `fw patch` is idempotent by construction — same VM, same plan, same bytes
+on disk however many times it runs — and the pristine container is also put back
+immediately before `loader.save`, because `ContainerFirmwareLoader.save`
+repackages the IM4P it finds at the destination and would otherwise wrap the
+second run's payload in the first run's container.
+
+The stash is a direct child of the VM directory and never of the restore tree,
+so `findRestoreDirectory` (which matches a directory *name* containing
+"Restore") and the component globs (rooted at the restore tree, or
+non-recursive in the VM root) cannot resolve a component to its own copy.
+
+**Turning a patch off now reverts it.** When the resolved plan selects nothing
+for a component — either every patch blocked, or the whole patch set dropped so
+no patcher is built at all — the unpatched image is copied back. A component
+nobody has ever patched is not rewritten, so its modification date stays where
+the restore left it.
+
+**Two components opt out** (`restorable: false`): `Filesystem`
+(`CryptexFilesystemPatcher`) and `Manifest` (`ManifestHashPatcher`). Both name
+`BuildManifest.plist`, but neither is a patcher over that one file — the first
+rewrites cryptex images across the restore tree, the second rewrites hashes that
+describe files other steps produced. Restoring the manifest alone would describe
+a tree that no longer exists. Both are `.less`-only, and `.less` is excluded from
+the mechanism outright so a `.less` run over a CFW-patched VM cannot read "this
+variant builds no boot-chain patchers" as "put the boot chain back".
+
+**Existing VMs.** A machine patched by an earlier build has no stash, so the
+first run under the new code would adopt its already-patched bytes as the
+"original". That case is detected rather than accepted: if the component then
+fails to patch, the copy is deleted — so it never becomes the baseline — and the
+error says the VM was patched by a build that kept no originals and that the
+restore tree must be removed and `fw prepare` re-run. Only `patchSiteNotFound` is
+rewritten this way; every other failure means what it says and passes through.
+
+Covered by `FirmwarePatcherTests/Pipeline/FirmwarePipelineOriginalsTests.swift`
+(7 tests), which drives `patchComponents` over a synthetic component whose
+patcher flips one byte and — like every real patcher — reports no site once that
+byte is flipped. The real boot chain needs firmware fixtures that are not in the
+repository. The same harness with `restorable: false` reproduces the old
+failure, so the test for the fix and the test for the defect differ only in the
+descriptor.

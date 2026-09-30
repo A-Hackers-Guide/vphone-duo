@@ -204,47 +204,120 @@ public final class FirmwarePipeline {
         )
         log("[*] Patching \(components.count) boot-chain components ...")
 
+        let allRecords = try patchComponents(components, restoreDir: restoreDir, plan: plan)
+
+        log("\n\(String(repeating: "=", count: 60))")
+        log("  All \(components.count) components processed successfully! (\(allRecords.count) total patches)")
+        log(String(repeating: "=", count: 60))
+
+        return allRecords
+    }
+
+    /// Patch every component in order, against the files under `restoreDir` and the
+    /// VM directory root.
+    ///
+    /// Each component is patched from the bytes the firmware shipped with rather
+    /// than from whatever the last run left behind, so running this twice produces
+    /// the same files as running it once — see FirmwarePipelineOriginals.swift for
+    /// why that is not how it used to work.
+    ///
+    /// Split out of ``patchAll()`` so a test can drive the loop, and with it the
+    /// originals behaviour, over a component whose patcher it controls. The real
+    /// boot chain needs firmware fixtures that are not in the repository.
+    func patchComponents(
+        _ components: [ComponentDescriptor],
+        restoreDir: URL,
+        plan: VPhonePatchPlan?,
+    ) throws -> [PatchRecord] {
         var allRecords: [PatchRecord] = []
 
         for component in components {
+            let baseDir = component.inRestoreDir ? restoreDir : vmDirectory
+            // `.less` never touches the boot chain: it runs the two whole-tree
+            // patchers and leaves every other component with no factories at all.
+            // Keeping it out of this entirely is what stops a `.less` run over an
+            // already patched VM reading "no patches here" as "put the unpatched
+            // boot chain back".
+            let keepsOriginal = variant != .less && component.restorable
+
             guard !component.patcherFactories.isEmpty else {
                 log("  [=] \(component.name): no patches for \(variant.rawValue)")
+                // The preset dropped this component's whole patch set. If an earlier
+                // run patched it, the file on disk is now carrying patches nothing
+                // selects any more, so it goes back to how the restore left it.
+                if keepsOriginal,
+                   let fileURL = try? findFile(
+                       in: baseDir,
+                       patterns: component.searchPatterns,
+                       label: component.name,
+                   ),
+                   try restorePristine(to: fileURL)
+                {
+                    log("  [+] \(component.name): unpatched image restored")
+                }
                 continue
             }
-            let baseDir = component.inRestoreDir ? restoreDir : vmDirectory
             let fileURL = try findFile(in: baseDir, patterns: component.searchPatterns, label: component.name)
 
             log("\n\(String(repeating: "=", count: 60))")
             log("  \(component.name): \(fileURL.path)")
             log(String(repeating: "=", count: 60))
 
-            // Load
-            let rawData = try loader.load(from: fileURL)
+            // Load — from the copy of the shipped file, not from the bytes the last
+            // run wrote. The first run is the one that puts it aside.
+            var sourceURL = fileURL
+            var stashedNow = false
+            if keepsOriginal {
+                (sourceURL, stashedNow) = try pristineInput(for: fileURL)
+                if sourceURL != fileURL {
+                    log(stashedNow
+                        ? "  original: kept in \(Self.originalsDirectoryName)/"
+                        : "  original: re-patching the copy in \(Self.originalsDirectoryName)/")
+                }
+            }
+            let rawData = try loader.load(from: sourceURL)
             log("  format: \(rawData.count) bytes")
 
-            let (currentData, componentRecords) = try patchData(
-                rawData,
-                componentName: component.name,
-                patcherFactories: component.patcherFactories,
-                expectsPatches: expectsPatches(for: component.name, plan: plan),
-            )
+            let currentData: Data
+            let componentRecords: [PatchRecord]
+            do {
+                (currentData, componentRecords) = try patchData(
+                    rawData,
+                    componentName: component.name,
+                    patcherFactories: component.patcherFactories,
+                    expectsPatches: expectsPatches(for: component.name, plan: plan),
+                )
+            } catch {
+                // A copy made this run is the one thing here that was never proved
+                // pristine, so it does not get to become the next run's baseline.
+                guard stashedNow else { throw error }
+                discardStash(for: fileURL)
+                throw staleFirmwareError(component: component.name, underlying: error)
+            }
 
-            // A component whose every patch the preset turned off is left exactly
-            // as it was found. Re-sealing an unmodified payload would rewrite a
-            // signed image for no reason.
             if componentRecords.isEmpty {
-                log("  [=] unchanged, not rewritten")
+                // Every patch for this component is off. Re-sealing an unmodified
+                // payload would rewrite a signed image for no reason — but if an
+                // earlier run did patch it, the file on disk still has to go back.
+                if keepsOriginal, try restorePristine(to: fileURL) {
+                    log("  [+] every patch is off, unpatched image restored")
+                } else {
+                    log("  [=] unchanged, not rewritten")
+                }
             } else {
+                // `save` repackages the container it finds at the destination, so
+                // the shipped one goes back first. Otherwise the second run would
+                // wrap its payload in the container the first run wrote, and two
+                // runs of the same plan would not produce the same file.
+                if keepsOriginal {
+                    try restorePristine(to: fileURL)
+                }
                 try loader.save(currentData, to: fileURL)
                 log("  [+] saved")
             }
 
             allRecords.append(contentsOf: componentRecords)
         }
-
-        log("\n\(String(repeating: "=", count: 60))")
-        log("  All \(components.count) components processed successfully! (\(allRecords.count) total patches)")
-        log(String(repeating: "=", count: 60))
 
         return allRecords
     }

@@ -194,4 +194,16 @@ public enum VPhoneBundleOperations {
         ".pcc-restoration-*",
         ".pcc-system-*",
     ]
+
+    /// The directory holding each boot-chain file exactly as the restore tree laid
+    /// it down, so `fw patch` patches those bytes rather than its own output and
+    /// can be run again. `FirmwarePipeline` fills it; the name lives here because
+    /// three other things in the bundle have to agree about it: `fw prepare`
+    /// deletes it with the restore tree it describes, and export both excludes it
+    /// from a slim archive and leaves it out of the progress total.
+    ///
+    /// Deliberately outside the restore tree: `findRestoreDirectory` picks the
+    /// newest direct child whose name contains "Restore", so an originals
+    /// directory that matched would become a candidate restore tree.
+    public static let firmwareOriginalsDirectoryName = "FirmwareOriginals"
 }
