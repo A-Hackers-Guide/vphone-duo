@@ -481,41 +481,6 @@
         }
       }
     },
-    "%@ is too old" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ is too old"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ は古すぎます"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@은(는) 너무 오래된 버전입니다"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ quá cũ"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 版本过旧"
-          }
-        }
-      }
-    },
     "%@ of %@" : {
       "localizations" : {
         "en" : {
@@ -1140,41 +1105,6 @@
         }
       }
     },
-    "Administrator authorization failed (OSStatus %d)." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Administrator authorization failed (OSStatus %d)."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "管理者の認証に失敗しました（OSStatus %d）。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "관리자 인증에 실패했습니다(OSStatus %d)."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Xác thực quản trị viên thất bại (OSStatus %d)."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "管理员授权失败（OSStatus %d）。"
-          }
-        }
-      }
-    },
     "Advanced" : {
       "localizations" : {
         "en" : {
@@ -1311,41 +1241,6 @@
         }
       }
     },
-    "After allowing vphone-launchpad under Privacy & Security → Developer Tools, quit and reopen it." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "After allowing vphone-launchpad under Privacy & Security → Developer Tools, quit and reopen it."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "「プライバシーとセキュリティ」→「デベロッパツール」で vphone-launchpad を許可したあと、終了してから開き直してください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "개인정보 보호 및 보안 → 개발자 도구에서 vphone-launchpad를 허용한 후 종료했다가 다시 여십시오."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sau khi cho phép vphone-launchpad trong Quyền riêng tư & Bảo mật → Công cụ dành cho nhà phát triển, hãy thoát rồi mở lại ứng dụng."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在“隐私与安全性”→“开发者工具”中允许 vphone-launchpad 后，请退出并重新打开它。"
-          }
-        }
-      }
-    },
     "All" : {
       "localizations" : {
         "en" : {
@@ -1410,17 +1305,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "允许 bundle 运行"
-          }
-        }
-      }
-    },
-    "Allow Network" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Allow Network"
           }
         }
       }
@@ -1527,17 +1411,6 @@
         }
       }
     },
-    "Allowing network access…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Allowing network access…"
-          }
-        }
-      }
-    },
     "An install is in progress." : {
       "localizations" : {
         "en" : {
@@ -1568,41 +1441,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在安装。"
-          }
-        }
-      }
-    },
-    "An install is in progress. Follow it in the inspector." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "An install is in progress. Follow it in the inspector."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "インストール中です。進行状況はインスペクタで確認できます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "설치가 진행 중입니다. 속성 패널에서 진행 상황을 확인하십시오."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang cài đặt. Hãy theo dõi trong bảng kiểm tra."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在安装。可在检查器中查看进度。"
           }
         }
       }
@@ -1913,41 +1751,6 @@
         }
       }
     },
-    "Cannot create an authorization (OSStatus %d)." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cannot create an authorization (OSStatus %d)."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "認証を作成できません（OSStatus %d）。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "인증을 생성할 수 없습니다(OSStatus %d)."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Không thể tạo phiên xác thực (OSStatus %d)."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法创建授权（OSStatus %d）。"
-          }
-        }
-      }
-    },
     "Cannot reach %@" : {
       "localizations" : {
         "en" : {
@@ -2046,41 +1849,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "目录"
-          }
-        }
-      }
-    },
-    "cfw install exited with status %d." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "cfw install exited with status %d."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "cfw install がステータス %d で終了しました。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "cfw install이 상태 %d(으)로 종료되었습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "cfw install đã thoát với mã trạng thái %d."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "cfw install 已退出，状态码 %d。"
           }
         }
       }
@@ -2629,41 +2397,6 @@
         }
       }
     },
-    "Cloning" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cloning"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "複製中"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "복제 중"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang nhân bản"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在克隆"
-          }
-        }
-      }
-    },
     "Cloning…" : {
       "localizations" : {
         "en" : {
@@ -2766,41 +2499,6 @@
         }
       }
     },
-    "Closing this window keeps it running." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Closing this window keeps it running."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このウインドウを閉じても処理は続行されます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 윈도우를 닫아도 계속 실행됩니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đóng cửa sổ này thì quá trình vẫn tiếp tục chạy."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关闭此窗口后仍会继续运行。"
-          }
-        }
-      }
-    },
     "cloudOS" : {
       "localizations" : {
         "en" : {
@@ -2899,41 +2597,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "命令"
-          }
-        }
-      }
-    },
-    "Commands Launchpad runs appear here." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Commands Launchpad runs appear here."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Launchpad が実行したコマンドがここに表示されます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Launchpad가 실행한 명령이 여기에 표시됩니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Các lệnh Launchpad chạy sẽ hiển thị ở đây."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Launchpad 运行的命令会显示在这里。"
           }
         }
       }
@@ -3210,41 +2873,6 @@
         }
       }
     },
-    "Core Bundle appears once every required check passes." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Core Bundle appears once every required check passes."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "必須項目がすべて合格すると「コアバンドル」が表示されます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "모든 필수 검사를 통과하면 코어 번들이 표시됩니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bundle lõi sẽ xuất hiện khi mọi mục kiểm tra bắt buộc đều đạt."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "所有必需检查通过后，将显示“核心 Bundle”。"
-          }
-        }
-      }
-    },
     "Core Bundle Install" : {
       "localizations" : {
         "en" : {
@@ -3491,41 +3119,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "创建虚拟机"
-          }
-        }
-      }
-    },
-    "Create bundle" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Create bundle"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "バンドルを作成"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "번들 생성"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tạo bundle"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "创建 bundle"
           }
         }
       }
@@ -4074,41 +3667,6 @@
         }
       }
     },
-    "Deleting" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deleting"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "削除中"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "삭제 중"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang xóa"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在删除"
-          }
-        }
-      }
-    },
     "Deleting…" : {
       "localizations" : {
         "en" : {
@@ -4139,41 +3697,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在删除…"
-          }
-        }
-      }
-    },
-    "Densest compression" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Densest compression"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最大圧縮"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "최대 압축"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nén tối đa"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最高压缩率"
           }
         }
       }
@@ -4246,41 +3769,6 @@
         }
       }
     },
-    "Disable dyld shared cache randomization" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Disable dyld shared cache randomization"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "dyld 共有キャッシュのランダム化を無効にする"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "dyld 공유 캐시 무작위화 비활성화"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tắt ngẫu nhiên hóa bộ đệm dùng chung dyld"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "停用 dyld 共享缓存随机化"
-          }
-        }
-      }
-    },
     "Disk" : {
       "localizations" : {
         "en" : {
@@ -4345,41 +3833,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "磁盘：%lld GB"
-          }
-        }
-      }
-    },
-    "Dismiss" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dismiss"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "閉じる"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "닫기"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bỏ qua"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关闭"
           }
         }
       }
@@ -4554,76 +4007,6 @@
         }
       }
     },
-    "Downloading" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Downloading"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ダウンロード中"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "다운로드 중"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang tải xuống"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在下载"
-          }
-        }
-      }
-    },
-    "Downloading…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Downloading…"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ダウンロード中…"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "다운로드 중…"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang tải xuống…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在下载…"
-          }
-        }
-      }
-    },
     "Edit…" : {
       "localizations" : {
         "en" : {
@@ -4726,17 +4109,6 @@
         }
       }
     },
-    "Every patch in this bundle, including advanced ones that a freshly restored 26.4 guest may not survive." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Every patch in this bundle, including advanced ones that a freshly restored 26.4 guest may not survive."
-          }
-        }
-      }
-    },
     "Every patch in this bundle, including advanced ones that may stop a newly restored 26.4 machine from starting." : {
       "localizations" : {
         "en" : {
@@ -4767,41 +4139,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此 Bundle 中的全部补丁，包括可能导致刚恢复的 26.4 机器无法启动的高级补丁。"
-          }
-        }
-      }
-    },
-    "Every patch this bundle declares, including the Frida Stalker relaxations and the hv_vmm_present concealment that a freshly restored 26.4 guest does not survive." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Every patch this bundle declares, including the Frida Stalker relaxations and the hv_vmm_present concealment that a freshly restored 26.4 guest does not survive."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このバンドルが宣言するすべてのパッチ。Frida Stalker 向けの制限緩和と、復元直後の 26.4 ゲストでは起動できなくなる hv_vmm_present の隠蔽を含みます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 번들이 선언하는 모든 패치입니다. Frida Stalker용 제한 완화와, 새로 복원한 26.4 게스트가 부팅하지 못하는 hv_vmm_present 은폐를 포함합니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mọi bản vá mà gói này khai báo, bao gồm các nới lỏng cho Frida Stalker và phần che giấu hv_vmm_present mà khách 26.4 vừa khôi phục không khởi động được."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此 Bundle 声明的全部补丁，包括针对 Frida Stalker 的限制放宽，以及刚恢复的 26.4 客户机无法承受的 hv_vmm_present 隐藏。"
           }
         }
       }
@@ -5113,41 +4450,6 @@
         }
       }
     },
-    "Exporting" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exporting"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "書き出し中"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "내보내는 중"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang xuất"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在导出"
-          }
-        }
-      }
-    },
     "Exporting…" : {
       "localizations" : {
         "en" : {
@@ -5454,41 +4756,6 @@
         }
       }
     },
-    "GitHub answered the release list with an error." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "GitHub answered the release list with an error."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "GitHub がリリース一覧の要求にエラーを返しました。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "GitHub가 릴리스 목록 요청에 오류를 반환했습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "GitHub trả về lỗi khi lấy danh sách bản phát hành."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "GitHub 返回发行版列表时出错。"
-          }
-        }
-      }
-    },
     "GitHub refused the token. Check that it can read Actions for Lakr233/vphone-cli." : {
       "localizations" : {
         "en" : {
@@ -5659,41 +4926,6 @@
         }
       }
     },
-    "Hide the install steps" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hide the install steps"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "インストール手順を隠す"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "설치 단계 가리기"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ẩn các bước cài đặt"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "隐藏安装步骤"
-          }
-        }
-      }
-    },
     "Host only" : {
       "localizations" : {
         "en" : {
@@ -5762,41 +4994,6 @@
         }
       }
     },
-    "Host preflight did not pass." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Host preflight did not pass."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ホストの事前チェックに合格しませんでした。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "호스트 사전 점검을 통과하지 못했습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kiểm tra trước máy chủ không đạt."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机预检未通过。"
-          }
-        }
-      }
-    },
     "Host preflight failed. Fix the issue and retry, or skip to use this version anyway." : {
       "localizations" : {
         "en" : {
@@ -5827,41 +5024,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "主机预检未通过。请修复问题后重试，或跳过以继续使用此版本。"
-          }
-        }
-      }
-    },
-    "Host preflight failed. Fix the issue below, then choose Run Preflight Again." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Host preflight failed. Fix the issue below, then choose Run Preflight Again."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ホストの事前チェックに合格しませんでした。以下の問題を解決してから、「事前チェックを再実行」を選択してください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "호스트 사전 점검에 실패했습니다. 아래 문제를 해결한 후 사전 점검 다시 실행을 선택하십시오."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kiểm tra trước máy chủ không đạt. Hãy khắc phục sự cố bên dưới, rồi chọn Chạy lại kiểm tra trước."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机预检未通过。请修复下方的问题，然后选择“再次运行预检”。"
           }
         }
       }
@@ -5930,41 +5092,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "主机设置…"
-          }
-        }
-      }
-    },
-    "Identifier" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Identifier"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "識別子"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "식별자"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mã định danh"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "标识符"
           }
         }
       }
@@ -6339,76 +5466,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "安装 VPhone.bundle 以创建和运行虚拟机。"
-          }
-        }
-      }
-    },
-    "Install as root" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Install as root"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "root としてインストール"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "root 권한으로 설치"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cài đặt với quyền root"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "以 root 身份安装"
-          }
-        }
-      }
-    },
-    "Install CFW" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Install CFW"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CFW をインストール"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CFW 설치"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cài đặt CFW"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "安装 CFW"
           }
         }
       }
@@ -7087,41 +6144,6 @@
         }
       }
     },
-    "Latest Release" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Latest Release"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最新リリース"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "최신 릴리스"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bản phát hành mới nhất"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最新发行版"
-          }
-        }
-      }
-    },
     "Launchpad quit before the install finished. Retry to continue." : {
       "localizations" : {
         "en" : {
@@ -7224,41 +6246,6 @@
         }
       }
     },
-    "Letters, digits, dots, dashes and underscores." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Letters, digits, dots, dashes and underscores."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "英字、数字、ピリオド、ハイフン、アンダースコアを使用できます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "문자, 숫자, 마침표, 하이픈, 밑줄을 사용할 수 있습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Chữ cái, chữ số, dấu chấm, gạch ngang và gạch dưới."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可使用字母、数字、句点、连字符和下划线。"
-          }
-        }
-      }
-    },
     "Library on APFS" : {
       "localizations" : {
         "en" : {
@@ -7293,41 +6280,6 @@
         }
       }
     },
-    "List releases again and rerun host preflight" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "List releases again and rerun host preflight"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "リリースを再取得し、ホストの事前チェックを再実行"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "릴리스를 다시 불러오고 호스트 사전 점검 재실행"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tải lại danh sách bản phát hành và chạy lại kiểm tra trước máy chủ"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重新列出发行版并再次运行主机预检"
-          }
-        }
-      }
-    },
     "Loading firmware catalog…" : {
       "localizations" : {
         "en" : {
@@ -7358,41 +6310,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在载入固件目录…"
-          }
-        }
-      }
-    },
-    "Loading fw catalog…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loading fw catalog…"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "fw catalog を読み込み中…"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "fw catalog 불러오는 중…"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang tải fw catalog…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在载入 fw catalog…"
           }
         }
       }
@@ -7529,41 +6446,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "虚拟机"
-          }
-        }
-      }
-    },
-    "Machines appears once a bundle is installed and passes host preflight." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Machines appears once a bundle is installed and passes host preflight."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "バンドルをインストールし、ホストの事前チェックに合格すると「マシン」が表示されます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "번들을 설치하고 호스트 사전 점검을 통과하면 머신이 표시됩니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Máy ảo sẽ xuất hiện khi đã cài bundle và đạt kiểm tra trước máy chủ."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "安装 bundle 并通过主机预检后，将显示“虚拟机”。"
           }
         }
       }
@@ -7976,39 +6858,6 @@
         }
       }
     },
-    "Network Access" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Network Access"
-          }
-        }
-      }
-    },
-    "Network access for %@ did not change. Relaunch the app and try again." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Network access for %@ did not change. Relaunch the app and try again."
-          }
-        }
-      }
-    },
-    "Network access is restricted" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Network access is restricted"
-          }
-        }
-      }
-    },
     "New Machine" : {
       "localizations" : {
         "en" : {
@@ -8107,41 +6956,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有核心 Bundle"
-          }
-        }
-      }
-    },
-    "No core bundle is active." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No core bundle is active."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用中のコアバンドルがありません。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "사용 중인 코어 번들이 없습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Không có Bundle lõi nào đang dùng."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有正在使用的核心 Bundle。"
           }
         }
       }
@@ -9064,41 +7878,6 @@
         }
       }
     },
-    "Owner" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Owner"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "所有者"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "소유자"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Chủ sở hữu"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "所有者"
-          }
-        }
-      }
-    },
     "Passed" : {
       "localizations" : {
         "en" : {
@@ -9197,41 +7976,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "修补启动链"
-          }
-        }
-      }
-    },
-    "Patch Set" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Patch Set"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "パッチセット"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "패치 세트"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bộ bản vá"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "补丁集"
           }
         }
       }
@@ -9372,41 +8116,6 @@
         }
       }
     },
-    "Policy exception" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Policy exception"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ポリシーの例外"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "정책 예외"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ngoại lệ chính sách"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "策略例外"
-          }
-        }
-      }
-    },
     "Pre-release" : {
       "localizations" : {
         "en" : {
@@ -9437,41 +8146,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "预发行版"
-          }
-        }
-      }
-    },
-    "Preflight" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Preflight"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "事前チェック"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "사전 점검"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kiểm tra trước"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "预检"
           }
         }
       }
@@ -9782,41 +8456,6 @@
         }
       }
     },
-    "Quitting stops the New Machine pipeline. You can retry it later from the step it stopped at." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Quitting stops the New Machine pipeline. You can retry it later from the step it stopped at."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "終了すると新規マシンの作成処理が停止します。あとで停止したステップから再試行できます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "종료하면 새로운 머신 생성 과정이 중지됩니다. 나중에 중지된 단계부터 다시 시도할 수 있습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Thoát sẽ dừng quy trình tạo máy ảo mới. Bạn có thể thử lại sau từ bước đã dừng."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "退出会停止新建虚拟机流程。你可以稍后从中断的步骤重试。"
-          }
-        }
-      }
-    },
     "Reading the bundle's patches…" : {
       "localizations" : {
         "en" : {
@@ -9919,76 +8558,6 @@
         }
       }
     },
-    "Recommended pairings for %@ from vphone-cli fw catalog." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recommended pairings for %@ from vphone-cli fw catalog."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "vphone-cli fw catalog による %@ の推奨組み合わせです。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "vphone-cli fw catalog에서 제공하는 %@의 권장 조합입니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Các cặp khuyến nghị cho %@ từ vphone-cli fw catalog."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "来自 vphone-cli fw catalog 的 %@ 推荐组合。"
-          }
-        }
-      }
-    },
-    "Relax kernel restrictions for Frida Stalker" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Relax kernel restrictions for Frida Stalker"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Frida Stalker 向けにカーネル制限を緩和"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Frida Stalker용 커널 제한 완화"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nới lỏng giới hạn kernel cho Frida Stalker"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "放宽内核限制以支持 Frida Stalker"
-          }
-        }
-      }
-    },
     "Releases" : {
       "localizations" : {
         "en" : {
@@ -10053,41 +8622,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重新载入发行版和构建版本，并再次运行主机预检。"
-          }
-        }
-      }
-    },
-    "Reload releases and run host preflight again." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reload releases and run host preflight again."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "リリースを再読み込みし、ホストの事前チェックを再実行します。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "릴리스를 다시 불러오고 호스트 사전 점검을 다시 실행합니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tải lại các bản phát hành và chạy lại kiểm tra trước máy chủ."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重新载入发行版并再次运行主机预检。"
           }
         }
       }
@@ -10292,41 +8826,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重命名…"
-          }
-        }
-      }
-    },
-    "Renaming" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Renaming"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "名前を変更中"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이름 변경 중"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang đổi tên"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在重命名"
           }
         }
       }
@@ -10705,41 +9204,6 @@
         }
       }
     },
-    "root:wheel, written only by the helper" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "root:wheel, written only by the helper"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "root:wheel、ヘルパーのみが書き込み"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "root:wheel, 도우미만 기록 가능"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "root:wheel, chỉ trình trợ giúp được ghi"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "root:wheel，仅由辅助工具写入"
-          }
-        }
-      }
-    },
     "Run every check again" : {
       "localizations" : {
         "en" : {
@@ -10978,41 +9442,6 @@
         }
       }
     },
-    "Saving settings" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Saving settings"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "設定を保存中"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "설정 저장 중"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang lưu cài đặt"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在存储设置"
-          }
-        }
-      }
-    },
     "Saving settings…" : {
       "localizations" : {
         "en" : {
@@ -11077,41 +9506,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索虚拟机"
-          }
-        }
-      }
-    },
-    "Section" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Section"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "セクション"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "섹션"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mục"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "部分"
           }
         }
       }
@@ -11214,41 +9608,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开始设置…"
-          }
-        }
-      }
-    },
-    "Set VPHONE_LAUNCHPAD_TEAM, rebuild, and sign the app before installing the helper." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Set VPHONE_LAUNCHPAD_TEAM, rebuild, and sign the app before installing the helper."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ヘルパーをインストールする前に、VPHONE_LAUNCHPAD_TEAM を設定し、App を再ビルドして署名してください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "도우미를 설치하기 전에 VPHONE_LAUNCHPAD_TEAM을 설정하고 앱을 다시 빌드한 후 서명하십시오."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hãy đặt VPHONE_LAUNCHPAD_TEAM, dựng lại và ký ứng dụng trước khi cài trình trợ giúp."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请先设置 VPHONE_LAUNCHPAD_TEAM，重新构建并签名 App，然后再安装辅助工具。"
           }
         }
       }
@@ -11521,41 +9880,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示检查器"
-          }
-        }
-      }
-    },
-    "Show the install steps" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show the install steps"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "インストール手順を表示"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "설치 단계 보기"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hiện các bước cài đặt"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示安装步骤"
           }
         }
       }
@@ -12105,41 +10429,6 @@
         }
       }
     },
-    "Stop creating the machine?" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stop creating the machine?"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "マシンの作成を停止しますか？"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "머신 생성을 중지하겠습니까?"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dừng tạo máy ảo?"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "要停止创建虚拟机吗？"
-          }
-        }
-      }
-    },
     "Stop machine" : {
       "localizations" : {
         "en" : {
@@ -12158,41 +10447,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "머신 중지"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dừng máy ảo"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "停止虚拟机"
-          }
-        }
-      }
-    },
-    "Stop VM" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stop VM"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "VM を停止"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "VM 중지"
           }
         },
         "vi" : {
@@ -12243,41 +10497,6 @@
         }
       }
     },
-    "Stopping" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stopping"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "停止処理中"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "중지 중"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang dừng"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在停止"
-          }
-        }
-      }
-    },
     "Stopping…" : {
       "localizations" : {
         "en" : {
@@ -12308,41 +10527,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在停止…"
-          }
-        }
-      }
-    },
-    "Store" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Store"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存場所"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "저장소"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kho lưu trữ"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "存储位置"
           }
         }
       }
@@ -12416,181 +10600,6 @@
         }
       }
     },
-    "The clone boots as a new device. SEP storage is copied as is, so a restored machine may need restoring again." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The clone boots as a new device. SEP storage is copied as is, so a restored machine may need restoring again."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "複製は新しいデバイスとして起動します。SEP ストレージはそのままコピーされるため、復元済みのマシンは再度の復元が必要になる場合があります。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "복제본은 새로운 기기로 부팅됩니다. SEP 저장소는 그대로 복사되므로 복원된 머신은 다시 복원해야 할 수 있습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bản nhân bản khởi động như một thiết bị mới. Bộ nhớ SEP được sao chép nguyên trạng, nên máy ảo đã khôi phục có thể cần khôi phục lại."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "克隆会作为新设备启动。SEP 存储会原样拷贝，因此已恢复的虚拟机可能需要重新恢复。"
-          }
-        }
-      }
-    },
-    "The clone starts as a new device. Its Secure Enclave data is copied unchanged, so you may need to restore the clone again." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The clone starts as a new device. Its Secure Enclave data is copied unchanged, so you may need to restore the clone again."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "複製は新しいデバイスとして起動します。Secure Enclave のデータはそのままコピーされるため、複製を再度復元する必要がある場合があります。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "복제본은 새로운 기기로 시작됩니다. Secure Enclave 데이터는 그대로 복사되므로 복제본을 다시 복원해야 할 수 있습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bản nhân bản khởi động như một thiết bị mới. Dữ liệu Secure Enclave được sao chép nguyên trạng, nên bạn có thể cần khôi phục lại bản nhân bản."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "克隆会作为新设备启动。其 Secure Enclave 数据会原样拷贝，因此你可能需要重新恢复该克隆。"
-          }
-        }
-      }
-    },
-    "The command failed." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The command failed."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "コマンドが失敗しました。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "명령이 실패했습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lệnh thất bại."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "命令失败。"
-          }
-        }
-      }
-    },
-    "The DFU boot did not write udid-prediction.txt within 30 seconds." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The DFU boot did not write udid-prediction.txt within 30 seconds."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DFU 起動が 30 秒以内に udid-prediction.txt を書き込みませんでした。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DFU 부팅이 30초 이내에 udid-prediction.txt를 기록하지 않았습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lần khởi động DFU không ghi udid-prediction.txt trong vòng 30 giây."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DFU 启动未在 30 秒内写入 udid-prediction.txt。"
-          }
-        }
-      }
-    },
-    "The DFU boot exited." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The DFU boot exited."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DFU 起動が終了しました。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DFU 부팅이 종료되었습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lần khởi động DFU đã thoát."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DFU 启动已退出。"
-          }
-        }
-      }
-    },
     "The download could not be verified. Try again." : {
       "localizations" : {
         "en" : {
@@ -12625,181 +10634,6 @@
         }
       }
     },
-    "The download does not match the published SHA-256." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The download does not match the published SHA-256."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ダウンロードしたファイルが公開されている SHA-256 と一致しません。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "다운로드한 파일이 게시된 SHA-256과 일치하지 않습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tệp tải xuống không khớp với SHA-256 đã công bố."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下载的文件与公布的 SHA-256 不符。"
-          }
-        }
-      }
-    },
-    "The download of %@ failed." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The download of %@ failed."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ のダウンロードに失敗しました。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 다운로드에 실패했습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tải xuống %@ thất bại."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 下载失败。"
-          }
-        }
-      }
-    },
-    "The guest panicked on first boot." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The guest panicked on first boot."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ゲストが初回起動時にパニックしました。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "게스트가 첫 부팅 중 패닉을 일으켰습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Máy khách bị panic khi khởi động lần đầu."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "客户机在首次启动时发生 panic。"
-          }
-        }
-      }
-    },
-    "The helper connection has the wrong interface." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The helper connection has the wrong interface."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ヘルパー接続のインターフェイスが正しくありません。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "도우미 연결의 인터페이스가 올바르지 않습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kết nối trình trợ giúp có giao diện không đúng."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "辅助工具连接的接口不正确。"
-          }
-        }
-      }
-    },
-    "The helper could not be installed." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The helper could not be installed."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ヘルパーをインストールできませんでした。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "도우미를 설치할 수 없습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Không thể cài đặt trình trợ giúp."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法安装辅助工具。"
-          }
-        }
-      }
-    },
     "The helper did not answer." : {
       "localizations" : {
         "en" : {
@@ -12830,41 +10664,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "辅助工具没有响应。"
-          }
-        }
-      }
-    },
-    "The install failed." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The install failed."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "インストールに失敗しました。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "설치에 실패했습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cài đặt thất bại."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "安装失败。"
           }
         }
       }
@@ -13277,41 +11076,6 @@
         }
       }
     },
-    "The patches every vphone VM needs to boot, jailbroken, with a working display and camera." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The patches every vphone VM needs to boot, jailbroken, with a working display and camera."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "すべての vphone 仮想マシンが脱獄状態で起動し、画面とカメラを使うために必要なパッチ。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "모든 vphone 가상 머신이 탈옥 상태로 부팅하고 화면과 카메라를 사용하는 데 필요한 패치입니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Các bản vá mà mọi máy ảo vphone cần để khởi động ở trạng thái jailbreak, với màn hình và camera hoạt động."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "每台 vphone 虚拟机以越狱状态启动、并正常使用屏幕和摄像头所需的补丁。"
-          }
-        }
-      }
-    },
     "The path is too long. Use a shorter name, or a location with a shorter path." : {
       "localizations" : {
         "en" : {
@@ -13342,41 +11106,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "路径太长。请使用更短的名称，或选择路径更短的位置。"
-          }
-        }
-      }
-    },
-    "The VM exited before vphoned answered." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The VM exited before vphoned answered."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "vphoned が応答する前に VM が終了しました。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "vphoned가 응답하기 전에 VM이 종료되었습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Máy ảo đã thoát trước khi vphoned phản hồi."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "虚拟机在 vphoned 响应前已退出。"
           }
         }
       }
@@ -13483,41 +11212,6 @@
         }
       }
     },
-    "This build has no signing team." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This build has no signing team."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このビルドには署名チームがありません。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 빌드에는 서명 팀이 없습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bản dựng này không có nhóm ký."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此构建版本没有签名团队。"
-          }
-        }
-      }
-    },
     "This build has no signing team. Rebuild and sign the app with your team, then try again." : {
       "localizations" : {
         "en" : {
@@ -13548,41 +11242,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此构建没有签名团队。请使用你的团队重新构建并签名 App，然后重试。"
-          }
-        }
-      }
-    },
-    "Timed out waiting for the device to enter recovery mode." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Timed out waiting for the device to enter recovery mode."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "デバイスがリカバリモードに入るのを待機中にタイムアウトしました。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "기기가 복구 모드로 진입하기를 기다리는 중 시간이 초과되었습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hết thời gian chờ thiết bị vào chế độ khôi phục."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "等待设备进入恢复模式时超时。"
           }
         }
       }
@@ -13651,52 +11310,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "UDID"
-          }
-        }
-      }
-    },
-    "udid-prediction.txt has no ECID." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "udid-prediction.txt has no ECID."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "udid-prediction.txt に ECID がありません。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "udid-prediction.txt에 ECID가 없습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "udid-prediction.txt không có ECID."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "udid-prediction.txt 中没有 ECID。"
-          }
-        }
-      }
-    },
-    "Unable to allow network access for %@." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unable to allow network access for %@."
           }
         }
       }
@@ -13833,41 +11446,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法获取管理员权限"
-          }
-        }
-      }
-    },
-    "Unable to install CFW. Check the log for details." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unable to install CFW. Check the log for details."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CFW をインストールできません。詳細はログを確認してください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CFW를 설치할 수 없습니다. 자세한 내용은 로그를 확인하십시오."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Không thể cài đặt CFW. Hãy xem nhật ký để biết chi tiết."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法安装 CFW。请查看日志了解详情。"
           }
         }
       }
@@ -14314,41 +11892,6 @@
         }
       }
     },
-    "Unknown error" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unknown error"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不明なエラー"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "알 수 없는 오류"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lỗi không xác định"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未知错误"
-          }
-        }
-      }
-    },
     "Unknown Firmware" : {
       "localizations" : {
         "en" : {
@@ -14621,41 +12164,6 @@
         }
       }
     },
-    "Variant" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Variant"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "バリアント"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "변형"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Biến thể"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "变体"
-          }
-        }
-      }
-    },
     "Verify SHA-256" : {
       "localizations" : {
         "en" : {
@@ -14896,41 +12404,6 @@
         }
       }
     },
-    "vphoned did not answer within 300 seconds." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "vphoned did not answer within 300 seconds."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "vphoned が 300 秒以内に応答しませんでした。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "vphoned가 300초 이내에 응답하지 않았습니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "vphoned không phản hồi trong vòng 300 giây."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "vphoned 未在 300 秒内响应。"
-          }
-        }
-      }
-    },
     "Wait for DFU" : {
       "localizations" : {
         "en" : {
@@ -14999,41 +12472,6 @@
         }
       }
     },
-    "Waiting for an administrator…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Waiting for an administrator…"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "管理者を待機中…"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "관리자 대기 중…"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang chờ quản trị viên…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在等待管理员…"
-          }
-        }
-      }
-    },
     "Waiting to export…" : {
       "localizations" : {
         "en" : {
@@ -15068,76 +12506,6 @@
         }
       }
     },
-    "Writes a .txz archive with xz -9. Smaller, and much slower." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Writes a .txz archive with xz -9. Smaller, and much slower."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "xz -9 で .txz アーカイブを書き出します。サイズは小さくなりますが、かなり時間がかかります。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "xz -9로 .txz 아카이브를 만듭니다. 크기는 더 작지만 훨씬 느립니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ghi tệp lưu trữ .txz bằng xz -9. Nhỏ hơn nhưng chậm hơn nhiều."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用 xz -9 写入 .txz 归档。文件更小，但速度慢得多。"
-          }
-        }
-      }
-    },
-    "Writes a .tzst archive with zstd -3." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Writes a .tzst archive with zstd -3."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "zstd -3 で .tzst アーカイブを書き出します。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "zstd -3으로 .tzst 아카이브를 만듭니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ghi tệp lưu trữ .tzst bằng zstd -3."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用 zstd -3 写入 .tzst 归档。"
-          }
-        }
-      }
-    },
     "You cannot write to %@." : {
       "localizations" : {
         "en" : {
@@ -15168,41 +12536,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你无法写入 %@。"
-          }
-        }
-      }
-    },
-    "Zero the dyld cache maxSlide" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zero the dyld cache maxSlide"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "dyld キャッシュの maxSlide をゼロにする"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "dyld 캐시 maxSlide를 0으로 설정"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đặt maxSlide của bộ đệm dyld về 0"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "将 dyld 缓存的 maxSlide 置零"
           }
         }
       }
