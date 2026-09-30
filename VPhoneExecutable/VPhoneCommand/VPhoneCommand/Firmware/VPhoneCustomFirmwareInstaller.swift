@@ -461,8 +461,12 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
         // Version-agnostic: the guest is hacktivated on every base, so the
-        // profile check this opens fails on every base too.
-        if on("dyld-cfw-mis_trust_auth") {
+        // profile check this opens fails on every base too. Off in `standard`,
+        // because libmisfix declines the same check from userspace in installd
+        // and misagent without touching the cache — see
+        // FirmwarePatchSetCatalog.misTrustAuthPatch for why editing the cache
+        // is the worse trade on 27.
+        if on(FirmwarePatchSetCatalog.misTrustAuthPatch) {
             try patch("patch-mis-trust-auth", [dsc])
         }
         // These former EXP patches pair with the kernel OID rename and the

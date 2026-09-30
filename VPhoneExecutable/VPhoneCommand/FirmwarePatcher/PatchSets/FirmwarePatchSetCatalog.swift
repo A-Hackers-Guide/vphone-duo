@@ -51,10 +51,38 @@ public enum FirmwarePatchSetCatalog {
     /// freshly restored 26.4 guest booting at all. See
     /// ``hypervisorConcealmentPatches``. The rest of the former EXP variant is
     /// off with it, bar the camera: see ``experimentalIdentityPatches``.
+    ///
+    /// `dyld-exp-mis_trust_auth` is off because a userspace hook now does its
+    /// job: see ``misTrustAuthPatch``.
     public static let manualOnlyPatches: Set<String> =
         Set(FirmwareKernelFridaPatchSet.manifest.patches.map(\.identifier))
             .union(hypervisorConcealmentPatches)
             .union(experimentalIdentityPatches)
+            .union([misTrustAuthPatch])
+
+    /// The shared-cache short-circuit of `libmis`'s `checkTrustAndAuthorization`.
+    ///
+    /// Off in `standard` because `libmisfix.dylib` reaches the same outcome from
+    /// userspace without editing the cache. The hook passes
+    /// `RespectUppTrustAndAuthorization = false` in the options dictionary, and
+    /// libmis only calls `checkTrustAndAuthorization` when that flag is set, so
+    /// `0xE8008026` — "missing trust and/or authorization", which a hacktivated
+    /// guest with no activation record can never satisfy — is never produced.
+    /// `cfw install` injects that hook into `installd` and `misagent`.
+    ///
+    /// Leaving the patch on costs more than it buys. On iOS 27 it stops the guest
+    /// booting: TXM rejects the re-attested page, dyld cannot map
+    /// `libSystem.B.dylib`, and `initproc failed to start` (issue #532). On 24A435
+    /// it cannot even be applied — `checkTrustAndAuthorization` there carries
+    /// neither the seeding prologue the patcher matches nor the patcher's own
+    /// output, so `cfw install` fails outright before it writes anything.
+    ///
+    /// What it still buys, and why it stays declared rather than being deleted:
+    /// the hook only covers the processes it is injected into, so an app signed
+    /// with a *free personal-team* certificate can be installed but is still
+    /// refused at launch, where SpringBoard asks MIS itself. A VM that wants that
+    /// on a 26.x base can check this box; on 27 it should not.
+    public static let misTrustAuthPatch = "dyld-exp-mis_trust_auth"
 
     /// The former EXP patches that make the guest claim to be an iPhone17,3.
     ///

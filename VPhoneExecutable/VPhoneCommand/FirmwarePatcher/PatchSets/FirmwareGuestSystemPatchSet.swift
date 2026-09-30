@@ -60,13 +60,15 @@ public enum FirmwareGuestSystemPatchSet {
                 bootEssential: true,
             ),
             VPhonePatchDeclaration(
-                identifier: "dyld-cfw-mis_trust_auth",
+                identifier: "dyld-exp-mis_trust_auth",
                 title: "MIS online authorization",
                 summary: """
-                Accepts a provisioning profile that wants online authorization. The guest is \
-                hacktivated and has no activation record, so it can never obtain the device \
-                identity such a profile is checked against; without this, an app signed with a \
-                free personal-team certificate installs but refuses to launch.
+                Accepts a provisioning profile that wants online authorization, by short-circuiting \
+                the check in the shared cache. Off by default: libmisfix.dylib already declines the \
+                same check from userspace in installd and misagent, and editing the cache for it \
+                stops an iOS 27 guest booting. Turn it on only on a 26.x base, and only to launch \
+                an app signed with a free personal-team certificate — that launch goes through \
+                SpringBoard, which the hook does not cover.
                 """,
                 target: .dyldSharedCache,
             ),

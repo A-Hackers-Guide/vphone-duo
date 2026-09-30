@@ -108,8 +108,10 @@ public enum DyldSharedCacheMISTrustAuthPatcher {
     /// own log strings rather than from any symbol table.
     public static let function = "checkTrustAndAuthorization"
 
-    /// Record identity. `dyld-cfw-mis_trust_auth` is the declaration prefix.
-    public static let patchID = "dyld-cfw-mis_trust_auth.force_success"
+    /// Record identity. `dyld-exp-mis_trust_auth` is the declaration prefix —
+    /// `exp` because `standard` leaves this off, which is what the naming rule
+    /// in `Skills/authoring-patch-sets/SKILL.md` requires.
+    public static let patchID = "dyld-exp-mis_trust_auth.force_success"
 
     /// The literal that names the function. Matched with its NUL so the tail of
     /// a longer string cannot stand in for it.
