@@ -295,6 +295,12 @@ struct VPhoneLaunchpadMachinesView: View {
             // Only for an unfinished install: that is when the restore tree it
             // reads is still there. A finished one removes it.
             .disabled(!isStopped || machine.customFirmwareInstalled != false)
+            // The finished-install counterpart: redeploys the active bundle's
+            // guest resources without the restore tree.
+            Button("Update Guest Environment") {
+                Task { await library.updateGuestEnvironment(machine.path) }
+            }
+            .disabled(!isStopped || machine.restoreInfo == nil || machine.customFirmwareInstalled == false)
             Divider()
             Button("Show in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([machine.path.url])

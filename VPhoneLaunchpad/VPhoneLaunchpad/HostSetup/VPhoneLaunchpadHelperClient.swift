@@ -277,6 +277,37 @@ final class VPhoneLaunchpadHelperClient {
         }
     }
 
+    /// Runs `cfw update-environment` as root: redeploys the active bundle's
+    /// guest resources into a stopped machine. Output lines go to `onLine`.
+    func updateGuestEnvironment(
+        bundleVersion: String,
+        machineName: String,
+        libraryRoot: String,
+        onLine: @escaping @Sendable (String) -> Void,
+    ) async throws -> Int32 {
+        let authorization = try await authorizationSession.externalForm()
+        receiver.setHandler(onLine)
+        defer { receiver.setHandler(nil) }
+        return try await withTaskCancellationHandler {
+            try await request { proxy, done in
+                proxy.updateGuestEnvironment(
+                    authorization: authorization,
+                    bundleVersion: bundleVersion,
+                    machineName: machineName,
+                    libraryRoot: libraryRoot,
+                ) { status, message in
+                    if let message {
+                        done(.failure(VPhoneLaunchpadError(message)))
+                    } else {
+                        done(.success(status))
+                    }
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in self.cancelCustomFirmware() }
+        }
+    }
+
     /// Never prompts. The helper stops only an install this user started.
     func cancelCustomFirmware() {
         let proxy = currentConnection().remoteObjectProxy as? VPhoneLaunchpadHelperProtocol

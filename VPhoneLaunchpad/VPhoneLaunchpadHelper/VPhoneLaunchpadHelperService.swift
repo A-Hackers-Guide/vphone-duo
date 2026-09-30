@@ -81,6 +81,44 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
         keepArtifacts: Bool,
         reply: @escaping @Sendable (Int32, String?) -> Void,
     ) {
+        runFirmware(
+            .install(keepArtifacts: keepArtifacts),
+            authorization: authorization,
+            bundleVersion: bundleVersion,
+            machineName: machineName,
+            libraryRoot: libraryRoot,
+            reply: reply,
+        )
+    }
+
+    func updateGuestEnvironment(
+        authorization: Data,
+        bundleVersion: String,
+        machineName: String,
+        libraryRoot: String,
+        reply: @escaping @Sendable (Int32, String?) -> Void,
+    ) {
+        runFirmware(
+            .updateEnvironment,
+            authorization: authorization,
+            bundleVersion: bundleVersion,
+            machineName: machineName,
+            libraryRoot: libraryRoot,
+            reply: reply,
+        )
+    }
+
+    /// Both operations share one slot, so an install and an environment
+    /// update never write the same machine at once, and one cancel stops
+    /// either.
+    private func runFirmware(
+        _ operation: VPhoneLaunchpadHelperFirmwareRequest.Operation,
+        authorization: Data,
+        bundleVersion: String,
+        machineName: String,
+        libraryRoot: String,
+        reply: @escaping @Sendable (Int32, String?) -> Void,
+    ) {
         let callerUID = callerUID
         let callerGID = callerGID
         DispatchQueue.global(qos: .userInitiated).async { [self] in
@@ -88,10 +126,10 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
             do {
                 try VPhoneLaunchpadHelperAuthorization.require(authorization)
                 request = try VPhoneLaunchpadHelperFirmwareRequest(
+                    operation: operation,
                     bundleVersion: bundleVersion,
                     machineName: machineName,
                     libraryRoot: libraryRoot,
-                    keepArtifacts: keepArtifacts,
                     callerUID: callerUID,
                     callerGID: callerGID,
                 )
@@ -113,7 +151,7 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
             Self.firmwareLock.lock()
             guard Self.firmwareProcess == nil else {
                 Self.firmwareLock.unlock()
-                reply(-1, "Another CFW install is in progress. Wait for it to finish, then try again.")
+                reply(-1, "Another CFW install or environment update is in progress. Wait for it to finish, then try again.")
                 return
             }
             Self.firmwareProcess = process

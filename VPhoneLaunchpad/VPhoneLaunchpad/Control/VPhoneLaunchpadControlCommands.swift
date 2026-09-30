@@ -57,6 +57,7 @@ struct VPhoneLaunchpadControlCommands {
         case "vm.log": return try await log(request)
         case "vm.create": return try await create(request, emit: emit)
         case "cfw.install": return try await installCustomFirmware(request, emit: emit)
+        case "cfw.update-environment": return try await updateGuestEnvironment(request, emit: emit)
         case "guest.send": return try await sendToGuest(request)
         case "guest.rpc": return try await callGuest(request)
         case "exec": return try await exec(request, emit: emit)
@@ -580,6 +581,26 @@ struct VPhoneLaunchpadControlCommands {
         )
         guard status == 0 else {
             throw VPhoneLaunchpadError("Unable to install custom firmware. Check the log for details.")
+        }
+        return ["name": machine.name, "bundle": version, "status": status]
+    }
+
+    private func updateGuestEnvironment(_ request: VPhoneLaunchpadControlRequest, emit: @escaping Emit) async throws -> Any {
+        let machine = try await machine(request)
+        guard let version = bundles.activeVersion else {
+            throw VPhoneLaunchpadError("No Core Bundle version is in use.")
+        }
+        guard library.state(of: machine) == .stopped else {
+            throw VPhoneLaunchpadError("Stop \(machine.name) before updating its guest environment.")
+        }
+        let status = try await model.helper.updateGuestEnvironment(
+            bundleVersion: version,
+            machineName: machine.name,
+            libraryRoot: machine.libraryRoot,
+            onLine: emit,
+        )
+        guard status == 0 else {
+            throw VPhoneLaunchpadError("Unable to update the guest environment. Check the log for details.")
         }
         return ["name": machine.name, "bundle": version, "status": status]
     }

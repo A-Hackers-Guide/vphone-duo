@@ -364,6 +364,41 @@ final class VPhoneLaunchpadMachineLibrary {
         await refresh()
     }
 
+    /// Redeploys the active bundle's guest resources (vphoned and the hook
+    /// dylibs) into a stopped machine through the helper, and nothing else.
+    /// This is how a machine created by an older bundle gets newer hooks,
+    /// since its restore tree is gone after the first boot.
+    func updateGuestEnvironment(_ machine: Path) async {
+        guard let version = bundles.activeVersion else {
+            actionError = VPhoneLaunchpadError(String(localized: "No Core Bundle version is in use. Choose a version in Core Bundle."))
+            return
+        }
+        activities[machine] = String(localized: "Updating guest environment…")
+        defer { activities[machine] = nil }
+        appendConsoleLog(machine, "$ vphone-cli cfw update-environment \(machine.name)")
+        let log = Self.consoleLog(machine)
+        do {
+            let status = try await helper.updateGuestEnvironment(
+                bundleVersion: version,
+                machineName: machine.name,
+                libraryRoot: machine.libraryRoot,
+                onLine: { line in Self.append(line, to: log) },
+            )
+            if status != 0 {
+                actionError = VPhoneLaunchpadError(
+                    String(localized: "Unable to update the guest environment."),
+                    detail: String(localized: "Choose Show Console Log for the full output."),
+                )
+            }
+        } catch {
+            if !(error is CancellationError) {
+                actionError = error as? VPhoneLaunchpadError
+                    ?? VPhoneLaunchpadError(String(localized: "Unable to update the guest environment."), detail: error.localizedDescription)
+            }
+        }
+        await refresh()
+    }
+
     func stop(_ machine: Path) async {
         await perform(String(localized: "Stopping…"), on: machine, ["vm", "stop", machine.name] + machine.libraryArguments)
         launched[machine]?.interrupt()

@@ -1,20 +1,28 @@
 import Darwin
 import Foundation
 
-/// A validated `vphone-cli cfw install` invocation. Built only from a store
-/// bundle whose cdhash still matches its receipt, and only for a VM directory
-/// the calling user owns.
+/// A validated `vphone-cli cfw install` or `cfw update-environment`
+/// invocation. Built only from a store bundle whose cdhash still matches its
+/// receipt, and only for a VM directory the calling user owns.
 struct VPhoneLaunchpadHelperFirmwareRequest {
+    enum Operation {
+        /// The full install, which needs the prepared restore tree.
+        case install(keepArtifacts: Bool)
+        /// Redeploys the bundle's guest resources into a stopped machine and
+        /// nothing else.
+        case updateEnvironment
+    }
+
     let executable: URL
     let arguments: [String]
     let environment: [String: String]
     let workingDirectory: URL
 
     init(
+        operation: Operation,
         bundleVersion: String,
         machineName: String,
         libraryRoot: String,
-        keepArtifacts: Bool,
         callerUID: uid_t,
         callerGID: gid_t,
     ) throws {
@@ -45,9 +53,15 @@ struct VPhoneLaunchpadHelperFirmwareRequest {
         let userName = String(cString: account.pointee.pw_name)
         let home = String(cString: account.pointee.pw_dir)
 
-        var arguments = ["cfw", "install", machineName, "--library-root", libraryRoot]
-        if keepArtifacts {
-            arguments.append("--keep-artifacts")
+        var arguments: [String]
+        switch operation {
+        case let .install(keepArtifacts):
+            arguments = ["cfw", "install", machineName, "--library-root", libraryRoot]
+            if keepArtifacts {
+                arguments.append("--keep-artifacts")
+            }
+        case .updateEnvironment:
+            arguments = ["cfw", "update-environment", machineName, "--library-root", libraryRoot]
         }
 
         self.executable = executable

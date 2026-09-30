@@ -6399,6 +6399,33 @@
         }
       }
     },
+    "Update Guest Environment" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Update Guest Environment" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲスト環境を更新" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트 환경 업데이트" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cập nhật môi trường máy khách" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新客户机环境" } }
+      }
+    },
+    "Updating guest environment…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Updating guest environment…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲスト環境を更新中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트 환경 업데이트 중…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang cập nhật môi trường máy khách…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在更新客户机环境…" } }
+      }
+    },
+    "Unable to update the guest environment." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to update the guest environment." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲスト環境を更新できません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트 환경을 업데이트할 수 없습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không thể cập nhật môi trường máy khách." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法更新客户机环境。" } }
+      }
+    },
     "Install Custom Firmware" : {
       "localizations" : {
         "en" : {

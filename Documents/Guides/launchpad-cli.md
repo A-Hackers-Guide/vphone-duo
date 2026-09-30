@@ -60,6 +60,7 @@ expires asks for an administrator password on the Mac, as the window does.
 | `vm wait <name>` / `vm log <name> [--kind create\|dfu\|patch]` | Wait for vphoned; read a console log |
 | `vm create <name> [...] [--from <step>]` | The New Machine pipeline; `--from` retries from a step |
 | `cfw install <name>` | Install CFW into a stopped machine through the helper |
+| `cfw update-environment <name>` | Redeploy the active bundle's guest resources (vphoned, hook dylibs) into a stopped machine through the helper; nothing else changes |
 | `guest send <name> <json>` | One raw `vphone.sock` request (tap, swipe, key, screenshot) |
 | `guest rpc <name> <method> [params]` | Any vphoned method, see `Research/vphoned_http_api.md` |
 | `exec <vphone-cli arguments>` | Run the active bundle's `vphone-cli`, streaming its output |

@@ -171,6 +171,8 @@ nonisolated struct VPhoneLaunchpadControlCommand: Sendable {
 
         Self(name: "cfw.install", arguments: ["name"], options: ["root"], flags: ["keep-artifacts"],
              summary: "Install CFW into a stopped machine through the root helper."),
+        Self(name: "cfw.update-environment", arguments: ["name"], options: ["root"], flags: [],
+             summary: "Redeploy the active bundle's guest resources (vphoned and hook dylibs) into a stopped machine, and nothing else."),
 
         Self(name: "guest.send", arguments: ["name", "json"], options: ["root"], flags: [],
              summary: "Send one raw vphone.sock request, such as {\"t\":\"tap\",\"x\":645,\"y\":1398}."),
