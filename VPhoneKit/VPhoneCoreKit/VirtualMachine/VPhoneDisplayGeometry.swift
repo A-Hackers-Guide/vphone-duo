@@ -49,13 +49,20 @@ public struct VPhoneDisplayGeometry: Equatable, Sendable {
 
     /// A view point as a 0...1 display position with y down. Points on the
     /// letterbox bars clamp to the nearest display edge.
-    public func normalizedPoint(_ point: CGPoint) -> CGPoint {
+    ///
+    /// `clamped: false` keeps a point that falls outside the display outside it,
+    /// so the result may leave 0...1. A trackpad scroll replayed as a touch
+    /// needs that: the guest stops following a finger once it is pinned to the
+    /// edge, so a long swipe has to carry coordinates past it.
+    public func normalizedPoint(_ point: CGPoint, clamped: Bool = true) -> CGPoint {
         guard displayRect.width > 0, displayRect.height > 0 else { return .zero }
         let x = (point.x - displayRect.minX) / displayRect.width
         let y = (point.y - displayRect.minY) / displayRect.height
+        let down = isFlipped ? y : 1 - y
+        guard clamped else { return CGPoint(x: x, y: down) }
         return CGPoint(
             x: min(1, max(0, x)),
-            y: min(1, max(0, isFlipped ? y : 1 - y)),
+            y: min(1, max(0, down)),
         )
     }
 

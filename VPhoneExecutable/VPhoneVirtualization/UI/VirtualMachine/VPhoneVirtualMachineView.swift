@@ -800,13 +800,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     /// reaches the edge the guest stops receiving new positions, so a long
     /// swipe could not keep scrolling.
     private func normalizeCoordinate(_ localPoint: NSPoint, allowOutside: Bool = false) -> CGPoint {
-        let geometry = displayGeometry
-        guard allowOutside else { return geometry.normalizedPoint(localPoint) }
-        let rect = geometry.displayRect
-        guard rect.width > 0, rect.height > 0 else { return .zero }
-        let x = (localPoint.x - rect.minX) / rect.width
-        let y = (localPoint.y - rect.minY) / rect.height
-        return CGPoint(x: x, y: geometry.isFlipped ? y : 1 - y)
+        displayGeometry.normalizedPoint(localPoint, clamped: !allowOutside)
     }
 
     private func hitTestEdge(at point: CGPoint) -> Int {

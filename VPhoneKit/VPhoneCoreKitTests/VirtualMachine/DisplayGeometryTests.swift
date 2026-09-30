@@ -65,6 +65,15 @@ struct DisplayGeometryTests {
         #expect(Self.close(geometry.normalizedPoint(CGPoint(x: 1500, y: 491)), CGPoint(x: 1, y: 0.5)))
     }
 
+    @Test func `unclamped normalizing keeps a point off the display outside 0 and 1`() {
+        let geometry = Self.geometry(Self.fullScreen)
+        let rect = geometry.displayRect
+        let left = geometry.normalizedPoint(CGPoint(x: rect.minX - rect.width, y: rect.midY), clamped: false)
+        #expect(abs(left.x + 1) < 1e-6 && abs(left.y - 0.5) < 1e-6)
+        let below = geometry.normalizedPoint(CGPoint(x: rect.midX, y: rect.minY - rect.height), clamped: false)
+        #expect(abs(below.x - 0.5) < 1e-6 && abs(below.y - 2) < 1e-6)
+    }
+
     @Test func `a flipped view keeps y down`() {
         let geometry = Self.geometry(Self.fullScreen, flipped: true)
         let rect = geometry.displayRect

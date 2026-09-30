@@ -261,6 +261,12 @@ enum GuestAPI {
             guard let phase = (params["phase"] as? String).flatMap(TouchPhase.init(rawValue:)) else {
                 throw GuestAPIError.invalidRequest("phase must be down, move or up")
             }
+            // `vp_hid_touch2` takes normalized coordinates only. `input.touch`
+            // also accepts screen points, so refuse the flag here rather than
+            // read points as fractions and put both fingers in the corner.
+            guard params["normalized"] as? Bool ?? true else {
+                throw GuestAPIError.invalidRequest("touch2 coordinates are normalized 0..1 only")
+            }
             vp_hid_touch2(
                 touchPhaseCode(phase),
                 number(params, "x1"), number(params, "y1"),
