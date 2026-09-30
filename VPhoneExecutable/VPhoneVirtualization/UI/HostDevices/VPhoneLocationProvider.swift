@@ -3,10 +3,12 @@ import Foundation
 
 /// Forwards the host Mac's location to the guest VM via vsock.
 ///
-/// Uses macOS CoreLocation to track the Mac's real location and forwards
-/// every update to the guest.  Call `startForwarding()` when the guest
-/// reports "location" capability.  Safe to call multiple times (e.g.
-/// after vphoned reconnects) - re-sends the last known position.
+/// locationd never answers a client inside VPhone.bundle, so the Mac's
+/// location comes from `Contents/Helpers/VPhoneLocation.app`: it asks for
+/// permission and writes one JSON line per update, which this class forwards
+/// to the guest.  Call `startForwarding()` when the guest reports "location"
+/// capability.  Safe to call multiple times (e.g. after vphoned reconnects) -
+/// re-sends the last known position.
 @MainActor
 class VPhoneLocationProvider: NSObject {
     struct ReplayPoint {
@@ -40,9 +42,10 @@ class VPhoneLocationProvider: NSObject {
     private let control: VPhoneGuestControl
     private var hostModeStarted = false
 
-    private var locationManager: CLLocationManager?
-    private var delegateProxy: LocationDelegateProxy?
-    private var lastHostLocation: CLLocation?
+    private var helper: Process?
+    private var helperInput: Pipe?
+    private var helperReader: Task<Void, Never>?
+    private var lastHostLocation: HostLocation?
     private var replayTask: Task<Void, Never>?
     private var replayName: String?
     var onAuthorizationFailure: (() -> Void)?
@@ -54,50 +57,109 @@ class VPhoneLocationProvider: NSObject {
     init(control: VPhoneGuestControl) {
         self.control = control
         super.init()
-
-        let proxy = LocationDelegateProxy(
-            locationHandler: { [weak self] location in
-                Task { @MainActor in self?.forward(location) }
-            },
-            authorizationHandler: { [weak self] status in
-                Task { @MainActor in self?.handleAuthorization(status) }
-            },
-        )
-        delegateProxy = proxy
-        let mgr = CLLocationManager()
-        mgr.delegate = proxy
-        mgr.desiredAccuracy = kCLLocationAccuracyBest
-        locationManager = mgr
-        print("[location] host location forwarding ready")
     }
 
     /// Begin sending location to the guest.  Safe to call on every (re)connect.
     func startForwarding() {
         stopReplay()
-        guard let mgr = locationManager else { return }
         hostModeStarted = true
-        mgr.requestWhenInUseAuthorization()
-        handleAuthorization(mgr.authorizationStatus)
-        print("[location] started host location tracking")
+        if let last = lastHostLocation, abs(last.date.timeIntervalSinceNow) < 60 {
+            forward(last)
+        }
+        guard helper == nil else { return }
+        do {
+            try launchHelper()
+            print("[location] started host location tracking")
+        } catch {
+            print("[location] cannot start VPhoneLocation.app: \(error.localizedDescription)")
+            hostModeStarted = false
+            onAuthorizationFailure?()
+        }
     }
 
     /// Stop forwarding host location updates.
     func stopForwarding() {
         if hostModeStarted {
-            locationManager?.stopUpdatingLocation()
             hostModeStarted = false
+            stopHelper()
             print("[location] stopped host location tracking")
         }
     }
 
+    // MARK: - Location Helper
+
+    private static var helperURL: URL {
+        let executable = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0]))
+            .resolvingSymlinksInPath()
+        return executable
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Helpers/VPhoneLocation.app/Contents/MacOS/vphone-location")
+    }
+
+    private func launchHelper() throws {
+        let process = Process()
+        process.executableURL = Self.helperURL
+        // The helper exits when this pipe closes, including when vphone-vm dies.
+        let input = Pipe()
+        let output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        process.terminationHandler = { [weak self] process in
+            let status = process.terminationStatus
+            Task { @MainActor in self?.helperDidExit(process, status: status) }
+        }
+        try process.run()
+        helper = process
+        helperInput = input
+        helperReader = Task { @MainActor [weak self] in
+            do {
+                for try await line in output.fileHandleForReading.bytes.lines {
+                    self?.handleHelperLine(line)
+                }
+            } catch {
+                print("[location] VPhoneLocation.app output failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func stopHelper() {
+        helperReader?.cancel()
+        helperReader = nil
+        try? helperInput?.fileHandleForWriting.close()
+        helperInput = nil
+        helper?.terminate()
+        helper = nil
+    }
+
+    private func helperDidExit(_ process: Process, status: Int32) {
+        guard helper === process else { return }
+        print("[location] VPhoneLocation.app exited with status \(status)")
+        helper = nil
+        helperInput = nil
+        helperReader = nil
+        stopForwarding()
+    }
+
+    private func handleHelperLine(_ line: String) {
+        guard let message = try? JSONDecoder().decode(HelperMessage.self, from: Data(line.utf8)) else {
+            print("[location] unreadable VPhoneLocation.app output: \(line)")
+            return
+        }
+        if let rawStatus = message.authorization {
+            handleAuthorization(CLAuthorizationStatus(rawValue: rawStatus) ?? .notDetermined)
+        }
+        if let location = message.location {
+            let c = String(format: "%.6f,%.6f", location.latitude, location.longitude)
+            print("[location] got location: \(c) (+/-\(String(format: "%.0f", location.horizontalAccuracy))m)")
+            forward(location)
+        }
+    }
+
     private func handleAuthorization(_ status: CLAuthorizationStatus) {
+        print("[location] authorization status: \(status.rawValue)")
         guard hostModeStarted else { return }
         switch status {
-        case .authorized, .authorizedAlways:
-            locationManager?.startUpdatingLocation()
-            if let last = lastHostLocation, abs(last.timestamp.timeIntervalSinceNow) < 60 {
-                forward(last)
-            }
         case .denied, .restricted:
             stopForwarding()
             onAuthorizationFailure?()
@@ -193,7 +255,7 @@ class VPhoneLocationProvider: NSObject {
         replayName = nil
     }
 
-    private func forward(_ location: CLLocation) {
+    private func forward(_ location: HostLocation) {
         lastHostLocation = location
         guard hostModeStarted else { return }
         guard control.isConnected else {
@@ -201,8 +263,8 @@ class VPhoneLocationProvider: NSObject {
             return
         }
         control.sendLocation(
-            latitude: location.coordinate.latitude,
-            longitude: location.coordinate.longitude,
+            latitude: location.latitude,
+            longitude: location.longitude,
             altitude: location.altitude,
             horizontalAccuracy: location.horizontalAccuracy,
             verticalAccuracy: location.verticalAccuracy,
@@ -237,42 +299,43 @@ class VPhoneLocationProvider: NSObject {
     }
 }
 
-// MARK: - CLLocationManagerDelegate Proxy
+// MARK: - Location Helper Messages
 
-/// Separate object to avoid @MainActor vs nonisolated delegate conflicts.
-private class LocationDelegateProxy: NSObject, CLLocationManagerDelegate {
-    let locationHandler: (CLLocation) -> Void
-    let authorizationHandler: (CLAuthorizationStatus) -> Void
+/// One fix from VPhoneLocation.app.
+private struct HostLocation {
+    let latitude: Double
+    let longitude: Double
+    let altitude: Double
+    let horizontalAccuracy: Double
+    let verticalAccuracy: Double
+    let speed: Double
+    let course: Double
+    let date: Date
+}
 
-    init(
-        locationHandler: @escaping (CLLocation) -> Void,
-        authorizationHandler: @escaping (CLAuthorizationStatus) -> Void,
-    ) {
-        self.locationHandler = locationHandler
-        self.authorizationHandler = authorizationHandler
-    }
+/// One line of VPhoneLocation.app output: an authorization status or a fix.
+private struct HelperMessage: Decodable {
+    let authorization: Int32?
+    let latitude: Double?
+    let longitude: Double?
+    let altitude: Double?
+    let horizontalAccuracy: Double?
+    let verticalAccuracy: Double?
+    let speed: Double?
+    let course: Double?
+    let timestamp: Double?
 
-    func locationManager(_: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last else { return }
-        let c = location.coordinate
-        print(
-            "[location] got location: \(String(format: "%.6f,%.6f", c.latitude, c.longitude)) (+/-\(String(format: "%.0f", location.horizontalAccuracy))m)",
+    var location: HostLocation? {
+        guard let latitude, let longitude else { return nil }
+        return HostLocation(
+            latitude: latitude,
+            longitude: longitude,
+            altitude: altitude ?? 0,
+            horizontalAccuracy: horizontalAccuracy ?? -1,
+            verticalAccuracy: verticalAccuracy ?? -1,
+            speed: speed ?? -1,
+            course: course ?? -1,
+            date: timestamp.map(Date.init(timeIntervalSince1970:)) ?? Date(),
         )
-        locationHandler(location)
-    }
-
-    func locationManager(_: CLLocationManager, didFailWithError error: any Error) {
-        let clErr = (error as NSError).code
-        // kCLErrorLocationUnknown (0) = transient, just waiting for fix
-        if clErr == 0 {
-            return
-        }
-        print("[location] CLLocationManager error: \(error.localizedDescription) (code \(clErr))")
-    }
-
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        let status = manager.authorizationStatus
-        print("[location] authorization status: \(status.rawValue)")
-        authorizationHandler(status)
     }
 }

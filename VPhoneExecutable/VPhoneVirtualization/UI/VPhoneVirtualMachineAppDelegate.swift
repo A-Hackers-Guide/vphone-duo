@@ -174,8 +174,10 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 provider.onAuthorizationFailure = { [weak mc] in
                     mc?.locationMenuItem?.state = .off
                     let alert = NSAlert()
-                    alert.messageText = "Host Location Unavailable"
-                    alert.informativeText = "Allow location access for vphone in System Settings to sync the Mac's location."
+                    alert.messageText = VPhoneLocalization.text("Host Location Unavailable")
+                    alert.informativeText = VPhoneLocalization.text(
+                        "Allow VPhone to use your location in System Settings > Privacy & Security > Location Services to sync the Mac's location.",
+                    )
                     alert.runModal()
                 }
             }

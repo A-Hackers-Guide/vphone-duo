@@ -66,6 +66,18 @@ has supplied a coordinate or that the guest accepted one. This does not
 explain preset failure, which also reproduces through the HTTP API and
 `devicectl`.
 
+**Cause and fix (2026-09-30).** locationd never answers a client whose
+executable sits in a generic bundle. From `VPhone.bundle/Contents/MacOS`,
+`requestWhenInUseAuthorization` neither prompts nor changes the status, and the
+usage descriptions in the bundle's Info.plist are never read. A probe showed the
+same for every `.bundle` layout (BNDL, APPL, with or without
+`CFBundleExecutable`, with an embedded `__info_plist`); only an executable
+inside an `.app`, or a bare one outside any bundle, was prompted. vphone-vm now
+starts `Contents/Helpers/VPhoneLocation.app` (`vphone-location`, an
+`LSUIElement` app) when Sync Host Location is on. The helper asks for
+permission with its own localized InfoPlist.strings and writes one JSON line
+per authorization change or fix; it exits when vphone-vm closes its stdin.
+
 ## Application-level workaround (2026-09-25)
 
 `libvlocation.dylib` is loaded by SystemHook into newly launched apps. It

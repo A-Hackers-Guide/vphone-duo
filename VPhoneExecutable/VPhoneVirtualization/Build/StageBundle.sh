@@ -13,6 +13,7 @@ frameworks="$bundle/Contents/Frameworks"
 # Host programs run from Contents/MacOS. Everything installed into the guest
 # lives in guest-resources and never runs on the Mac.
 guest="$resources/guest-resources"
+location_app="$bundle/Contents/Helpers/VPhoneLocation.app"
 
 # Xcode exports the bundle target's SDK and package paths to build phases. Nested
 # xcodebuild must resolve each project's own graph, especially the iOS daemon.
@@ -82,11 +83,21 @@ fi
     "$resources/patches_presets/"
 
 "${0:a:h}/SyncStrings.sh"
-for catalog in Localizable InfoPlist; do
-    /usr/bin/xcrun xcstringstool compile \
-        "$root/VPhoneExecutable/VPhoneVirtualization/Resources/$catalog.xcstrings" \
-        --output-directory "$resources"
-done
+/usr/bin/xcrun xcstringstool compile \
+    "$root/VPhoneExecutable/VPhoneVirtualization/Resources/Localizable.xcstrings" \
+    --output-directory "$resources"
+
+# locationd ignores a client inside a generic bundle, so vphone-vm reads the
+# host location through this app. Its InfoPlist.strings translate the
+# location prompt.
+/bin/rm -rf "$location_app"
+/bin/mkdir -p "$location_app/Contents/MacOS" "$location_app/Contents/Resources"
+/bin/cp "$root/VPhoneExecutable/VPhoneVirtualization/Resources/VPhoneLocation.Info.plist" \
+    "$location_app/Contents/Info.plist"
+/bin/cp "$TARGET_BUILD_DIR/vphone-location" "$location_app/Contents/MacOS/vphone-location"
+/usr/bin/xcrun xcstringstool compile \
+    "$root/VPhoneExecutable/VPhoneVirtualization/Resources/InfoPlist.xcstrings" \
+    --output-directory "$location_app/Contents/Resources"
 
 # vphone-vm needs Swift's span back-deployment library on macOS 15. Xcode's
 # generic bundle has no main executable. Use a private load name for the VM child.
@@ -104,6 +115,7 @@ compatibility_library="$(/usr/bin/xcrun swift-stdlib-tool --print \
 /usr/bin/codesign --force --sign - "$macos/vphone-escalator"
 /usr/bin/codesign --force --sign - "$macos/libswiftCompatibilitySpan.vphone.dylib"
 /usr/bin/codesign --force --sign - --entitlements "$root/VPhoneExecutable/VPhoneVirtualization/Resources/VPhoneVirtualization.entitlements" "$macos/vphone-vm"
+/usr/bin/codesign --force --sign - "$location_app"
 /usr/bin/codesign --force --sign - "$bundle"
 
 "${0:a:h}/ValidateBundle.sh" "$bundle"

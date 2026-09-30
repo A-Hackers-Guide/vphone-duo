@@ -8,6 +8,8 @@ macos="$bundle/Contents/MacOS"
 resources="$bundle/Contents/Resources"
 frameworks="$bundle/Contents/Frameworks"
 guest="$resources/guest-resources"
+location_app="$bundle/Contents/Helpers/VPhoneLocation.app"
+location_helper="$location_app/Contents/MacOS/vphone-location"
 
 file_copy_spawns="$(/usr/bin/find "$root/VPhoneExecutable" "$root/VPhoneKit" \
     "$root/VPhoneDaemon" "$root/VPhoneGuestComponents" \
@@ -38,6 +40,21 @@ for name in vphone-vm vphone-cli vphone-escalator libswiftCompatibilitySpan.vpho
     require_signed_macho "$macos/$name"
 done
 require_signed_macho "$frameworks/VPhonePatchKit.framework/Versions/A/VPhonePatchKit"
+require_signed_macho "$location_helper"
+/usr/bin/codesign --verify --strict "$location_app"
+# locationd answers only a client inside an .app, and prompts with its usage
+# description in the user's language.
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$location_app/Contents/Info.plist")" == "APPL" ]] || {
+    print -u2 "VPhoneLocation.app is not an application bundle"
+    exit 1
+}
+for language in en zh-Hans ja ko vi; do
+    strings="$location_app/Contents/Resources/$language.lproj/InfoPlist.strings"
+    /usr/libexec/PlistBuddy -c 'Print :NSLocationWhenInUseUsageDescription' "$strings" >/dev/null 2>&1 || {
+        print -u2 "Missing location prompt text in VPhoneLocation.app: $language"
+        exit 1
+    }
+done
 # The patch API ships its interface so an out-of-tree patch set can build against
 # the same framework the bundle loads.
 [[ -d "$frameworks/VPhonePatchKit.framework/Versions/A/Modules/VPhonePatchKit.swiftmodule" ]] || {
@@ -92,6 +109,9 @@ while IFS= read -r file; do
         "$macos/"*)
             [[ "$platform" != IOS ]] || { print -u2 "iOS binary in Contents/MacOS: ${file#$bundle/}"; exit 1; }
             ;;
+        "$location_helper")
+            [[ "$platform" != IOS ]] || { print -u2 "iOS binary in VPhoneLocation.app"; exit 1; }
+            ;;
         "$frameworks/"*)
             [[ "$platform" != IOS ]] || { print -u2 "iOS binary in Contents/Frameworks: ${file#$bundle/}"; exit 1; }
             ;;
@@ -99,7 +119,7 @@ while IFS= read -r file; do
             [[ "$platform" == IOS ]] || { print -u2 "Non-iOS binary in guest-resources: ${file#$bundle/}"; exit 1; }
             ;;
         *)
-            print -u2 "Mach-O outside Contents/MacOS, Contents/Frameworks and guest-resources: ${file#$bundle/}"
+            print -u2 "Mach-O outside Contents/MacOS, Contents/Frameworks, VPhoneLocation.app and guest-resources: ${file#$bundle/}"
             exit 1
             ;;
     esac
@@ -124,7 +144,7 @@ daemon_entitlements="$(/usr/bin/codesign -d --entitlements - --xml "$guest/vphon
     print -u2 "vphoned has the wrong entitlements"
     exit 1
 }
-for name in vphone-cli vphone-escalator; do
+for name in vphone-cli vphone-escalator ../Helpers/VPhoneLocation.app/Contents/MacOS/vphone-location; do
     process_entitlements="$(/usr/bin/codesign -d --entitlements - --xml "$macos/$name" 2>/dev/null || true)"
     [[ "$process_entitlements" != *'com.apple.private.virtualization'* &&
         "$process_entitlements" != *'com.apple.CommCenter.fine-grained'* ]] || {
@@ -133,7 +153,7 @@ for name in vphone-cli vphone-escalator; do
     }
 done
 
-for name in vphone-vm vphone-cli vphone-escalator; do
+for name in vphone-vm vphone-cli vphone-escalator ../Helpers/VPhoneLocation.app/Contents/MacOS/vphone-location; do
     /usr/bin/otool -L "$macos/$name" | /usr/bin/awk 'NR > 1 {print $1}' |
     while IFS= read -r dependency; do
         case "$dependency" in

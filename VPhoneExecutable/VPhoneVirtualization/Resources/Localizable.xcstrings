@@ -1949,6 +1949,40 @@
         }
       }
     },
+    "Allow VPhone to use your location in System Settings > Privacy & Security > Location Services to sync the Mac's location." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow VPhone to use your location in System Settings > Privacy & Security > Location Services to sync the Mac's location."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac の位置情報を同期するには、システム設定 > プライバシーとセキュリティ > 位置情報サービスで VPhone を許可してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 위치를 동기화하려면 시스템 설정 > 개인정보 보호 및 보안 > 위치 서비스에서 VPhone을 허용하십시오."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Để đồng bộ vị trí của máy Mac, hãy cho phép VPhone trong Cài đặt hệ thống > Quyền riêng tư & Bảo mật > Dịch vụ định vị."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要同步 Mac 的位置，请在“系统设置”>“隐私与安全性”>“定位服务”中允许 VPhone。"
+          }
+        }
+      }
+    },
     "Allow Network" : {
 
     },
@@ -10775,6 +10809,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "主屏幕"
+          }
+        }
+      }
+    },
+    "Host Location Unavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Host Location Unavailable"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ホストの位置情報を取得できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "호스트 위치를 사용할 수 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không lấy được vị trí máy chủ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法获取主机位置"
           }
         }
       }
