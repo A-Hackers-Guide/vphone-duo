@@ -45,6 +45,34 @@ static int vpIsInjectionTarget(const char *path) {
            (vpInBootstrap && path[0] != '/');
 }
 
+static int vpPathHasSuffix(const char *path, const char *suffix) {
+    size_t length = path ? strlen(path) : 0;
+    size_t want = strlen(suffix);
+    return length >= want && strcmp(path + length - want, suffix) == 0;
+}
+
+// The processes that evaluate a code signature or a provisioning profile, and
+// so the ones that have to agree about what device this is and what signatures
+// are acceptable. Everything else spawns without libmisfix.
+//
+//   installd   runs `+[MICodeSigningVerifier
+//              _validateSignatureAndCopyInfoForURL:withOptions:error:]`, which
+//              is in MobileInstallation and calls libmis. This is the install.
+//   misagent   installs the embedded profile and checks ProvisionedDevices.
+//   SpringBoard asks MIS again at launch, which is the half neither daemon
+//              covers: an app signed with a free personal-team certificate
+//              could be installed and then refused at launch with 0xE8008026.
+//
+// Matched on the end of the path so a bootstrap or cryptex copy of the same
+// binary is caught too.
+static int vpIsMISFixTarget(const char *path) {
+    if (!path)
+        return 0;
+    return vpPathHasSuffix(path, "/usr/libexec/installd") ||
+           vpPathHasSuffix(path, "/usr/libexec/misagent") ||
+           vpPathHasSuffix(path, "/SpringBoard.app/SpringBoard");
+}
+
 static int vpOpenLog(const char *name) {
     char path[PATH_MAX];
     int used = snprintf(path, sizeof(path), "/var/mobile/Library/Caches/%s", name);
@@ -90,12 +118,14 @@ static void vpPrepareLoaderLink(const char *path) {
 // then skips ElleKit. Only bootstrap, app and camera targets are logged and
 // get their loader links prepared.
 static VPInjectionEnvironment vpPrepareChild(const char *path, char *const envp[], const char *kind) {
-    VPInjectionEnvironment injected = vpInsertHook(envp, getenv("VPHONE_JB_ROOT"));
-    if (vpIsInjectionTarget(path)) {
+    const int misFix = vpIsMISFixTarget(path);
+    VPInjectionEnvironment injected =
+        vpInsertHooks(envp, getenv("VPHONE_JB_ROOT"), misFix ? VP_MIS_FIX : NULL);
+    if (vpIsInjectionTarget(path) || misFix) {
         vpPrepareLoaderLink(path);
-        char decision[64];
-        snprintf(decision, sizeof(decision), "%s%s%s", kind, !injected.values ? "unchanged" : "inserted",
-                 vpInjectionDisabled(envp) ? "-tweaks-disabled" : "");
+        char decision[80];
+        snprintf(decision, sizeof(decision), "%s%s%s%s", kind, !injected.values ? "unchanged" : "inserted",
+                 misFix ? "+misfix" : "", vpInjectionDisabled(envp) ? "-tweaks-disabled" : "");
         vpLogSpawn(path, decision);
     }
     return injected;
