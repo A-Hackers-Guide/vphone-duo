@@ -40,20 +40,38 @@
 // ad-hoc signature does not have and never will, because the whole point of
 // ad-hoc is that nobody signed it.
 //
-// Measured on test-26.4 (2026-09-30) with a `codesign --sign -` bundle:
-// `MISValidateSignature(…/SignTest.app) -> 0x0`, and the install still failed,
-// here, at line 424 with `LibMISErrorNumber = -402620415`.
+// `MICodeSigningVerifier` already knows what to do about that. It carries
+// `allowAdhocSigning` as a settable property, exactly like the MIS option, and
+// installd never turns it on. Forcing the getter is the whole fix, and it is
+// the class's own idea of the answer rather than an override of a decision it
+// made: with it on, the real `performValidationWithError:` succeeds and fills
+// `signingInfo` for real.
 //
-// There is nothing to widen and nothing to supply. The decision itself is what
-// has to change, and this is the decision the guest is entitled to make
-// differently: it runs unsigned code on purpose. So validation is allowed to
-// fail and the install proceeds. Everything the verifier *could* determine has
-// already been determined by the time it gets to the signer — the real
-// implementation runs first, and fails late.
+// That matters, and the alternative is what proved it. Forcing
+// `performValidationWithError:` to return `YES` after it failed got no further
+// — the verifier had bailed before storing anything, so its caller read a nil
+// signing identifier and refused with
+//
+//     -[MIExecutableBundle codeSigningInfoByValidatingResources:…]: 1306:
+//         Code signing identifier ((null)) does not match bundle identifier (…)
+//
+// A refusal can be allowed through; an answer that was never computed cannot
+// be invented. Only the first of those is done here.
+//
+// Measured on test-26.4 (2026-09-30): a `codesign --sign -` bundle with no
+// certificate and no provisioning profile installs through
+// `devicectl device install app` and launches.
+//
+// What is *not* covered, deliberately: a bundle with no signature at all
+// still fails with `0xE800801C`, and an app missing the
+// `application-identifier` entitlement still fails. Both are real absences
+// rather than policy, and everything downstream needs what they are missing.
+// Unsigned bundles reach the guest through vphoned's `apps.install`, which
+// re-signs in the container and never involves installd.
 //
 // ## Why a swizzle and not a detour
 //
-// Both are Objective-C methods in MobileInstallation, and an Objective-C
+// These are Objective-C methods in MobileInstallation, and an Objective-C
 // method list is *data*. Replacing an implementation through the runtime
 // reaches every caller, in the shared cache or out of it, without making a
 // single page of cache text writable. Where that is available it is strictly
@@ -69,6 +87,7 @@
 #include <dlfcn.h>
 #include <objc/objc.h>
 #include <objc/runtime.h>
+#include <stdlib.h>
 
 /// MobileInstallation's install name, for the case where a class is not
 /// registered yet. Our constructor runs among the inserted libraries, ahead of
@@ -78,20 +97,40 @@
 #define kMISFixMobileInstallationPath \
     "/System/Library/PrivateFrameworks/MobileInstallation.framework/MobileInstallation"
 
-/// The shape both hooks have: a `BOOL`-returning method whose only argument is
-/// an `NSError **` out-parameter.
+/// A `BOOL`-returning method whose only argument is an `NSError **`
+/// out-parameter. Two of the three hooks have this shape.
 typedef BOOL (*MISFixCheckIMP)(id self, SEL selector, void *error);
 
-/// Replace `class`'s `-selector` with `replacement`, keeping the original.
+/// Print a class's own methods and ivars.
 ///
-/// Returns zero and logs when there is no such class or method, which is the
-/// expected outcome on an OS version that renamed one.
-static int vpSwizzle(
-    const char *className,
-    const char *selectorName,
-    MISFixCheckIMP replacement,
-    MISFixCheckIMP *original
-) {
+/// Called only when a selector this file expects has gone, which is the one
+/// moment the list is worth its few hundred lines: it says what the method was
+/// renamed to, on the guest, without disassembling the shared cache. The
+/// runtime knows, and asking it is cheaper and more honest.
+static void vpDescribeClass(Class found, const char *className) {
+    unsigned count = 0;
+    Method *methods = class_copyMethodList(found, &count);
+    for (unsigned index = 0; index < count; index += 1)
+        MISFixNote("  -[%s %s]", className, sel_getName(method_getName(methods[index])));
+    free(methods);
+
+    count = 0;
+    Ivar *ivars = class_copyIvarList(found, &count);
+    for (unsigned index = 0; index < count; index += 1) {
+        const char *encoding = ivar_getTypeEncoding(ivars[index]);
+        MISFixNote("  %s ivar %s : %s", className, ivar_getName(ivars[index]),
+                   encoding != NULL ? encoding : "?");
+    }
+    free(ivars);
+}
+
+/// Replace `className`'s `-selectorName` with `replacement` and return the
+/// implementation it had, or NULL.
+///
+/// NULL and a line in the log is the expected outcome on an OS version that
+/// renamed the method, and every caller is written so that means "this hook is
+/// inert" rather than anything worse.
+static IMP vpSwizzle(const char *className, const char *selectorName, IMP replacement) {
     Class found = objc_getClass(className);
     if (found == NULL) {
         if (dlopen(kMISFixMobileInstallationPath, RTLD_LAZY) != NULL)
@@ -99,16 +138,17 @@ static int vpSwizzle(
     }
     if (found == NULL) {
         MISFixNote("%s is not in this process", className);
-        return 0;
+        return NULL;
     }
     Method method = class_getInstanceMethod(found, sel_registerName(selectorName));
     if (method == NULL) {
-        MISFixNote("%s has no -%s", className, selectorName);
-        return 0;
+        MISFixNote("%s has no -%s; its interface follows", className, selectorName);
+        vpDescribeClass(found, className);
+        return NULL;
     }
-    *original = (MISFixCheckIMP)method_setImplementation(method, (IMP)replacement);
+    IMP original = method_setImplementation(method, replacement);
     MISFixNote("swizzled -[%s %s]", className, selectorName);
-    return 1;
+    return original;
 }
 
 /// Clear an `NSError **` the failing implementation wrote.
@@ -135,27 +175,24 @@ static BOOL vpInstallEmbeddedProfiles(id self, SEL selector, void *error) {
 
 // MARK: - The signer identity
 
-static MISFixCheckIMP vpOriginalPerformValidation;
-
-static BOOL vpPerformValidation(id self, SEL selector, void *error) {
-    if (vpOriginalPerformValidation(self, selector, error))
-        return YES;
-    vpClearError(error);
-    MISFixNote("code-signing validation refused; installing anyway");
+/// The verifier's own switch for an ad-hoc signature, forced on.
+///
+/// `MICodeSigningVerifier` carries `allowAdhocSigning` as a settable property
+/// and installd leaves it off, which is the same shape as the MIS option:
+/// the capability is there and nothing asks for it. Turning it on in the
+/// getter is the smallest possible change and it is the code's own idea of
+/// what to do, not an override of a decision it made.
+static BOOL vpAllowAdhocSigning(id self, SEL selector) {
+    (void)self;
+    (void)selector;
     return YES;
 }
 
 __attribute__((constructor)) static void vpInstallPolicyHooks(void) {
-    vpSwizzle(
+    vpOriginalInstallProfiles = (MISFixCheckIMP)vpSwizzle(
         "MIInstallableBundle",
         "_installEmbeddedProfilesWithError:",
-        &vpInstallEmbeddedProfiles,
-        &vpOriginalInstallProfiles
+        (IMP)&vpInstallEmbeddedProfiles
     );
-    vpSwizzle(
-        "MICodeSigningVerifier",
-        "performValidationWithError:",
-        &vpPerformValidation,
-        &vpOriginalPerformValidation
-    );
+    vpSwizzle("MICodeSigningVerifier", "allowAdhocSigning", (IMP)&vpAllowAdhocSigning);
 }

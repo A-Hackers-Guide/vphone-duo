@@ -1851,8 +1851,9 @@ App installed:
 • installationURL: file:///private/var/containers/Bundle/Application/9A626C1C-…/AirBuild.app/
 ```
 
-and it launches. Four separate refusals had to go, in this order, and each one
-was only visible once the one before it was gone.
+and it launches. So does a `codesign --sign -` bundle with no certificate and
+no profile at all. Four separate refusals had to go, in this order, and each
+one was only visible once the one before it was gone.
 
 1. **The interpose never ran.** Replaced by `MISFixDetour`: a four-word
    absolute jump at the top of the callee, the displaced instructions
@@ -1895,32 +1896,47 @@ was only visible once the one before it was gone.
    logged and turned into "there is no profile" rather than a failed install.
 
 4. **`-[MICodeSigningVerifier performValidationWithError:]`, line 424, "Failed
-   to extract signer identity".** The gate behind the gate. MIS accepts the
-   bundle and MobileInstallation then wants a CMS leaf certificate out of it.
-   Same treatment: run the real implementation, allow its refusal.
+   to extract signer identity".** The gate behind the gate, and the one that
+   stops an ad-hoc signature: MIS accepts the bundle and MobileInstallation
+   then wants a CMS leaf certificate out of it, which `codesign --sign -`
+   does not produce.
+
+   The verifier already knows what to do. It carries `allowAdhocSigning` as a
+   settable property — the same shape as the MIS option — and installd never
+   turns it on, so `MISFixInstallPolicy.c` forces the getter. The real
+   validation then succeeds and fills `signingInfo` for real.
 
 Both Objective-C hooks are swizzles, not detours. A method list is data, so
 replacing an implementation reaches every caller without making any cache text
 writable; where that is available it is strictly better.
 
-### Still refused: an ad-hoc signature
+### The dead end that proved the shape of the fix
 
-`codesign --sign -` is accepted by MIS (`-> 0x0`, with a real `CdHash` and
-`SigningID`) and still fails the install:
+Before `allowAdhocSigning` was found, `performValidationWithError:` was forced
+to return `YES` after it had failed. That got no further:
 
 ```
 -[MIExecutableBundle codeSigningInfoByValidatingResources:…]: 1306:
     Code signing identifier ((null)) does not match bundle identifier (wiki.qaq.vphone.signtest)
 ```
 
-The identifier is null because `performValidationWithError:` bailed at the
-signer before storing anything, and allowing its *return value* through does
-not populate the verifier's outputs. An ad-hoc bundle has no signer and never
-will, so this one needs a different answer than "let the refusal through" —
-either the verifier's outputs supplied directly, or the caller of
-`codeSigningInfoByValidatingResources:` answered instead. Unsigned and
-ad-hoc bundles still install through vphoned's `apps.install`, which does not
-involve installd at all.
+The verifier had bailed before storing anything, so its caller read a nil
+signing identifier. A refusal can be allowed through; an answer that was never
+computed cannot be invented. The override was removed once the property made
+it unnecessary, and the rule generalises to every gate above MIS.
+
+The class's interface came from the runtime, not from a disassembly:
+`class_copyMethodList` and `class_copyIvarList` printed into the note log.
+`MISFixInstallPolicy.c` still does that, but only when a selector it expects
+has gone, which is the one moment the list earns its few hundred lines.
+
+### Still refused, deliberately
+
+A bundle with no signature at all (`0xE800801C`) and an app with no
+`application-identifier` entitlement (`MIInstallerErrorDomain` 63). Both are
+real absences rather than policy, and everything downstream needs what they
+are missing. Unsigned bundles reach the guest through vphoned's
+`apps.install`, which re-signs in the container and never involves installd.
 
 ### A trap in the measurement, not in the guest
 

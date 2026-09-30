@@ -138,9 +138,10 @@ public enum FirmwareGuestSystemPatchSet {
                 install fails at 0xE8008014 or 0xE8008015 even though the guest runs \
                 unsigned code perfectly well. A hook in /usr/lib/libmisfix.dylib, loaded \
                 into installd, sets the options MIS already understands, answers \
-                ProvisionsAllDevices for every profile, and lets MobileInstallation's own \
-                refusals through. Nothing in the dyld shared cache is written on disk: the \
-                two libmis functions are detoured in installd's own copy-on-write pages.
+                ProvisionsAllDevices for every profile, and turns on the ad-hoc switch \
+                MICodeSigningVerifier carries and installd never sets. Nothing in the dyld \
+                shared cache is written on disk: the libmis functions are detoured in \
+                installd's own copy-on-write pages.
                 """,
                 target: .guestExecutable(path: "/usr/libexec/installd"),
             ),
