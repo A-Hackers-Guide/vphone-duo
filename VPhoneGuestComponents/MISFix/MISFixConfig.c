@@ -65,15 +65,34 @@ static CFPropertyListRef vpCopyConfigurationPlist(const char *path) {
     return plist;
 }
 
-static void vpReload(const char *path) {
+static void vpForget(void) {
     if (gDeviceIdentifier != NULL) {
         CFRelease(gDeviceIdentifier);
         gDeviceIdentifier = NULL;
     }
+    gPath = NULL;
+    gStamp.tv_sec = 0;
+    gStamp.tv_nsec = 0;
+    gSize = 0;
+    gLoaded = 1;
+}
 
+/// Read `path` and adopt it as the live configuration. Returns 0 when the file
+/// could not be read or parsed, in which case nothing was adopted and the
+/// caller should try the next candidate.
+///
+/// A file that parses but sets no `UniqueDeviceID` still counts as adopted: an
+/// explicitly present, valid, empty configuration means "no override", not
+/// "keep looking".
+static int vpAdopt(const char *path, const struct stat *info) {
     CFPropertyListRef plist = vpCopyConfigurationPlist(path);
     if (plist == NULL)
-        return;
+        return 0;
+
+    if (gDeviceIdentifier != NULL) {
+        CFRelease(gDeviceIdentifier);
+        gDeviceIdentifier = NULL;
+    }
 
     CFTypeRef value = CFDictionaryGetValue((CFDictionaryRef)plist, CFSTR("UniqueDeviceID"));
     if (value != NULL && CFGetTypeID(value) == CFStringGetTypeID()
@@ -82,45 +101,46 @@ static void vpReload(const char *path) {
         gDeviceIdentifier = CFStringCreateCopy(kCFAllocatorDefault, (CFStringRef)value);
     }
     CFRelease(plist);
+
+    gPath = path;
+    gStamp = info->st_mtimespec;
+    gSize = info->st_size;
+    gLoaded = 1;
+    return 1;
 }
 
 CFStringRef MISFixCopyConfiguredDeviceIdentifier(void) {
-    const char *path = NULL;
+    // Fast path: the file chosen last time, still there and unchanged. This is
+    // the common case — misagent asks once per profile, installd once per
+    // bundle — and it costs one `stat`.
     struct stat info;
-    for (size_t index = 0; index < kConfigPathCount; index += 1) {
-        if (stat(kConfigPaths[index], &info) == 0) {
-            path = kConfigPaths[index];
-            break;
-        }
-    }
-
-    if (path == NULL) {
-        // Neither file is there. Forget anything cached from before one was
-        // removed, so deleting the plist turns the override off.
-        if (gDeviceIdentifier != NULL) {
-            CFRelease(gDeviceIdentifier);
-            gDeviceIdentifier = NULL;
-        }
-        gLoaded = 1;
-        gPath = NULL;
-        gStamp.tv_sec = 0;
-        gStamp.tv_nsec = 0;
-        gSize = 0;
-        return NULL;
-    }
-
-    int unchanged = gLoaded
-        && gPath == path
+    if (gLoaded && gPath != NULL && stat(gPath, &info) == 0
         && info.st_mtimespec.tv_sec == gStamp.tv_sec
         && info.st_mtimespec.tv_nsec == gStamp.tv_nsec
-        && info.st_size == gSize;
-    if (unchanged)
+        && info.st_size == gSize)
+    {
         return gDeviceIdentifier;
+    }
 
-    gPath = path;
-    gStamp = info.st_mtimespec;
-    gSize = info.st_size;
-    gLoaded = 1;
-    vpReload(path);
-    return gDeviceIdentifier;
+    // Otherwise pick again: the first candidate that is there *and* reads.
+    //
+    // Selecting on `stat` alone was wrong, and quietly so. The /usr/lib copy is
+    // documented as the fallback "if a daemon's sandbox turns out not to reach
+    // /var/db", but a sandbox that allows metadata and denies read leaves
+    // `stat` succeeding and the open failing. That picked /var/db, read
+    // nothing, and reported no override — the one result indistinguishable from
+    // the hook working and finding nothing configured. A file that is there but
+    // unreadable now falls through to the next candidate instead.
+    for (size_t index = 0; index < kConfigPathCount; index += 1) {
+        struct stat candidate;
+        if (stat(kConfigPaths[index], &candidate) != 0)
+            continue;
+        if (vpAdopt(kConfigPaths[index], &candidate))
+            return gDeviceIdentifier;
+    }
+
+    // Nothing readable anywhere. Forget whatever was cached, so removing the
+    // plist turns the override off.
+    vpForget();
+    return NULL;
 }
