@@ -116,20 +116,29 @@ static void vpDescribeRegion(vm_address_t address) {
 /// processes have mapped. With it, the request is "give me my own copy of
 /// these pages, writable", which is what a detour needs and what leaves every
 /// other process on the system untouched.
-/// Execute is asked for alongside write, not traded against it.
+/// Write, without execute. Measured, both ways round, and this is the way that
+/// works.
 ///
-/// Dropping it is what killed the first run: a page that loses `VM_PROT_EXECUTE`
-/// faults on the next instruction fetched from it, and on a page holding live
-/// code that is immediate. A detour has the same problem for a different
-/// reason — another thread may be inside the function being rewritten — so
-/// RWX is what it would ask for too, and this measures the thing that matters.
+/// Asking for RWX succeeds at the VM layer — the region comes back `prot=7`,
+/// `max=7` — and then the store still faults:
+///
+///     EXC_BAD_ACCESS (SIGBUS), UNKNOWN_0x32 at 0x1027543dc
+///     __TEXT 102754000-102758000 [16K] rwx/rwx SM=COW /usr/lib/libmisfix.dylib
+///
+/// Apple silicon enforces write-xor-execute in hardware below the VM
+/// permissions, so a page that is writable *and* executable is writable only
+/// to a thread that has said so. Dropping execute for the duration is the
+/// simpler answer and the one a detour can use, because the page it rewrites
+/// is not the page it is running from — that was the first run's mistake, and
+/// the two failures look identical from outside, which is why both are
+/// written down here.
 static kern_return_t vpMakeWritable(vm_address_t address, vm_size_t length) {
     return vm_protect(
         mach_task_self(),
         address,
         length,
         FALSE,
-        VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE | VM_PROT_COPY
+        VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY
     );
 }
 
@@ -160,10 +169,10 @@ static void vpProbeWriteAt(const char *what, const uint8_t *function) {
 
     kern_return_t opened = vpMakeWritable(start, page);
     if (opened != KERN_SUCCESS) {
-        MISFixNote("probe: %s vm_protect(rwx|copy) failed: %s", what, mach_error_string(opened));
+        MISFixNote("probe: %s vm_protect(rw|copy) failed: %s", what, mach_error_string(opened));
         return;
     }
-    MISFixNote("probe: %s vm_protect(rwx|copy) succeeded", what);
+    MISFixNote("probe: %s vm_protect(rw|copy) succeeded, writing", what);
     vpDescribeRegion(start);
 
     // The same bytes, written back. Nothing about this process's behaviour
@@ -195,17 +204,19 @@ static const uint32_t kProbeThunk[] = { 0x52800540u, 0xD65F03C0u };
 /// trampoline is memory this process fills in and then jumps to, which on iOS
 /// is exactly what codesigning is there to prevent.
 ///
-/// Both spellings are tried, because they fail for different reasons and the
-/// fallback decides the design. `PROT_EXEC` straight from `mmap` is the simple
-/// one; write-then-`mprotect` is what a process without dynamic-codesigning
-/// has to do, and it is the one that usually still works.
+/// Both spellings are tried, write-then-`mprotect` first. That order is not
+/// arbitrary: a page that is writable *and* executable at once is subject to
+/// the same hardware write-xor-execute rule that made the cache write fault
+/// with `SIGBUS` above, so the RWX spelling is the one expected to fail and it
+/// goes second.
 ///
 /// This step is last, and deliberately. It is the only part of the probe that
 /// can take the process down — running a page the kernel has not blessed is a
 /// kill, not an error return — so everything else is already in the log by the
 /// time it runs.
 static void vpProbeExecutableMemory(void) {
-    for (int writeThenProtect = 0; writeThenProtect < 2; writeThenProtect += 1) {
+    for (int rwxAtOnce = 0; rwxAtOnce < 2; rwxAtOnce += 1) {
+        int writeThenProtect = !rwxAtOnce;
         const char *how = writeThenProtect ? "rw then mprotect r-x" : "rwx from mmap";
         int protection = writeThenProtect ? (PROT_READ | PROT_WRITE)
                                           : (PROT_READ | PROT_WRITE | PROT_EXEC);
@@ -267,16 +278,13 @@ __attribute__((constructor)) static void vpProbeCacheWrite(void) {
     if (!vpProbeIsPermittedProcess())
         return;
 
-    // This dylib's own text first. It is private, file-backed and already
-    // carries write in its maximum protection, so it is the easy case — and if
-    // it fails, nothing further is worth reading. It is also a candidate home
-    // for trampolines, which is why it is measured rather than assumed.
-    // Stripped, like every other code address here: on arm64e the address of
-    // a function is a signed pointer, and the VM calls want the plain one.
-    vpProbeWriteAt(
-        "own-text",
-        ptrauth_strip((const void *)&vpProbeWriteAt, ptrauth_key_function_pointer)
-    );
+    // This dylib's own text was measured here too, as a warm-up, and it is
+    // gone: it is the one page that must never lose execute, because the probe
+    // is running from it, and with execute kept the store faults under the
+    // hardware's write-xor-execute rule. Both spellings crash, for opposite
+    // reasons, and neither says anything about the page a detour targets. What
+    // it did establish before crashing is worth keeping: copy-on-write works,
+    // and the page came back `prot=7 max=7` as its own region.
 
     // RTLD_NOLOAD, because the answer is only interesting for an image already
     // mapped from the cache, and a handle-scoped dlsym is not interposed.
