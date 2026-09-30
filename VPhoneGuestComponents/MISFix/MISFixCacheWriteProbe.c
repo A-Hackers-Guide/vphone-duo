@@ -49,10 +49,13 @@
 // `vm_*` entry points in `mach/vm_map.h` instead. On arm64 they take the same
 // 64-bit addresses and sizes; only the names differ.
 #include <dlfcn.h>
+#include <errno.h>
+#include <libkern/OSCacheControl.h>
 #include <mach/mach.h>
 #include <ptrauth.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/mman.h>
 
 /// The symbol the probe stands on. Exported by libMobileGestalt, in the shared
 /// cache, and the one a real detour would go on first.
@@ -139,9 +142,120 @@ static kern_return_t vpRestore(vm_address_t address, vm_size_t length) {
     );
 }
 
+/// Write back the four bytes already at `function`, and say whether they stuck.
+///
+/// Shared by both write steps, because "can this page be rewritten" is the
+/// same question for the cache and for this dylib's own text, and the answer
+/// may well differ.
+static void vpProbeWriteAt(const char *what, const uint8_t *function) {
+    // Page alignment, because protection is a per-page property and asking
+    // about four bytes would silently widen to the page anyway.
+    vm_size_t page = vm_page_size;
+    vm_address_t start = (vm_address_t)(uintptr_t)function & ~(vm_address_t)(page - 1);
+    vpDescribeRegion(start);
+
+    uint8_t before[kProbeLength];
+    memcpy(before, function, sizeof(before));
+
+    kern_return_t opened = vpMakeWritable(start, page);
+    if (opened != KERN_SUCCESS) {
+        MISFixNote("probe: %s vm_protect(rwx|copy) failed: %s", what, mach_error_string(opened));
+        return;
+    }
+    MISFixNote("probe: %s vm_protect(rwx|copy) succeeded", what);
+    vpDescribeRegion(start);
+
+    // The same bytes, written back. Nothing about this process's behaviour
+    // changes whether it lands or not; only whether it lands is interesting.
+    memcpy((void *)(uintptr_t)function, before, sizeof(before));
+
+    uint8_t after[kProbeLength];
+    memcpy(after, function, sizeof(after));
+    int identical = memcmp(before, after, sizeof(before)) == 0;
+
+    kern_return_t closed = vpRestore(start, page);
+    MISFixNote(
+        "probe: %s wrote %u bytes, readback %s, restore r-x %s",
+        what,
+        kProbeLength,
+        identical ? "matches" : "DIFFERS",
+        closed == KERN_SUCCESS ? "ok" : mach_error_string(closed)
+    );
+}
+
+/// `mov w0, #42 ; ret`, for the executable-memory step.
+static const uint32_t kProbeThunk[] = { 0x52800540u, 0xD65F03C0u };
+#define kProbeThunkAnswer 42
+
+/// Can this process get memory it wrote and then run it?
+///
+/// The other half of what a detour needs. Rewriting the top of a function
+/// costs nothing if the displaced instructions have nowhere to live: a
+/// trampoline is memory this process fills in and then jumps to, which on iOS
+/// is exactly what codesigning is there to prevent.
+///
+/// Both spellings are tried, because they fail for different reasons and the
+/// fallback decides the design. `PROT_EXEC` straight from `mmap` is the simple
+/// one; write-then-`mprotect` is what a process without dynamic-codesigning
+/// has to do, and it is the one that usually still works.
+///
+/// This step is last, and deliberately. It is the only part of the probe that
+/// can take the process down — running a page the kernel has not blessed is a
+/// kill, not an error return — so everything else is already in the log by the
+/// time it runs.
+static void vpProbeExecutableMemory(void) {
+    for (int writeThenProtect = 0; writeThenProtect < 2; writeThenProtect += 1) {
+        const char *how = writeThenProtect ? "rw then mprotect r-x" : "rwx from mmap";
+        int protection = writeThenProtect ? (PROT_READ | PROT_WRITE)
+                                          : (PROT_READ | PROT_WRITE | PROT_EXEC);
+        void *page = mmap(NULL, vm_page_size, protection, MAP_PRIVATE | MAP_ANON, -1, 0);
+        if (page == MAP_FAILED) {
+            MISFixNote("probe: mmap %s failed: %s", how, strerror(errno));
+            continue;
+        }
+        memcpy(page, kProbeThunk, sizeof(kProbeThunk));
+        if (writeThenProtect && mprotect(page, vm_page_size, PROT_READ | PROT_EXEC) != 0) {
+            MISFixNote("probe: mprotect r-x failed: %s", strerror(errno));
+            munmap(page, vm_page_size);
+            continue;
+        }
+        sys_icache_invalidate(page, sizeof(kProbeThunk));
+        MISFixNote("probe: %s mapped at %p, calling it", how, page);
+
+        // Signed for the indirect call arm64e requires. If the kernel refuses
+        // the page, this line does not return and the log above is the record.
+        int (*thunk)(void) = ptrauth_sign_unauthenticated(
+            (int (*)(void))page,
+            ptrauth_key_function_pointer,
+            0
+        );
+        int answer = thunk();
+        munmap(page, vm_page_size);
+        MISFixNote(
+            "probe: %s returned %d (%s)",
+            how,
+            answer,
+            answer == kProbeThunkAnswer ? "usable" : "WRONG"
+        );
+        if (answer == kProbeThunkAnswer)
+            return;
+    }
+}
+
 __attribute__((constructor)) static void vpProbeCacheWrite(void) {
     if (!MISFixConfiguredFlag(kMISFixProbeCacheWriteKey))
         return;
+
+    // This dylib's own text first. It is private, file-backed and already
+    // carries write in its maximum protection, so it is the easy case — and if
+    // it fails, nothing further is worth reading. It is also a candidate home
+    // for trampolines, which is why it is measured rather than assumed.
+    // Stripped, like every other code address here: on arm64e the address of
+    // a function is a signed pointer, and the VM calls want the plain one.
+    vpProbeWriteAt(
+        "own-text",
+        ptrauth_strip((const void *)&vpProbeWriteAt, ptrauth_key_function_pointer)
+    );
 
     // RTLD_NOLOAD, because the answer is only interesting for an image already
     // mapped from the cache, and a handle-scoped dlsym is not interposed.
@@ -165,7 +279,8 @@ __attribute__((constructor)) static void vpProbeCacheWrite(void) {
     // Last line of defence against the first run's mistake. Whatever the
     // resolution did, refuse to touch a page this dylib's own code is on.
     Dl_info self;
-    if (dladdr((const void *)(uintptr_t)&vpProbeCacheWrite, &self) != 0
+    if (dladdr(ptrauth_strip((const void *)&vpProbeCacheWrite, ptrauth_key_function_pointer),
+               &self) != 0
         && self.dli_fbase != NULL)
     {
         Dl_info target;
@@ -175,38 +290,8 @@ __attribute__((constructor)) static void vpProbeCacheWrite(void) {
         }
     }
 
-    // Page alignment, because protection is a per-page property and asking
-    // about four bytes would silently widen to the page anyway.
-    vm_size_t page = vm_page_size;
-    vm_address_t start = (vm_address_t)(uintptr_t)function & ~(vm_address_t)(page - 1);
-    vpDescribeRegion(start);
+    vpProbeWriteAt("cache-text", function);
 
-    uint8_t before[kProbeLength];
-    memcpy(before, function, sizeof(before));
-
-    kern_return_t opened = vpMakeWritable(start, page);
-    if (opened != KERN_SUCCESS) {
-        MISFixNote("probe: vm_protect(rwx|copy) failed: %s — a detour is not possible here",
-                   mach_error_string(opened));
-        return;
-    }
-    MISFixNote("probe: vm_protect(rwx|copy) succeeded");
-    vpDescribeRegion(start);
-
-    // The same bytes, written back. Nothing about this process's behaviour
-    // changes whether it lands or not; only whether it lands is interesting.
-    memcpy((void *)(uintptr_t)function, before, sizeof(before));
-
-    uint8_t after[kProbeLength];
-    memcpy(after, function, sizeof(after));
-    int identical = memcmp(before, after, sizeof(before)) == 0;
-
-    kern_return_t closed = vpRestore(start, page);
-    MISFixNote(
-        "probe: wrote %u bytes, readback %s, restore r-x %s — a detour %s possible here",
-        kProbeLength,
-        identical ? "matches" : "DIFFERS",
-        closed == KERN_SUCCESS ? "ok" : mach_error_string(closed),
-        identical && closed == KERN_SUCCESS ? "is" : "may not be"
-    );
+    vpProbeExecutableMemory();
+    MISFixNote("probe: done");
 }
