@@ -1651,13 +1651,62 @@ and lockdown-mode patchers. So this is **not** the already-patched-anchor case
 fixed earlier the same day for 26.x — 24A435's `checkTrustAndAuthorization`
 genuinely matches neither shape `locateSite` accepts.
 
-**Why the answer is not to teach the patcher the new shape.** Even when it
-applies, this patch stops an iOS 27 guest booting (issue #532: `TXM [Error]:
-Errno: selector: 45 | 78` → `dyld[1]: Library not loaded:
+**And the message was wrong.** MIS has *not* been rewritten. Measured on the
+pristine 24A435 SystemOS cryptex (`043-70113-702.dmg.aea`, decrypted with
+`fw aea-key` + `/usr/bin/aea` and mounted read-only; `cfw patch-mis-trust-auth
+--dry-run` against it reproduces the failure verbatim, same VMA):
+
+| | 26.6.2 | 24A435 |
+|---|---|---|
+| function | `0x1BC6AE364` | `0x22406F814` |
+| seed | `mov w21, #0x8026 ; movk w21, #0xe800, lsl #16` @ `+0x4C` | `mov w23, #0x8001 ; movk w23, #0xe800, lsl #16` @ `+0x34` |
+| reaches `0xE8008026` | seeded directly, **subtracts** down (`sub w21, w21, #0x2` → `…8024`) | **adds** up, `add w26, w23, #0x25` @ `+0x124` |
+| return register | `w21` (the seeded one) | `w26` (derived) |
+
+A whole-image decode of `libmis` (94,984 instructions, `0x224060000`–`0x2240BCC23`)
+finds **zero** mov-family instructions with immediate `0x8026` and **zero** raw
+`0xE8008026` words: on 24A435 the constant is never written literally at all.
+Everything else is as the patcher expects — the naming literal at `0x2240BCC23`
+occurs once, has exactly one adrp+add reference (`0x22406FB1C`) and that
+reference is inside the function; the nearest preceding `pacibsp` is the
+function start itself, and the instruction before it is an unconditional `b`.
+So the location routes were right and only `findSeededError` missed.
+
+`findSeededError` now accepts both, and the two are not interchangeable. The
+`0x8026` low half stands on its own. The `0x8001` low half is only the bottom of
+the MIS error range and proves nothing by itself, so it is accepted only when
+the same function also contains an `add w<result>, w<seed>, #imm` that
+arithmetically equals `0xE8008026`; the scan stops at the next function's
+`pacibsp`. That corroboration is not decoration: the function *preceding*
+`checkTrustAndAuthorization` on 24A435 carries the identical
+`mov w8, #0x8001 ; movk w8, #0xe800` idiom 18 instructions earlier, which is
+also why the seed window stays forward-only from the function start. Matching is
+on Capstone-decoded immediates and registers throughout, and nothing new is
+written, so no new encoder and no keystone trip.
+
+**A version gate went on the declaration with it.** `experimental` is
+`Kind = All`, so without one it would still turn this patch on for a 27 guest
+and produce an unbootable VM — and after the matcher fix it would now succeed in
+doing so. `applicability` is `iOSBase: .oneOf([.major(18), .major(26)])`. That
+is not a preference (a preference belongs in a preset's block list, and
+`standard` blocks it too) but the statement `applicability` exists for: applying
+it on 27 breaks the guest. An unreadable base satisfies only `.any`, so an
+unknown release skips the patch, which is the safe direction.
+
+**Why teaching the patcher the new shape is not, by itself, the answer.** Even
+when it applies, this patch stops an iOS 27 guest booting (issue #532:
+`TXM [Error]: Errno: selector: 45 | 78` → `dyld[1]: Library not loaded:
 /usr/lib/libSystem.B.dylib … (no such file, no dyld cache)` → `initproc failed
-to start`). Making it apply on 24A435 would convert a failed install into a
-guest that installs and then does not boot. The hard failure is doing a useful
-job: it is stopping a patch that should not be running on 27 at all.
+to start`). Making it apply on 24A435 without also taking it out of `standard`
+would have converted a failed install into a guest that installs and then does
+not boot. Both were done, in that order.
+
+**VERIFIED (2026-09-30):** with the patch out of `standard`, `cfw install
+test-27.0` completes, and `iPhone17,3_27.0_24A435` + cloudOS `26.4-23E5207q`
+**boots clean** — `panicked: false`, vphoned answering 6s after launch,
+SpringBoard running (pid 36), `apps.list` returning 264 apps. **Issue #532 is
+closed**, and its cause is confirmed to have been this patch rather than
+anything else in the 27 install.
 
 **What replaced it.** `libmisfix.dylib` already reaches the same outcome from
 userspace, and by the better route — it steers the call rather than forging the

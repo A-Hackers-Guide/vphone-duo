@@ -17,6 +17,22 @@ public enum FirmwareGuestSystemPatchSet {
 
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
 
+    /// The bases where short-circuiting `checkTrustAndAuthorization` in the
+    /// shared cache is survivable.
+    ///
+    /// Not a preference — a preference belongs in a preset's block list, and
+    /// `standard` blocks this one too. This is the harder statement: on iOS 27 the
+    /// patch stops the guest booting. TXM rejects the re-attested page, dyld
+    /// cannot map `libSystem.B.dylib`, and `initproc failed to start`
+    /// (issue #532). Without the gate, `experimental` — which is `Kind = All` —
+    /// would hand a 27 user an unbootable VM.
+    ///
+    /// An unreadable base satisfies only `.any`, so an unknown release skips the
+    /// patch. That is the safe direction here.
+    private static let misTrustAuthBases = VPhonePatchApplicability(
+        iOSBase: .oneOf([.major(18), .major(26)]),
+    )
+
     public static let manifest = VPhonePatchSetManifest(
         identifier: identifier,
         name: "Guest System",
@@ -68,9 +84,11 @@ public enum FirmwareGuestSystemPatchSet {
                 same check from userspace in installd and misagent, and editing the cache for it \
                 stops an iOS 27 guest booting. Turn it on only on a 26.x base, and only to launch \
                 an app signed with a free personal-team certificate — that launch goes through \
-                SpringBoard, which the hook does not cover.
+                SpringBoard, which the hook does not cover. Not offered on iOS 27, where it stops \
+                the guest booting.
                 """,
                 target: .dyldSharedCache,
+                applicability: misTrustAuthBases,
             ),
 
             // MARK: System Daemons

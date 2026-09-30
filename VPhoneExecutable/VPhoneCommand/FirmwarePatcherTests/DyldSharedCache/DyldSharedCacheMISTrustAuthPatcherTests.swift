@@ -71,6 +71,10 @@ private enum MISFixture {
         /// `functionVMA + 4`, the 27.0 shape from issue #532: the two words
         /// this patch overwrites *are* the seed.
         case inTheWordsWeOverwrite
+        /// The 24A435 shape: the prologue seeds the *base* `0xE8008001` and the
+        /// function adds its way up to `0xE8008026`, which is never written as a
+        /// literal anywhere in that image.
+        case derivedFromBase
     }
 
     /// What to put in the function when the point of the test is that neither
@@ -79,6 +83,9 @@ private enum MISFixture {
         case none
         /// Prologue present, seed absent, and not this patch's output either.
         case seedRemoved
+        /// The 24A435 base seed present but nothing deriving `0xE8008026` from
+        /// it, so `0xE8008001` could be any MIS error and proves nothing.
+        case derivationRemoved
     }
 
     /// `movk w<rd>, #<imm16>, lsl #<shift>`.
@@ -104,6 +111,36 @@ private enum MISFixture {
             + movkW(rd: 21, imm16: 0xE800, shift: 16)
     }
 
+    /// The 24A435 seed, `mov w23, #0x8001 ; movk w23, #0xe800, lsl #16`.
+    static var baseSeed: Data {
+        (ARM64Encoder.encodeMovzW(rd: 23, imm16: 0x8001, shift: 0) ?? Data())
+            + movkW(rd: 23, imm16: 0xE800, shift: 16)
+    }
+
+    /// `add w<rd>, w<rn>, #<imm12>`.
+    ///
+    /// Derived from `ARM64Encoder.encodeAddImm12`, the same way ``movkW(rd:imm16:shift:)``
+    /// is derived from `encodeMovzW`: ADD (immediate) 32-bit and 64-bit differ
+    /// only in `sf`, bit 31, so clearing it turns the X form into the W form.
+    /// `A derived 32-bit add word disassembles as a w-register add` asserts that
+    /// against Capstone rather than trusting it. Fixture input only — nothing the
+    /// patcher writes comes from here.
+    static func addWImm(rd: UInt32, rn: UInt32, imm12: UInt32) -> Data {
+        guard let addX = ARM64Encoder.encodeAddImm12(rd: rd, rn: rn, imm12: imm12) else {
+            return Data()
+        }
+        let word = addX.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
+        return withUnsafeBytes(of: (UInt32(littleEndian: word) & ~UInt32(0x8000_0000)).littleEndian) {
+            Data($0)
+        }
+    }
+
+    /// `add w26, w23, #0x25` — the instruction that makes `0xE8008001` into
+    /// `0xE8008026`, and the only reason the base seed can be trusted.
+    static var derivation: Data {
+        addWImm(rd: 26, rn: 23, imm12: 0x25)
+    }
+
     /// The stand-in function's instruction stream, from `functionVMA`.
     static func functionWords(seedAt placement: SeedPlacement, damage: Damage) -> Data {
         var code = ARM64.pacibsp
@@ -122,6 +159,15 @@ private enum MISFixture {
         }
         if case .afterPrologue = placement, case .none = damage {
             code += seed
+        }
+        if case .derivedFromBase = placement, damage != .seedRemoved {
+            code += baseSeed
+            // The 24A435 layout: the add is hundreds of instructions further in,
+            // but only its presence and its operands matter here.
+            if damage != .derivationRemoved {
+                code += ARM64.nop
+                code += derivation
+            }
         }
 
         // The ADRP+ADD pair that materialises the naming literal, then the
@@ -548,5 +594,98 @@ struct DyldSharedCacheMISTrustAuthShapeDetectorTests {
         #expect(!DyldSharedCacheMISTrustAuthPatcher.isShortCircuited(
             decode([ARM64.pacibsp, ARM64.movX0_0]),
         ))
+    }
+}
+
+// MARK: - The 24A435 shape: a seeded base plus a derivation
+//
+// Measured on a pristine `iPhone17,3_27.0_24A435` SystemOS cryptex, decrypted
+// and mounted read-only. `libmis` there does not materialise `0xE8008026`
+// anywhere — a whole-image decode of 94,984 instructions finds no mov-family
+// instruction with immediate `0x8026` and no such word in the data. The
+// function at `0x22406F814` is the right one (the naming literal at
+// `0x2240BCC23` has exactly one adrp+add reference, at `0x22406FB1C`, inside
+// it; the nearest preceding `pacibsp` is the function start itself, and the
+// instruction before it is an unconditional `b`). It seeds
+// `mov w23, #0x8001 ; movk w23, #0xe800, lsl #16` at `+0x34`, and reaches the
+// failure with `add w26, w23, #0x25` at `+0x124`. 26.6.2 did the reverse: it
+// seeded `0xE8008026` and subtracted.
+
+@Suite(.serialized)
+struct DyldSharedCacheMISTrustAuthDerivedSeedTests {
+    @Test
+    func `A derived 32-bit add word disassembles as a w-register add`() {
+        let decoded = ARM64Disassembler().disassemble(MISFixture.derivation, at: 0)
+        let instruction = try? #require(decoded.first)
+        #expect(instruction?.mnemonic == "add")
+        let operands = instruction?.detail?.operands
+        #expect(operands?.count == 3)
+        #expect(operands?[0].reg.name == "w26")
+        #expect(operands?[1].reg.name == "w23")
+        #expect(operands?[2].imm == 0x25)
+    }
+
+    @Test
+    func `A prologue seeding the base and deriving the failure is patched`() throws {
+        let directory = MISFixture.scratch("derived")
+        defer { MISFixture.discard(directory) }
+        try MISFixture.makeCache(at: directory, seedAt: .derivedFromBase)
+
+        let chunks = try DyldSharedCacheChunkSet(directory: directory)
+        let site = try #require(try DyldSharedCacheMISTrustAuthPatcher.locateSite(in: chunks))
+        #expect(site.functionVMA == MISFixture.functionVMA)
+        guard case let .derivesFailure(_, register, deriveVMA) = site.shape else {
+            Issue.record("expected the derived shape, got \(site.shape)")
+            return
+        }
+        #expect(register == "w23")
+        #expect(deriveVMA > MISFixture.functionVMA)
+
+        let report = try DyldSharedCacheMISTrustAuthPatcher.patch(
+            chunksDirectory: directory,
+            log: nil,
+        )
+        #expect(report.outcome == .patched)
+        #expect(try DyldSharedCacheChunkSet(directory: directory)
+            .bytesAtVMA(MISFixture.functionVMA + 4, length: 8) == ARM64.movX0_0 + ARM64.retab)
+    }
+
+    @Test
+    func `The base seed alone is not enough`() throws {
+        // `0xE8008001` is just the bottom of the MIS error range. Without an
+        // instruction deriving `0xE8008026` from it, this function has not been
+        // shown to be the one that produces that error, and guessing is exactly
+        // what this patcher refuses to do.
+        let directory = MISFixture.scratch("derived-uncorroborated")
+        defer { MISFixture.discard(directory) }
+        try MISFixture.makeCache(
+            at: directory,
+            seedAt: .derivedFromBase,
+            damage: .derivationRemoved,
+        )
+
+        let chunks = try DyldSharedCacheChunkSet(directory: directory)
+        #expect(throws: PatcherError.self) {
+            _ = try DyldSharedCacheMISTrustAuthPatcher.locateSite(in: chunks)
+        }
+    }
+
+    @Test
+    func `Patching the derived shape twice is a no-op the second time`() throws {
+        // The 24A435 seed sits at +0x34, clear of the two words at +4, so unlike
+        // the issue-#532 layout it survives the write. Both recognitions must
+        // still agree on the second run.
+        let directory = MISFixture.scratch("derived-rerun")
+        defer { MISFixture.discard(directory) }
+        try MISFixture.makeCache(at: directory, seedAt: .derivedFromBase)
+
+        try DyldSharedCacheMISTrustAuthPatcher.patch(chunksDirectory: directory, log: nil)
+        let second = try DyldSharedCacheMISTrustAuthPatcher.patch(
+            chunksDirectory: directory,
+            log: nil,
+        )
+        #expect(second.outcome == .alreadyPatched)
+        #expect(second.sitesWritten == 0)
+        #expect(second.site?.shape == .alreadyShortCircuited)
     }
 }
