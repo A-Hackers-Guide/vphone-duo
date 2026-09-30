@@ -1737,3 +1737,99 @@ new `FirmwarePatchSetCatalog.misTrustAuthPatch`; `The shipped preset plists matc
 the built-in copies` checks the two agree. `experimental` is `Kind = All` and so
 still turns it on, which is correct: that preset is documented as everything the
 bundle declares, including patches a 26.4 guest does not survive.
+
+## An interpose does not cross the shared cache (2026-09-30)
+
+**This supersedes the paragraph above that says the hook "covers
+*installation*".** It does not. `libmisfix.dylib` reaches misagent and nothing
+else that matters, and no version of it can reach installd, because
+`__DATA,__interpose` replaces **call sites** in the images dyld links and every
+call site on installd's path is inside the cache:
+
+```
+MobileInstallation.framework  →  libmis.dylib        (cache to cache)
+libmis.dylib                  →  libMobileGestalt    (cache to cache)
+```
+
+Measured on test-26.4, `libmisfix[726]`, with `LogQueries` on, the query log
+carrying each caller's image (`MISFixCallerImage`, `dladdr` on the return
+address) and the validation log made unconditional. One
+`devicectl device install app` of a paid-team-signed AirBuild.app produced
+exactly one line from installd:
+
+```
+libmisfix[726]: MGCopyAnswer(BuildVersion) from installd passed through
+```
+
+`from installd` is the finding: the only call the hook catches is the one the
+**main executable** makes itself. misagent works for that reason and no other —
+its own binary calls `MGCopyAnswer`, three times per install, each answered
+`-> override`.
+
+What installd did instead, in the same capture:
+
+```
+amfi_interface_query_bootarg_state returned error Function not implemented
+cdhash: <private> is trusted
+Trust evaluate failure: [leaf IssuerCommonName LeafMarkerOid SubjectCommonName]
+Skipping a profile because of error 0xe8008012.
++[MICodeSigningVerifier _validateSignatureAndCopyInfoForURL:withOptions:error:]:
+    80: Failed to verify code signature of …/AirBuild.app : 0xe8008015
+```
+
+Three things follow, and each corrects something previously written here:
+
+1. **The signature was never the problem.** `cdhash … is trusted`. The failure
+   is the profile: libmis walked the installed profiles and skipped every one
+   with `0xE8008012` — this device is not in `ProvisionedDevices` — leaving
+   `0xE8008015`, "a valid provisioning profile for this executable was not
+   found".
+2. **libmis resolved a UDID without going through the interpose.** No
+   `MGCopyAnswer(UniqueDeviceID)` line exists from installd, yet the comparison
+   plainly happened. Its other route is closed —
+   `amfi_interface_query_bootarg_state` returns `ENOSYS`, so the
+   `amfi_emulate_device_udid` path libmis prefers is dead on this guest and the
+   MobileGestalt fallback is what ran.
+3. **`AllowAdHocSigning` has never taken effect in installd.** No
+   `MISValidateSignatureAndCopyInfo` line appears either, from a log that no
+   longer returns early on an unconvertible path argument. `MICodeSigningVerifier`
+   lives in MobileInstallation, not in installd, so that call is cache-to-cache
+   too. The measured table at the top of `MISFixSignature.c` was taken by
+   calling libmis directly; it is still true of libmis and was never reached
+   through installd.
+
+`DYLD_INSERT_LIBRARIES` does not change this. Commit `d44a0e9` had already
+moved libmisfix from a `LC_LOAD_WEAK_DYLIB` of installd to SystemHook's insert
+list, which is the strongest position an interpose can hold, and the capture
+above is from that arrangement.
+
+**What can still work.** Three routes, in the order they were judged:
+
+- **Rewrite the callee, not the call sites.** A detour at the top of
+  `MGCopyAnswer` and `MISValidateSignatureAndCopyInfo` is reached by every
+  caller, cache-internal or not. It stays a guest dylib, so
+  `cfw update-environment` deploys it to an existing VM and no cache page is
+  written — nothing for TXM to reject, which is what makes it preferable to a
+  new libmis patch after #532. It needs the process to make a cache text page
+  writable (copy-on-write) and to obtain executable memory for the trampoline;
+  `MISFixCacheWriteProbe.c` measures both behind `ProbeCacheWrite`, in installd
+  only.
+- **A shared-cache patch on libmis**, forcing the `ProvisionedDevices` check to
+  pass and the ad-hoc option on. Same family as row 17, so the same risk: row 17
+  is the patch that stopped a 27.0 guest booting.
+- **Give the VM the right UDID instead of lying about it.** A modern UDID is
+  `<chip-id>-<ECID>`; `chip-id` is fixed at `0x0000FE01` by the virtual SoC but
+  the ECID is chosen at `vm create`, and the SHSH blob is personalised against
+  it either way. A VM created with the ECID of a device the team has already
+  registered needs no hook at all. It does not help an ad-hoc IPA, which has no
+  profile to match.
+
+**A mistake in the first probe, recorded because it is easy to repeat.** dyld
+applies interposing to `dlsym` as well as to call sites, so
+`dlsym(RTLD_DEFAULT, "MGCopyAnswer")` returns *libmisfix's own replacement* —
+the probe measured its own text and never touched the cache. It then asked for
+`VM_PROT_WRITE` in place of `VM_PROT_EXECUTE` on the page it was executing
+from, which faults on the next instruction fetch and crash-looped installd
+until the flag was cleared. The probe now resolves through a handle on
+`libMobileGestalt` (a handle-scoped `dlsym` is not interposed), refuses a
+target inside its own image, asks for RWX, and runs in installd only.
