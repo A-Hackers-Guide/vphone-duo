@@ -129,7 +129,9 @@ public enum DyldSharedCacheMISTrustAuthPatcher {
     static let maxPrologueInstructions = 48
 
     /// Bytes written at `functionVMA + 4`: `mov x0, #0` then `retab`.
-    static var replacement: Data { ARM64.movX0_0 + ARM64.retab }
+    static var replacement: Data {
+        ARM64.movX0_0 + ARM64.retab
+    }
 
     // MARK: - Results
 

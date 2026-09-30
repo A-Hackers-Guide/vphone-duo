@@ -286,7 +286,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         scrollTouchPoint = start
         scrollLastSend = 0
         if !sendTouchEvent(
-            phase: 0, localPoint: start, timestamp: ProcessInfo.processInfo.systemUptime
+            phase: 0, localPoint: start, timestamp: ProcessInfo.processInfo.systemUptime,
         ) {
             scrollTouchPoint = nil
         }
@@ -298,7 +298,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         // the edge. `boundedScrollTouch` is only a guard against a stuck gesture
         // running away.
         let target = boundedScrollTouch(
-            NSPoint(x: current.x + delta.x, y: current.y + delta.y)
+            NSPoint(x: current.x + delta.x, y: current.y + delta.y),
         )
         guard target != current else { return }
 
@@ -347,8 +347,8 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
                     : overflow.x < 0 ? bounds.width * (1 - inset) : current.x,
                 y: overflow.y > 0
                     ? bounds.height * inset
-                    : overflow.y < 0 ? bounds.height * (1 - inset) : current.y
-            )
+                    : overflow.y < 0 ? bounds.height * (1 - inset) : current.y,
+            ),
         )
         guard landing != clampedTouchPoint(current) else { return }
 
@@ -361,7 +361,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         scrollRebaseTime = ProcessInfo.processInfo.systemUptime
         sendTouchEvent(
             phase: 3, localPoint: clampedTouchPoint(current),
-            timestamp: ProcessInfo.processInfo.systemUptime
+            timestamp: ProcessInfo.processInfo.systemUptime,
         )
     }
 
@@ -393,7 +393,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         // the guest does not see it snap back to the edge on the way up.
         sendTouchEvent(
             phase: 3, localPoint: point, allowOutside: true,
-            timestamp: ProcessInfo.processInfo.systemUptime
+            timestamp: ProcessInfo.processInfo.systemUptime,
         )
     }
 
@@ -425,7 +425,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         ]
         sendTouchEvent(
             phase: phase, localPoints: points, swipeAim: 0,
-            timestamp: ProcessInfo.processInfo.systemUptime
+            timestamp: ProcessInfo.processInfo.systemUptime,
         )
     }
 
@@ -691,11 +691,11 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
 
     @discardableResult
     private func sendTouchEvent(
-        phase: Int, localPoint: NSPoint, allowOutside: Bool = false, timestamp: TimeInterval
+        phase: Int, localPoint: NSPoint, allowOutside: Bool = false, timestamp: TimeInterval,
     ) -> Bool {
         sendTouchEvent(
             phase: phase, localPoints: [localPoint], swipeAim: currentTouchSwipeAim,
-            allowOutside: allowOutside, timestamp: timestamp
+            allowOutside: allowOutside, timestamp: timestamp,
         )
     }
 
@@ -709,7 +709,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     @discardableResult
     private func sendTouchEvent(
         phase: Int, localPoints: [NSPoint], swipeAim: Int, allowOutside: Bool = false,
-        timestamp: TimeInterval
+        timestamp: TimeInterval,
     ) -> Bool {
         guard !localPoints.isEmpty else { return false }
         let normalized = localPoints.map { normalizeCoordinate($0, allowOutside: allowOutside) }
@@ -722,11 +722,11 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
                 control.sendTouch2(
                     phase: phase,
                     x1: Double(normalized[0].x), y1: Double(normalized[0].y),
-                    x2: Double(normalized[1].x), y2: Double(normalized[1].y)
+                    x2: Double(normalized[1].x), y2: Double(normalized[1].y),
                 )
             } else {
                 control.sendTouch(
-                    phase: phase, x: Double(normalized[0].x), y: Double(normalized[0].y)
+                    phase: phase, x: Double(normalized[0].x), y: Double(normalized[0].y),
                 )
             }
             return true
@@ -743,7 +743,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
                 phase: phase,
                 location: point,
                 swipeAim: swipeAim,
-                timestamp: timestamp
+                timestamp: timestamp,
             ).asObject
         }
 
@@ -767,7 +767,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         let maxY = max(inset, bounds.height - inset)
         return NSPoint(
             x: min(max(point.x, inset), maxX),
-            y: min(max(point.y, inset), maxY)
+            y: min(max(point.y, inset), maxY),
         )
     }
 
@@ -777,7 +777,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     private func boundedScrollTouch(_ point: NSPoint) -> NSPoint {
         NSPoint(
             x: min(max(point.x, -bounds.width), bounds.width * 2),
-            y: min(max(point.y, -bounds.height), bounds.height * 2)
+            y: min(max(point.y, -bounds.height), bounds.height * 2),
         )
     }
 

@@ -64,8 +64,12 @@ public enum VPhoneDisplayOrientation: Int, CaseIterable, Sendable {
     /// way round to `target`; a half turn goes counterclockwise.
     public static func turnTarget(from current: CGFloat, to target: CGFloat) -> CGFloat {
         var delta = (target - current).truncatingRemainder(dividingBy: 360)
-        if delta > 180 { delta -= 360 }
-        if delta <= -180 { delta += 360 }
+        if delta > 180 {
+            delta -= 360
+        }
+        if delta <= -180 {
+            delta += 360
+        }
         return current + delta
     }
 

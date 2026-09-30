@@ -98,7 +98,9 @@ final class VPhoneDisplayContainerView: NSView {
 
     private func finishTurn(angle target: CGFloat, windowFrame: NSRect?) {
         angle = target.truncatingRemainder(dividingBy: 360)
-        if angle < 0 { angle += 360 }
+        if angle < 0 {
+            angle += 360
+        }
         if let windowFrame, let window {
             window.setFrame(windowFrame, display: true)
         }
