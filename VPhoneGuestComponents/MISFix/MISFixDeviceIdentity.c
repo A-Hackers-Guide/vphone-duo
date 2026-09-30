@@ -45,14 +45,14 @@
 //
 // ## How far this reaches, measured
 //
-// misagent, and nothing else that matters. Its main executable calls
-// `MGCopyAnswer` itself, so the interpose catches it and a profile naming the
-// configured device installs.
+// misagent, and nothing else. Its main executable calls `MGCopyAnswer` itself,
+// so the interpose catches it and a profile naming the configured device
+// installs.
 //
-// installd does not benefit, and no version of this dylib can make it. Its
-// profile check runs MobileInstallation → libmis → libMobileGestalt, all three
-// inside the dyld shared cache, and an interpose rewrites call sites in the
-// images dyld links — not the cache's own. Measured on test-26.4 (2026-09-30,
+// installd does not benefit and no interpose can make it. Its profile check
+// runs MobileInstallation → libmis → libMobileGestalt, all three inside the
+// dyld shared cache, and an interpose rewrites call sites in the images dyld
+// links — not the cache's own. Measured on test-26.4 (2026-09-30,
 // `libmisfix[726]`): one `devicectl device install app`, `LogQueries` on, and
 // the only line from installd is `MGCopyAnswer(BuildVersion) from installd`.
 // No `UniqueDeviceID` query, although libmis plainly resolved one — it skipped
@@ -65,12 +65,20 @@
 // trusted`. libmis's other route to a UDID is closed too:
 // `amfi_interface_query_bootarg_state returned error Function not implemented`.
 //
-// So an Xcode or `devicectl` install still needs the guest's *own* UDID to be
-// in the profile. Two things could give it that, and neither belongs in this
-// file: a shared-cache patch on libmis, or creating the VM with the ECID of a
-// device the team has already registered — a modern UDID is
-// `<chip-id>-<ECID>`, and the ECID is chosen at `vm create`, so that one needs
-// no hook and tells no lie.
+// ## Why this is now a convenience rather than the fix
+//
+// Making a profile install was one way to get an Xcode install through. It is
+// no longer the way this project takes: MISFixSignature.c validates the bundle
+// on its own signature with `ValidatedByProfile = 0`, and
+// MISFixProfilePolicy.c lets the embedded profile fail to install without
+// failing the install. An arbitrary IPA then goes in with no UDID configured
+// at all, which is the point — pinning a VM to a borrowed UDID only ever
+// worked for a team whose registered devices you already have.
+//
+// The override is kept because it is harmless, already shipped, and reachable
+// from the VM window's Device ▸ Set UDID…. Setting it makes profiles install
+// for real instead of being skipped, which is closer to what the device would
+// have done.
 //
 // ## The inconsistency this creates, stated plainly
 //

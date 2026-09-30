@@ -1,35 +1,5 @@
 // MISFixSignature.c — widen MIS's idea of an acceptable signature.
 //
-// ## Measured 2026-09-30: this never runs in installd, and cannot
-//
-// Read this first, because the rest of the file was written believing
-// otherwise. A `__DATA,__interpose` replacement is applied to *call sites*, and
-// every call site that matters here is inside the dyld shared cache:
-//
-//     MobileInstallation.framework  →  libmis.dylib        (cache to cache)
-//     libmis.dylib                  →  libMobileGestalt    (cache to cache)
-//
-// Neither is rewritten, whether this dylib arrives as a weak dependency of the
-// main executable or ahead of everything through `DYLD_INSERT_LIBRARIES`. On
-// test-26.4, with `LogQueries` on and the log for `MISValidateSignatureAndCopyInfo`
-// made unconditional, a whole `devicectl device install app` produced exactly
-// one line from installd:
-//
-//     libmisfix[726]: MGCopyAnswer(BuildVersion) from installd passed through
-//
-// `from installd` is the point: the one call this hook catches is the one the
-// main executable makes itself. `+[MICodeSigningVerifier
-// _validateSignatureAndCopyInfoForURL:withOptions:error:]` ran to its line 80
-// and failed, and no line here records it.
-//
-// So the options are never widened in installd. What that daemon actually
-// refuses, and why, is in MISFixDeviceIdentity.c; fixing it means changing the
-// shared cache, not this dylib. misagent is different — its main executable
-// calls `MGCopyAnswer` itself — and the UDID override there does work.
-//
-// The hook is kept because it costs nothing and is correct where it is
-// reached, and because it is the control that measured all of this.
-//
 // A guest restored by this project runs unsigned code happily: the kernel
 // patches (`amfi_trustcache`, `jb.post_validation`, `jb.amfi_execve`) admit it,
 // lsd registers it, and SpringBoard launches it. An app pushed in through
@@ -68,9 +38,41 @@
 // synthesise a reply. That matters: installd reads those keys, and a hook that
 // faked success without them would break the install further down.
 //
-// So the hook adds one key to the options and calls through. On anything MIS
+// So the hook adds keys to the options and calls through. On anything MIS
 // would have accepted anyway the behaviour is bit for bit unchanged, because
-// the key only widens what counts as an acceptable signature.
+// the keys only widen what counts as acceptable.
+//
+// ## Why this is a detour and not an interpose
+//
+// It used to be an interpose, and that was measured wrong on 2026-09-30. A
+// `__DATA,__interpose` replacement is applied to *call sites*, and every call
+// site that matters here is inside the dyld shared cache:
+//
+//     MobileInstallation.framework  →  libmis.dylib        (cache to cache)
+//
+// Neither dyld's linking of this dylib as a weak dependency nor
+// `DYLD_INSERT_LIBRARIES` rewrites that. With `LogQueries` on and this file's
+// log made unconditional, a whole `devicectl device install app` produced not
+// one line from installd, while `MICodeSigningVerifier` ran to its line 80 and
+// failed. The options were never widened, in any install, ever.
+//
+// A detour rewrites the callee instead, so there is nothing to miss: one copy
+// of the function, one jump at its top, every caller redirected. See
+// MISFixDetour.h for what that costs and what it refuses.
+//
+// Two details of the target, both of which the detour has to respect.
+//
+// `MISValidateSignatureAndCopyInfo` is a short thunk in front of
+// `…WithProgress`, where libmis's body actually lives, so it is *shorter than
+// the four-word jump* and `MISFixDetour` declines it with
+// `MISFixDetourTooShort`. That is the expected outcome, not a failure: the
+// thunk branches into the function that is hooked, so its callers are covered
+// anyway. Both are attempted so the log says which one took.
+//
+// The address cannot come from `dlsym`. dyld applies interposing to it, so a
+// hooked symbol resolves to our own replacement — measured even through a
+// handle on libmis itself. Taking `&MISValidateSignatureAndCopyInfoWithProgress`
+// here uses this image's own import, which dyld leaves alone.
 //
 // ## What this deliberately does not do
 //
@@ -80,33 +82,34 @@
 // supplies one. Forging a reply for a bundle with no signature at all would
 // mean inventing a cdhash the kernel never agreed to.
 //
-// The online-authorization gate is a different patch: `mis_trust_auth` covers
-// a profile that wants network validation on a hacktivated guest. This one is
-// only about the signature's shape.
-//
-// ## Mechanism
-//
-// See `MISFixInterpose.h`. SystemHook puts this dylib in
-// `DYLD_INSERT_LIBRARIES` for the processes it recognises by path, so it is
-// loaded ahead of everything — which is the strongest position an interpose
-// can be in, and still not enough to reach the cache-internal call sites
-// above.
+// The profile half of an Xcode install is not here either; it is
+// MISFixProfilePolicy.c.
 
 #include "MISFixConfig.h"
-#include "MISFixInterpose.h"
+#include "MISFixDetour.h"
 
 #include <CoreFoundation/CoreFoundation.h>
+#include <stdlib.h>
 
 // libmis's own option keys, taken from the cache's string table rather than
 // from a header — libmis.tbd exports the `kMISValidationOption*` symbols but
 // the SDK declares none of them.
 #define kMISValidationOptionAllowAdHocSigning CFSTR("AllowAdHocSigning")
 #define kMISValidationOptionRespectUppTrustAndAuthorization CFSTR("RespectUppTrustAndAuthorization")
+#define kMISValidationOptionSkipProfileIdentifierPolicy CFSTR("SkipProfileIdentifierPolicy")
 
 // The first argument is a path string, not a URL. Handing MIS an NSURL aborts
 // the process inside libmis with `-[NSURL length]: unrecognized selector`,
 // which is how this was pinned down.
 typedef CFStringRef MISPath;
+
+typedef int (*MISValidate)(MISPath path, CFDictionaryRef options, CFDictionaryRef *info);
+typedef int (*MISValidateWithProgress)(
+    MISPath path,
+    CFDictionaryRef options,
+    CFDictionaryRef *info,
+    void *progress
+);
 
 extern int MISValidateSignatureAndCopyInfo(MISPath path, CFDictionaryRef options, CFDictionaryRef *info);
 extern int MISValidateSignatureAndCopyInfoWithProgress(
@@ -116,12 +119,22 @@ extern int MISValidateSignatureAndCopyInfoWithProgress(
     void *progress
 );
 
+static MISValidate vpOriginalValidate;
+static MISValidateWithProgress vpOriginalValidateWithProgress;
+
 /// The caller's options, widened. Never returns NULL for a NULL input: MIS is
 /// called with an options dictionary either way.
 ///
-/// Two keys go in.
+/// Three keys go in.
 ///
 /// `AllowAdHocSigning` is the signature half described above.
+///
+/// `SkipProfileIdentifierPolicy` stops MIS insisting that a profile's
+/// application-identifier match the bundle's. A profile that names a different
+/// app — or an app whose profile never installed, which is the ordinary case
+/// for an IPA built for someone else's team — is then not a reason to refuse a
+/// signature that is otherwise fine. Measured to leave an accepted bundle
+/// accepted.
 ///
 /// `RespectUppTrustAndAuthorization = false` is the online-authorization half,
 /// and it replaces a patch that used to edit the shared cache. libmis reaches
@@ -141,7 +154,7 @@ extern int MISValidateSignatureAndCopyInfoWithProgress(
 ///
 /// The option parser writes a flag's slot only when the key is present, so an
 /// explicit value always beats the defaults `UnauthoritativeLaunch` installs —
-/// and nothing else in the shared cache passes this key, so there is no
+/// and nothing else in the shared cache passes these keys, so there is no
 /// caller's own value to override.
 static CFDictionaryRef vpWidenedOptions(CFDictionaryRef options) {
     CFMutableDictionaryRef widened =
@@ -149,13 +162,18 @@ static CFDictionaryRef vpWidenedOptions(CFDictionaryRef options) {
             ? CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0, options)
             : CFDictionaryCreateMutable(
                   kCFAllocatorDefault,
-                  2,
+                  3,
                   &kCFTypeDictionaryKeyCallBacks,
                   &kCFTypeDictionaryValueCallBacks
               );
     if (widened == NULL)
         return NULL;
     CFDictionarySetValue(widened, kMISValidationOptionAllowAdHocSigning, kCFBooleanTrue);
+    CFDictionarySetValue(
+        widened,
+        kMISValidationOptionSkipProfileIdentifierPolicy,
+        kCFBooleanTrue
+    );
     CFDictionarySetValue(
         widened,
         kMISValidationOptionRespectUppTrustAndAuthorization,
@@ -166,77 +184,144 @@ static CFDictionaryRef vpWidenedOptions(CFDictionaryRef options) {
 
 /// Log one validation, under `LogQueries`.
 ///
-/// This is the other half of the control. `MISValidateSignatureAndCopyInfo` is
-/// reached the same way the UDID query is — from MobileInstallation, in the
-/// shared cache, into libmis, also in the shared cache, with the main
-/// executable's own image not involved. So if this line appears in installd
-/// and the `MGCopyAnswer` line does not, the two calls are being treated
-/// differently and the difference is in MobileGestalt, not in whether an
-/// interpose can cross the cache at all.
 /// Never returns early. A first run logged nothing here from installd, which
-/// was read as "the interpose was not reached" — but a `path` this could not
-/// turn into a C string would have produced exactly the same silence. The line
-/// is unconditional now, and says what the argument was when it is not a
-/// string, so an absent line means one thing only.
-static void vpLogValidation(MISPath path, int result, const char *caller) {
+/// was read as "the hook was not reached" — but a `path` this could not turn
+/// into a C string would have produced exactly the same silence. The line says
+/// what the argument was when it is not a string, so an absent line means one
+/// thing only.
+static void vpLogValidation(MISPath path, int result) {
     char buffer[1024];
     if (path == NULL) {
-        MISFixLog("MISValidateSignatureAndCopyInfo(NULL) from %s -> 0x%x", caller, (unsigned)result);
+        MISFixLog("MISValidateSignature(NULL) -> 0x%x", (unsigned)result);
         return;
     }
     if (CFGetTypeID(path) != CFStringGetTypeID()
         || !CFStringGetCString(path, buffer, sizeof(buffer), kCFStringEncodingUTF8))
     {
         MISFixLog(
-            "MISValidateSignatureAndCopyInfo(<non-string %lu>) from %s -> 0x%x",
+            "MISValidateSignature(<non-string %lu>) -> 0x%x",
             (unsigned long)CFGetTypeID(path),
-            caller,
             (unsigned)result
         );
         return;
     }
-    MISFixLog(
-        "MISValidateSignatureAndCopyInfo(%s) from %s -> 0x%x",
-        buffer,
-        caller,
-        (unsigned)result
-    );
+    MISFixLog("MISValidateSignature(%s) -> 0x%x", buffer, (unsigned)result);
 }
 
-static int vpMISValidateSignatureAndCopyInfo(
-    MISPath path,
-    CFDictionaryRef options,
-    CFDictionaryRef *info
-) {
-    const char *caller = MISFixCaller();
+/// One line naming what MIS put in the info dictionary, under `LogQueries`.
+///
+/// This is the instrument for the gates *above* MIS. `MICodeSigningVerifier`
+/// accepts MIS's answer and then wants more from it — a signer identity, an
+/// identifier that matches the bundle — and which key it is reading is not
+/// visible from the failure it reports. Naming the keys, and the short values,
+/// is what turns that into a readable question.
+static void vpLogInfo(CFDictionaryRef info) {
+    if (info == NULL || CFGetTypeID(info) != CFDictionaryGetTypeID())
+        return;
+    CFIndex count = CFDictionaryGetCount(info);
+    if (count <= 0) {
+        MISFixLog("  info: empty");
+        return;
+    }
+    const void **keys = calloc((size_t)count, sizeof(void *));
+    const void **values = calloc((size_t)count, sizeof(void *));
+    if (keys == NULL || values == NULL) {
+        free(keys);
+        free(values);
+        return;
+    }
+    CFDictionaryGetKeysAndValues(info, keys, values);
+    for (CFIndex index = 0; index < count; index += 1) {
+        CFStringRef key = (CFStringRef)keys[index];
+        char name[128];
+        if (key == NULL || CFGetTypeID(key) != CFStringGetTypeID()
+            || !CFStringGetCString(key, name, sizeof(name), kCFStringEncodingUTF8))
+        {
+            continue;
+        }
+        CFTypeRef value = values[index];
+        CFTypeID kind = value != NULL ? CFGetTypeID(value) : 0;
+        char shown[160] = "<…>";
+        if (value == NULL) {
+            snprintf(shown, sizeof(shown), "<null>");
+        } else if (kind == CFStringGetTypeID()) {
+            CFStringGetCString((CFStringRef)value, shown, sizeof(shown), kCFStringEncodingUTF8);
+        } else if (kind == CFBooleanGetTypeID()) {
+            snprintf(shown, sizeof(shown), CFBooleanGetValue((CFBooleanRef)value) ? "true" : "false");
+        } else if (kind == CFNumberGetTypeID()) {
+            long long number = 0;
+            CFNumberGetValue((CFNumberRef)value, kCFNumberLongLongType, &number);
+            snprintf(shown, sizeof(shown), "%lld", number);
+        } else if (kind == CFDataGetTypeID()) {
+            snprintf(shown, sizeof(shown), "<%ld bytes>",
+                     (long)CFDataGetLength((CFDataRef)value));
+        } else if (kind == CFDictionaryGetTypeID()) {
+            snprintf(shown, sizeof(shown), "<%ld entries>",
+                     (long)CFDictionaryGetCount((CFDictionaryRef)value));
+        }
+        MISFixLog("  info[%s] = %s", name, shown);
+    }
+    free(keys);
+    free(values);
+}
+
+static int vpValidate(MISPath path, CFDictionaryRef options, CFDictionaryRef *info) {
     CFDictionaryRef widened = vpWidenedOptions(options);
     // Out of memory: pass the caller's own options through rather than fail.
     if (widened == NULL)
-        return MISValidateSignatureAndCopyInfo(path, options, info);
-    int result = MISValidateSignatureAndCopyInfo(path, widened, info);
+        return vpOriginalValidate(path, options, info);
+    int result = vpOriginalValidate(path, widened, info);
     CFRelease(widened);
-    vpLogValidation(path, result, caller);
+    vpLogValidation(path, result);
+    if (result == 0 && info != NULL)
+        vpLogInfo(*info);
     return result;
 }
 
-static int vpMISValidateSignatureAndCopyInfoWithProgress(
+static int vpValidateWithProgress(
     MISPath path,
     CFDictionaryRef options,
     CFDictionaryRef *info,
     void *progress
 ) {
-    const char *caller = MISFixCaller();
     CFDictionaryRef widened = vpWidenedOptions(options);
     if (widened == NULL)
-        return MISValidateSignatureAndCopyInfoWithProgress(path, options, info, progress);
-    int result = MISValidateSignatureAndCopyInfoWithProgress(path, widened, info, progress);
+        return vpOriginalValidateWithProgress(path, options, info, progress);
+    int result = vpOriginalValidateWithProgress(path, widened, info, progress);
     CFRelease(widened);
-    vpLogValidation(path, result, caller);
+    vpLogValidation(path, result);
+    if (result == 0 && info != NULL)
+        vpLogInfo(*info);
     return result;
 }
 
-// Both entry points are replaced. The plain one is what MobileInstallation
-// calls; the progress variant is where libmis's own body lives, and a future
-// caller that reaches for it directly gets the same treatment.
-MISFIX_INTERPOSE(vpMISValidateSignatureAndCopyInfo, MISValidateSignatureAndCopyInfo);
-MISFIX_INTERPOSE(vpMISValidateSignatureAndCopyInfoWithProgress, MISValidateSignatureAndCopyInfoWithProgress);
+/// Hook both entry points before the daemon serves anything.
+///
+/// The `…WithProgress` one is the body and is the one that has to take. The
+/// plain one is a thunk in front of it and is expected to come back
+/// `MISFixDetourTooShort`; it is attempted anyway, because "expected" is a
+/// property of one libmis build and the log is how the next one tells us it
+/// changed.
+__attribute__((constructor)) static void vpInstallSignatureHooks(void) {
+    MISFixDetourResult body = MISFixDetour(
+        "MISValidateSignatureAndCopyInfoWithProgress",
+        (void *)&MISValidateSignatureAndCopyInfoWithProgress,
+        (void *)&vpValidateWithProgress,
+        (void **)&vpOriginalValidateWithProgress
+    );
+    if (body != MISFixDetourOK) {
+        MISFixNote("MISValidateSignatureAndCopyInfoWithProgress not hooked: %s",
+                   MISFixDetourDescribe(body));
+    }
+
+    MISFixDetourResult thunk = MISFixDetour(
+        "MISValidateSignatureAndCopyInfo",
+        (void *)&MISValidateSignatureAndCopyInfo,
+        (void *)&vpValidate,
+        (void **)&vpOriginalValidate
+    );
+    if (thunk != MISFixDetourOK) {
+        MISFixLog("MISValidateSignatureAndCopyInfo not hooked: %s",
+                  MISFixDetourDescribe(thunk));
+    }
+}

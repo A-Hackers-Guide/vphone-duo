@@ -76,8 +76,4 @@ const char *MISFixCallerImage(const void *address);
 /// The flag every diagnostic in this dylib is behind.
 #define kMISFixLogQueriesKey CFSTR("LogQueries")
 
-/// The flag for the shared-cache write probe. Off by default, and nothing
-/// reads it but ``MISFixCacheWriteProbe.c``.
-#define kMISFixProbeCacheWriteKey CFSTR("ProbeCacheWrite")
-
 #endif

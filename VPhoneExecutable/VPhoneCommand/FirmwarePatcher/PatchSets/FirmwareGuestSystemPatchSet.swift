@@ -130,28 +130,32 @@ public enum FirmwareGuestSystemPatchSet {
             ),
             VPhonePatchDeclaration(
                 identifier: "system-installd-cfw-adhoc_signature",
-                title: "installd ad-hoc signatures",
+                title: "installd signature policy",
                 summary: """
                 Lets Xcode install an app the guest would otherwise refuse. installd asks \
                 MobileIdentityService to validate a bundle without allowing an ad-hoc \
-                signature, so anything not signed with an Apple leaf fails at \
-                0xE8008014 even though the guest runs unsigned code perfectly well. A \
-                hook in /usr/lib/libmisfix.dylib, loaded into installd, sets the option \
-                MIS already understands. Nothing in the dyld shared cache is touched.
+                signature and insists on a provisioning profile no VM can satisfy, so an \
+                install fails at 0xE8008014 or 0xE8008015 even though the guest runs \
+                unsigned code perfectly well. A hook in /usr/lib/libmisfix.dylib, loaded \
+                into installd, sets the options MIS already understands, answers \
+                ProvisionsAllDevices for every profile, and lets MobileInstallation's own \
+                refusals through. Nothing in the dyld shared cache is written on disk: the \
+                two libmis functions are detoured in installd's own copy-on-write pages.
                 """,
                 target: .guestExecutable(path: "/usr/libexec/installd"),
             ),
             VPhonePatchDeclaration(
                 identifier: "system-misagent-cfw-device_identity",
-                title: "misagent device identity",
+                title: "misagent profile scope",
                 summary: """
-                Lets a provisioning profile written for a device you already own install on \
-                this guest. misagent compares the profile's ProvisionedDevices against the \
-                UDID MobileGestalt reports, and a VM's UDID is in nobody's list, so a paid \
-                team's profile fails at 0xE8008012. The same hook, loaded into misagent, \
-                answers that one query with the UDID set in /usr/lib/libmisfix.plist. Off \
-                until a UDID is set there, and it does not change what Xcode or lockdown \
-                report.
+                Lets any provisioning profile install on this guest. misagent asks the \
+                profile whether it provisions all devices and otherwise compares its \
+                ProvisionedDevices against the UDID MobileGestalt reports; a VM's UDID is \
+                in nobody's list, so a paid team's profile fails at 0xE8008012. The same \
+                hook, loaded into misagent, answers the first question yes, so the profile \
+                installs for real and the app is validated against it. It can also answer \
+                the UDID query with a device set in /usr/lib/libmisfix.plist, which is off \
+                until one is set and does not change what Xcode or lockdown report.
                 """,
                 target: .guestExecutable(path: "/usr/libexec/misagent"),
             ),

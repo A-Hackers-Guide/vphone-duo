@@ -23,7 +23,6 @@
 
 #include "MISFixConfig.h"
 
-#include <dlfcn.h>
 #include <libkern/OSCacheControl.h>
 #include <mach/mach.h>
 #include <ptrauth.h>
@@ -72,6 +71,20 @@ static void vpEmitJump(uint32_t *out, uint64_t target) {
 static int64_t vpSignExtend(uint64_t value, unsigned bits) {
     uint64_t mask = 1ull << (bits - 1);
     return (int64_t)((value ^ mask) - mask);
+}
+
+/// Whether `insn` ends the function it appears in — a return in any of its
+/// three authenticated spellings, or an unconditional branch away.
+///
+/// This is the test for "the target is shorter than the patch", and it is not
+/// hypothetical: `MISValidateSignatureAndCopyInfo` is a two-instruction thunk
+/// in front of `…WithProgress`, so a four-word jump written over it would land
+/// in whatever libmis put next.
+static int vpIsTerminator(uint32_t insn) {
+    return insn == 0xD65F03C0u     // ret
+        || insn == 0xD65F0BFFu     // retaa
+        || insn == 0xD65F0FFFu     // retab
+        || (insn & 0xFC000000u) == 0x14000000u; // b
 }
 
 // MARK: - Relocation
@@ -126,8 +139,9 @@ static unsigned vpRelocate(uint32_t insn, uint64_t pc, uint32_t *out) {
 /// here. Filling it means making its page writable, which means dropping
 /// execute from a page of `__TEXT` — and the section's other occupant is the
 /// code doing the dropping. Page-aligning a 16 KB hole to avoid sharing would
-/// work and costs 16 KB in every guest, for a fallback that
-/// `MISFixCacheWriteProbe.c` exists to tell us we do not need.
+/// work and costs 16 KB in every guest, for a fallback the guest turns out not
+/// to need: `mmap` RW then `mprotect` RX then call was measured working in
+/// installd on test-26.4.
 
 static kern_return_t vpProtect(const void *address, size_t length, vm_prot_t protection) {
     vm_size_t page = vm_page_size;
@@ -151,10 +165,9 @@ static void *vpAllocateTrampoline(void) {
 const char *MISFixDetourDescribe(MISFixDetourResult result) {
     switch (result) {
     case MISFixDetourOK: return "installed";
-    case MISFixDetourImageMissing: return "image is not mapped in this process";
-    case MISFixDetourSymbolMissing: return "image exports no such symbol";
-    case MISFixDetourSymbolIsOurs: return "symbol resolved into libmisfix itself";
+    case MISFixDetourNoTarget: return "the symbol did not bind";
     case MISFixDetourUnrelocatable: return "a displaced instruction is PC-relative";
+    case MISFixDetourTooShort: return "the target is shorter than the jump";
     case MISFixDetourNoTrampoline: return "no executable memory for the trampoline";
     case MISFixDetourPageReadOnly: return "the target page could not be made writable";
     case MISFixDetourWriteFailed: return "the detour did not read back as written";
@@ -162,49 +175,15 @@ const char *MISFixDetourDescribe(MISFixDetourResult result) {
     return "unknown";
 }
 
-/// The target address for `symbol` in `image`, stripped, or NULL.
-///
-/// Resolved through a handle rather than `RTLD_DEFAULT`, and this is not a
-/// stylistic choice: dyld applies interposing to `dlsym`, so the flat lookup
-/// for a symbol this dylib also interposes returns *our* replacement. A detour
-/// built on that would point at itself.
-static const uint8_t *vpResolve(const char *image, const char *symbol, MISFixDetourResult *why) {
-    void *handle = dlopen(image, RTLD_LAZY | RTLD_NOLOAD);
-    if (handle == NULL) {
-        *why = MISFixDetourImageMissing;
-        return NULL;
-    }
-    void *found = dlsym(handle, symbol);
-    dlclose(handle);
-    if (found == NULL) {
-        *why = MISFixDetourSymbolMissing;
-        return NULL;
-    }
-    const uint8_t *target = ptrauth_strip(found, ptrauth_key_function_pointer);
-
-    Dl_info self;
-    Dl_info owner;
-    if (dladdr(ptrauth_strip((const void *)&MISFixDetourDescribe, ptrauth_key_function_pointer),
-               &self) != 0
-        && dladdr(target, &owner) != 0
-        && self.dli_fbase == owner.dli_fbase)
-    {
-        *why = MISFixDetourSymbolIsOurs;
-        return NULL;
-    }
-    return target;
-}
-
 MISFixDetourResult MISFixDetour(
-    const char *image,
-    const char *symbol,
+    const char *label,
+    void *function,
     void *replacement,
     void **original
 ) {
-    MISFixDetourResult why = MISFixDetourOK;
-    const uint8_t *target = vpResolve(image, symbol, &why);
-    if (target == NULL)
-        return why;
+    if (function == NULL)
+        return MISFixDetourNoTarget;
+    const uint8_t *target = ptrauth_strip(function, ptrauth_key_function_pointer);
 
     // Build the trampoline before touching the target, so a refusal costs
     // nothing: the displaced instructions relocated, then a jump back to the
@@ -215,6 +194,8 @@ MISFixDetourResult MISFixDetour(
     uint32_t body[kTrampolineBytes / 4];
     unsigned words = 0;
     for (unsigned index = 0; index < kDetourWords; index += 1) {
+        if (index + 1 < kDetourWords && vpIsTerminator(displaced[index]))
+            return MISFixDetourTooShort;
         unsigned written = vpRelocate(
             displaced[index],
             (uint64_t)(uintptr_t)target + index * 4u,
@@ -234,7 +215,8 @@ MISFixDetourResult MISFixDetour(
     //
     //     EXC_BAD_ACCESS (SIGBUS), UNKNOWN_0x32
     //
-    // which is what `MISFixCacheWriteProbe.c` found the hard way.
+    // on a region `vm_region_64` reported as `rwx/rwx SM=COW`. Found the hard
+    // way, by crash-looping installd on test-26.4.
     void *trampoline = vpAllocateTrampoline();
     if (trampoline == NULL)
         return MISFixDetourNoTrampoline;
@@ -244,6 +226,17 @@ MISFixDetourResult MISFixDetour(
         return MISFixDetourNoTrampoline;
     }
     sys_icache_invalidate(trampoline, words * 4u);
+
+    // Hand the trampoline over before the jump goes in, not after. The target
+    // is live from the instant its first word changes, and a replacement that
+    // reached `*original` while it was still NULL would call zero.
+    if (original != NULL) {
+        *original = ptrauth_sign_unauthenticated(
+            trampoline,
+            ptrauth_key_function_pointer,
+            0
+        );
+    }
 
     // Now the target: copy-on-write, because the cache is mapped shared and
     // read-execute. Execute is given up for the duration, which is safe here
@@ -263,17 +256,20 @@ MISFixDetourResult MISFixDetour(
 
     int landed = memcmp(target, detour, sizeof(detour)) == 0;
     vpProtect(target, kDetourBytes, VM_PROT_READ | VM_PROT_EXECUTE);
-    if (!landed)
+    if (!landed) {
+        if (original != NULL)
+            *original = NULL;
         return MISFixDetourWriteFailed;
-
-    if (original != NULL) {
-        *original = ptrauth_sign_unauthenticated(
-            trampoline,
-            ptrauth_key_function_pointer,
-            0
-        );
     }
-    MISFixNote("detour: %s in %s -> %p, trampoline %p (%u words)",
-               symbol, image, replacement, trampoline, words);
+
+    // The owning image is named because the one way this goes quietly wrong is
+    // a target that resolved back into libmisfix — see the header on `dlsym`.
+    MISFixNote("detour: %s at %p in %s -> %p, trampoline %p (%u words)",
+               label,
+               (const void *)target,
+               MISFixCallerImage(target),
+               replacement,
+               trampoline,
+               words);
     return MISFixDetourOK;
 }

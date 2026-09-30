@@ -144,7 +144,7 @@ $(MISFIX): $(MISFIX_SOURCES) $(MISFIX_INCLUDES) MISFix | $(STAGE)/misfix
 	$(CLANG) $(GUEST_C_FLAGS) -dynamiclib \
 		-install_name /usr/lib/libmisfix.dylib \
 		-o $@ $(MISFIX_SOURCES) \
-		-framework CoreFoundation -lmis -lMobileGestalt \
+		-framework CoreFoundation -lmis -lMobileGestalt -lobjc \
 		-Wl,-not_for_dyld_shared_cache
 	@codesign --force --sign - $@
 

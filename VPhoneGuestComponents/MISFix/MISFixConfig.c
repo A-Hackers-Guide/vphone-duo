@@ -1,6 +1,7 @@
 #include "MISFixConfig.h"
 
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <os/log.h>
 #include <ptrauth.h>
 #include <stdarg.h>
@@ -188,6 +189,35 @@ const char *MISFixCallerImage(const void *address) {
     return slash != NULL && slash[1] != '\0' ? slash + 1 : info.dli_fname;
 }
 
+// Somewhere each hooked daemon can append to, first one that opens.
+//
+// The unified log alone is not enough, and that cost a whole diagnosis cycle.
+// vphoned's `logs.syslog` is a live tail with no lookback, so a line written
+// from a constructor — which is where every hook here reports whether it
+// installed — lands before any tail can be attached and is simply not there
+// afterwards. A file is readable at leisure with `files.read`.
+//
+// installd's own cache directory is first because installd is the daemon this
+// dylib is mostly about and its sandbox certainly reaches it. /var/mobile is
+// for misagent and SpringBoard. /var/tmp is the last resort.
+static const char *const kNotePaths[] = {
+    "/var/installd/Library/Caches/libmisfix.log",
+    "/var/mobile/Library/Caches/libmisfix.log",
+    "/var/tmp/libmisfix.log",
+};
+static const size_t kNotePathCount = sizeof(kNotePaths) / sizeof(kNotePaths[0]);
+
+static void vpAppendNote(const char *message) {
+    for (size_t index = 0; index < kNotePathCount; index += 1) {
+        int fd = open(kNotePaths[index], O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+        if (fd < 0)
+            continue;
+        dprintf(fd, "libmisfix[%d]: %s\n", getpid(), message);
+        close(fd);
+        return;
+    }
+}
+
 void MISFixNote(const char *format, ...) {
     char message[512];
     va_list arguments;
@@ -199,6 +229,7 @@ void MISFixNote(const char *format, ...) {
     // One prefix for every line this dylib writes, so a single predicate finds
     // them whichever process is carrying the hook.
     os_log(OS_LOG_DEFAULT, "libmisfix[%d]: %{public}s", getpid(), message);
+    vpAppendNote(message);
 }
 
 void MISFixLog(const char *format, ...) {
