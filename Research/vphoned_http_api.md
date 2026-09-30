@@ -286,6 +286,7 @@ request carries `"force": true`.
 | Packages (read-only) | `packages.list`, `status`, `info {path}`, `compare`, `tweaks`, `repos` |
 | Bootstrap | `bootstrap.install {layout}`, `bootstrap.status`, `bootstrap.inspect`, `bootstrap.uninstall {jbroot, force}`, `bootstrap.firmware` (see above) |
 | Environment | `environment.status` (SHA-256 of each vphone library in `/usr/lib`, or null when absent, plus the staging directory), `environment.install {libraries: [{name, sha256}]}` (see below) |
+| Profile UDID | `udid.get`, `udid.set {udid}`, `udid.clear` — each returns `{udid, path}`, the UDID libmisfix gives misagent's profile check (null: the guest's own) and the settings file it came from; `set` and `clear` also return `restarted_pids` (see below) |
 
 `processes.list` joins icli's kernel process list with `proc_pid_rusage`
 footprint, resident size and CPU time (`VPhoneDaemon/Native/vphoned_process.m`),
@@ -294,7 +295,7 @@ Account passwords, boot logo rendering and package installation, removal and
 repository changes are deliberately not exposed. `/v1/health` lists the new
 areas in `capabilities` (`device_info`, `display`, `audio`, `input_gestures`,
 `ui_inspection`, `processes`, `services`, `logs`, `network_capture`,
-`app_details`, `system_control`, `file_tools`, `packages`, `environment_update`) so a host can hide
+`app_details`, `system_control`, `file_tools`, `packages`, `environment_update`, `udid_override`) so a host can hide
 panels an older agent cannot serve. icli failures reach the caller with
 icli's own error `code` (`failed`, `unavailable`, `device_locked`, …) and
 message.
@@ -316,6 +317,20 @@ the intended root state for jailbreak detection. It stops a running
 camera client loads the new hook. The result lists `installed`,
 `restarted_pids` and `reboot_required`, which is true when the launchd hook
 changed: launchd keeps the copy it mapped at boot.
+
+The profile UDID methods drive `libmisfix.dylib`'s `MGCopyAnswer` interpose
+in misagent (`Research/Guest/xcode_install_signature_gate.md`). The hook reads
+`UniqueDeviceID` from the first of `/var/db/vphone/misfix.plist` and
+`/usr/lib/libmisfix.plist` that exists. vphoned owns the first: `udid.set`
+stores the string exactly as sent, with no format check, so the API and
+`vphone.sock`'s `rpc` verb can try unusual values; `udid.clear` removes the key
+but keeps the file, so a value in the `/usr/lib` copy cannot take over. The file
+is written as a binary plist in one rename and read back, then vphoned sends
+SIGTERM to misagent; launchd starts it again for the next profile check. The
+guest does not restart, and installd is left running so an install in progress
+is not aborted. The VM window's Device › Set UDID… is stricter than the API: it
+accepts only 8 and 16 hex digits joined by a hyphen (sent upper-case) or 40 hex
+digits (sent lower-case).
 
 `location.set` is IcliKit's `simulateLocation`: it sends locationd's
 `CLSimulationManager` the sequence Xcode uses (`stopLocationSimulation`,

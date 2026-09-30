@@ -265,6 +265,10 @@ the one a running guest can be reconfigured through; the `/usr/lib` copy is
 what `cfw install` ships, and it is only written when the guest has none, so
 re-running the installer never puts an empty file over a UDID someone set.
 
+The VM window sets it from Device › Set UDID… and Reset UDID, through
+vphoned's `udid.set` and `udid.clear` (`Research/vphoned_http_api.md`). vphoned
+writes the data-volume file, reads it back and restarts misagent.
+
 ### The inconsistency this creates
 
 The guest now answers two ways about which device it is. Xcode, `devicectl`

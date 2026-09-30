@@ -93,6 +93,7 @@ enum GuestAPI {
                 "files_app_drop",
                 "packages",
                 "environment_update",
+                "udid_override",
             ],
         ]
     }

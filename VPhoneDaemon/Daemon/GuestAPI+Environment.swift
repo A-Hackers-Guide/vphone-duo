@@ -159,7 +159,9 @@ extension GuestAPI {
         }
     }
 
-    private static func stopProcesses(named name: String) -> [Int] {
+    /// Sends SIGTERM to every process with this name; launchd starts an
+    /// on-demand daemon again for its next client.
+    static func stopProcesses(named name: String) -> [Int] {
         let rows = (try? listProcesses(filter: name))?["processes"] as? [[String: Any]] ?? []
         return rows.compactMap { row in
             guard row["name"] as? String == name, let pid = row["pid"] as? Int, kill(pid_t(pid), SIGTERM) == 0

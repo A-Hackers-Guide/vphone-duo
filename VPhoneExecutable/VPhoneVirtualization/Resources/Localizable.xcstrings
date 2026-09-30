@@ -2305,6 +2305,108 @@
         }
       }
     },
+    "App installs check provisioning profiles against this UDID. Enter the UDID of a device already registered with your team. Xcode and devicectl still show the guest's own UDID." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App installs check provisioning profiles against this UDID. Enter the UDID of a device already registered with your team. Xcode and devicectl still show the guest's own UDID."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリのインストール時、プロビジョニングプロファイルはこの UDID と照合されます。チームに登録済みのデバイスの UDID を入力してください。Xcode と devicectl には引き続きゲスト自身の UDID が表示されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "앱을 설치할 때 프로비저닝 프로파일을 이 UDID와 대조합니다. 팀에 이미 등록된 기기의 UDID를 입력하세요. Xcode와 devicectl에는 계속 게스트 자체의 UDID가 표시됩니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khi cài ứng dụng, hồ sơ cấp phép được đối chiếu với UDID này. Hãy nhập UDID của một thiết bị đã đăng ký với nhóm của bạn. Xcode và devicectl vẫn hiển thị UDID riêng của máy khách."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装应用时，描述文件会与此 UDID 比对。请输入已在你的团队中注册的设备的 UDID。Xcode 和 devicectl 仍显示客体自身的 UDID。"
+          }
+        }
+      }
+    },
+    "App installs now check provisioning profiles against %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App installs now check provisioning profiles against %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリのインストール時、プロビジョニングプロファイルは %@ と照合されるようになりました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이제 앱을 설치할 때 프로비저닝 프로파일을 %@와(과) 대조합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Từ giờ, khi cài ứng dụng, hồ sơ cấp phép được đối chiếu với %@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "现在安装应用时，描述文件会与 %@ 比对。"
+          }
+        }
+      }
+    },
+    "App installs now check provisioning profiles against the guest's own UDID." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App installs now check provisioning profiles against the guest's own UDID."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリのインストール時、プロビジョニングプロファイルはゲスト自身の UDID と照合されるようになりました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이제 앱을 설치할 때 프로비저닝 프로파일을 게스트 자체의 UDID와 대조합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Từ giờ, khi cài ứng dụng, hồ sơ cấp phép được đối chiếu với UDID riêng của máy khách."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "现在安装应用时，描述文件会与客体自身的 UDID 比对。"
+          }
+        }
+      }
+    },
     "Apple Park (Cupertino)" : {
       "localizations" : {
         "en" : {
@@ -3869,6 +3971,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在充电"
+          }
+        }
+      }
+    },
+    "Check that the guest agent is connected, then try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check that the guest agent is connected, then try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストエージェントの接続を確認して再試行してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트 에이전트 연결을 확인한 후 다시 시도하세요."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hãy kiểm tra kết nối của tác nhân máy khách rồi thử lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请检查客体代理连接后重试。"
           }
         }
       }
@@ -8341,6 +8477,40 @@
         }
       }
     },
+    "Enter 8 and 16 hexadecimal digits joined by a hyphen, or 40 hexadecimal digits." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter 8 and 16 hexadecimal digits joined by a hyphen, or 40 hexadecimal digits."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "8 桁と 16 桁の 16 進数をハイフンでつないだもの、または 40 桁の 16 進数を入力してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "16진수 8자리와 16자리를 하이픈으로 연결하거나 16진수 40자리를 입력하세요."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hãy nhập 8 và 16 chữ số thập lục phân nối bằng dấu gạch ngang, hoặc 40 chữ số thập lục phân."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入用连字符连接的 8 位和 16 位十六进制数，或 40 位十六进制数。"
+          }
+        }
+      }
+    },
     "Enter a URL to open on the guest." : {
       "localizations" : {
         "en" : {
@@ -11475,6 +11645,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "中断"
+          }
+        }
+      }
+    },
+    "Invalid UDID" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid UDID"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID が無効です"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "유효하지 않은 UDID"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID không hợp lệ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID 无效"
           }
         }
       }
@@ -18224,6 +18428,40 @@
         }
       }
     },
+    "Reset UDID" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset UDID"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID をリセット"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID 재설정"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đặt lại UDID"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置 UDID"
+          }
+        }
+      }
+    },
     "Resident" : {
       "localizations" : {
         "ja" : {
@@ -20786,6 +21024,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设置剪贴板文本…"
+          }
+        }
+      }
+    },
+    "Set UDID" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set UDID"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID を設定"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID 설정"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đặt UDID"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置 UDID"
+          }
+        }
+      }
+    },
+    "Set UDID…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set UDID…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID を設定…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID 설정…"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đặt UDID…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置 UDID…"
           }
         }
       }
@@ -24230,6 +24536,40 @@
         }
       }
     },
+    "UDID for provisioning profile checks" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID for provisioning profile checks"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロビジョニングプロファイルの照合に使う UDID"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로비저닝 프로파일 대조에 사용할 UDID"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID dùng để đối chiếu hồ sơ cấp phép"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于比对描述文件的 UDID"
+          }
+        }
+      }
+    },
     "URL" : {
       "localizations" : {
         "ja" : {
@@ -24410,6 +24750,40 @@
         }
       }
     },
+    "Unable to Reset UDID" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to Reset UDID"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID をリセットできません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID를 재설정할 수 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể đặt lại UDID"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法重置 UDID"
+          }
+        }
+      }
+    },
     "Unable to Restart Guest" : {
       "localizations" : {
         "en" : {
@@ -24468,6 +24842,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法旋转"
+          }
+        }
+      }
+    },
+    "Unable to Set UDID" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to Set UDID"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID を設定できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UDID를 설정할 수 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể đặt UDID"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法设置 UDID"
           }
         }
       }
