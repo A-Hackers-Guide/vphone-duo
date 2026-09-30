@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "" : {
+
+    },
     "%@ · %@ · Expires %@" : {
       "localizations" : {
         "en" : {
@@ -1411,6 +1414,17 @@
         }
       }
     },
+    "Allow Network" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Network"
+          }
+        }
+      }
+    },
     "Allow vphone-launchpad in Privacy & Security → Developer Tools, then click Reopen." : {
       "localizations" : {
         "en" : {
@@ -1441,26 +1455,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在“隐私与安全性”→“开发者工具”中允许 vphone-launchpad，然后点按“重新打开”。"
-          }
-        }
-      }
-    },
-    "Allow Network" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Allow Network"
-          }
-        }
-      }
-    },
-    "Allowing network access…" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Allowing network access…"
           }
         }
       }
@@ -1533,7 +1527,53 @@
         }
       }
     },
+    "Allowing network access…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allowing network access…"
+          }
+        }
+      }
+    },
+    "An install is in progress." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An install is in progress."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "インストール中です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치가 진행 중입니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang cài đặt."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在安装。"
+          }
+        }
+      }
+    },
     "An install is in progress. Follow it in the inspector." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2381,6 +2421,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择位置…"
+          }
+        }
+      }
+    },
+    "Choose Show Console Log for the full output." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Show Console Log for the full output."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完全な出力は「コンソールログを表示」で確認できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전체 출력은 '콘솔 로그 보기'에서 확인하십시오."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chọn Hiển thị nhật ký bảng điều khiển để xem toàn bộ đầu ra."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择“显示控制台日志”查看完整输出。"
           }
         }
       }
@@ -3762,6 +3836,74 @@
         }
       }
     },
+    "Custom firmware installation on this machine did not complete, so it cannot boot. Choose Install Custom Firmware from the machine's menu, then start it again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom firmware installation on this machine did not complete, so it cannot boot. Choose Install Custom Firmware from the machine's menu, then start it again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このマシンのカスタムファームウェアのインストールが完了していないため、起動できません。マシンのメニューから「カスタムファームウェアをインストール」を選択してから、もう一度起動してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 머신의 커스텀 펌웨어 설치가 완료되지 않아 부팅할 수 없습니다. 머신 메뉴에서 '커스텀 펌웨어 설치'를 선택한 다음 다시 시작하십시오."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Việc cài firmware tùy chỉnh trên máy này chưa hoàn tất nên máy không thể khởi động. Chọn Cài firmware tùy chỉnh trong menu của máy, rồi khởi động lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台机器的自定义固件没有安装完成，无法启动。请在机器菜单中选择“安装自定义固件”，然后再启动。"
+          }
+        }
+      }
+    },
+    "Custom Firmware Not Installed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom Firmware Not Installed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カスタムファームウェア未インストール"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커스텀 펌웨어 미설치"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chưa cài firmware tùy chỉnh"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义固件未安装"
+          }
+        }
+      }
+    },
     "Custom IPSWs" : {
       "localizations" : {
         "en" : {
@@ -4105,6 +4247,7 @@
       }
     },
     "Disable dyld shared cache randomization" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4207,6 +4350,7 @@
       }
     },
     "Dismiss" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4548,7 +4692,42 @@
         }
       }
     },
+    "Error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エラー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오류"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lỗi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "错误"
+          }
+        }
+      }
+    },
     "Every patch in this bundle, including advanced ones that a freshly restored 26.4 guest may not survive." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4569,6 +4748,7 @@
       }
     },
     "Every patch this bundle declares, including the Frida Stalker relaxations and the hv_vmm_present concealment that a freshly restored 26.4 guest does not survive." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4700,6 +4880,75 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "预期 %1$@\n实际 %2$@"
+          }
+        }
+      }
+    },
+    "Experimental" : {
+      "comment" : "The built-in patch preset",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Experimental"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実験的"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실험적"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thử nghiệm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实验性"
+          }
+        }
+      }
+    },
+    "Experimental Custom Firmware" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Experimental Custom Firmware"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実験的カスタムファームウェア"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실험적 커스텀 펌웨어"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Firmware tùy chỉnh thử nghiệm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实验性自定义固件"
           }
         }
       }
@@ -4907,142 +5156,6 @@
             "value" : "正在导出…"
           }
         }
-      }
-    },
-    "Experimental" : {
-      "comment" : "The built-in patch preset",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Experimental" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "実験的" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "실험적" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Thử nghiệm" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实验性" } }
-      }
-    },
-    "Experimental Custom Firmware" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Experimental Custom Firmware" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "実験的カスタムファームウェア" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "실험적 커스텀 펌웨어" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Firmware tùy chỉnh thử nghiệm" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实验性自定义固件" } }
-      }
-    },
-    "Standard Custom Firmware" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Standard Custom Firmware" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "標準カスタムファームウェア" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "표준 커스텀 펌웨어" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Firmware tùy chỉnh tiêu chuẩn" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "标准自定义固件" } }
-      }
-    },
-    "Unknown Firmware" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unknown Firmware" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "不明なファームウェア" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "알 수 없는 펌웨어" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Firmware không xác định" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未知固件" } }
-      }
-    },
-    "Custom Firmware Not Installed" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Custom Firmware Not Installed" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カスタムファームウェア未インストール" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "커스텀 펌웨어 미설치" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chưa cài firmware tùy chỉnh" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自定义固件未安装" } }
-      }
-    },
-    "Custom firmware installation on this machine did not complete, so it cannot boot. Choose Install Custom Firmware from the machine's menu, then start it again." : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Custom firmware installation on this machine did not complete, so it cannot boot. Choose Install Custom Firmware from the machine's menu, then start it again." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このマシンのカスタムファームウェアのインストールが完了していないため、起動できません。マシンのメニューから「カスタムファームウェアをインストール」を選択してから、もう一度起動してください。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 머신의 커스텀 펌웨어 설치가 완료되지 않아 부팅할 수 없습니다. 머신 메뉴에서 '커스텀 펌웨어 설치'를 선택한 다음 다시 시작하십시오." } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Việc cài firmware tùy chỉnh trên máy này chưa hoàn tất nên máy không thể khởi động. Chọn Cài firmware tùy chỉnh trong menu của máy, rồi khởi động lại." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这台机器的自定义固件没有安装完成，无法启动。请在机器菜单中选择“安装自定义固件”，然后再启动。" } }
-      }
-    },
-    "Install Custom Firmware" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Install Custom Firmware" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カスタムファームウェアをインストール" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "커스텀 펌웨어 설치" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cài firmware tùy chỉnh" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安装自定义固件" } }
-      }
-    },
-    "Installing custom firmware…" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Installing custom firmware…" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カスタムファームウェアをインストール中…" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "커스텀 펌웨어 설치 중…" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang cài firmware tùy chỉnh…" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在安装自定义固件…" } }
-      }
-    },
-    "Choose Show Console Log for the full output." : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose Show Console Log for the full output." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "完全な出力は「コンソールログを表示」で確認できます。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전체 출력은 '콘솔 로그 보기'에서 확인하십시오." } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chọn Hiển thị nhật ký bảng điều khiển để xem toàn bộ đầu ra." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择“显示控制台日志”查看完整输出。" } }
-      }
-    },
-    "An install is in progress." : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "An install is in progress." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "インストール中です。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "설치가 진행 중입니다." } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang cài đặt." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在安装。" } }
-      }
-    },
-    "Hide" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "隠す" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "숨기기" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Ẩn" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隐藏" } }
-      }
-    },
-    "The install keeps running. Core Bundle shows it again." : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "The install keeps running. Core Bundle shows it again." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "インストールは続行されます。コアバンドルから再度表示できます。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "설치는 계속 진행됩니다. 코어 번들에서 다시 볼 수 있습니다." } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Việc cài đặt vẫn tiếp tục. Bundle lõi sẽ hiển thị lại." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安装会继续进行，可在核心 Bundle 中再次查看。" } }
-      }
-    },
-    "No install to show." : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No install to show." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "表示するインストールはありません。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "표시할 설치가 없습니다." } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không có bản cài đặt nào để hiển thị." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有可显示的安装。" } }
-      }
-    },
-    "Steps" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Steps" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "手順" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "단계" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Các bước" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "步骤" } }
-      }
-    },
-    "Error" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Error" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "エラー" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "오류" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Lỗi" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "错误" } }
       }
     },
     "Filter patches" : {
@@ -5454,6 +5567,40 @@
         }
       }
     },
+    "Hide" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隠す"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "숨기기"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ẩn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏"
+          }
+        }
+      }
+    },
     "Hide the inspector" : {
       "localizations" : {
         "en" : {
@@ -5489,6 +5636,7 @@
       }
     },
     "Hide the install steps" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5763,6 +5911,7 @@
       }
     },
     "Identifier" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6171,6 +6320,7 @@
       }
     },
     "Install as root" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6204,27 +6354,8 @@
         }
       }
     },
-    "Install custom firmware" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Install custom firmware"
-          }
-        }
-      }
-    },
-    "Install with administrator access" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Install with administrator access"
-          }
-        }
-      }
-    },
     "Install CFW" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6254,6 +6385,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "安装 CFW"
+          }
+        }
+      }
+    },
+    "Install custom firmware" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install custom firmware"
+          }
+        }
+      }
+    },
+    "Install Custom Firmware" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install Custom Firmware"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カスタムファームウェアをインストール"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커스텀 펌웨어 설치"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cài firmware tùy chỉnh"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装自定义固件"
           }
         }
       }
@@ -6322,6 +6497,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "安装本地构建版本…"
+          }
+        }
+      }
+    },
+    "Install with administrator access" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install with administrator access"
           }
         }
       }
@@ -6459,6 +6644,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在安装 %@"
+          }
+        }
+      }
+    },
+    "Installing custom firmware…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installing custom firmware…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カスタムファームウェアをインストール中…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커스텀 펌웨어 설치 중…"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang cài firmware tùy chỉnh…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在安装自定义固件…"
           }
         }
       }
@@ -7624,36 +7843,6 @@
         }
       }
     },
-    "Network Access" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Network Access"
-          }
-        }
-      }
-    },
-    "Network access is restricted" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Network access is restricted"
-          }
-        }
-      }
-    },
-    "Network access for %@ did not change. Relaunch the app and try again." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Network access for %@ did not change. Relaunch the app and try again."
-          }
-        }
-      }
-    },
     "Network" : {
       "localizations" : {
         "en" : {
@@ -7684,6 +7873,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "网络"
+          }
+        }
+      }
+    },
+    "Network Access" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network Access"
+          }
+        }
+      }
+    },
+    "Network access for %@ did not change. Relaunch the app and try again." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network access for %@ did not change. Relaunch the app and try again."
+          }
+        }
+      }
+    },
+    "Network access is restricted" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network access is restricted"
           }
         }
       }
@@ -7889,6 +8111,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有可用的 GitHub Actions 构建版本。"
+          }
+        }
+      }
+    },
+    "No install to show." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No install to show."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示するインストールはありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표시할 설치가 없습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không có bản cài đặt nào để hiển thị."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可显示的安装。"
           }
         }
       }
@@ -8847,6 +9103,7 @@
       }
     },
     "Patch Set" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8914,16 +9171,6 @@
         }
       }
     },
-    "Patches every machine needs to start, with a working display and camera." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Patches every machine needs to start, with a working display and camera."
-          }
-        }
-      }
-    },
     "Patches" : {
       "localizations" : {
         "en" : {
@@ -8954,6 +9201,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "补丁"
+          }
+        }
+      }
+    },
+    "Patches every machine needs to start, with a working display and camera." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Patches every machine needs to start, with a working display and camera."
           }
         }
       }
@@ -11146,6 +11403,7 @@
       }
     },
     "Show the install steps" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11350,6 +11608,40 @@
         }
       }
     },
+    "Standard Custom Firmware" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard Custom Firmware"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "標準カスタムファームウェア"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표준 커스텀 펌웨어"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Firmware tùy chỉnh tiêu chuẩn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标准自定义固件"
+          }
+        }
+      }
+    },
     "Start" : {
       "localizations" : {
         "en" : {
@@ -11516,6 +11808,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "状态"
+          }
+        }
+      }
+    },
+    "Steps" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手順"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단계"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Các bước"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "步骤"
           }
         }
       }
@@ -11909,6 +12235,7 @@
       }
     },
     "Stored in %@, owned by root and written only by the helper." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12395,6 +12722,40 @@
         }
       }
     },
+    "The install keeps running. Core Bundle shows it again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The install keeps running. Core Bundle shows it again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "インストールは続行されます。コアバンドルから再度表示できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치는 계속 진행됩니다. 코어 번들에서 다시 볼 수 있습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Việc cài đặt vẫn tiếp tục. Bundle lõi sẽ hiển thị lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装会继续进行，可在核心 Bundle 中再次查看。"
+          }
+        }
+      }
+    },
     "The installed helper did not match the copy in this app. Try again." : {
       "localizations" : {
         "en" : {
@@ -12770,6 +13131,7 @@
       }
     },
     "The patches every vphone VM needs to boot, jailbroken, with a working display and camera." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -13182,21 +13544,12 @@
       }
     },
     "Unable to allow network access for %@." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unable to allow network access for %@."
-          }
-        }
-      }
-    },
-    "Unable to install custom firmware. Check the log for details." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unable to install custom firmware. Check the log for details."
           }
         }
       }
@@ -13338,6 +13691,7 @@
       }
     },
     "Unable to install CFW. Check the log for details." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -13367,6 +13721,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法安装 CFW。请查看日志了解详情。"
+          }
+        }
+      }
+    },
+    "Unable to install custom firmware. Check the log for details." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to install custom firmware. Check the log for details."
           }
         }
       }
@@ -13814,6 +14178,40 @@
         }
       }
     },
+    "Unknown Firmware" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown Firmware"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不明なファームウェア"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "알 수 없는 펌웨어"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Firmware không xác định"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知固件"
+          }
+        }
+      }
+    },
     "Update the privileged helper in Host Setup, then run preflight again." : {
       "localizations" : {
         "en" : {
@@ -14053,6 +14451,7 @@
       }
     },
     "Variant" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
