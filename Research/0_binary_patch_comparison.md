@@ -2144,3 +2144,23 @@ Foreground PID stayed unchanged and accessibility switches were restored for
 each helper run. Temporary services were unloaded and their directories removed;
 pcc-research-02 was untouched. Helper evidence is not an integrated daemon
 release or cold-start readiness claim.
+
+Installed-daemon cold-read testing subsequently exposed an initial Settings
+snapshot containing only its unavailable root. The native walker now retries
+only the first root label copy with error -25215 when this invocation actually
+enabled accessibility, after one 400 ms readiness wait. It shares the original
+deadline and query budget, preserves the initial error in readiness metadata,
+and retains unresolved errors. No child error or action is retried.
+
+After a supported bundle installation and phone01 restart, the first Settings
+CLI read recovered and returned 220 nodes with 217 matching parent checks and
+3 disagreements; subsequent reads returned 176. Fresh Calculator returned
+44 partial nodes and Clock 66 complete nodes. Flat queries and the nested
+alias also worked. These are diagnostic inspection results on that VM,
+not full action-cycle performance acceptance. Phone02 remained stopped.
+
+The Release build also reproduced SIGPIPE failures in bundle validation:
+early-exiting grep and awk closed their file/vtool producers under pipefail.
+Those probes now drain producer output while keeping matching, first-platform
+selection, failure propagation, and all signature checks. The full workspace
+build and strict signatures then passed.

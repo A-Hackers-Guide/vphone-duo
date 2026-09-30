@@ -18,7 +18,9 @@ static double milliseconds(void) {
  double start;
  NSMutableArray *seen;
  NSMutableSet *active,*reasons;
- BOOL incomplete;
+ BOOL incomplete,switchesEnabled,retryAttempted,retryResolved;
+ double readinessWait;
+ NSArray *initialReadinessErrors;
 }
 - (NSDictionary *)node:(CFTypeRef)element parent:(CFTypeRef)parent depth:(int)depth;
 @end
@@ -44,6 +46,27 @@ static double milliseconds(void) {
   return nil;
  }
  return CFBridgingRelease(value);
+}
+// Only a newly enabled AX invocation may wait for the first root query to become ready.
+// Historical failures remain separate after resolution; child-query failures never retry.
+- (id)rootLabel:(CFTypeRef)element errors:(NSMutableArray *)errors {
+ id value=[self attribute:2001 element:element errors:errors];
+ NSDictionary *initial=errors.lastObject;
+ if(value || !switchesEnabled || queries!=1 || [initial[@"attribute"] intValue]!=2001 ||
+    [initial[@"error_code"] intValue]!=-25215 || [initial[@"value_present"] boolValue] ||
+    [initial[@"timeout_configuration_failed"] boolValue]) return value;
+ initialReadinessErrors=@[initial];
+ // Reserve time for the retry. Waiting must not reset the walk's global deadline.
+ if(![self budget] || timeoutMS-(milliseconds()-start)<=400.0) return nil;
+ double waitStart=milliseconds();
+ struct timespec delay={.tv_sec=0,.tv_nsec=400000000};nanosleep(&delay,NULL);
+ readinessWait=milliseconds()-waitStart;
+ if(![self budget]) return nil;
+ int before=queries;
+ value=[self attribute:2001 element:element errors:errors];
+ retryAttempted=queries>before;retryResolved=value!=nil;
+ if(retryResolved) [errors removeObject:initial];
+ return value;
 }
 - (NSString *)text:(id)value {
  if(!value || CFGetTypeID((__bridge CFTypeRef)value)!=CFStringGetTypeID())return @"";
@@ -81,7 +104,7 @@ static double milliseconds(void) {
  [seen addObject:(__bridge id)element];[active addObject:identity];
  NSMutableArray *errors=[NSMutableArray array];
  id proof=[self parentProof:element parent:parent errors:errors];
- NSString *label=[self text:[self attribute:2001 element:element errors:errors]];
+ NSString *label=[self text:depth==0?[self rootLabel:element errors:errors]:[self attribute:2001 element:element errors:errors]];
  NSString *identifier=[self text:[self attribute:5019 element:element errors:errors]];
  id type=[self attribute:5003 element:element errors:errors];
  NSString *role=[self text:type];
@@ -113,7 +136,10 @@ static double milliseconds(void) {
 @end
 
 NSDictionary *vp_ax_walk(VPAxFunctions functions, CFTypeRef root, pid_t pid, int elements, int depth, int duration) {
- VPAxWalker *walker=[VPAxWalker new];walker->f=functions;
+ return vp_ax_walk_with_readiness(functions,root,pid,elements,depth,duration,NO);
+}
+NSDictionary *vp_ax_walk_with_readiness(VPAxFunctions functions, CFTypeRef root, pid_t pid, int elements, int depth, int duration, BOOL switchesEnabled) {
+ VPAxWalker *walker=[VPAxWalker new];walker->f=functions;walker->switchesEnabled=switchesEnabled;
  walker->maxElements=MAX(1,MIN(elements,2000));walker->maxDepth=MAX(0,MIN(depth,32));
  walker->timeoutMS=MAX(100,MIN(duration,10000));walker->maxQueries=walker->maxElements*8;
  walker->seen=[NSMutableArray array];walker->active=[NSMutableSet set];walker->reasons=[NSMutableSet set];walker->start=milliseconds();
@@ -125,6 +151,9 @@ NSDictionary *vp_ax_walk(VPAxFunctions functions, CFTypeRef root, pid_t pid, int
   @"truncated":@(truncated),@"truncation_reasons":[walker->reasons.allObjects sortedArrayUsingSelector:@selector(compare:)],
   @"limits":@{@"max_elements":@(walker->maxElements),@"max_depth":@(walker->maxDepth),@"max_queries":@(walker->maxQueries),@"timeout_ms":@(walker->timeoutMS)},
   @"queries":@(walker->queries),@"elapsed_ms":@(milliseconds()-walker->start),
+  @"readiness":@{@"switches_enabled_for_invocation":@(switchesEnabled),@"retry_attempted":@(walker->retryAttempted),
+   @"retry_resolved":@(walker->retryResolved),@"wait_ms":@(walker->readinessWait),@"max_wait_ms":@400,
+   @"initial_query_errors":walker->initialReadinessErrors?:@[]},
   @"parent_checks":@{@"verified":@(walker->verified),@"mismatch":@(walker->mismatch),@"unavailable":@(walker->unavailable)}};
 }
 NSDictionary *vp_ax_hierarchy(int pid,int maxElements,int maxDepth,int timeoutMS) {
@@ -149,7 +178,8 @@ NSDictionary *vp_ax_hierarchy(int pid,int maxElements,int maxDepth,int timeoutMS
  NSDictionary *result=nil;
  @try {
   if(changedApp) setApp(true); if(changedAuto) setAuto(true);
-  result=vp_ax_walk(f,root,pid,maxElements,maxDepth,timeoutMS);
+  BOOL enabledForInvocation=(changedApp && appEnabled()) || (changedAuto && autoEnabled());
+  result=vp_ax_walk_with_readiness(f,root,pid,maxElements,maxDepth,timeoutMS,enabledForInvocation);
  } @catch(NSException *exception) {
   NSMutableDictionary *failure=[vp_ax_walk(f,NULL,pid,maxElements,maxDepth,timeoutMS) mutableCopy];
   failure[@"native_exception"]=exception.name; result=failure.copy;
