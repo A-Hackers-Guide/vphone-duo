@@ -65,7 +65,7 @@ public final class ARM64Disassembler: @unchecked Sendable {
     /// (the write target for the moves/loads/branches the patchers match), else nil.
     ///
     /// Replaces the brittle `operandString.components(separatedBy: ",")` parsing that
-    /// was duplicated across the JB patch files to recover a destination register's
+    /// was duplicated across the CFW patch files to recover a destination register's
     /// width ("w…" vs "x…") and identity.
     public func firstRegisterName(_ insn: ARM64Instruction) -> String? {
         guard let first = insn.detail?.operands.first, first.type == .register else { return nil }

@@ -13,7 +13,7 @@ public enum FirmwarePatchSetCatalog {
     public static let bundled: [VPhonePatchSetManifest] = [
         FirmwareBootChainPatchSet.manifest,
         FirmwareKernelBasePatchSet.manifest,
-        FirmwareKernelJailbreakPatchSet.manifest,
+        FirmwareKernelCustomFirmwarePatchSet.manifest,
         FirmwareKernelHypervisorPatchSet.manifest,
         FirmwareKernelFridaPatchSet.manifest,
         FirmwareDeviceTreePatchSet.manifest,
@@ -106,7 +106,7 @@ public enum FirmwarePatchSetCatalog {
     public static let standardPreset = VPhonePatchPreset(
         identifier: VPhonePatchPreset.standardIdentifier,
         title: "Standard",
-        summary: "The patches every vphone VM needs to boot, jailbroken, with a working display and camera.",
+        summary: "The patches every vphone VM needs to boot custom firmware, with a working display and camera.",
         patchSets: bundledReferences,
         selection: .block(manualOnlyPatches),
     )
@@ -114,9 +114,9 @@ public enum FirmwarePatchSetCatalog {
     /// Everything the bundle declares, including the Frida relaxations, the
     /// hypervisor concealment and the iPhone17,3 identity. Each patch's own version
     /// gate still decides whether it lands.
-    public static let extendedPreset = VPhonePatchPreset(
-        identifier: "extended",
-        title: "Extended",
+    public static let experimentalPreset = VPhonePatchPreset(
+        identifier: "experimental",
+        title: "Experimental",
         summary: """
         Every patch this bundle declares, including the Frida Stalker relaxations, \
         the iPhone17,3 identity rewrites, and the hv_vmm_present concealment that a \
@@ -127,5 +127,5 @@ public enum FirmwarePatchSetCatalog {
     )
 
     /// The presets the bundle ships.
-    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, extendedPreset]
+    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, experimentalPreset]
 }

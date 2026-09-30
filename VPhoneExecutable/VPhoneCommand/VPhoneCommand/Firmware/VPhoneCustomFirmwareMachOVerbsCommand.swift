@@ -208,7 +208,7 @@ struct VPhoneCustomFirmwarePatchLaunchdJetsamCommand: ParsableCommand {
         abstract: "Bypass the jetsam panic guard in /sbin/launchd",
         discussion: """
         launchd panics when its jetsam configuration does not add up, which a
-        JB guest's rearranged daemon set reliably triggers. The conditional
+        CFW guest's rearranged daemon set reliably triggers. The conditional
         branch that guards the panic is rewritten to an unconditional `b` to
         the same target, so the function always takes its return path.
 

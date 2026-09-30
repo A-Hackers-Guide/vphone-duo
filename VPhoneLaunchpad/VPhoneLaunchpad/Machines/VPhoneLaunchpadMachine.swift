@@ -39,6 +39,18 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
         let cloudOS: OSVersion
         let variant: String?
         let device: String?
+
+        /// The firmware this machine was restored with, named after the patch sets
+        /// it carries. `variant` itself is the value recorded at restore time and
+        /// keeps its old spelling, so a machine built before the rename still reads
+        /// correctly and needs no rebuild.
+        var firmwareName: String {
+            switch variant {
+            case "jb": String(localized: "Standard Custom Firmware")
+            case "exp": String(localized: "Experimental Custom Firmware")
+            default: String(localized: "Unknown Firmware")
+            }
+        }
     }
 
     let name: String

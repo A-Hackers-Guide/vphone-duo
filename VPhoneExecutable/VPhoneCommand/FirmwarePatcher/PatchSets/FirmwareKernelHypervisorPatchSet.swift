@@ -17,7 +17,7 @@
 // `system-watchdogd-exp-hv_vmm_cache`.
 //
 // Its own set because it is the one kernel change that is about hiding the
-// hypervisor rather than about jailbreaking, so a preset can take it or leave it
+// hypervisor rather than about running custom firmware, so a preset can take it or leave it
 // without giving up the rest.
 
 import Foundation
@@ -45,6 +45,6 @@ public enum FirmwareKernelHypervisorPatchSet {
         ],
         requires: ["vphone.kernel.base"],
         provides: ["vphone.kernel.hypervisor"],
-        after: ["vphone.kernel.jailbreak"],
+        after: ["vphone.kernel.cfw"],
     )
 }

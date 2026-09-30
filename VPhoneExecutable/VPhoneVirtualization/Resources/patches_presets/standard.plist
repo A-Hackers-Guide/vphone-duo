@@ -3,7 +3,7 @@
 <!--
   The preset every VM gets unless another is named.
 
-  It is the JB baseline plus the virtual camera. It draws on every patch set the
+  It is the CFW baseline plus the virtual camera. It draws on every patch set the
   bundle ships and turns on all of their patches bar three groups. The Frida
   Stalker pair widens what any process in the guest may do and nothing needs it in
   order to boot. The hv_vmm_present concealment — the kernel OID rename, the
@@ -32,7 +32,7 @@
 	<key>Title</key>
 	<string>Standard</string>
 	<key>Summary</key>
-	<string>The patches every vphone VM needs to boot, jailbroken, with a working display and camera.</string>
+	<string>The patches every vphone VM needs to boot custom firmware, with a working display and camera.</string>
 	<key>PatchSets</key>
 	<array>
 		<dict>
@@ -51,7 +51,7 @@
 			<key>Kind</key>
 			<string>Bundled</string>
 			<key>Identifier</key>
-			<string>com.vphone.patchset.kernel.jailbreak</string>
+			<string>com.vphone.patchset.kernel.cfw</string>
 		</dict>
 		<dict>
 			<key>Kind</key>

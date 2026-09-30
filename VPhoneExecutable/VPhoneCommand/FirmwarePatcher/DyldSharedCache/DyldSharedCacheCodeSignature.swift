@@ -27,8 +27,8 @@
 // Side effect, by design
 // ----------------------
 // Rewriting slot hashes changes the code directory's contents and therefore its
-// cdHash. That is only survivable because the JB kernel patch
-// `patch_amfi_cdhash_in_trustcache` — `KernelJailbreakPatchAmfiTrustcache` in this
+// cdHash. That is only survivable because the CFW kernel patch
+// `patch_amfi_cdhash_in_trustcache` — `KernelCustomFirmwarePatchAmfiTrustcache` in this
 // repo — short-circuits AMFI's per-image trust-cache lookup to return 1. This
 // file must not be used on a firmware that does not carry that patch.
 //

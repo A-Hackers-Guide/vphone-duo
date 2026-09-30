@@ -36,8 +36,8 @@ public enum FirmwareKernelFridaPatchSet {
                 applicability: fridaCapable,
             ),
         ],
-        requires: ["vphone.kernel.jailbreak"],
+        requires: ["vphone.kernel.cfw"],
         provides: ["vphone.kernel.frida"],
-        after: ["vphone.kernel.jailbreak"],
+        after: ["vphone.kernel.cfw"],
     )
 }

@@ -3,7 +3,7 @@
 > **Patch sets and presets (2026-09-28):** every patch is now *declared*, and
 > selection happens before any byte is written. The declarations live in nine
 > bundled patch sets under `VPhoneExecutable/VPhoneCommand/FirmwarePatcher/PatchSets/`
-> (`bootchain`, `kernel.base`, `kernel.jailbreak`, `kernel.hypervisor`,
+> (`bootchain`, `kernel.base`, `kernel.cfw`, `kernel.hypervisor`,
 > `kernel.frida`, `devicetree`, `guest.system`, `guest.display`,
 > `guest.identity`), listed by `FirmwarePatchSetCatalog`. A declaration's
 > identifier is the record identifier the patcher already emits, or the common

@@ -1,8 +1,8 @@
 // FirmwareKernelBasePatchSet.swift — Manifest for the base kernel patches.
 //
 // What every research VM needs to mount a patched, unsealed root filesystem and
-// run unsigned code from it. `KernelJailbreakPatcher` builds on this set, so the
-// jailbreak set requires the capability declared here.
+// run unsigned code from it. `KernelCustomFirmwarePatcher` builds on this set, so
+// the custom-firmware set requires the capability declared here.
 //
 // The Mach port guard patch is the one entry with a version gate. It is required
 // on an iOS 18 base, where runningboardd trips a flavor-10 guard and crash-loops

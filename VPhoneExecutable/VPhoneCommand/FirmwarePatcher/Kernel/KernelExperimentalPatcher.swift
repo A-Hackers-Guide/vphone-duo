@@ -1,6 +1,6 @@
 // KernelExperimentalPatcher.swift — Experimental kernel patcher orchestrator.
 //
-// Runs after KernelPatcher + KernelJailbreakPatcher for public JB firmware.
+// Runs after KernelPatcher + KernelCustomFirmwarePatcher for public CFW firmware.
 // The internal historical `.exp` variant uses the same patcher.
 //
 // Current contents:
@@ -13,11 +13,11 @@ import VPhonePatchKit
 
 /// Experimental kernel patcher.
 ///
-/// Inherits the JB infrastructure (symbol table, ADRP/BL indices, branch
+/// Inherits the CFW infrastructure (symbol table, ADRP/BL indices, branch
 /// encoders, code-cave finder, string-anchored function finders, etc.) from
-/// `KernelJailbreakPatcherBase` so EXP-specific patches can use the same helpers
-/// as JB ones without duplicating them.
-public final class KernelExperimentalPatcher: KernelJailbreakPatcherBase, BufferedPatcher {
+/// `KernelCustomFirmwarePatcherBase` so EXP-specific patches can use the same helpers
+/// as CFW ones without duplicating them.
+public final class KernelExperimentalPatcher: KernelCustomFirmwarePatcherBase, BufferedPatcher {
     public let component = "kernelcache_exp"
 
     public func findAll() throws -> [PatchRecord] {
@@ -27,7 +27,7 @@ public final class KernelExperimentalPatcher: KernelJailbreakPatcherBase, Buffer
         buildSymbolTable()
         findPanic()
 
-        // Former EXP patch, now part of the public JB firmware pipeline.
+        // Former EXP patch, now part of the public CFW firmware pipeline.
         patchHvVmmRename()
 
         return patches

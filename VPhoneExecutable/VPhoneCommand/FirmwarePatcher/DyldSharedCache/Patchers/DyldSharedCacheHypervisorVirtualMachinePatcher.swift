@@ -418,7 +418,7 @@ public enum DyldSharedCacheHypervisorVirtualMachinePatcher {
         // without a re-hash is a SIGKILL on the first demand-page-in of that
         // page, with nothing pointing back at this patch. The CD blob's own
         // cdHash changes as a side effect; that is survivable only because the
-        // JB kernel patch `KernelJailbreakPatchAmfiTrustcache` short-circuits AMFI's
+        // CFW kernel patch `KernelCustomFirmwarePatchAmfiTrustcache` short-circuits AMFI's
         // per-image trust-cache lookup.
         //
         // The write spans come from `DyldSharedCacheChunkSet` itself rather than from a list

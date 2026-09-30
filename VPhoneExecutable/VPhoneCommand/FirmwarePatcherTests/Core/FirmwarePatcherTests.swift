@@ -504,7 +504,7 @@ struct IBootPatcherIdempotencyTests {
 }
 
 struct IM4PPayloadParityTests {
-    @Test func `ibss IM 4 P payload matches raw and JB patcher finds nonce patch`() throws {
+    @Test func `ibss IM 4 P payload matches raw and CFW patcher finds nonce patch`() throws {
         let baseDir = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -520,7 +520,7 @@ struct IM4PPayloadParityTests {
 
         #expect(im4pPayload == rawIBSS)
 
-        let patcher = IBootJailbreakPatcher(data: im4pPayload, mode: .ibss, verbose: false)
+        let patcher = IBootCustomFirmwarePatcher(data: im4pPayload, mode: .ibss, verbose: false)
         let records = try patcher.findAll()
         #expect(records.count == 1)
     }
@@ -587,7 +587,7 @@ struct FirmwarePipelineTests {
             restoreDir: root,
             iOSBase: VPhoneVersion("27.0"),
         )
-        // Base and jailbreak, and no KernelExperimentalPatcher: the hv_vmm_present
+        // Base and custom firmware, and no KernelExperimentalPatcher: the hv_vmm_present
         // concealment is off unless a preset or a checkmark asks for it, and a
         // patcher that would write nothing is not built. See
         // FirmwareKernelHypervisorPatchSet for what it does to a 26.4 guest.

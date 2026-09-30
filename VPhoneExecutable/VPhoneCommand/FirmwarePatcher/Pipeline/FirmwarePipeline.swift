@@ -7,10 +7,11 @@
 // Internal variant selection:
 //   .regular — base patchers only
 //   .dev     — TXMDevPatcher instead of TXMPatcher
-//   .jb      — TXMDevPatcher + IBootJailbreakPatcher (iBSS) + KernelJailbreakPatcher
-//              + former EXP kernel and DeviceTree patches.
-//   .exp     — historical internal variant, currently equivalent to JB for
-//              the boot-chain patcher catalogue. Only JB is public.
+//   .jb      — TXMDevPatcher + IBootCustomFirmwarePatcher (iBSS) + KernelCustomFirmwarePatcher
+//              + former EXP kernel and DeviceTree patches. The case keeps its old
+//              spelling because its raw value is recorded in every VM's RestoreInfo.
+//   .exp     — historical internal variant, currently equivalent to CFW for
+//              the boot-chain patcher catalogue. Only CFW is public.
 //
 // The component catalogue lives in FirmwarePipelineComponents.swift and the
 // Restore-directory/firmware-file lookup in FirmwarePipelineDiscovery.swift.

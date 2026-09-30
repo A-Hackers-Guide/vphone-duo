@@ -188,7 +188,7 @@ struct VPhoneCustomFirmwarePatchIOMFBForceKernCommand: ParsableCommand {
         side file has to be present; without it there would be zero pairs to
         find, which would read as "this userland has none".
 
-        Pairs with the KernelJailbreakPatchIomfbSwap kernel patches, which make the
+        Pairs with the KernelCustomFirmwarePatchIomfbSwap kernel patches, which make the
         userclient accept 27's native 0x6e0 SwapEnd struct. Modified pages are
         re-attested; an already-forced cache is a no-op.
         """,
@@ -264,7 +264,7 @@ struct VPhoneCustomFirmwarePatchDyldSharedCacheMaxSlideCommand: ParsableCommand 
 struct VPhoneCustomFirmwarePatchLSDEmbeddedRegCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "patch-lsd-embedded-reg",
-        abstract: "Open lsd's embedded-registration path so JB app installs can register",
+        abstract: "Open lsd's embedded-registration path so CFW app installs can register",
         discussion: """
         On iOS 27, `-[_LSDModifyClient
         clientIsEntitledForEmbeddedRegistrationOperations]` demands three

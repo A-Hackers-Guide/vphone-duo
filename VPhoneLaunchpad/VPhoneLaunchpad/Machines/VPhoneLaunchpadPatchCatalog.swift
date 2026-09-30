@@ -22,7 +22,7 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
         var displayTitle: String {
             switch identifier {
             case "standard": String(localized: "Standard", comment: "The built-in patch preset")
-            case "extended": String(localized: "Extended", comment: "The built-in patch preset")
+            case "experimental": String(localized: "Experimental", comment: "The built-in patch preset")
             default: title
             }
         }
@@ -30,7 +30,7 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
         var displaySummary: String {
             switch identifier {
             case "standard": String(localized: "Patches every machine needs to start, with a working display and camera.")
-            case "extended": String(localized: "Every patch in this bundle, including advanced ones that may stop a newly restored 26.4 machine from starting.")
+            case "experimental": String(localized: "Every patch in this bundle, including advanced ones that may stop a newly restored 26.4 machine from starting.")
             default: summary
             }
         }

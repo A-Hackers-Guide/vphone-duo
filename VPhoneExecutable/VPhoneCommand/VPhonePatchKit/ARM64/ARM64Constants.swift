@@ -59,7 +59,7 @@ public enum ARM64 {
     /// STRB W0, [X20, #0x30]
     public static let strbW0X20_30 = encodeU32(0x3900_C280)
 
-    // MARK: JB Constants
+    // MARK: CFW Constants
 
     /// CBZ X2, #8  (branch if X2 == 0, skip 2 instructions)
     public static let cbzX2_8 = encodeU32(0xB400_0042)

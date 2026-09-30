@@ -202,7 +202,7 @@ struct VPhoneCustomFirmwareInstaller {
         try mountGuestVolume("\(container)s1", at: system)
         dataMounted = true
         try mountGuestVolume("\(container)s3", at: data)
-        print("[*] JB system install: \(bundle.lastPathComponent)")
+        print("[*] CFW system install: \(bundle.lastPathComponent)")
         do {
             // Every descriptor on a guest volume lives in this scope, so none
             // is left open to hold the volume busy when it is unmounted.
@@ -241,7 +241,7 @@ struct VPhoneCustomFirmwareInstaller {
             work: work,
             owner: invokingUser.map { ($0.uid, $0.gid) },
         )
-        print("[+] JB system install complete; vphoned is installed, no package bootstrap was staged")
+        print("[+] CFW system install complete; vphoned is installed, no package bootstrap was staged")
     }
 
     // MARK: - Host inputs
@@ -444,7 +444,7 @@ struct VPhoneCustomFirmwareInstaller {
             try patch("patch-mis-trust-auth", [dsc])
         }
         // These former EXP patches pair with the kernel OID rename and the
-        // camera DeviceTree additions in the public JB firmware pipeline.
+        // camera DeviceTree additions in the public CFW firmware pipeline.
         if on("dyld-exp-hv_vmm") {
             try patch("patch-hv-vmm-dsc", [dsc])
         }
@@ -1130,7 +1130,7 @@ struct VPhoneCustomFirmwareInstaller {
 
 struct VPhoneCustomFirmwareInstallRootCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "install-root", abstract: "Internal privileged JB disk install",
+        commandName: "install-root", abstract: "Internal privileged CFW disk install",
         shouldDisplay: false,
     )
 

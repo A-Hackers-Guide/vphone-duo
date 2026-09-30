@@ -214,12 +214,12 @@ struct KernelcacheComparisonTests {
 // MARK: - JB Tests
 
 @Suite(.enabled(if: hasReferencePatches, referenceMissing))
-struct IBSSJailbreakComparisonTests {
-    @Test func `compare IBSSJailbreak`() throws {
+struct IBSSCustomFirmwareComparisonTests {
+    @Test func `compare IBSSCustomFirmware`() throws {
         let data = try loadRawPayload("ibss.bin")
-        let patcher = IBootJailbreakPatcher(data: data, mode: .ibss, verbose: false)
-        // IBootJailbreakPatcher only adds JB-specific patches on top of base
-        // We need to run findAll() first (base patches), then add JB patch
+        let patcher = IBootCustomFirmwarePatcher(data: data, mode: .ibss, verbose: false)
+        // IBootCustomFirmwarePatcher only adds CFW-specific patches on top of base
+        // We need to run findAll() first (base patches), then add the CFW patch
         patcher.patches = []
         patcher.patchSkipGenerateNonce()
         let refPatches = try loadReference("ibss_jb")
@@ -228,10 +228,10 @@ struct IBSSJailbreakComparisonTests {
 }
 
 @Suite(.enabled(if: hasReferencePatches, referenceMissing))
-struct KernelcacheJailbreakComparisonTests {
-    @Test func `compare kernelcache JB`() throws {
+struct KernelcacheCustomFirmwareComparisonTests {
+    @Test func `compare kernelcache CFW`() throws {
         let data = try loadRawPayload("kernelcache.bin")
-        let patcher = KernelJailbreakPatcher(data: data, verbose: false)
+        let patcher = KernelCustomFirmwarePatcher(data: data, verbose: false)
         let swiftPatches = try patcher.findAll()
         let refPatches = try loadReference("kernelcache_jb")
         comparePatchRecords(swift: swiftPatches, reference: refPatches, component: "kernelcache_jb")

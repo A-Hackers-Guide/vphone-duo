@@ -75,7 +75,7 @@ struct PatchFirmwareCommand: ParsableCommand {
             try encoder.encode(records).write(to: url)
             print("[patch-firmware] wrote \(records.count) patch records to \(url.path)")
         } else {
-            print("[patch-firmware] applied \(records.count) JB patches")
+            print("[patch-firmware] applied \(records.count) CFW patches")
         }
     }
 }
@@ -85,11 +85,11 @@ struct PatchComponentCommand: ParsableCommand {
         case txm
         case kernelBase = "kernel-base"
         /// TESTING/DIAGNOSTICS ONLY — not part of any production flow.
-        /// Production JB patching runs through `patch-firmware`; this
-        /// standalone option runs the JB kernel layer over a single kernelcache
+        /// Production CFW patching runs through `patch-firmware`; this
+        /// standalone option runs the CFW kernel layer over a single kernelcache
         /// and dumps records via --records-out.
         /// (txm / kernel-base, by contrast, are standalone single-component patchers.)
-        case kernelJB = "kernel-jb"
+        case kernelCFW = "kernel-cfw"
     }
 
     static let configuration = CommandConfiguration(
@@ -125,7 +125,7 @@ struct PatchComponentCommand: ParsableCommand {
 
     @Option(
         name: .customLong("target-os"),
-        help: "kernel-jb only: base iOS version the kernel will run under (e.g. 27.0). Gates the iOS-27-only JB patches exactly as the pipeline does. Omit to apply the full set (dev/test default).",
+        help: "kernel-cfw only: base iOS version the kernel will run under (e.g. 27.0). Gates the iOS-27-only CFW patches exactly as the pipeline does. Omit to apply the full set (dev/test default).",
     )
     var targetOS: String?
 
@@ -153,12 +153,12 @@ struct PatchComponentCommand: ParsableCommand {
             patchedData = patcher.buffer.data
             records = patcher.patches
 
-        case .kernelJB:
-            // Mirrors the pipeline's jb kernel layer. In FirmwarePipeline each kernel
+        case .kernelCFW:
+            // Mirrors the pipeline's cfw kernel layer. In FirmwarePipeline each kernel
             // patcher runs on the *original* payload independently, so running
-            // KernelJailbreakPatcher standalone faithfully reproduces JB hook behavior
-            // without the base patcher or the rest of the boot chain.
-            let patcher = KernelJailbreakPatcher(data: payload, verbose: !quiet)
+            // KernelCustomFirmwarePatcher standalone faithfully reproduces CFW hook
+            // behavior without the base patcher or the rest of the boot chain.
+            let patcher = KernelCustomFirmwarePatcher(data: payload, verbose: !quiet)
             // Mirror the pipeline's per-base gating: apply the iOS-27-only patches when
             // --target-os is 27.x, skip them for an explicit non-27 target. With no
             // --target-os, default to applying them so the dev/test tool exercises the

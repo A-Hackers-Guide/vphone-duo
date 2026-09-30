@@ -344,7 +344,7 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
         }
 
         try VPhoneHostFilePermissions.makeAccessible(at: bundle.url)
-        print("[fw patch] applied \(records.count) JB patches"
+        print("[fw patch] applied \(records.count) CFW patches"
             + " (preset \(selection.presetIdentifier))")
     }
 }

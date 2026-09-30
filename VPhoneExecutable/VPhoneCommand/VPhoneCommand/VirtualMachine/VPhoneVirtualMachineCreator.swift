@@ -191,7 +191,7 @@ public struct VPhoneVirtualMachineCreator {
         try VPhoneHostFilePermissions.makeDirectoryAccessible(at: VPhoneResources.userDataRoot())
         permissionsRestored = true
         print("\n=== Done ===")
-        print("JB VM created; vphoned connected. Guest user environment is untouched.")
+        print("CFW VM created; vphoned connected. Guest user environment is untouched.")
     }
 
     // MARK: - trace
@@ -274,7 +274,7 @@ public struct VPhoneVirtualMachineCreator {
                 forVM: bundleURL,
             )
         }
-        print("[fw patch] applied \(records.count) JB patches (preset \(presetIdentifier))")
+        print("[fw patch] applied \(records.count) CFW patches (preset \(presetIdentifier))")
     }
 
     // MARK: - restore phase
@@ -425,10 +425,10 @@ public struct VPhoneVirtualMachineCreator {
         bundleURL: URL,
     ) throws {
         let v = options.verbosity
-        trace("native JB CFW install for \(bundleURL.path)", v)
+        trace("native CFW install for \(bundleURL.path)", v)
         let code = try VPhoneCustomFirmwareInstaller.elevate(bundle: bundleURL, resources: resources)
         guard code == 0 else { throw VPhoneVirtualMachineCreationError.cfwInstallFailed(code) }
-        print("[+] JB CFW installed.")
+        print("[+] CFW installed.")
         if let bundle = try? VPhoneBundle.load(at: bundleURL),
            let info = try? VPhoneRestoreInfo.recordVariant("jb", toBundle: bundle), info.variant != nil
         {

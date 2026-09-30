@@ -286,12 +286,12 @@
         /// and out of the preset, as the real report does.
         static func patchCatalog(preset: String?) -> VPhoneLaunchpadPatchCatalog? {
             let active = preset ?? "standard"
-            let frida = active == "extended"
+            let frida = active == "experimental"
             let json = """
             {"activePreset":"\(active)","blockedPatches":[],"allowedPatches":[],
              "presets":[
-               {"identifier":"standard","title":"Standard","summary":"The patches every vphone VM needs to boot, jailbroken, with a working display and camera.","patchSets":[]},
-               {"identifier":"extended","title":"Extended","summary":"Every patch this bundle declares, including the Frida Stalker relaxations.","patchSets":[]}
+               {"identifier":"standard","title":"Standard","summary":"The patches every vphone VM needs to boot custom firmware, with a working display and camera.","patchSets":[]},
+               {"identifier":"experimental","title":"Experimental","summary":"Every patch this bundle declares, including the Frida Stalker relaxations.","patchSets":[]}
              ],
              "patches":[
                {"identifier":"avpbooter-boot-dgst_bypass","title":"AVPBooter digest bypass","summary":"Accepts the resealed boot images instead of the stock digests.","patchSet":"com.vphone.patchset.bootchain","patchSetName":"Boot Chain","target":"AVPBooter","applicability":"any","bootEssential":true,"inPreset":true,"enabled":true},

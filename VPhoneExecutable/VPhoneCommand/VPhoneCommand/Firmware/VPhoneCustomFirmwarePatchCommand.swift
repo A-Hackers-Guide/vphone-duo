@@ -147,7 +147,7 @@ struct VPhoneCustomFirmwareInjectDylibCommand: ParsableCommand {
         commandName: "inject-dylib",
         abstract: "Insert a weak LC_LOAD_DYLIB into every slice of a Mach-O",
         discussion: """
-        Replaces `insert_dylib --weak --inplace --all-yes`, which is how the JB
+        Replaces `insert_dylib --weak --inplace --all-yes`, which is how the CFW
         and EXP installers get launchd to load /b (the short launchdhook alias)
         at boot.
 

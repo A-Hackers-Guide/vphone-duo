@@ -141,14 +141,14 @@ struct FirmwarePatchSetCatalogTests {
             iOSBase: VPhoneVersion("26.4"),
             cloudOS: VPhoneVersion("26.4"),
         )
-        let extended = try VPhonePatchPlan.resolve(
-            preset: FirmwarePatchSetCatalog.extendedPreset,
+        let experimental = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.experimentalPreset,
             patchSets: FirmwarePatchSetCatalog.bundled,
             iOSBase: VPhoneVersion("26.4"),
             cloudOS: VPhoneVersion("26.4"),
         )
-        #expect(extended.enabled.subtracting(standard.enabled) == FirmwarePatchSetCatalog.manualOnlyPatches)
-        #expect(standard.enabled.subtracting(extended.enabled).isEmpty)
+        #expect(experimental.enabled.subtracting(standard.enabled) == FirmwarePatchSetCatalog.manualOnlyPatches)
+        #expect(standard.enabled.subtracting(experimental.enabled).isEmpty)
     }
 
     @Test
@@ -160,7 +160,7 @@ struct FirmwarePatchSetCatalogTests {
         for (identifier, requiredMajor) in pinned {
             for base in [18, 26, 27] {
                 let plan = try VPhonePatchPlan.resolve(
-                    preset: FirmwarePatchSetCatalog.extendedPreset,
+                    preset: FirmwarePatchSetCatalog.experimentalPreset,
                     patchSets: FirmwarePatchSetCatalog.bundled,
                     iOSBase: VPhoneVersion("\(base).0"),
                     cloudOS: VPhoneVersion("26.4"),
@@ -177,7 +177,7 @@ struct FirmwarePatchSetCatalogTests {
     func `The Frida relaxations need cloudOS 26.4`() throws {
         for cloud in ["26.1", "26.4"] {
             let plan = try VPhonePatchPlan.resolve(
-                preset: FirmwarePatchSetCatalog.extendedPreset,
+                preset: FirmwarePatchSetCatalog.experimentalPreset,
                 patchSets: FirmwarePatchSetCatalog.bundled,
                 iOSBase: VPhoneVersion("26.4"),
                 cloudOS: VPhoneVersion(cloud),
@@ -190,7 +190,7 @@ struct FirmwarePatchSetCatalogTests {
     }
 
     @Test
-    func `The hv_vmm_present patches move together, and only extended has them`() throws {
+    func `The hv_vmm_present patches move together, and only experimental has them`() throws {
         // Three patches, one behaviour: the kernel OID rename, the shared-cache
         // mangle and the watchdogd cache patch. A plan holding some without the
         // rest is broken — the rename alone breaks the graphics and ML paths and
