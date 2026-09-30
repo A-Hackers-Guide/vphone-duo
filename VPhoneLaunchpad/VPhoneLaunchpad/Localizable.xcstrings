@@ -4744,6 +4744,30 @@
             "state" : "translated",
             "value" : "Every patch in this bundle, including advanced ones that may stop a newly restored 26.4 machine from starting."
           }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このバンドルのすべてのパッチ。復元直後の 26.4 マシンが起動できなくなる可能性のある高度なパッチを含みます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 번들의 모든 패치로, 새로 복원한 26.4 머신이 부팅하지 못하게 할 수 있는 고급 패치를 포함합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mọi bản vá trong gói này, bao gồm các bản vá nâng cao có thể khiến máy 26.4 vừa khôi phục không khởi động được."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 Bundle 中的全部补丁，包括可能导致刚恢复的 26.4 机器无法启动的高级补丁。"
+          }
         }
       }
     },
@@ -6396,6 +6420,30 @@
             "state" : "translated",
             "value" : "Install custom firmware"
           }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カスタムファームウェアをインストール"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커스텀 펌웨어 설치"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cài firmware tùy chỉnh"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装自定义固件"
+          }
         }
       }
     },
@@ -6534,6 +6582,30 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Install with administrator access"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理者権限でインストール"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "관리자 권한으로 설치"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cài đặt bằng quyền quản trị viên"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以管理员权限安装"
           }
         }
       }
@@ -9238,6 +9310,30 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Patches every machine needs to start, with a working display and camera."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのマシンの起動に必要なパッチ。ディスプレイとカメラも使えるようにします。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 머신의 부팅에 필요한 패치로, 디스플레이와 카메라도 작동하게 합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Các bản vá mọi máy cần để khởi động, kèm màn hình và camera hoạt động."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每台机器启动所需的补丁，并确保显示和摄像头可用。"
           }
         }
       }
@@ -12258,6 +12354,30 @@
             "state" : "translated",
             "value" : "Stored in %@ and managed by the helper."
           }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ に保存され、特権ヘルパーが管理します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 저장되며 권한 있는 도우미가 관리합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Được lưu trong %@ và do trình trợ giúp đặc quyền quản lý."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存放在 %@，由特权辅助工具管理。"
+          }
         }
       }
     },
@@ -13758,6 +13878,30 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unable to install custom firmware. Check the log for details."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カスタムファームウェアをインストールできません。詳細はログを確認してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커스텀 펌웨어를 설치할 수 없습니다. 자세한 내용은 로그를 확인하십시오."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể cài firmware tùy chỉnh. Hãy xem nhật ký để biết chi tiết."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法安装自定义固件。请查看日志了解详情。"
           }
         }
       }
