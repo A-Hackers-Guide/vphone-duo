@@ -53,23 +53,6 @@ extension GuestAPI {
                     throw GuestAPIError.invalidRequest("value is required unless remove is true")
                 }
             return try setPlistValue(string(params, "path"), key: string(params, "key"), json: json)
-        case "keychain.get":
-            return try getKeychain(
-                className: optionalString(params, "class") ?? "genp",
-                service: optionalString(params, "service"),
-                account: optionalString(params, "account"),
-                server: optionalString(params, "server"),
-                group: optionalString(params, "group"),
-            )
-        case "keychain.update":
-            return try updateKeychain(
-                className: optionalString(params, "class") ?? "genp",
-                service: optionalString(params, "service"),
-                account: string(params, "account"),
-                server: optionalString(params, "server"),
-                group: optionalString(params, "group"),
-                data: string(params, "data"),
-            )
         case "keychain.database":
             return try listKeychainDatabaseMetadata(className: optionalString(params, "class"))
         case "packages.list":

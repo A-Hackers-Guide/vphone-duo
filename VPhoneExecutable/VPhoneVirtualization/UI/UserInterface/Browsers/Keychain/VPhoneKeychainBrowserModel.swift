@@ -16,6 +16,8 @@ class VPhoneKeychainBrowserModel {
     var sortOrder = [KeyPathComparator(\VPhoneKeychainItem.displayName)]
     var filterClass: String?
     var showDiagnostics = false
+    var editing: EditingValue?
+    var pendingDeletion: Set<VPhoneKeychainItem.ID>?
 
     init(control: VPhoneGuestControl) {
         self.control = control
@@ -74,6 +76,75 @@ class VPhoneKeychainBrowserModel {
         }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(([header] + rows).joined(separator: "\n"), forType: .string)
+    }
+
+    // MARK: - Editing
+
+    /// The rows the guest can act on: the ones Security.framework answered for.
+    func editableItems(ids: Set<VPhoneKeychainItem.ID>) -> [VPhoneKeychainItem] {
+        filteredItems.filter { ids.contains($0.id) && $0.isAccessible }
+    }
+
+    var canEdit: Bool {
+        control.guestCapabilities.contains("keychain_edit")
+    }
+
+    func reveal(ids: Set<VPhoneKeychainItem.ID>) async {
+        for item in editableItems(ids: ids) {
+            do {
+                let value = try await control.keychainValue(of: item.identity)
+                if let index = items.firstIndex(where: { $0.id == item.id }) {
+                    items[index].value = value
+                }
+            } catch {
+                self.error = VPhoneLocalization.text("Unable to read the keychain item. Try again.")
+                print("[keychain] read failed: \(error)")
+                return
+            }
+        }
+    }
+
+    func beginEditing(ids: Set<VPhoneKeychainItem.ID>) async {
+        guard let item = editableItems(ids: ids).first else { return }
+        do {
+            editing = try await EditingValue(item: item, value: control.keychainValue(of: item.identity))
+        } catch {
+            self.error = VPhoneLocalization.text("Unable to read the keychain item. Try again.")
+            print("[keychain] read failed: \(error)")
+        }
+    }
+
+    func commitEditing() async {
+        guard let editing else { return }
+        self.editing = nil
+        do {
+            try await control.updateKeychainItem(editing.item.identity, value: editing.value)
+            await refresh()
+        } catch {
+            self.error = VPhoneLocalization.text("Unable to update the keychain item. Try again.")
+            print("[keychain] update failed: \(error)")
+        }
+    }
+
+    func delete(ids: Set<VPhoneKeychainItem.ID>) async {
+        for item in editableItems(ids: ids) {
+            do {
+                try await control.deleteKeychainItem(item.identity)
+            } catch {
+                self.error = VPhoneLocalization.text("Unable to delete the keychain item. Try again.")
+                print("[keychain] delete failed: \(error)")
+                break
+            }
+        }
+        selection.removeAll()
+        await refresh()
+    }
+
+    struct EditingValue: Identifiable {
+        let item: VPhoneKeychainItem
+        var value: String
+
+        var id: VPhoneKeychainItem.ID { item.id }
     }
 
     // MARK: - Actions

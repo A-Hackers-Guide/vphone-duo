@@ -9,12 +9,27 @@ struct VPhoneKeychainItem: Identifiable, Hashable {
     let accessGroup: String
     let protection: String
     let server: String
-    let value: String
+    /// Filled in when the browser reads one accessible item's value.
+    var value: String
     let valueEncoding: String
     let valueSize: Int
     let protectedMetadata: Bool
+    /// Security.framework answered for this row, so the guest can read, edit
+    /// and delete it. A row that only came from the keychain database carries
+    /// encrypted attributes and cannot be named in a query.
+    let isAccessible: Bool
     let created: Date?
     let modified: Date?
+
+    var identity: VPhoneGuestControl.KeychainIdentity {
+        .init(
+            itemClass: itemClass,
+            account: account,
+            service: service,
+            server: server,
+            accessGroup: accessGroup,
+        )
+    }
 
     var displayClass: String {
         switch itemClass {
@@ -41,6 +56,9 @@ struct VPhoneKeychainItem: Identifiable, Hashable {
     var displayValue: String {
         if valueEncoding == "protected" {
             return VPhoneLocalization.text("Protected")
+        }
+        if valueEncoding == "hidden", value.isEmpty {
+            return VPhoneLocalization.text("Hidden")
         }
         if value.isEmpty {
             return "-"
@@ -148,7 +166,8 @@ extension VPhoneKeychainItem {
             modified = nil
         }
 
-        if entry["source"] as? String == "security" {
+        isAccessible = entry["source"] as? String == "security"
+        if isAccessible {
             id = "\(cls)-security-\(index)"
         } else {
             let rowid = (entry["_rowid"] as? NSNumber)?.intValue ?? index

@@ -338,6 +338,8 @@ final class VPhoneGuestControl {
         case "app_foreground": method = "apps.foreground"
         case "keychain_list": method = "keychain.list"
         case "keychain_add": method = "keychain.add"
+        case "keychain_get": method = "keychain.get"
+        case "keychain_update": method = "keychain.update"
         case "keychain_delete": method = "keychain.delete"
         case "open_url": method = "apps.open_url"
         case "settings_get": method = "settings.get"

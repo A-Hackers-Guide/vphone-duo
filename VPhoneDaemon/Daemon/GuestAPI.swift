@@ -72,6 +72,7 @@ enum GuestAPI {
                 "clipboard",
                 "location",
                 "keychain",
+                "keychain_edit",
                 "ipa_install",
                 "bootstrap_install",
                 "bootstrap_uninstall",
@@ -359,11 +360,12 @@ enum GuestAPI {
                 service: string(params, "service"),
                 password: string(params, "password"),
             )
+        case "keychain.get":
+            return try GuestKeychain.get(GuestKeychain.Identity(params))
+        case "keychain.update":
+            return try GuestKeychain.update(GuestKeychain.Identity(params), value: string(params, "value"))
         case "keychain.delete":
-            return try GuestKeychain.delete(
-                account: string(params, "account"),
-                service: string(params, "service"),
-            )
+            return try GuestKeychain.delete(GuestKeychain.Identity(params))
         case "agent.apply_update":
             let expected = try string(params, "sha256")
             let cache = "/var/root/Library/Caches/vphoned"

@@ -40,6 +40,70 @@ struct VPhoneKeychainBrowserView: View {
         } message: {
             Text(model.error ?? "")
         }
+        .confirmationDialog(
+            "Delete the selected keychain items?",
+            isPresented: .init(
+                get: { model.pendingDeletion != nil },
+                set: {
+                    if !$0 {
+                        model.pendingDeletion = nil
+                    }
+                },
+            ),
+            titleVisibility: .visible,
+        ) {
+            Button("Delete", role: .destructive) {
+                let ids = model.pendingDeletion ?? []
+                model.pendingDeletion = nil
+                Task { await model.delete(ids: ids) }
+            }
+            Button("Cancel", role: .cancel) { model.pendingDeletion = nil }
+        } message: {
+            Text("The guest removes them from its keychain. This cannot be undone.")
+        }
+        .sheet(item: $model.editing) { _ in
+            editSheet
+        }
+    }
+
+    // MARK: - Edit Sheet
+
+    @ViewBuilder
+    var editSheet: some View {
+        if let editing = model.editing {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Edit Value")
+                    .font(.headline)
+
+                Text(editing.item.displayName)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                TextEditor(
+                    text: .init(
+                        get: { model.editing?.value ?? "" },
+                        set: { model.editing?.value = $0 },
+                    ),
+                )
+                .font(.system(.body, design: .monospaced))
+                .frame(width: 380, height: 120)
+                .border(Color.secondary.opacity(0.4))
+
+                Text("The value is stored as its UTF-8 bytes.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    Spacer()
+                    Button("Cancel") { model.editing = nil }
+                        .keyboardShortcut(.cancelAction)
+                    Button("Save") { Task { await model.commitEditing() } }
+                        .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(16)
+        }
     }
 
     // MARK: - Table
@@ -210,6 +274,14 @@ struct VPhoneKeychainBrowserView: View {
 
     @ViewBuilder
     func contextMenu(for ids: Set<VPhoneKeychainItem.ID>) -> some View {
+        let editable = model.editableItems(ids: ids)
+        if model.canEdit, !editable.isEmpty {
+            Button("Reveal Value") { Task { await model.reveal(ids: ids) } }
+            Button("Edit Value…") { Task { await model.beginEditing(ids: ids) } }
+                .disabled(editable.count != 1)
+            Button("Delete", role: .destructive) { model.pendingDeletion = ids }
+            Divider()
+        }
         Button("Copy Account") { copyField(ids: ids, keyPath: \.account) }
         Button("Copy Service") { copyField(ids: ids, keyPath: \.service) }
         Button("Copy Value") { copyField(ids: ids, keyPath: \.value) }

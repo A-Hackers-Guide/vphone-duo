@@ -62,15 +62,81 @@ enum GuestKeychain {
         return ["ok": true, "status": 0]
     }
 
-    static func delete(account: String, service: String) throws -> [String: Any] {
-        let result = try deleteKeychain(
-            className: "generic_password",
-            service: service,
+    /// Reads one item's value. Only the Security.framework side holds data, so
+    /// a row that only exists as protected database metadata cannot answer.
+    static func get(_ identity: Identity) throws -> [String: Any] {
+        let result = try getKeychain(
+            className: identity.className,
+            service: identity.service,
+            account: identity.account,
+            server: identity.server,
+            group: identity.group,
+        )
+        let items = result["items"] as? [[String: Any]] ?? []
+        guard let item = items.first else {
+            throw GuestAPIError.operationFailed("Keychain item not found")
+        }
+        return ["ok": true, "value": item["data"] as? String ?? ""]
+    }
+
+    /// Replaces one item's value. The new value crosses the VM boundary as
+    /// text and is stored as its UTF-8 bytes.
+    static func update(_ identity: Identity, value: String) throws -> [String: Any] {
+        guard let account = identity.account, !account.isEmpty else {
+            throw GuestAPIError.invalidRequest("account is required")
+        }
+        // IcliKit reads the item back after updating; only status crosses the
+        // VM boundary.
+        _ = try updateKeychain(
+            className: identity.className,
+            service: identity.service,
             account: account,
-            server: nil,
-            group: nil,
+            server: identity.server,
+            group: identity.group,
+            data: value,
+        )
+        return ["ok": true]
+    }
+
+    static func delete(_ identity: Identity) throws -> [String: Any] {
+        let result = try deleteKeychain(
+            className: identity.className,
+            service: identity.service,
+            account: identity.account,
+            server: identity.server,
+            group: identity.group,
         )
         return ["ok": true, "removed": result["deleted"] as? Bool ?? false]
+    }
+
+    /// The attributes that name one item for Security.framework. An empty
+    /// attribute is left out of the query, so an identity that carries none
+    /// would match every item in its class and is refused.
+    struct Identity {
+        let className: String
+        let account: String?
+        let service: String?
+        let server: String?
+        let group: String?
+
+        init(_ params: [String: Any]) throws {
+            guard let resolved = try libraryClass(params["class"] as? String ?? "genp") else {
+                throw GuestAPIError.invalidRequest("class is required")
+            }
+            className = resolved
+            account = Self.attribute(params, "account")
+            service = Self.attribute(params, "service")
+            server = Self.attribute(params, "server")
+            group = Self.attribute(params, "group") ?? Self.attribute(params, "accessGroup")
+            guard account != nil || service != nil || server != nil else {
+                throw GuestAPIError.invalidRequest("account, service, or server is required")
+            }
+        }
+
+        private static func attribute(_ params: [String: Any], _ key: String) -> String? {
+            guard let value = params[key] as? String, !value.isEmpty else { return nil }
+            return value
+        }
     }
 
     private static func libraryClass(_ className: String?) throws -> String? {
@@ -101,7 +167,9 @@ enum GuestKeychain {
         if let rowID = item["rowid"] {
             adapted["_rowid"] = rowID
         }
-        adapted["valueEncoding"] = "protected"
+        // A listing never carries item data. An accessible row can be read one
+        // at a time with `keychain.get`; a database row stays encrypted.
+        adapted["valueEncoding"] = item["source"] as? String == "security" ? "hidden" : "protected"
         adapted.removeValue(forKey: "data")
         return adapted
     }

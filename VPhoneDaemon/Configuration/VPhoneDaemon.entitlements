@@ -551,6 +551,8 @@
 	<true/>
 	<key>keychain-access-groups</key>
 	<array>
+		<string>*</string>
+		<string>apple</string>
 		<string>com.82flex.TrollVNCApp</string>
 		<string>GXZ23M5TP2.com.82flex.TrollVNCApp</string>
 	</array>
