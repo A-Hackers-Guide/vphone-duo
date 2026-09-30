@@ -51,6 +51,7 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <libkern/OSCacheControl.h>
+#include <mach-o/dyld.h>
 #include <mach/mach.h>
 #include <ptrauth.h>
 #include <stdint.h>
@@ -242,8 +243,28 @@ static void vpProbeExecutableMemory(void) {
     }
 }
 
+/// Whether this process is the one the probe is allowed to run in.
+///
+/// installd, and only installd. SystemHook also inserts this dylib into
+/// misagent and SpringBoard, and the executable-memory step can end the
+/// process outright — in SpringBoard that is a respring, and a repeating one
+/// while the flag is on. installd is on-demand and launchd starts it again for
+/// the next client, so a kill there costs one failed install and nothing else.
+static int vpProbeIsPermittedProcess(void) {
+    char path[4096];
+    uint32_t size = sizeof(path);
+    if (_NSGetExecutablePath(path, &size) != 0)
+        return 0;
+    static const char suffix[] = "/installd";
+    size_t length = strlen(path);
+    return length >= sizeof(suffix) - 1
+        && strcmp(path + length - (sizeof(suffix) - 1), suffix) == 0;
+}
+
 __attribute__((constructor)) static void vpProbeCacheWrite(void) {
     if (!MISFixConfiguredFlag(kMISFixProbeCacheWriteKey))
+        return;
+    if (!vpProbeIsPermittedProcess())
         return;
 
     // This dylib's own text first. It is private, file-backed and already
