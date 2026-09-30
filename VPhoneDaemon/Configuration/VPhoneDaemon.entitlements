@@ -45,6 +45,8 @@
 	<true/>
 	<key>com.apple.SystemConfiguration.SCPreferences-write-access</key>
 	<true/>
+	<key>com.apple.accessibility.api</key>
+	<true/>
 	<key>com.apple.backboard.client</key>
 	<true/>
 	<key>com.apple.backboardd.launchapplications</key>
@@ -70,6 +72,10 @@
 	<key>com.apple.private.IOSurface.protected-access</key>
 	<true/>
 	<key>com.apple.private.MobileContainerManager.allowed</key>
+	<true/>
+	<key>com.apple.private.accessibility.inspection</key>
+	<true/>
+	<key>com.apple.private.accessibility.look-me-up-setup</key>
 	<true/>
 	<key>com.apple.private.allow-explicit-graphics-priority</key>
 	<true/>
