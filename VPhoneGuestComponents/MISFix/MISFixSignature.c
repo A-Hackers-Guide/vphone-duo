@@ -61,6 +61,7 @@
 // hook is attached — weak, deliberately, so an installd whose libmisfix has
 // been removed still boots.
 
+#include "MISFixConfig.h"
 #include "MISFixInterpose.h"
 
 #include <CoreFoundation/CoreFoundation.h>
@@ -132,6 +133,22 @@ static CFDictionaryRef vpWidenedOptions(CFDictionaryRef options) {
     return widened;
 }
 
+/// Log one validation, under `LogQueries`.
+///
+/// This is the other half of the control. `MISValidateSignatureAndCopyInfo` is
+/// reached the same way the UDID query is — from MobileInstallation, in the
+/// shared cache, into libmis, also in the shared cache, with the main
+/// executable's own image not involved. So if this line appears in installd
+/// and the `MGCopyAnswer` line does not, the two calls are being treated
+/// differently and the difference is in MobileGestalt, not in whether an
+/// interpose can cross the cache at all.
+static void vpLogValidation(MISPath path, int result) {
+    char buffer[1024];
+    if (path == NULL || !CFStringGetCString(path, buffer, sizeof(buffer), kCFStringEncodingUTF8))
+        return;
+    MISFixLog("MISValidateSignatureAndCopyInfo(%s) -> 0x%x", buffer, (unsigned)result);
+}
+
 static int vpMISValidateSignatureAndCopyInfo(
     MISPath path,
     CFDictionaryRef options,
@@ -143,6 +160,7 @@ static int vpMISValidateSignatureAndCopyInfo(
         return MISValidateSignatureAndCopyInfo(path, options, info);
     int result = MISValidateSignatureAndCopyInfo(path, widened, info);
     CFRelease(widened);
+    vpLogValidation(path, result);
     return result;
 }
 
@@ -157,6 +175,7 @@ static int vpMISValidateSignatureAndCopyInfoWithProgress(
         return MISValidateSignatureAndCopyInfoWithProgress(path, options, info, progress);
     int result = MISValidateSignatureAndCopyInfoWithProgress(path, widened, info, progress);
     CFRelease(widened);
+    vpLogValidation(path, result);
     return result;
 }
 

@@ -60,7 +60,7 @@
 #include "MISFixConfig.h"
 #include "MISFixInterpose.h"
 
-#include <os/log.h>
+#include <mach-o/dyld.h>
 
 extern CFTypeRef MGCopyAnswer(CFStringRef property);
 extern CFTypeRef MGCopyAnswerWithError(CFStringRef property, uint32_t *error);
@@ -80,16 +80,26 @@ extern CFTypeRef MGCopyAnswerWithError(CFStringRef property, uint32_t *error);
 /// installd, the call is not coming through `MGCopyAnswer` and the hook needs a
 /// different point to stand on.
 static void vpLogQuery(CFStringRef property, int answered) {
-    if (!MISFixConfiguredFlag(CFSTR("LogQueries")))
-        return;
     char name[128];
     if (property == NULL
         || !CFStringGetCString(property, name, sizeof(name), kCFStringEncodingUTF8))
     {
         return;
     }
-    os_log(OS_LOG_DEFAULT, "libmisfix: MGCopyAnswer(%{public}s) %{public}s",
-           name, answered ? "-> override" : "passed through");
+    MISFixLog("MGCopyAnswer(%s) %s", name, answered ? "-> override" : "passed through");
+}
+
+/// Say, once, that this dylib is in this process.
+///
+/// The positive control the diagnosis needs. Without it, "installd logged no
+/// MGCopyAnswer" has two readings that look the same — the call never came
+/// through the interposed symbol, or the hook was not in the process at all —
+/// and they call for opposite fixes. With it, the pair of lines is decisive:
+/// this one and no query line means the call is bypassing the interpose.
+__attribute__((constructor)) static void vpAnnounce(void) {
+    char path[4096];
+    uint32_t size = sizeof(path);
+    MISFixLog("loaded into %s", _NSGetExecutablePath(path, &size) == 0 ? path : "<unknown>");
 }
 
 /// MobileGestalt's key for the UDID. A plain string, not the SDK constant:

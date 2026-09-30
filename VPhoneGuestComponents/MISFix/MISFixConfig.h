@@ -37,4 +37,13 @@ CFStringRef MISFixCopyConfiguredDeviceIdentifier(void);
 /// a boolean, or no configuration can be read.
 int MISFixConfiguredFlag(CFStringRef key);
 
+/// Log `format` under `LogQueries`, prefixed so one predicate finds every line
+/// this dylib writes, from whichever process is carrying it.
+///
+/// A no-op unless the flag is set.
+void MISFixLog(const char *format, ...) __attribute__((format(printf, 1, 2)));
+
+/// The flag every diagnostic in this dylib is behind.
+#define kMISFixLogQueriesKey CFSTR("LogQueries")
+
 #endif

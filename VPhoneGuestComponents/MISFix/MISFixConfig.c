@@ -1,6 +1,10 @@
 #include "MISFixConfig.h"
 
+#include <os/log.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 // Two locations, first match wins.
 //
@@ -163,4 +167,19 @@ int MISFixConfiguredFlag(CFStringRef key) {
     if (value == NULL || CFGetTypeID(value) != CFBooleanGetTypeID())
         return 0;
     return CFBooleanGetValue((CFBooleanRef)value) ? 1 : 0;
+}
+
+void MISFixLog(const char *format, ...) {
+    if (!MISFixConfiguredFlag(kMISFixLogQueriesKey))
+        return;
+    char message[512];
+    va_list arguments;
+    va_start(arguments, format);
+    int written = vsnprintf(message, sizeof(message), format, arguments);
+    va_end(arguments);
+    if (written <= 0)
+        return;
+    // One prefix for every line this dylib writes, so a single predicate finds
+    // them whichever process is carrying the hook.
+    os_log(OS_LOG_DEFAULT, "libmisfix[%d]: %{public}s", getpid(), message);
 }
