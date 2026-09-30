@@ -43,13 +43,30 @@ struct NetworkingTests {
     }
 
     @Test func `make network device off is nil`() throws {
-        let dev = try VPhoneNetworking.makeNetworkDevice(NetworkConfig(mode: .off, macAddress: ""))
+        let (dev, backend) = try VPhoneNetworking.makeNetworkDevice(NetworkConfig(mode: .off, macAddress: ""))
         #expect(dev == nil)
+        #expect(backend == nil)
     }
 
     @Test func `make network device NAT has attachment`() throws {
-        let dev = try VPhoneNetworking.makeNetworkDevice(NetworkConfig(mode: .nat, macAddress: ""))
+        let (dev, backend) = try VPhoneNetworking.makeNetworkDevice(NetworkConfig(mode: .nat, macAddress: ""))
         #expect(dev != nil)
         #expect(dev?.attachment is VZNATNetworkDeviceAttachment)
+        #expect(backend == nil)
+    }
+
+    /// `tunnel` is the only mode with a backend: the network lives in this
+    /// process, so the caller has to hold (and start) it.
+    @Test func `make network device tunnel carries an in-process backend`() throws {
+        let (dev, backend) = try VPhoneNetworking.makeNetworkDevice(NetworkConfig(mode: .tunnel, macAddress: ""))
+        #expect(dev?.attachment is VZFileHandleNetworkDeviceAttachment)
+        let backend = try #require(backend)
+        #expect(backend.configuration == .default)
+        // Starting and stopping must not trap; the rest of the behaviour is
+        // covered by the frame-level tests.
+        backend.start()
+        backend.start()
+        backend.stop()
+        backend.stop()
     }
 }

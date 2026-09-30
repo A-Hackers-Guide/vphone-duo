@@ -13,6 +13,9 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
     private var serialOutputReadHandle: FileHandle?
     /// Synthetic battery source for runtime charge/connectivity updates.
     private var batterySource: AnyObject?
+    /// The in-process network backing `.tunnel` mode; nil for every other mode.
+    /// Held because the sockets live only as long as this reference does.
+    private var userspaceNetwork: VPhoneUserspaceNetwork?
 
     struct Options {
         var configURL: URL
@@ -169,12 +172,14 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         let attachment = try VZDiskImageStorageDeviceAttachment(url: options.diskURL, readOnly: false)
         config.storageDevices = [VZVirtioBlockDeviceConfiguration(attachment: attachment)]
 
-        // Network (mode + MAC from the bundle manifest; nat/bridged/none)
-        if let net = try VPhoneNetworking.makeNetworkDevice(manifest.networkConfig) {
-            config.networkDevices = [net]
+        // Network (mode + MAC from the bundle manifest; nat/bridged/tunnel/none)
+        let (networkDevice, networkBackend) = try VPhoneNetworking.makeNetworkDevice(manifest.networkConfig)
+        if let networkDevice {
+            config.networkDevices = [networkDevice]
         } else {
             config.networkDevices = []
         }
+        userspaceNetwork = networkBackend
 
         // Serial port (PL011 UART - pipes for input/output with boot detection)
         if let serialPort = Dynamic._VZPL011SerialPortConfiguration().asObject
@@ -363,6 +368,9 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         Dynamic(opts)._setStopInIBootStage1(false)
         Dynamic(opts)._setStopInIBootStage2(false)
         print("[vphone] Starting\(forceDFU ? " DFU" : "")...")
+        // Start draining before the framework touches the device, or the guest's
+        // first DHCP request is sent into a socket nobody is reading.
+        userspaceNetwork?.start()
         nonisolated(unsafe) let vm = virtualMachine
         try await vm.start(options: opts)
         if forceDFU {

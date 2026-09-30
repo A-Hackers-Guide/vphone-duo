@@ -162,6 +162,11 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
             case nat
             case bridged
             case hostOnly
+            /// The guest's NIC is carried by this process. Egress leaves through
+            /// ordinary host sockets, so it follows the host's routing table —
+            /// and therefore a VPN — which vmnet's `nat` cannot do because its
+            /// masquerade is pinned to a physical interface.
+            case tunnel
             /// No network device. Named `off` (not `none`) so a `NetworkMode?`
             /// literal `.none` can't silently bind to `Optional.none`.
             case off = "none"
