@@ -8,9 +8,10 @@ import Foundation
 /// type by that name and `vphone-cli` imports both, so sharing it would make
 /// every unqualified use ambiguous.
 ///
-/// The messages of the first five cases are word for word the ones
-/// `scripts/pymobiledevice3_bridge.py` printed, because scripts and people
-/// have been reading them for a while.
+/// The first five cases are the ones `scripts/pymobiledevice3_bridge.py` used
+/// to raise, and the notes below record what it reported for each. The
+/// messages themselves are no longer its wording: they were rewritten to say
+/// what failed and what to do next.
 public enum VPhoneRestoreBackendError: Error, Equatable {
     // MARK: ECID
 

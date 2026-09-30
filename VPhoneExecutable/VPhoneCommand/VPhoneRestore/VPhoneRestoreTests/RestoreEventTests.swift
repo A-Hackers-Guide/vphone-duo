@@ -124,18 +124,22 @@ struct RestoreEventTests {
         }
     }
 
-    @Test func `the timeout message is the pythons word for word`() {
+    @Test func `the timeout message names the mode and what to do next`() {
         let error = VPhoneRestoreBackendError.recoveryProbeTimedOut(mode: "dfu/recovery")
-        #expect("\(error)" == "Timed out waiting for dfu/recovery endpoint")
+        #expect("\(error)"
+            == "The device did not enter dfu/recovery mode in time. Check the connection, then try again.")
     }
 
     // MARK: - Error messages
 
-    @Test func `the restore tree messages are the pythons word for word`() {
+    @Test func `the restore tree messages say which folder is wrong`() {
+        // These once repeated Python's wording verbatim. They were rewritten to
+        // say what to do next; the one that can name a path still names it.
         let none = VPhoneRestoreBackendError.noRestoreDirectory(URL(fileURLWithPath: "/tmp/vm"))
-        #expect("\(none)" == "No iPhone*_Restore directory found in /tmp/vm")
+        #expect("\(none)"
+            == "No restore folder was found in /tmp/vm. Prepare the firmware, then try again.")
         let several = VPhoneRestoreBackendError.multipleRestoreDirectories(["a", "b"])
         #expect("\(several)"
-            == "Multiple iPhone*_Restore directories found; keep only one active restore tree")
+            == "More than one restore folder was found. Keep only one, then try again.")
     }
 }

@@ -73,9 +73,14 @@ struct RestoreIdentityTests {
         }
     }
 
-    @Test func `invalid ECID carries the python message`() {
-        #expect("\(VPhoneRestoreBackendError.ecidEmpty)" == "ECID is empty")
-        #expect("\(VPhoneRestoreBackendError.ecidInvalid("zz"))" == "Invalid ECID: zz")
+    @Test func `an invalid ECID says what to enter instead`() {
+        // The bridge once reported Python's wording; the messages were rewritten
+        // to say what failed and what to do next. Both still name the rejected
+        // value and the format that would be accepted.
+        #expect("\(VPhoneRestoreBackendError.ecidEmpty)"
+            == "The ECID is empty. Enter up to 16 hexadecimal digits.")
+        #expect("\(VPhoneRestoreBackendError.ecidInvalid("zz"))"
+            == "zz is not a valid ECID. Enter up to 16 hexadecimal digits.")
     }
 
     // MARK: - UDID
