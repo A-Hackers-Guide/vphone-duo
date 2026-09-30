@@ -59,12 +59,35 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
     let diskSizeBytes: Int64
     let network: Network
     let restoreInfo: RestoreInfo?
+    /// `false` when the last CFW install did not finish, `nil` when unknown.
+    let customFirmwareInstalled: Bool?
     let udid: String?
     /// The library `vm list` was run on. Not part of the JSON.
     var libraryRoot = ""
 
     private enum CodingKeys: String, CodingKey {
-        case name, cpuCount, memoryMB, diskSizeBytes, network, restoreInfo, udid
+        case name, cpuCount, memoryMB, diskSizeBytes, network, restoreInfo, customFirmwareInstalled, udid
+    }
+
+    /// The inspector's firmware line. A restore whose CFW install never
+    /// finished cannot boot, which matters more than which set it was meant for.
+    var firmwareName: String? {
+        guard let restoreInfo else { return nil }
+        if customFirmwareInstalled == false {
+            return String(localized: "Custom Firmware Not Installed")
+        }
+        return restoreInfo.firmwareName
+    }
+
+    /// Read from disk at launch time rather than from the last `vm list`, so a
+    /// machine that was just installed is not refused on stale data. Mirrors
+    /// `vm launch`: restore-info.json with no variant is an unfinished install.
+    static func customFirmwareIncomplete(at path: VPhoneLaunchpadMachinePath) -> Bool {
+        let file = path.url.appendingPathComponent("restore-info.json")
+        guard let data = try? Data(contentsOf: file),
+              let info = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return false }
+        return info["variant"] == nil
     }
 
     var path: VPhoneLaunchpadMachinePath {

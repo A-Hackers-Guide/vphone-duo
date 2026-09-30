@@ -161,9 +161,51 @@ struct RestoreInfoTests {
             _ = try VPhoneBootCommand.parseAsRoot(["--config", b.configURL.path])
             Issue.record("Boot accepted an explicitly unsupported VM variant")
         } catch {
-            #expect(String(describing: error).contains("Only JB VMs are supported"))
+            #expect(String(describing: error).contains("which this build does not support"))
         }
         _ = try VPhoneBootCommand.parseAsRoot(["--config", b.configURL.path, "--dfu"])
+    }
+
+    @Test func `a restore without a recorded variant reads as an unfinished CFW install`() throws {
+        let b = try makeBundle()
+        defer { try? FileManager.default.removeItem(at: b.url) }
+        // No snapshot: a bundle from before restore-info.json, not known either way.
+        #expect(VPhoneRestoreInfo.customFirmwareInstalled(inBundle: b) == nil)
+
+        try VPhoneRestoreInfo(
+            ios: .init(version: "27.0", build: "24A435"),
+            cloudOS: .init(version: "26.4", build: "23E5207q"),
+        ).write(toBundle: b)
+        #expect(VPhoneRestoreInfo.customFirmwareInstalled(inBundle: b) == false)
+        #expect(VPhoneBundleReport(bundle: b).customFirmwareInstalled == false)
+
+        try VPhoneRestoreInfo.recordVariant("jb", toBundle: b)
+        #expect(VPhoneRestoreInfo.customFirmwareInstalled(inBundle: b) == true)
+
+        try VPhoneRestoreInfo.clearVariant(inBundle: b)
+        #expect(VPhoneRestoreInfo.customFirmwareInstalled(inBundle: b) == false)
+        #expect(VPhoneRestoreInfo.load(fromBundle: b)?.ios.build == "24A435")
+    }
+
+    @Test func `normal boot refuses an unfinished CFW install but DFU still parses`() throws {
+        let b = try makeBundle()
+        defer { try? FileManager.default.removeItem(at: b.url) }
+        try b.manifest.write(to: b.configURL)
+        try VPhoneRestoreInfo(
+            ios: .init(version: "27.0", build: "24A435"),
+            cloudOS: .init(version: "26.4", build: "23E5207q"),
+        ).write(toBundle: b)
+
+        do {
+            _ = try VPhoneBootCommand.parseAsRoot(["--config", b.configURL.path])
+            Issue.record("Boot accepted a VM whose CFW install did not finish")
+        } catch {
+            #expect(String(describing: error).contains("cfw install"))
+        }
+        _ = try VPhoneBootCommand.parseAsRoot(["--config", b.configURL.path, "--dfu"])
+
+        try VPhoneRestoreInfo.recordVariant("jb", toBundle: b)
+        _ = try VPhoneBootCommand.parseAsRoot(["--config", b.configURL.path])
     }
 
     @Test func `bundle report carries UDID`() throws {

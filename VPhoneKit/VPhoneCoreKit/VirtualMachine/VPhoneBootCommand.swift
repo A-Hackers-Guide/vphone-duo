@@ -114,6 +114,13 @@ public struct VPhoneBootCommand: ParsableCommand {
                 "This VM was created as '\(existingVariant)', which this build does not support. Create a new VM and try again.",
             )
         }
+        // A restored guest without CFW panics at pid 1 and shows only a black
+        // screen, so say so before booting it.
+        if !dfu, VPhoneRestoreInfo.customFirmwareInstalled(inBundle: bundle) == false {
+            throw ValidationError(
+                "CFW installation on this VM did not complete, so it cannot boot. Stop the VM, run `sudo vphone-cli cfw install \(bundle.name)` again, then launch.",
+            )
+        }
 
         if dfu, let packageURL = installPackageURL {
             throw ValidationError(

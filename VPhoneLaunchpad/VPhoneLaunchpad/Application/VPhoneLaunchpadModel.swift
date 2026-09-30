@@ -11,6 +11,7 @@ final class VPhoneLaunchpadModel {
     enum Panel: String, Identifiable {
         case hostSetup
         case coreBundle
+        case bundleInstall
 
         var id: Self {
             self
@@ -20,6 +21,7 @@ final class VPhoneLaunchpadModel {
             switch self {
             case .hostSetup: String(localized: "Host Setup")
             case .coreBundle: String(localized: "Core Bundle")
+            case .bundleInstall: String(localized: "Core Bundle Install")
             }
         }
     }
@@ -112,9 +114,13 @@ final class VPhoneLaunchpadModel {
             await bundles.checkActive()
         }
         await listed
-        // An unfinished install is picked up in the inspector instead.
-        if panel == nil, bundles.progress == nil || bundles.progress?.isFinished == true {
-            panel = !host.requiredPassed ? .hostSetup : !bundles.isReady ? .coreBundle : nil
+        // An unfinished install reopens its own sheet instead.
+        if panel == nil {
+            if bundles.progress == nil || bundles.progress?.isFinished == true {
+                panel = !host.requiredPassed ? .hostSetup : !bundles.isReady ? .coreBundle : nil
+            } else {
+                panel = .bundleInstall
+            }
         }
         await bundles.fetchReleases()
         await bundles.fetchArtifacts()
@@ -145,8 +151,8 @@ final class VPhoneLaunchpadModel {
 
     // MARK: - Bundle install
 
-    /// An install runs in the inspector, not in the sheet it started from,
-    /// so the sheet closes and the inspector opens on its progress.
+    /// An install shows its progress in a sheet of its own, which replaces
+    /// the Core Bundle sheet it started from.
     func installBundle(_ release: VPhoneLaunchpadRelease) async {
         revealInstall()
         await bundles.install(release)
@@ -171,15 +177,12 @@ final class VPhoneLaunchpadModel {
     }
 
     private func revealInstall() {
-        panel = nil
-        showsInspector = true
-        isInstallExpanded = true
+        present(.bundleInstall)
     }
 
     // MARK: - Inspector
 
     var showsInspector = true
-    var isInstallExpanded = true
 
     func removeBundle(_ version: String) async {
         await bundles.remove(version)

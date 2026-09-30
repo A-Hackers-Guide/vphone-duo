@@ -274,10 +274,33 @@ final class VPhoneLaunchpadMachineLibrary {
         try? handle.write(contentsOf: Data("\n\(line)\n".utf8))
     }
 
+    /// One line of helper output, from the XPC queue. Creates the log if the
+    /// machine has never been started from Launchpad.
+    private nonisolated static func append(_ line: String, to log: URL) {
+        if !FileManager.default.fileExists(atPath: log.path) {
+            try? FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: log.path, contents: nil)
+        }
+        guard let handle = try? FileHandle(forWritingTo: log) else {
+            return
+        }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: Data("\(line)\n".utf8))
+    }
+
     // MARK: - Start and stop
 
     func start(_ machine: Path, headless: Bool = false) {
         guard let commandLine = bundles.commandLine() else {
+            return
+        }
+        // `vm launch` refuses these too, but only into the console log.
+        guard !VPhoneLaunchpadMachine.customFirmwareIncomplete(at: machine) else {
+            actionError = VPhoneLaunchpadError(
+                String(localized: "Unable to Start \(machine.name)"),
+                detail: String(localized: "Custom firmware installation on this machine did not complete, so it cannot boot. Choose Install Custom Firmware from the machine's menu, then start it again."),
+            )
             return
         }
         var arguments = ["vm", "launch", machine.name] + machine.libraryArguments
@@ -305,6 +328,40 @@ final class VPhoneLaunchpadMachineLibrary {
         } catch {
             actionError = VPhoneLaunchpadError(String(localized: "Unable to Start \(machine.name)"), detail: error.localizedDescription)
         }
+    }
+
+    /// Runs `cfw install` again through the helper, for a machine whose last
+    /// install did not finish. Output goes to the machine's console log.
+    func installCustomFirmware(_ machine: Path) async {
+        guard let version = bundles.activeVersion else {
+            actionError = VPhoneLaunchpadError(String(localized: "No Core Bundle version is in use. Choose a version in Core Bundle."))
+            return
+        }
+        activities[machine] = String(localized: "Installing custom firmware…")
+        defer { activities[machine] = nil }
+        appendConsoleLog(machine, "$ vphone-cli cfw install \(machine.name)")
+        let log = Self.consoleLog(machine)
+        do {
+            let status = try await helper.installCustomFirmware(
+                bundleVersion: version,
+                machineName: machine.name,
+                libraryRoot: machine.libraryRoot,
+                keepArtifacts: true,
+                onLine: { line in Self.append(line, to: log) },
+            )
+            if status != 0 {
+                actionError = VPhoneLaunchpadError(
+                    String(localized: "Unable to install custom firmware. Check the log for details."),
+                    detail: String(localized: "Choose Show Console Log for the full output."),
+                )
+            }
+        } catch {
+            if !(error is CancellationError) {
+                actionError = error as? VPhoneLaunchpadError
+                    ?? VPhoneLaunchpadError(String(localized: "Unable to install custom firmware. Check the log for details."), detail: error.localizedDescription)
+            }
+        }
+        await refresh()
     }
 
     func stop(_ machine: Path) async {

@@ -24,6 +24,8 @@ struct VPhoneLaunchpadRootView: View {
                         VPhoneLaunchpadHostSetupView()
                     case .coreBundle:
                         VPhoneLaunchpadCoreBundleView()
+                    case .bundleInstall:
+                        VPhoneLaunchpadInstallView()
                     }
                 }
                 .environment(model)

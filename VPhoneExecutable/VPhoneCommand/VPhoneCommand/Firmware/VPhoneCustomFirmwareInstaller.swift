@@ -125,6 +125,9 @@ struct VPhoneCustomFirmwareInstaller {
                 throw ValidationError("The VM disk image changed during the install. Try again.")
             }
             image = try URL(fileURLWithPath: bundleDirectory.path).appendingPathComponent("Disk.img")
+            // From here a failure leaves a half-written guest, so it must not
+            // keep reading as installed. `cfw install` records it again on success.
+            clearRecordedInstall(invokingUser: invokingUser)
         }
 
         let attached = try tool(
@@ -242,6 +245,25 @@ struct VPhoneCustomFirmwareInstaller {
             owner: invokingUser.map { ($0.uid, $0.gid) },
         )
         print("[+] CFW system install complete; vphoned is installed, no package bootstrap was staged")
+    }
+
+    /// Host bookkeeping in the caller's folder, written with the caller's
+    /// credentials as `cfw install` records the variant, never as root.
+    private func clearRecordedInstall(invokingUser: VPhoneInvokingUser?) {
+        let bundle = bundle
+        let clear: () throws -> Void = {
+            guard let vm = try? VPhoneBundle.load(at: bundle) else { return }
+            try VPhoneRestoreInfo.clearVariant(inBundle: vm)
+        }
+        do {
+            if let invokingUser {
+                try invokingUser.withUserCredentials(clear)
+            } else {
+                try clear()
+            }
+        } catch {
+            fputs("warning: could not mark the install as in progress: \(error)\n", stderr)
+        }
     }
 
     // MARK: - Host inputs

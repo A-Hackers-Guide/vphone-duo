@@ -49,9 +49,17 @@ private enum MISFixture {
     static let functionOffset = 0x2000
     static let literalOffset = 0x3000
 
-    static var machHeaderVMA: UInt64 { base + UInt64(machHeaderOffset) }
-    static var functionVMA: UInt64 { base + UInt64(functionOffset) }
-    static var literalVMA: UInt64 { base + UInt64(literalOffset) }
+    static var machHeaderVMA: UInt64 {
+        base + UInt64(machHeaderOffset)
+    }
+
+    static var functionVMA: UInt64 {
+        base + UInt64(functionOffset)
+    }
+
+    static var literalVMA: UInt64 {
+        base + UInt64(literalOffset)
+    }
 
     static let chunkName = "dyld_shared_cache_arm64e"
 
@@ -168,7 +176,9 @@ private enum MISFixture {
         // accepts it.
         var name = Data(installName.utf8)
         name.append(0)
-        while name.count % 8 != 0 { name.append(0) }
+        while name.count % 8 != 0 {
+            name.append(0)
+        }
         let commandSize = 24 + name.count
         put32(0xFEED_FACF, at: machHeaderOffset)
         put32(0x0100_000C, at: machHeaderOffset + 4) // CPU_TYPE_ARM64
@@ -485,7 +495,6 @@ struct DyldSharedCacheMISTrustAuthIdempotenceTests {
 
 // MARK: - The shape detector on its own
 
-@Suite
 struct DyldSharedCacheMISTrustAuthShapeDetectorTests {
     private func decode(_ words: [Data]) -> [ARM64Instruction] {
         ARM64Disassembler().disassemble(words.reduce(Data(), +), at: MISFixture.functionVMA)

@@ -74,11 +74,6 @@ struct VPhoneLaunchpadMachinesView: View {
                     )
                 } else if library.selection.count > 1 {
                     ContentUnavailableView("\(library.selection.count) Machines Selected", systemImage: "iphone")
-                } else if model.bundles.progress != nil {
-                    Form {
-                        VPhoneLaunchpadInstallSection()
-                    }
-                    .formStyle(.grouped)
                 } else {
                     ContentUnavailableView("No Selection", systemImage: "iphone")
                 }
@@ -289,6 +284,12 @@ struct VPhoneLaunchpadMachinesView: View {
                 .disabled(!isStopped)
             Button("Export…") { sheet = .export([machine.path]) }
                 .disabled(!isStopped)
+            Button("Install Custom Firmware") {
+                Task { await library.installCustomFirmware(machine.path) }
+            }
+            // Only for an unfinished install: that is when the restore tree it
+            // reads is still there. A finished one removes it.
+            .disabled(!isStopped || machine.customFirmwareInstalled != false)
             Divider()
             Button("Show in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([machine.path.url])

@@ -4909,39 +4909,140 @@
         }
       }
     },
-    "Extended" : {
+    "Experimental" : {
       "comment" : "The built-in patch preset",
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extended"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "拡張"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "확장"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mở rộng"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "扩展"
-          }
-        }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Experimental" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "実験的" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "실험적" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Thử nghiệm" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实验性" } }
+      }
+    },
+    "Experimental Custom Firmware" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Experimental Custom Firmware" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "実験的カスタムファームウェア" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "실험적 커스텀 펌웨어" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Firmware tùy chỉnh thử nghiệm" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实验性自定义固件" } }
+      }
+    },
+    "Standard Custom Firmware" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Standard Custom Firmware" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "標準カスタムファームウェア" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "표준 커스텀 펌웨어" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Firmware tùy chỉnh tiêu chuẩn" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "标准自定义固件" } }
+      }
+    },
+    "Unknown Firmware" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unknown Firmware" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "不明なファームウェア" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "알 수 없는 펌웨어" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Firmware không xác định" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未知固件" } }
+      }
+    },
+    "Custom Firmware Not Installed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Custom Firmware Not Installed" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カスタムファームウェア未インストール" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "커스텀 펌웨어 미설치" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chưa cài firmware tùy chỉnh" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自定义固件未安装" } }
+      }
+    },
+    "Custom firmware installation on this machine did not complete, so it cannot boot. Choose Install Custom Firmware from the machine's menu, then start it again." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Custom firmware installation on this machine did not complete, so it cannot boot. Choose Install Custom Firmware from the machine's menu, then start it again." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このマシンのカスタムファームウェアのインストールが完了していないため、起動できません。マシンのメニューから「カスタムファームウェアをインストール」を選択してから、もう一度起動してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 머신의 커스텀 펌웨어 설치가 완료되지 않아 부팅할 수 없습니다. 머신 메뉴에서 '커스텀 펌웨어 설치'를 선택한 다음 다시 시작하십시오." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Việc cài firmware tùy chỉnh trên máy này chưa hoàn tất nên máy không thể khởi động. Chọn Cài firmware tùy chỉnh trong menu của máy, rồi khởi động lại." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这台机器的自定义固件没有安装完成，无法启动。请在机器菜单中选择“安装自定义固件”，然后再启动。" } }
+      }
+    },
+    "Install Custom Firmware" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Install Custom Firmware" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カスタムファームウェアをインストール" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "커스텀 펌웨어 설치" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cài firmware tùy chỉnh" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安装自定义固件" } }
+      }
+    },
+    "Installing custom firmware…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Installing custom firmware…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カスタムファームウェアをインストール中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "커스텀 펌웨어 설치 중…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang cài firmware tùy chỉnh…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在安装自定义固件…" } }
+      }
+    },
+    "Choose Show Console Log for the full output." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose Show Console Log for the full output." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "完全な出力は「コンソールログを表示」で確認できます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전체 출력은 '콘솔 로그 보기'에서 확인하십시오." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chọn Hiển thị nhật ký bảng điều khiển để xem toàn bộ đầu ra." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择“显示控制台日志”查看完整输出。" } }
+      }
+    },
+    "An install is in progress." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "An install is in progress." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "インストール中です。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "설치가 진행 중입니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang cài đặt." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在安装。" } }
+      }
+    },
+    "Hide" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "隠す" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "숨기기" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Ẩn" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隐藏" } }
+      }
+    },
+    "The install keeps running. Core Bundle shows it again." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The install keeps running. Core Bundle shows it again." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "インストールは続行されます。コアバンドルから再度表示できます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "설치는 계속 진행됩니다. 코어 번들에서 다시 볼 수 있습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Việc cài đặt vẫn tiếp tục. Bundle lõi sẽ hiển thị lại." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安装会继续进行，可在核心 Bundle 中再次查看。" } }
+      }
+    },
+    "No install to show." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No install to show." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "表示するインストールはありません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "표시할 설치가 없습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không có bản cài đặt nào để hiển thị." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有可显示的安装。" } }
+      }
+    },
+    "Steps" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Steps" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "手順" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "단계" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Các bước" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "步骤" } }
+      }
+    },
+    "Error" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Error" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "エラー" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "오류" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Lỗi" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "错误" } }
       }
     },
     "Filter patches" : {

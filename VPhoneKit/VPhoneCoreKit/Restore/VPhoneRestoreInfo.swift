@@ -98,6 +98,29 @@ public struct VPhoneRestoreInfo: Codable, Equatable, Sendable {
         return merged
     }
 
+    /// Whether `cfw install` finished on this bundle. `restore` writes
+    /// restore-info.json without a variant and only a completed install records
+    /// one, so a snapshot with no variant is a guest that cannot boot yet. `nil`
+    /// when there is no snapshot to tell: a bundle restored before it existed.
+    public static func customFirmwareInstalled(inBundle bundle: VPhoneBundle) -> Bool? {
+        guard let directory = readableDirectory(of: bundle),
+              let data = try? directory.readData(fileName),
+              let info = try? JSONDecoder().decode(VPhoneRestoreInfo.self, from: data)
+        else { return nil }
+        return info.variant != nil
+    }
+
+    /// Drop the recorded variant before an install that writes Disk.img in
+    /// place, so an install that stops halfway is not reported as complete.
+    public static func clearVariant(inBundle bundle: VPhoneBundle) throws {
+        guard let directory = readableDirectory(of: bundle),
+              let data = try? directory.readData(fileName),
+              let info = try? JSONDecoder().decode(VPhoneRestoreInfo.self, from: data),
+              info.variant != nil
+        else { return }
+        try VPhoneRestoreInfo(ios: info.ios, cloudOS: info.cloudOS).write(toBundle: bundle)
+    }
+
     /// Remove the `iPhone*_Restore/` tree from the bundle; returns its name, or
     /// nil if absent. Record versions (`derive`) first — it reads this directory.
     /// Only a real folder is removed, without following any link inside it:

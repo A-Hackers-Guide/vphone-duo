@@ -27,8 +27,9 @@ struct VPhoneLaunchpadCoreBundleView: View {
             Form {
                 if bundles.isInstalling {
                     Section {
-                        Text("An install is in progress. Follow it in the inspector.")
-                            .foregroundStyle(.secondary)
+                        LabeledContent("An install is in progress.") {
+                            Button("Show Progress") { model.present(.bundleInstall) }
+                        }
                     }
                 }
                 if !bundles.installed.isEmpty {
