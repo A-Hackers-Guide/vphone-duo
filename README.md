@@ -77,6 +77,7 @@ To turn on the automation API, add `--api-listen 127.0.0.1:8765` at launch and u
 | [Host Setup](Documents/Guides/host-setup.md) | SIP and AMFI settings, building from source, environment checks |
 | [Create and Run](Documents/Guides/create-and-run.md) | Firmware sources, the creation process, storage and backups |
 | [Compatibility](Documents/Guides/compatibility.md) | Verified firmware pairings |
+| [iPadOS Guests](Documents/Guides/ipados.md) | Run iPadOS (iPad mini A17 Pro) instead of iOS |
 | [Package Environment](Documents/Guides/package-environment.md) | Installing and removing a package manager in the VM |
 | [Troubleshooting](Documents/Guides/troubleshooting.md) | Common errors and how to fix them |
 | [Networking](Documents/Guides/networking.md) | Network modes, and `tunnel` for a Mac behind a VPN or proxy |
