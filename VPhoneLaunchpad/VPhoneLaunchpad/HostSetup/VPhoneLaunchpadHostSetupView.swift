@@ -4,6 +4,7 @@ struct VPhoneLaunchpadHostSetupView: View {
     @Environment(VPhoneLaunchpadModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @AppStorage(VPhoneLaunchpadMenuBar.key) private var showsInMenuBar = false
+    @State private var showsSkillInstall = false
 
     private var host: VPhoneLaunchpadHostSetup {
         model.host
@@ -19,6 +20,8 @@ struct VPhoneLaunchpadHostSetupView: View {
             }
             .help("Run every check again")
             .disabled(host.isChecking)
+            Button("Install Skill…") { showsSkillInstall = true }
+                .help("Give your coding agent the vphone skill")
         } actions: {
             // Straight on to the next stage while it is not ready.
             if host.requiredPassed, !model.bundles.isReady {
@@ -30,6 +33,9 @@ struct VPhoneLaunchpadHostSetupView: View {
             }
         }
         .frame(width: 600, height: 600)
+        .sheet(isPresented: $showsSkillInstall) {
+            VPhoneLaunchpadSkillInstallView()
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             host.refreshDeveloperTools()
         }

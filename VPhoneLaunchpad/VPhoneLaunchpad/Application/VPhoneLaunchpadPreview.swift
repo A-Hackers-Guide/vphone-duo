@@ -65,6 +65,9 @@
                 coreBundleSource = .releases
 
                 await panel(model, .hostSetup, "04-host-setup-passed", suffix)
+                await standalone("04b-skill-install", suffix, size: NSSize(width: 520, height: 460)) {
+                    VPhoneLaunchpadSkillInstallView()
+                }
 
                 model.machines.selection = [path("research-01")]
                 await shot("05-machines", suffix)

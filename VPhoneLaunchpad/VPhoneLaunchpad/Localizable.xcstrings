@@ -1479,40 +1479,6 @@
         }
       }
     },
-    "An install is in progress." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "An install is in progress."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "インストール中です。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "설치가 진행 중입니다."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang cài đặt."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在安装。"
-          }
-        }
-      }
-    },
     "Apple silicon" : {
       "localizations" : {
         "en" : {
@@ -1919,6 +1885,69 @@
             "value" : "目录"
           }
         }
+      }
+    },
+    "Install Skill" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Install Skill" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スキルをインストール" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스킬 설치" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cài đặt skill" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安装 Skill" } }
+      }
+    },
+    "Install Skill…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Install Skill…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スキルをインストール…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스킬 설치…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cài đặt skill…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安装 Skill…" } }
+      }
+    },
+    "Give your coding agent the vphone skill" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Give your coding agent the vphone skill" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "コーディングエージェントに vphone スキルを渡します" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "코딩 에이전트에 vphone 스킬을 전달합니다" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đưa skill vphone cho agent lập trình của bạn" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "把 vphone skill 交给你的编程 Agent" } }
+      }
+    },
+    "Give this to your coding agent, such as Claude Code, Codex or Grok. It reads the vphone skill from this Mac and installs it where that agent expects skills." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Give this to your coding agent, such as Claude Code, Codex or Grok. It reads the vphone skill from this Mac and installs it where that agent expects skills." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code、Codex、Grok などのコーディングエージェントに渡してください。この Mac から vphone スキルを読み取り、そのエージェントがスキルを置く場所にインストールします。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code, Codex, Grok 같은 코딩 에이전트에 전달하세요. 이 Mac에서 vphone 스킬을 읽어 해당 에이전트가 스킬을 두는 위치에 설치합니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đưa nội dung này cho agent lập trình của bạn, như Claude Code, Codex hoặc Grok. Agent sẽ đọc skill vphone trên máy Mac này và cài vào nơi agent đó tải skill." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "把这段话交给你的编程 Agent，例如 Claude Code、Codex 或 Grok。它会读取这台 Mac 上的 vphone skill，并装到该 Agent 存放 skill 的位置。" } }
+      }
+    },
+    "This copy of Launchpad does not contain the skill." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This copy of Launchpad does not contain the skill." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "この Launchpad にはスキルが含まれていません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 Launchpad에는 스킬이 포함되어 있지 않습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Bản Launchpad này không chứa skill." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这份 Launchpad 不包含 skill。" } }
+      }
+    },
+    "Copy Prompt" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy Prompt" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "プロンプトをコピー" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "프롬프트 복사" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Sao chép prompt" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制提示词" } }
+      }
+    },
+    "Copied" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copied" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "コピーしました" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "복사됨" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đã sao chép" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已复制" } }
       }
     },
     "Check Again" : {

@@ -25,13 +25,6 @@ struct VPhoneLaunchpadCoreBundleView: View {
         @Bindable var bundles = bundles
         VPhoneLaunchpadSheet(Text("Core Bundle")) {
             Form {
-                if bundles.isInstalling {
-                    Section {
-                        LabeledContent("An install is in progress.") {
-                            Button("Show Progress") { model.present(.bundleInstall) }
-                        }
-                    }
-                }
                 if !bundles.installed.isEmpty {
                     installedSection
                 }
