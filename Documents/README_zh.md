@@ -107,6 +107,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/v1/health
 | [创建与运行](Guides/create-and-run.md) | 固件来源、创建流程、存储与备份 |
 | [兼容性说明](Guides/compatibility.md) | 已验证的固件组合 |
 | [故障排查](Guides/troubleshooting.md) | 常见错误及解决方法 |
+| [网络](Guides/networking.md) | 网络模式，以及在 Mac 使用 VPN 或代理时用的 `tunnel` |
 | [Launchpad 命令行](Guides/launchpad-cli.md) | 用 `vphone-launchpad-cli` 安装和测试本地构建 |
 | [研究记录](../Research/README.md) | 补丁与实现细节 |
 

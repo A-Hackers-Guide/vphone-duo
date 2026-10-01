@@ -21,7 +21,7 @@ extension VPhoneNetworkingError: CustomStringConvertible, LocalizedError {
     public var description: String {
         switch self {
         case .hostOnlyUnsupported:
-            "Network mode 'hostOnly' is not supported. Use nat, bridged, or none."
+            "Network mode 'hostOnly' is not supported. Use nat, bridged, tunnel, or none."
         case let .bridgeInterfaceNotFound(requested, available):
             "Bridge interface '\(requested)' not found. Available: \(available.isEmpty ? "none" : available.joined(separator: ", "))."
         case .noBridgeInterfaces:
@@ -116,16 +116,28 @@ public enum VPhoneNetworking {
     /// Build the VZ network device for a config, or nil for `.off` (no NIC).
     /// The MAC is left framework-assigned; a forced MAC breaks guest networking.
     /// Throws if the config cannot be realized (missing bridge interface, hostOnly).
-    public static func makeNetworkDevice(_ cfg: NetworkConfig) throws -> VZVirtioNetworkDeviceConfiguration? {
+    ///
+    /// The returned `backend` is non-nil only for `.tunnel`, where the network is
+    /// implemented in this process. It is a reference type whose sockets live as
+    /// long as the last holder, so the caller must keep it for the whole time the
+    /// VM runs, and should `start()` it once the VM does.
+    public static func makeNetworkDevice(_ cfg: NetworkConfig) throws
+        -> (device: VZVirtioNetworkDeviceConfiguration?, backend: VPhoneUserspaceNetwork?)
+    {
         switch cfg.mode {
         case .off:
-            return nil
+            return (nil, nil)
         case .hostOnly:
             throw VPhoneNetworkingError.hostOnlyUnsupported
         case .nat:
             let net = VZVirtioNetworkDeviceConfiguration()
             net.attachment = VZNATNetworkDeviceAttachment()
-            return net
+            return (net, nil)
+        case .tunnel:
+            let network = try VPhoneUserspaceNetwork()
+            let net = VZVirtioNetworkDeviceConfiguration()
+            net.attachment = network.networkAttachment
+            return (net, network)
         case .bridged:
             guard let id = cfg.bridgeInterface else {
                 throw VPhoneNetworkingError.noBridgeInterfaces
@@ -138,7 +150,7 @@ public enum VPhoneNetworking {
             }
             let net = VZVirtioNetworkDeviceConfiguration()
             net.attachment = VZBridgedNetworkDeviceAttachment(interface: iface)
-            return net
+            return (net, nil)
         }
     }
 }

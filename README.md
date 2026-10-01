@@ -63,6 +63,7 @@ To turn on the automation API, add `--api-listen 127.0.0.1:8765` at launch and u
 | [Compatibility](Documents/Guides/compatibility.md) | Verified firmware pairings |
 | [Package Environment](Documents/Guides/package-environment.md) | Installing and removing a package manager in the VM |
 | [Troubleshooting](Documents/Guides/troubleshooting.md) | Common errors and how to fix them |
+| [Networking](Documents/Guides/networking.md) | Network modes, and `tunnel` for a Mac behind a VPN or proxy |
 | [Launchpad Command Line](Documents/Guides/launchpad-cli.md) | Install and test a local build with `vphone-launchpad-cli` |
 | [Contributing](Documents/README.md#for-contributors) | Project structure, building from source, research notes |
 

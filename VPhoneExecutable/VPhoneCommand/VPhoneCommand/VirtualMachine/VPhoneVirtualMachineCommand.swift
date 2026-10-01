@@ -212,7 +212,7 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
     @Argument(help: "VM name") var name: String?
     @Option(name: .shortAndLong, help: "CPU cores") var cpu: UInt?
     @Option(name: .shortAndLong, help: "Memory (MB)") var memory: UInt64?
-    @Option(name: [.customShort("n"), .long], help: "Network mode: nat | bridged | none") var network: String?
+    @Option(name: [.customShort("n"), .long], help: "Network mode: nat | bridged | tunnel | none") var network: String?
     @Option(name: .long, help: "Host interface to bridge (bridged mode; auto-picks first if omitted)")
     var bridgeInterface: String?
 
@@ -240,11 +240,12 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
         switch s.lowercased() {
         case "nat": return .nat
         case "bridged": return .bridged
+        case "tunnel": return .tunnel
         case "none", "off": return .off
         case "hostonly", "host-only":
-            throw ValidationError("Host-only networking is not supported. Use nat, bridged, or none.")
+            throw ValidationError("Host-only networking is not supported. Use nat, bridged, tunnel, or none.")
         default:
-            throw ValidationError("Unknown network mode '\(s)'. Use nat, bridged, or none.")
+            throw ValidationError("Unknown network mode '\(s)'. Use nat, bridged, tunnel, or none.")
         }
     }
 }

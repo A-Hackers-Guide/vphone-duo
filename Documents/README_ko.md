@@ -107,6 +107,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/v1/health
 | [생성 및 실행](Guides/create-and-run.md) | 펌웨어 출처, 생성 절차, 저장과 백업 |
 | [호환성 안내](Guides/compatibility.md) | 검증된 펌웨어 조합 |
 | [문제 해결](Guides/troubleshooting.md) | 자주 발생하는 오류와 해결 방법 |
+| [네트워크](Guides/networking.md) | 네트워크 모드, 그리고 Mac이 VPN이나 프록시를 쓸 때의 `tunnel` |
 | [Launchpad 명령줄](Guides/launchpad-cli.md) | `vphone-launchpad-cli`로 로컬 빌드 설치 및 테스트 |
 | [연구 기록](../Research/README.md) | 패치와 구현 세부 사항 |
 

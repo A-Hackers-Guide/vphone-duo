@@ -107,6 +107,7 @@ token は起動のたびに新しく生成されます。token を固定する�
 | [作成と実行](Guides/create-and-run.md) | ファームウェアの入手元、作成の流れ、ストレージとバックアップ |
 | [互換性ガイド](Guides/compatibility.md) | 検証済みのファームウェアの組み合わせ |
 | [トラブルシューティング](Guides/troubleshooting.md) | よくあるエラーと対処方法 |
+| [ネットワーク](Guides/networking.md) | ネットワークモードと、Mac が VPN やプロキシを使うときの `tunnel` |
 | [Launchpad コマンドライン](Guides/launchpad-cli.md) | `vphone-launchpad-cli` でローカルビルドをインストールしてテストする |
 | [研究記録](../Research/README.md) | パッチと実装の詳細 |
 
