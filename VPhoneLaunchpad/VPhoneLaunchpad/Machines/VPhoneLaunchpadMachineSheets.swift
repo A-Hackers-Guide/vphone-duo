@@ -46,10 +46,15 @@ struct VPhoneLaunchpadMachineSettingsView: View {
                     Picker("Mode", selection: $network) {
                         Text("NAT").tag("nat")
                         Text("Bridged").tag("bridged")
+                        Text("Tunnel").tag("tunnel")
                         Text("None").tag("none")
                     }
                     if network == "bridged" {
                         TextField("Interface", text: $bridgeInterface, prompt: Text("First available"))
+                    }
+                    if network == "tunnel" {
+                        Text("Traffic leaves through this Mac's own connections, so it follows the Mac's VPN.")
+                            .foregroundStyle(.secondary)
                     }
                 } header: {
                     Text("Network")
