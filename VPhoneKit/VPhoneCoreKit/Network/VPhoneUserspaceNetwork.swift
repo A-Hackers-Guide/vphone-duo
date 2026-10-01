@@ -1,0 +1,270 @@
+import Foundation
+import Virtualization
+import os
+
+// MARK: - Errors
+
+public enum VPhoneUserspaceNetworkError: Error, Equatable {
+    /// `socketpair(2)` failed.
+    case socketPairFailed(errno: Int32)
+    /// The attachment was asked for before `start()`, or after `stop()`.
+    case notRunning
+}
+
+extension VPhoneUserspaceNetworkError: CustomStringConvertible, LocalizedError {
+    public var description: String {
+        switch self {
+        case let .socketPairFailed(errno):
+            "Could not create the network device socket pair (errno \(errno))."
+        case .notRunning:
+            "The userspace network is not running."
+        }
+    }
+
+    public var errorDescription: String? { description }
+}
+
+// MARK: - The device
+
+/// A guest NIC backed entirely by this process.
+///
+/// `VZFileHandleNetworkDeviceAttachment` hands frames to us untouched — it
+/// performs no DHCP, no ARP, no translation — so everything the guest expects a
+/// network to do is implemented on this side, in `VPhoneUserspaceNetworkResponder`.
+///
+/// The point of the mode is egress: replies leave through ordinary host sockets,
+/// so they follow the host's routing table and therefore a VPN, with no root, no
+/// interface, and no change to the host's configuration. `nat` cannot do that
+/// because vmnet's masquerade is pinned to a physical interface.
+///
+/// Threading: every field is touched only on `queue`, a serial queue. Frame reads
+/// arrive as `DispatchSource` events on that queue, and `stop()` hops onto it
+/// before tearing down. That is the whole of the invariant behind
+/// `@unchecked Sendable`.
+public final class VPhoneUserspaceNetwork: @unchecked Sendable {
+    public let configuration: VPhoneUserspaceNetworkConfiguration
+
+    /// Our end of the socket pair. The other end belongs to the attachment.
+    private let socket: Int32
+    /// Held so the attachment (and therefore the VZ device tree) outlives us.
+    private let attachment: VZFileHandleNetworkDeviceAttachment
+    private let queue: DispatchQueue
+    private static let log = Logger(subsystem: "com.vphone.tunnel", category: "frames")
+    /// Reused across frames; see the note on the UDP forwarder's buffer.
+    private var frameBuffer = [UInt8](repeating: 0, count: VPhoneUserspaceNetwork.frameCapacity)
+    private var source: DispatchSourceRead?
+    /// Set by `stop()`. Cancelling the read source closes our descriptor once no
+    /// handler is running, so the pair cannot be reopened after that.
+    private var isStopped = false
+    private var responder: VPhoneUserspaceNetworkResponder
+    /// Carries the guest's UDP out to the host and the answers back. Owns one
+    /// socket per flow, so it is the thing `stop()` has to tear down.
+    ///
+    /// `lazy` because building it needs a closure over `self`, and a stored
+    /// property cannot be captured until every property is initialised. First
+    /// touch is always on `queue`.
+    private lazy var forwarder = VPhoneUDPForwarder(configuration: configuration, queue: queue) { [weak self] flow, payload in
+        self?.sendUDPReply(flow: flow, payload: payload)
+    }
+
+    /// Terminates the guest's TCP against host sockets. Owns one connection per
+    /// flow, and emits segments of its own rather than echoing ours.
+    private lazy var tcpForwarder = VPhoneTCPForwarder(queue: queue) { [weak self] flow, segment in
+        self?.sendTCPReply(flow: flow, segment: segment)
+    }
+
+    /// Largest frame we will accept from the guest. Ethernet header plus a
+    /// jumbo-sized IP packet; the guest is expected to stay within `mtu`.
+    private static let frameCapacity = 9216
+
+    public convenience init(configuration: VPhoneUserspaceNetworkConfiguration = .default) throws {
+        var descriptors: [Int32] = [-1, -1]
+        guard socketpair(AF_UNIX, SOCK_DGRAM, 0, &descriptors) == 0 else {
+            throw VPhoneUserspaceNetworkError.socketPairFailed(errno: errno)
+        }
+        try self.init(
+            configuration: configuration,
+            guestDescriptor: descriptors[0],
+            hostDescriptor: descriptors[1],
+        )
+    }
+
+    /// Adopt a socket pair that already exists rather than making one.
+    ///
+    /// The frame loop only fails in ways a direct call cannot reproduce: a
+    /// blocking read that parks the shared queue, a `start()` that deadlocks
+    /// against the forwarders it owns. Catching those needs a real event loop,
+    /// and a test driving one needs the guest's end of the pair. That is what
+    /// this seam is for; production always goes through the initialiser above.
+    init(
+        configuration: VPhoneUserspaceNetworkConfiguration,
+        guestDescriptor: Int32,
+        hostDescriptor: Int32,
+    ) throws {
+        for descriptor in [guestDescriptor, hostDescriptor] {
+            // A SOCK_DGRAM pair has a small default buffer, and the guest can
+            // burst (a DHCP retry plus an ARP plus a DNS query) faster than we
+            // drain it. Dropping frames here would look like packet loss.
+            var size: Int32 = 4 << 20
+            _ = setsockopt(descriptor, SOL_SOCKET, SO_SNDBUF, &size, socklen_t(MemoryLayout<Int32>.size))
+            _ = setsockopt(descriptor, SOL_SOCKET, SO_RCVBUF, &size, socklen_t(MemoryLayout<Int32>.size))
+            // Non-blocking is load-bearing. `drain` loops until recv reports
+            // EAGAIN, and everything -- the UDP and TCP forwarders included --
+            // shares this one serial queue. On a blocking socket the loop parks
+            // in recv the moment the guest goes quiet, which is exactly when it
+            // is waiting for a reply, so the reply is never read. The symptom is
+            // a guest whose DNS queries leave but whose answers never arrive.
+            _ = fcntl(descriptor, F_SETFL, fcntl(descriptor, F_GETFL, 0) | O_NONBLOCK)
+            // VZ closes its end when the device goes away; a frame sent after that
+            // must fail with EPIPE, not kill the VM process with SIGPIPE.
+            _ = fcntl(descriptor, F_SETNOSIGPIPE, 1)
+        }
+
+        socket = hostDescriptor
+        attachment = VZFileHandleNetworkDeviceAttachment(
+            fileHandle: FileHandle(fileDescriptor: guestDescriptor, closeOnDealloc: true),
+        )
+        queue = DispatchQueue(label: "com.vphone.userspace-network")
+        responder = VPhoneUserspaceNetworkResponder(configuration: configuration)
+        self.configuration = configuration
+    }
+
+    /// The object to hand to `VZVirtioNetworkDeviceConfiguration.attachment`.
+    public var networkAttachment: VZNetworkDeviceAttachment { attachment }
+
+    /// Begin draining the guest's frames. Idempotent, and a no-op after `stop()`.
+    public func start() {
+        queue.sync {
+            guard !isStopped, source == nil else { return }
+            let descriptor = socket
+            let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: queue)
+            source.setEventHandler { [weak self] in self?.drain() }
+            // Closing the source closes the descriptor, but only once no handler
+            // is running; VZ holds its own end of the pair until the device goes.
+            source.setCancelHandler { close(descriptor) }
+            source.resume()
+            self.source = source
+            forwarder.start()
+            tcpForwarder.start()
+            Self.log.info(
+                "tunnel up: gateway \(String(describing: self.configuration.hostAddress), privacy: .public) guest \(String(describing: self.configuration.guestAddress), privacy: .public) mtu \(self.configuration.mtu, privacy: .public) resolver \(VPhoneHostResolver.preferred()?.description ?? "NONE", privacy: .public)",
+            )
+        }
+    }
+
+    /// Stop draining and close our end. Idempotent. There is no way back: the
+    /// descriptors are gone, so a later `start()` does nothing.
+    public func stop() {
+        queue.sync {
+            guard !isStopped else { return }
+            isStopped = true
+            source?.cancel()
+            source = nil
+            forwarder.stop()
+            tcpForwarder.stop()
+        }
+    }
+
+    deinit {
+        // Nothing may hop onto `queue` from deinit, so only cancel if we are
+        // already on it — which is why `stop()` exists and should be preferred.
+        source?.cancel()
+    }
+
+    // MARK: - Frame loop
+
+    private func drain() {
+        while true {
+            let received = frameBuffer.withUnsafeMutableBytes { raw in
+                recv(socket, raw.baseAddress, raw.count, 0)
+            }
+            if received <= 0 { return } // EAGAIN once the queue is empty
+            let frame = Array(frameBuffer[0 ..< received])
+            switch responder.handle(frame) {
+            case .drop:
+                continue
+            case let .reply(reply):
+                write(reply)
+            case let .forward(flow, payload):
+                // The answer arrives later, on this same queue.
+                forwarder.send(payload, for: flow)
+            case let .forwardTCP(flow, segment):
+                tcpForwarder.receive(segment, for: flow)
+            }
+        }
+    }
+
+    /// Hand a finished frame to the guest's side of the pair.
+    ///
+    /// The result matters. This is a datagram socket, so a frame the kernel
+    /// refuses is gone -- and since TCP is an ordered stream, one lost frame
+    /// leaves the guest waiting forever for a segment we never resend. Reporting
+    /// a failure here is the difference between "slow" and "silently stalled".
+    private func write(_ frame: [UInt8]) {
+        let sent = frame.withUnsafeBytes { raw in
+            send(socket, raw.baseAddress, raw.count, 0)
+        }
+        if sent != frame.count {
+            Self.log.error("frame send failed: \(sent, privacy: .public)/\(frame.count, privacy: .public) errno \(errno, privacy: .public)")
+        }
+    }
+
+    /// Wrap one forwarded datagram as if it came from where the guest sent it.
+    ///
+    /// The source address is the guest's *destination*, not our gateway address:
+    /// a DNS lookup was addressed to `192.168.127.1`, so the answer has to
+    /// appear to come from there or the guest's stack will discard it.
+    /// Wrap one TCP segment the forwarder produced.
+    ///
+    /// Same addressing rule as UDP: the source is what the guest believes it is
+    /// talking to, not our gateway address, or the guest's stack drops the
+    /// segment before its TCP ever sees it.
+    private func sendTCPReply(flow: VPhoneTCPFlow, segment: VPhoneTCPSegment) {
+        let packet = VPhoneIPv4Packet(
+            source: flow.destinationAddress,
+            destination: flow.sourceAddress,
+            proto: .tcp,
+            payload: segment.bytes(source: flow.destinationAddress, destination: flow.sourceAddress),
+        )
+        // Segments are already cut to the guest's MSS, so these normally fit in
+        // one. The call stays because a guest is free to advertise an MSS larger
+        // than the MTU we sent it, and silently emitting an oversized datagram
+        // would be the same bug as above.
+        for fragment in packet.fragmented(toFit: configuration.mtu) {
+            let frame = VPhoneEthernetFrame(
+                destination: flow.guestHardware,
+                source: .gateway,
+                etherType: .ipv4,
+                payload: fragment,
+            ).bytes
+            write(frame)
+        }
+    }
+
+    private func sendUDPReply(flow: VPhoneUDPFlow, payload: [UInt8]) {
+        let datagram = VPhoneUDPDatagram(
+            sourcePort: flow.destinationPort,
+            destinationPort: flow.sourcePort,
+            payload: payload,
+        )
+        let packet = VPhoneIPv4Packet(
+            source: flow.destinationAddress,
+            destination: flow.sourceAddress,
+            proto: .udp,
+            payload: datagram.bytes(source: flow.destinationAddress, destination: flow.sourceAddress),
+        )
+        // UDP has no layer above it to chop anything up, and QUIC rides right at
+        // the MTU boundary, so a reply that does not fit has to be fragmented
+        // here or it goes out as a datagram the guest cannot take.
+        for fragment in packet.fragmented(toFit: configuration.mtu) {
+            let frame = VPhoneEthernetFrame(
+                destination: flow.guestHardware,
+                source: .gateway,
+                etherType: .ipv4,
+                payload: fragment,
+            ).bytes
+            write(frame)
+        }
+    }
+
+}

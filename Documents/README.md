@@ -1,25 +1,38 @@
 # Documentation
 
-[Research notes](../Research/README.md)
-
-Start with the [Launchpad quick start](../README.md#get-started). For terminal use, see the [one-command VM flow](Guides/create-and-run.md). Version 2.x applies the complete firmware patch set, including the former EXP changes; selectable patch variants are not available. Earlier experiments remain in the research notes as historical context.
+Start with the [Launchpad quick start](../README.md#get-started). For terminal use, see [Create and Run](Guides/create-and-run.md). Version 2.x applies the complete firmware patch set; there are no selectable patch variants.
 
 | Guide | Use it for |
 | --- | --- |
-| [Host setup](Guides/host-setup.md) | Apple Silicon, SIP/AMFI settings, signing and preflight |
-| [Create and run a VM](Guides/create-and-run.md) | Firmware inputs, full or manual pipeline, vphoned, storage and backups |
-| [Compatibility](Guides/compatibility.md) | Verified firmware pairs and what the checks actually prove |
+| [Downloads](Downloads/README.md) | Notarized Launchpad versions and matching `VPhone.bundle` versions |
+| [Host Setup](Guides/host-setup.md) | Apple Silicon, SIP and AMFI settings, signing and preflight |
+| [Create and Run](Guides/create-and-run.md) | Firmware inputs, full or manual pipeline, vphoned, storage and backups |
+| [Compatibility](Guides/compatibility.md) | Verified firmware pairs and what the checks prove |
+| [Package Environment](Guides/package-environment.md) | Installing and removing a package manager in the VM |
 | [Troubleshooting](Guides/troubleshooting.md) | Launch refusals, restore failures, Home key and app problems |
+| [Launchpad Command Line](Guides/launchpad-cli.md) | Installing and testing a local build with `vphone-launchpad-cli` |
 
 ## Translations
 
 [中文](README_zh.md) · [日本語](README_ja.md) · [한국어](README_ko.md)
 
-These pages give a translated overview and quick start. The guides above hold the detailed, current procedures so that a change to the host or firmware flow has one place to update.
+These pages give a translated overview and quick start. The guides above hold the current procedures.
 
-## For contributors
+## For Contributors
 
-- [Research index](../Research/README.md) groups the patch and implementation records by subject.
-- [Patch inventory](../Research/0_binary_patch_comparison.md) is the canonical per-component comparison.
-- `xcodebuild -workspace VPhone.xcworkspace -scheme VPhone build` produces and validates `VPhone.bundle`; run each project's test scheme separately.
-- `vphone-cli <group> --help` shows the CLI command surface.
+- `vphone-launchpad`: A Mac app that downloads and installs `VPhone.bundle` and sets up the host. Released separately.
+- `vphone-cli`: Prepares firmware, patches it, restores the system, and manages VMs.
+- `vphone-vm`: Runs the VM and shows its window.
+- `vphoned`: The control service inside the VM. The window's features and the API work through it.
+
+| Path | Contents |
+| --- | --- |
+| [`VPhoneExecutable/`](../VPhoneExecutable/) | `vphone-cli`, `vphone-vm`, firmware patching and restore |
+| [`VPhoneKit/`](../VPhoneKit/) | Shared host libraries and API client |
+| [`VPhoneDaemon/`](../VPhoneDaemon/) | `vphoned` |
+| [`VPhoneGuestComponents/`](../VPhoneGuestComponents/) | Hooks and helper programs inside the VM |
+| [`VPhoneLaunchpad/`](../VPhoneLaunchpad/) | The Launchpad app and its helper |
+
+- `xcodebuild -workspace VPhone.xcworkspace -scheme VPhone build` produces and validates `VPhone.bundle`. Run each project's test scheme separately.
+- The [research index](../Research/README.md) groups patch and implementation records by subject.
+- The [patch inventory](../Research/0_binary_patch_comparison.md) compares patches per component.

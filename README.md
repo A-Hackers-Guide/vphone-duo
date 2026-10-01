@@ -14,12 +14,10 @@ vphone-cli runs iOS with Apple's Virtualization.framework and PCC research virtu
 - **Automation API:** An optional local HTTP and WebSocket interface.
 - **No Extra Dependencies:** Needs no Xcode, Python, or Homebrew at runtime.
 
-> For 1.x, see the [1.0.14 release](https://github.com/Lakr233/vphone-cli/releases/tag/1.0.14). Version 2.x cannot start VMs created by 1.x. You need to create them again.
-
 ## Requirements
 
 - A physical Apple Silicon Mac running macOS 15 or newer. It does not work in a macOS VM.
-- Enough disk space. Each VM uses a 64 GB virtual disk by default, and firmware and temporary files take additional space.
+- Free disk space. Each VM has a 64 GB virtual disk by default, and firmware takes more.
 - A network connection. Restoring the system fetches signing tickets online.
 - Adjusted security settings. Boot into macOS Recovery, run these commands in Terminal, then restart:
 
@@ -28,103 +26,48 @@ vphone-cli runs iOS with Apple's Virtualization.framework and PCC research virtu
   csrutil allow-research-guests enable
   ```
 
-  SIP stays enabled, with only the debugging restrictions relaxed. For the reasons and other ways to set this up, see [Host Setup](Documents/Guides/host-setup.md).
+  SIP stays enabled, with only the debugging restrictions relaxed. For details, see [Host Setup](Documents/Guides/host-setup.md).
 
 ## Get Started
 
-1. Download the latest [vphone-launchpad](https://github.com/Lakr233/vphone-cli/releases/latest) (`vphone-launchpad-<version>.zip`), unzip it, and open it.
+1. Download `vphone-launchpad-<version>-notarized.zip` from the [latest release](https://github.com/Lakr233/vphone-cli/releases/latest), unzip it, and open it. Not every release is notarized. If the latest one has no `-notarized` file, pick a notarized version from [Downloads](Documents/Downloads/README.md).
 2. In **Host Setup**, grant Developer Tools access and install the helper.
-3. In **Core Bundle**, click **Download and Install**. Launchpad downloads and verifies `VPhone.bundle`, then allows the VM program inside it to run on your Mac.
+3. In **Core Bundle**, click **Download and Install**.
 4. In **Machines**, click **New Machine**, choose a firmware pairing, and click **Create**.
 
-Launchpad downloads the firmware, patches it, restores the system, and boots it for the first time. When it finishes, the VM keeps running.
+Launchpad downloads the firmware, patches it, restores the system, and boots the VM. To use your own iPhone and cloudOS IPSWs, see [Compatibility](Documents/Guides/compatibility.md).
 
-You can also use your own iPhone and cloudOS IPSWs. For verified pairings, see [Compatibility](Documents/Guides/compatibility.md).
-
-## Install the Package Environment
-
-The VM has no package manager by default. To install one:
-
-1. In the menu bar, choose **Apps > Install Bootstrap…** and select the **roothide** layout (**rootless** is deprecated). This installs Irisin in the VM.
-2. For the first installation, select all of the following packages in Irisin at once, press and hold the install button, and choose **Bootstrap Install**:
-
-   - `apt`
-   - `bash`
-   - `uikittools`
-   - `launchctl`
-   - `openssh-server`
-
-   Installing them together in one bootstrap pass is recommended. Several of these packages depend on one another (for example, `bash` and `debianutils`), and `openssh-server` in particular declares some dependencies circularly or imprecisely, so installing them one by one with a normal install can fail partway.
-3. After the first installation, install further packages normally.
-
-If the first installation fails or leaves the environment in an inconsistent state, do not attempt to repair it in place. Remove the environment with **Apps > Uninstall Bootstrap…** and install it again from step 1.
-
-To remove the environment, choose **Apps > Uninstall Bootstrap…**. The VM restarts after removal.
-
-Hold Option while opening the **Apps** menu to see two more options:
-
-- **Install Bootstrap from File…:** Installs from a local Irisin `.deb`.
-- **Uninstall Bootstrap Without Restarting…:** Removes the environment without restarting the VM.
+To install a package manager in the VM, see [Package Environment](Documents/Guides/package-environment.md).
 
 ## Command Line
 
-Launchpad manages VMs through the `vphone-cli` inside `VPhone.bundle`. You can also use it directly in Terminal:
-
-| Task | Command |
-| --- | --- |
-| List VMs | `vphone-cli vm list` |
-| Show VM information | `vphone-cli vm info myphone` |
-| Start a VM | `vphone-cli vm launch myphone` |
-| Stop a VM | `vphone-cli vm stop myphone` |
-| Clone a VM | `vphone-cli vm clone myphone copy` |
-| Export a VM | `vphone-cli vm export myphone --out myphone.tzst` |
-| Import a VM | `vphone-cli vm import myphone.tzst --name restored` |
-
-VMs are stored in `~/.vphone/` by default. Run `vphone-cli <group> --help` to see all commands. To create a VM without Launchpad, see [Create and Run](Documents/Guides/create-and-run.md).
-
-### Automation API
-
-Add `--api-listen` at launch to turn it on:
+Launchpad drives VMs through the `vphone-cli` inside `VPhone.bundle`. You can also run it in Terminal:
 
 ```sh
-vphone-cli vm launch myphone --api-listen 127.0.0.1:8765
-# The output shows [api] token: …
-curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/v1/health
+vphone-cli vm list
+vphone-cli vm launch myphone
+vphone-cli vm export myphone --out myphone.tzst
 ```
 
-Each launch generates a new token. To use a fixed token, set the `VPHONE_API_TOKEN` environment variable. Requests without the token and requests from web pages are refused. For the interface reference, see the [API documentation](Research/vphoned_http_api.md).
+VMs are stored in `~/.vphone/`. Run `vphone-cli <group> --help` to see all commands. To create a VM without Launchpad, see [Create and Run](Documents/Guides/create-and-run.md).
 
-## Troubleshooting
-
-Start with [Troubleshooting](Documents/Guides/troubleshooting.md), which covers cases such as the system refusing the VM program, restore failures, and getting stuck on "Press home to continue". If that does not solve it, [open an issue](https://github.com/Lakr233/vphone-cli/issues).
+To turn on the automation API, add `--api-listen 127.0.0.1:8765` at launch and use the token it prints. See the [API documentation](Research/vphoned_http_api.md).
 
 ## Documentation
 
 | Document | Contents |
 | --- | --- |
+| [Downloads](Documents/Downloads/README.md) | Notarized Launchpad versions and matching `VPhone.bundle` versions |
 | [Host Setup](Documents/Guides/host-setup.md) | SIP and AMFI settings, building from source, environment checks |
 | [Create and Run](Documents/Guides/create-and-run.md) | Firmware sources, the creation process, storage and backups |
 | [Compatibility](Documents/Guides/compatibility.md) | Verified firmware pairings |
+| [Package Environment](Documents/Guides/package-environment.md) | Installing and removing a package manager in the VM |
 | [Troubleshooting](Documents/Guides/troubleshooting.md) | Common errors and how to fix them |
+| [Networking](Documents/Guides/networking.md) | Network modes, and `tunnel` for a Mac behind a VPN or proxy |
 | [Launchpad Command Line](Documents/Guides/launchpad-cli.md) | Install and test a local build with `vphone-launchpad-cli` |
-| [Research Notes](Research/README.md) | Patch and implementation details |
+| [Contributing](Documents/README.md#for-contributors) | Project structure, building from source, research notes |
 
-## Project Structure
-
-- `vphone-launchpad`: A Mac app that downloads and installs `VPhone.bundle` and sets up the host. Released separately.
-- `vphone-cli`: Prepares firmware, patches it, restores the system, and manages VMs.
-- `vphone-vm`: Runs the VM and shows its window.
-- `vphoned`: The control service inside the VM. The window's features and the API work through it.
-
-| Path | Contents |
-| --- | --- |
-| [`VPhoneExecutable/`](VPhoneExecutable/) | `vphone-cli`, `vphone-vm`, firmware patching and restore |
-| [`VPhoneKit/`](VPhoneKit/) | Shared host libraries and API client |
-| [`VPhoneDaemon/`](VPhoneDaemon/) | `vphoned` |
-| [`VPhoneGuestComponents/`](VPhoneGuestComponents/) | Hooks and helper programs inside the VM |
-| [`VPhoneLaunchpad/`](VPhoneLaunchpad/) | The Launchpad app and its helper |
-
-To build from source, run `xcodebuild -workspace VPhone.xcworkspace -scheme VPhone build`. The output is `VPhone.bundle`.
+If these do not solve your problem, [open an issue](https://github.com/Lakr233/vphone-cli/issues).
 
 ## Acknowledgements
 

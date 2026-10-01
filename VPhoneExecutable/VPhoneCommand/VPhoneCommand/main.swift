@@ -15,6 +15,10 @@ import ArgumentParser
 import Foundation
 import VPhoneCoreKit
 
+// Restore, guest RPC and child-process plumbing all write to descriptors whose
+// far end may already be gone. Make that an EPIPE error, not a silent exit.
+signal(SIGPIPE, SIG_IGN)
+
 do {
     let command = try VPhoneCommand.parseAsRoot()
 

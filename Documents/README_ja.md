@@ -32,7 +32,7 @@ vphone-cli は Apple の Virtualization.framework と PCC 研究用仮想マシ�
 
 ## クイックスタート
 
-1. 最新の [vphone-launchpad](https://github.com/Lakr233/vphone-cli/releases/latest)（`vphone-launchpad-<バージョン>.zip`）をダウンロードし、展開して開きます。
+1. [最新のリリース](https://github.com/Lakr233/vphone-cli/releases/latest)から `vphone-launchpad-<バージョン>-notarized.zip` をダウンロードし、展開して開きます。すべてのリリースが公証済みではありません。最新リリースに `-notarized` ファイルがない場合は、[ダウンロードガイド](Downloads/README.md)から公証済みのバージョンを選んでください。
 2. **Host Setup** で開発者ツールへのアクセスを許可し、ヘルパーをインストールします。
 3. **Core Bundle** で **Download and Install** をクリックします。Launchpad が `VPhone.bundle` をダウンロードして検証し、その中の仮想マシン用プログラムがこの Mac で実行できるようにします。
 4. **Machines** で **New Machine** をクリックし、ファームウェアの組み合わせを選んで **Create** をクリックします。
@@ -102,10 +102,12 @@ token は起動のたびに新しく生成されます。token を固定する�
 
 | ドキュメント | 内容 |
 | --- | --- |
+| [ダウンロードガイド](Downloads/README.md) | 公証済みの Launchpad バージョンと対応する `VPhone.bundle` バージョン |
 | [ホストの設定](Guides/host-setup.md) | SIP と AMFI の設定、ソースからのビルド、環境の確認 |
 | [作成と実行](Guides/create-and-run.md) | ファームウェアの入手元、作成の流れ、ストレージとバックアップ |
 | [互換性ガイド](Guides/compatibility.md) | 検証済みのファームウェアの組み合わせ |
 | [トラブルシューティング](Guides/troubleshooting.md) | よくあるエラーと対処方法 |
+| [ネットワーク](Guides/networking.md) | ネットワークモードと、Mac が VPN やプロキシを使うときの `tunnel` |
 | [Launchpad コマンドライン](Guides/launchpad-cli.md) | `vphone-launchpad-cli` でローカルビルドをインストールしてテストする |
 | [研究記録](../Research/README.md) | パッチと実装の詳細 |
 

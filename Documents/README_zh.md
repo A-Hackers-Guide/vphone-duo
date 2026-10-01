@@ -32,7 +32,7 @@ vphone-cli 使用 Apple 的 Virtualization.framework 和 PCC 研究虚拟机运�
 
 ## 快速开始
 
-1. 下载最新的 [vphone-launchpad](https://github.com/Lakr233/vphone-cli/releases/latest)（`vphone-launchpad-<版本>.zip`），解压并打开。
+1. 从[最新 release](https://github.com/Lakr233/vphone-cli/releases/latest)下载 `vphone-launchpad-<版本>-notarized.zip`，解压并打开。并非每个 release 都经过公证。如果最新版本没有 `-notarized` 文件，请在[下载说明](Downloads/README.md)中选择一个已公证的版本。
 2. 在 **Host Setup** 中授予开发者工具权限，并安装辅助程序。
 3. 在 **Core Bundle** 中点击 **Download and Install**。Launchpad 会下载并校验 `VPhone.bundle`，然后允许其中的虚拟机程序在本机运行。
 4. 在 **Machines** 中点击 **New Machine**，选择一组固件，点击 **Create**。
@@ -102,10 +102,12 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/v1/health
 
 | 文档 | 内容 |
 | --- | --- |
+| [下载说明](Downloads/README.md) | 已公证的 Launchpad 版本及匹配的 `VPhone.bundle` 版本 |
 | [宿主机设置](Guides/host-setup.md) | SIP 与 AMFI 设置、源码构建、环境检查 |
 | [创建与运行](Guides/create-and-run.md) | 固件来源、创建流程、存储与备份 |
 | [兼容性说明](Guides/compatibility.md) | 已验证的固件组合 |
 | [故障排查](Guides/troubleshooting.md) | 常见错误及解决方法 |
+| [网络](Guides/networking.md) | 网络模式，以及在 Mac 使用 VPN 或代理时用的 `tunnel` |
 | [Launchpad 命令行](Guides/launchpad-cli.md) | 用 `vphone-launchpad-cli` 安装和测试本地构建 |
 | [研究记录](../Research/README.md) | 补丁与实现细节 |
 

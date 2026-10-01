@@ -321,17 +321,21 @@ class VPhoneVirtualMachineWindowController: NSObject {
 
         // A titlebar accessory takes its width from the view's frame, so the
         // container is sized explicitly; otherwise the button collapses to 0.
+        // The accessory clips to that frame, and the glass bezel's shadow and
+        // press highlight reach past the button's frame, so the leading edge
+        // keeps room for them.
+        let leadingInset: CGFloat = 6
         let trailingInset = Self.titlebarSpacing
         let container = NSView()
         container.addSubview(button)
         NSLayoutConstraint.activate([
-            button.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            button.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: leadingInset),
             button.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -trailingInset),
             button.centerYAnchor.constraint(equalTo: container.centerYAnchor),
             button.widthAnchor.constraint(equalTo: button.heightAnchor),
         ])
         let side = button.fittingSize.height
-        container.frame.size = NSSize(width: side + trailingInset, height: side)
+        container.frame.size = NSSize(width: leadingInset + side + trailingInset, height: side)
 
         let accessory = NSTitlebarAccessoryViewController()
         accessory.view = container
