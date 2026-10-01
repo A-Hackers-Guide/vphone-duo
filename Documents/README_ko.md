@@ -32,7 +32,7 @@ vphone-cli는 Apple의 Virtualization.framework와 PCC 연구용 가상 머신�
 
 ## 빠른 시작
 
-1. 최신 [vphone-launchpad](https://github.com/Lakr233/vphone-cli/releases/latest)(`vphone-launchpad-<버전>.zip`)를 내려받아 압축을 풀고 엽니다.
+1. [최신 릴리스](https://github.com/Lakr233/vphone-cli/releases/latest)에서 `vphone-launchpad-<버전>-notarized.zip`을 내려받아 압축을 풀고 엽니다. 모든 릴리스가 공증된 것은 아닙니다. 최신 릴리스에 `-notarized` 파일이 없으면 [다운로드 안내](Downloads/README.md)에서 공증된 버전을 선택하세요.
 2. **Host Setup**에서 개발자 도구 권한을 부여하고 도우미 프로그램을 설치합니다.
 3. **Core Bundle**에서 **Download and Install**을 클릭합니다. Launchpad가 `VPhone.bundle`을 내려받아 검증한 뒤, 그 안의 가상 머신 프로그램이 이 Mac에서 실행되도록 허용합니다.
 4. **Machines**에서 **New Machine**을 클릭하고 펌웨어 조합을 선택한 뒤 **Create**를 클릭합니다.
@@ -102,6 +102,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/v1/health
 
 | 문서 | 내용 |
 | --- | --- |
+| [다운로드 안내](Downloads/README.md) | 공증된 Launchpad 버전과 맞는 `VPhone.bundle` 버전 |
 | [호스트 설정](Guides/host-setup.md) | SIP 및 AMFI 설정, 소스 빌드, 환경 점검 |
 | [생성 및 실행](Guides/create-and-run.md) | 펌웨어 출처, 생성 절차, 저장과 백업 |
 | [호환성 안내](Guides/compatibility.md) | 검증된 펌웨어 조합 |
