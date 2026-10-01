@@ -31,6 +31,9 @@ public final class DeviceTreePatcher: BufferedPatcher {
     /// DeviceTreeGuestDevicePatches.swift.
     let device: VPhoneGuestDevice
     let role: TreeRole
+    /// The guest device's own flat device tree payload, which an iPad's
+    /// installed tree takes its identity and `/product` answers from.
+    let sourceTree: Data?
 
     let buffer: BinaryBuffer
     var patches: [PatchRecord] = []
@@ -72,12 +75,14 @@ public final class DeviceTreePatcher: BufferedPatcher {
         includeIdentityPatches: Bool = false,
         device: VPhoneGuestDevice = .default,
         role: TreeRole = .shared,
+        sourceTree: Data? = nil,
     ) {
         buffer = BinaryBuffer(data)
         self.verbose = verbose
         self.includeIdentityPatches = includeIdentityPatches
         self.device = device
         self.role = role
+        self.sourceTree = sourceTree
     }
 
     // MARK: - Patcher
@@ -178,7 +183,7 @@ public final class DeviceTreePatcher: BufferedPatcher {
     }
 
     /// Parse the entire device tree payload.
-    private func parsePayload(_ blob: Data) throws -> DTNode {
+    func parsePayload(_ blob: Data) throws -> DTNode {
         let (root, end) = try parseNode(blob, offset: 0)
         guard end == blob.count else {
             throw PatcherError.invalidFormat(

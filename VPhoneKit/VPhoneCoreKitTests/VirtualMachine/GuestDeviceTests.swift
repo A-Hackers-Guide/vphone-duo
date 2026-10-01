@@ -56,4 +56,26 @@ struct GuestDeviceTests {
         #expect(manifest.guestProductType == nil)
         #expect(manifest.screenConfig == .default)
     }
+
+    @Test
+    func `an IPSW covering several iPads gives the one asked for`() {
+        let air = ["SupportedProductTypes": ["iPad15,3", "iPad15,4", "iPad15,5", "iPad15,6"]]
+        #expect(VPhoneGuestDevice.detect(buildManifest: air) == .iPad15_3)
+        #expect(VPhoneGuestDevice.detect(buildManifest: air, preferring: "iPad15,5") == .iPad15_5)
+        // A cellular model maps onto its Wi-Fi twin.
+        #expect(VPhoneGuestDevice.detect(buildManifest: air, preferring: "iPad15,6") == .iPad15_5)
+        // A model the IPSW does not cover is not invented.
+        #expect(VPhoneGuestDevice.detect(buildManifest: air, preferring: "iPad17,3") == .iPad15_3)
+        #expect(VPhoneGuestDevice.covered(by: air) == [.iPad15_3, .iPad15_5])
+    }
+
+    @Test
+    func `every known iPad has a 2x panel and a board tree to read`() {
+        for device in VPhoneGuestDevice.known where device.isPad {
+            #expect(device.screen.scale == 2.0)
+            #expect(device.screen.width < device.screen.height)
+            #expect(device.boardDeviceTreePath == "Firmware/all_flash/DeviceTree.\(device.deviceClass).im4p")
+        }
+        #expect(VPhoneGuestDevice.iPad17_3.screen == .init(width: 2064, height: 2752, pixelsPerInch: 264, scale: 2.0))
+    }
 }

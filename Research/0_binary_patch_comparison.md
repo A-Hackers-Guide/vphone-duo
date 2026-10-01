@@ -19,9 +19,14 @@
 > three `hv_vmm_present` concealment patches, and the iPhone17,3 identity rewrites;
 > `extended` blocks nothing.
 >
-> **iPad guests (2026-10-01):** four DeviceTree patches, on in `standard`,
-> exist only for a VM whose userland comes from an iPad restore IPSW
-> (`iPad16,1`, iPad mini A17 Pro, J410AP): `devicetree-cfw-ipad_artwork`,
+> **iPad guests (2026-10-01; every current iPad 2026-10-02):** four DeviceTree
+> patches, on in `standard`, exist only for a VM whose userland comes from an
+> iPad restore IPSW (iPad mini A17 Pro, iPad A16, iPad Air M3 11/13, iPad Pro
+> M4 and M5 11/13 — see `VPhoneGuestDevice.known`). Since 2026-10-02 their
+> values are read at `fw patch` time from the board's own
+> `DeviceTree.<board>.im4p` in the restore tree rather than a table, so an
+> M-series board keeps Stage Manager (no `disable-chamois`) and the iPad (A16)
+> has no `medusa-overlay-app-capability`: `devicetree-cfw-ipad_artwork`,
 > `devicetree-cfw-ipad_product`, `devicetree-cfw-ipad_buttons` and
 > `devicetree-cfw-ipad_identity`. They are written to a second device tree,
 > `Firmware/all_flash/DeviceTree.vphone600ap.guest.im4p`, which `fw prepare`

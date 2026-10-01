@@ -254,9 +254,11 @@ public enum VPhoneIPSWCache {
         VPhoneGuestDevice.known.map(\.productType)
     }
 
-    /// The guest device an IPSW supplies, or nil for any other product.
-    public static func guestDevice(for archive: Archive) -> VPhoneGuestDevice? {
-        archive.productTypes.lazy.compactMap(VPhoneGuestDevice.named).first
+    /// The guest device an IPSW supplies, or nil for any other product. An IPSW
+    /// that covers several models gives `preferring` when it is one of them, and
+    /// its first known model otherwise.
+    public static func guestDevice(for archive: Archive, preferring productType: String? = nil) -> VPhoneGuestDevice? {
+        VPhoneGuestDevice.detect(buildManifest: ["SupportedProductTypes": archive.productTypes], preferring: productType)
     }
 
     /// Checks each BuildManifest before anything is extracted, so a swapped

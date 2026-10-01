@@ -50,9 +50,10 @@ extension FirmwarePipeline {
 
         // An iPad guest boots a device tree of its own (7b) and needs LLB to give
         // it the iPad's display scale (4).
-        let guestDevice = Self.readGuestDevice(restoreDir)
+        let guestDevice = readGuestDevice(restoreDir)
         let guestTreeURL = restoreDir.appending(path: FirmwareManifest.guestDeviceTreePath)
         let hasGuestTree = guestDevice.isPad && FileManager.default.fileExists(atPath: guestTreeURL.path)
+        let boardTreeURL = restoreDir.appending(path: guestDevice.boardDeviceTreePath)
 
         /// Whether the plan turned a patch on. Without a plan, fall back to the
         /// release the patch is pinned to, which is the same answer the standard
@@ -168,7 +169,7 @@ extension FirmwarePipeline {
             patcherFactories: includeBootChain ? [{ data, verbose in
                 let p = IBootPatcher(data: data, mode: .llb, verbose: verbose)
                 p.extraBootArgs = extraBootArgs
-                p.displayScale = hasGuestTree ? UInt16(guestDevice.artworkScale) : nil
+                p.displayScale = hasGuestTree ? UInt16(guestDevice.screen.scale) : nil
                 p.gate = gate
                 return p
             }] : [],
@@ -275,6 +276,7 @@ extension FirmwarePipeline {
                         includeIdentityPatches: dtIncludeIdentity,
                         device: guestDevice,
                         role: .installed,
+                        sourceTree: try self.loader.load(from: boardTreeURL),
                     )
                     p.gate = gate
                     return p

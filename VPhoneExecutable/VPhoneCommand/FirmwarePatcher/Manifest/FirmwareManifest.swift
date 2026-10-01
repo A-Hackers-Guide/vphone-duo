@@ -55,6 +55,7 @@ public enum FirmwareManifest {
     public static func generate(
         iPhoneDir: URL,
         cloudOSDir: URL,
+        device chosen: VPhoneGuestDevice? = nil,
         verbose: Bool = true,
     ) throws {
         // Load source plists.
@@ -72,7 +73,7 @@ public enum FirmwareManifest {
 
         // Discover source identities. An iPad IPSW carries one erase identity
         // per board it covers, so the userland one is picked by board.
-        let device = VPhoneGuestDevice.detect(buildManifest: iPhoneBM) ?? .default
+        let device = chosen ?? VPhoneGuestDevice.detect(buildManifest: iPhoneBM) ?? .default
         let (prod, res) = try findCloudOS(cloudIdentities, deviceClass: "vresearch101ap")
         let (vp, vpr) = try findCloudOS(cloudIdentities, deviceClass: "vphone600ap")
         let iErase = try findIPhoneErase(iPhoneIdentities, deviceClass: device.deviceClass)

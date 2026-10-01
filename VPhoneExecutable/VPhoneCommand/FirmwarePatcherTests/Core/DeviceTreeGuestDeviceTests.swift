@@ -92,6 +92,48 @@ struct DeviceTreeGuestDeviceTests {
         ],
     )
 
+    /// A board tree shaped like `DeviceTree.j410ap.im4p`: iPad mini (A17 Pro).
+    static func board(
+        model: String = "iPad16,1",
+        unique: String = "J410AP",
+        subtype: UInt32 = 2266,
+        disablesStageManager: Bool = true,
+    ) -> Node {
+        var product: [Property] = [
+            .string("name", "product"),
+            .string("artwork-device-idiom", "pad"),
+            .integer("artwork-device-subtype", subtype),
+            .integer("artwork-scale-factor", 2),
+            .string("product-name", "iPad"),
+            .string("fdr-product-type", model),
+            .string("sub-product-type", model),
+            .string("unique-model", unique),
+            Property(name: "ui-pip", flags: 0, value: Data()),
+            .integer("medusa-overlay-app-capability", 1),
+            Property(name: "ui-pinned-app", flags: 0, value: Data()),
+            // A board placeholder is a syscfg key, not data: not copied, so the
+            // vphone600 placeholder it would replace is removed instead.
+            .placeholder("product-description", "prde"),
+        ]
+        if disablesStageManager {
+            product.append(.integer("disable-chamois", 1))
+        }
+        let target = String(unique.dropLast(2))
+        return Node(
+            properties: [
+                .string("name", "device-tree"),
+                .string("model", model),
+                .string("target-type", target),
+                .string("target-sub-type", unique),
+                Property(name: "compatible", flags: 0, value: Data("\(unique)\0\(model)\0AppleARM\0".utf8)),
+            ],
+            children: [
+                Node(properties: product, children: []),
+                Node(properties: [.string("name", "buttons"), .string("button-names", "volup")], children: []),
+            ],
+        )
+    }
+
     // MARK: - Reading the result
 
     /// `node -> property -> (flags, value)` for the two levels the fixture has.
@@ -132,13 +174,18 @@ struct DeviceTreeGuestDeviceTests {
         return value.1.loadLE(UInt32.self, at: 0)
     }
 
-    static func patch(device: VPhoneGuestDevice, role: DeviceTreePatcher.TreeRole) throws -> [String: [String: (UInt16, Data)]] {
+    static func patch(
+        device: VPhoneGuestDevice,
+        role: DeviceTreePatcher.TreeRole,
+        board: Node = board(),
+    ) throws -> [String: [String: (UInt16, Data)]] {
         let patcher = DeviceTreePatcher(
             data: tree.serialized(),
             verbose: false,
             includeIdentityPatches: false,
             device: device,
             role: role,
+            sourceTree: board.serialized(),
         )
         _ = try patcher.findAll()
         return read(patcher.patchedData)
@@ -161,12 +208,14 @@ struct DeviceTreeGuestDeviceTests {
         #expect(Self.integer(product["artwork-device-subtype"]) == 2266)
         #expect(Self.integer(product["artwork-scale-factor"]) == 2)
         #expect(product["artwork-scale-factor"]?.0 == 0, "a filled placeholder loses its flag")
-        #expect(Self.string(product["product-name"]) == "iPad mini (A17 Pro)")
+        #expect(Self.string(product["product-name"]) == "iPad")
+        #expect(product["product-description"] == nil)
         #expect(Self.string(product["sub-product-type"]) == "iPad16,1")
         #expect(Self.string(product["unique-model"]) == "J410AP")
         #expect(product["ui-pip"].map { $0.1.isEmpty && $0.0 == 0 } == true)
         #expect(product["medusa-overlay-app-capability"] != nil)
         #expect(product["ui-pinned-app"]?.1.isEmpty == true)
+        #expect(Self.integer(product["disable-chamois"]) == 1)
 
         #expect(product["island-notch-location"] == nil)
         #expect(product["car-integration"] == nil)
@@ -197,9 +246,30 @@ struct DeviceTreeGuestDeviceTests {
         #expect(Self.integer(installed["device-tree/product"]?["island-notch-location"]) == 144)
     }
 
-    @Test func `the iPad edits are declared by the device tree patch set`() {
+    @Test func `a 13-inch M-series board keeps Stage Manager and its own identity`() throws {
+        let board = Self.board(model: "iPad17,3", unique: "J820AP", subtype: 2752, disablesStageManager: false)
+        let tree = try Self.patch(device: .iPad17_3, role: .installed, board: board)
+        let root = try #require(tree["device-tree"])
+        let product = try #require(tree["device-tree/product"])
+        #expect(Self.string(root["model"]) == "iPad17,3")
+        #expect(Self.string(root["target-type"]) == "J820")
+        #expect(root["compatible"]?.1 == Data("J820AP\0VPHONE600AP\0AppleVirtualPlatformARM\0".utf8))
+        #expect(Self.integer(product["artwork-device-subtype"]) == 2752)
+        #expect(product["disable-chamois"] == nil)
+    }
+
+    @Test func `an iPad's installed tree needs the board's tree`() {
+        let patcher = DeviceTreePatcher(
+            data: Self.tree.serialized(), verbose: false, device: .iPad16_1, role: .installed,
+        )
+        #expect(throws: (any Error).self) { try patcher.findAll() }
+    }
+
+    @Test func `the iPad edits are declared by the device tree patch set`() throws {
         let declared = Set(FirmwareDeviceTreePatchSet.manifest.patches.map(\.identifier))
-        let used = Set(DeviceTreePatcher.guestEdits(for: .iPad16_1).map(\.patchID))
+        let parser = DeviceTreePatcher(data: Data(), verbose: false)
+        let board = try parser.parsePayload(Self.board().serialized())
+        let used = try Set(DeviceTreePatcher.guestEdits(from: board).map(\.patchID))
         #expect(!used.isEmpty)
         #expect(used.isSubset(of: declared))
     }
@@ -207,10 +277,12 @@ struct DeviceTreeGuestDeviceTests {
     @Test func `patching an iPad tree twice changes nothing more`() throws {
         let once = DeviceTreePatcher(
             data: Self.tree.serialized(), verbose: false, device: .iPad16_1, role: .installed,
+            sourceTree: Self.board().serialized(),
         )
         _ = try once.findAll()
         let twice = DeviceTreePatcher(
             data: once.patchedData, verbose: false, device: .iPad16_1, role: .installed,
+            sourceTree: Self.board().serialized(),
         )
         _ = try twice.findAll()
         #expect(twice.patchedData == once.patchedData)

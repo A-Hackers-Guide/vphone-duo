@@ -13,6 +13,7 @@ enum VPhoneFirmwarePreparer {
         case existingRestore(URL)
         case missingComponent(URL)
         case sourceNameMismatch(URL, version: String, build: String)
+        case deviceNotInSource(String, available: [String])
 
         var errorDescription: String? {
             switch self {
@@ -22,6 +23,8 @@ enum VPhoneFirmwarePreparer {
                 "A firmware component is missing: \(path.path). Check that the IPSW is complete, then prepare the firmware again."
             case let .sourceNameMismatch(path, version, build):
                 "The IPSW file name does not match its contents (\(version)/\(build)): \(path.path). Use the original file name or download the IPSW again."
+            case let .deviceNotInSource(productType, available):
+                "The IPSW does not contain \(productType); it covers \(available.joined(separator: ", ")). Choose one of those with --device, or use that model's IPSW."
             }
         }
     }
@@ -31,6 +34,7 @@ enum VPhoneFirmwarePreparer {
         cloudOSSource: String,
         gpuDriverBundle: URL? = nil,
         ipswCacheDirectory: URL = VPhoneResources.ipswCacheDirectory(),
+        device productType: String? = nil,
         bundle: VPhoneBundle,
         resources: VPhoneResources,
     ) throws {
@@ -70,7 +74,10 @@ enum VPhoneFirmwarePreparer {
             try await VPhoneIPSWCache.resolve(cloudOSSource, in: ipswCacheDirectory)
         }
         try VPhoneIPSWCache.checkPair(iPhone: phone, cloudOS: cloud)
-        let device = VPhoneIPSWCache.guestDevice(for: phone) ?? .default
+        let device = VPhoneIPSWCache.guestDevice(for: phone, preferring: productType) ?? .default
+        if let productType, VPhoneGuestDevice.named(productType) != device {
+            throw Error.deviceNotInSource(productType, available: phone.productTypes)
+        }
         try checkIPhoneName(iPhoneSource, archive: phone, device: device)
         print("[+] \(device.productType) \(phone.version) (\(phone.build)); cloudOS \(cloud.version) (\(cloud.build))")
 
@@ -100,7 +107,7 @@ enum VPhoneFirmwarePreparer {
         try mergeCloudOS(from: cloudTree, into: phoneTree)
         let originalManifest = phoneTree.appendingPathComponent("BuildManifest.plist")
         try clone(originalManifest, to: phoneTree.appendingPathComponent("iPhone-BuildManifest.plist"))
-        try FirmwareManifest.generate(iPhoneDir: phoneTree, cloudOSDir: cloudTree, verbose: true)
+        try FirmwareManifest.generate(iPhoneDir: phoneTree, cloudOSDir: cloudTree, device: device, verbose: true)
         let cachedDriver = cachedGPUDriver(for: cloud)
         if let gpuDriverBundle {
             print("[*] Staging GPU driver from local bundle...")

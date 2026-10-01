@@ -208,8 +208,11 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
     var ipswCache: String?
     @Option(help: "iPhone version to resolve to an IPSW") var iphoneVersion: String?
     @Option(help: "iPhone build to resolve to an IPSW") var iphoneBuild: String?
-    @Option(help: "Device whose IPSWs --list, --iphone-version and --iphone-build look up: iPhone17,3 or iPad16,1")
-    var device: String = VPhoneFirmwareCatalog.device
+    @Option(help: ArgumentHelp(
+        "Guest device: picks the model from an IPSW that covers several (iPad15,5 from the iPad Air IPSW), and the device --list, --iphone-version and --iphone-build look up (default: iPhone17,3)",
+        valueName: "product-type",
+    ))
+    var device: String?
     @Flag(help: "List downloadable IPSWs and exit") var list = false
     @Option(name: .shortAndLong, help: "Resource base override (default: inferred from the running binary path)")
     var projectRoot: String?
@@ -222,10 +225,11 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
         let bundleGuide = resources.base.appendingPathComponent("docs/guides/compatibility.md")
         let readme = FileManager.default.fileExists(atPath: sourceGuide.path) ? sourceGuide.path : bundleGuide.path
         let needsCatalog = list || iphoneVersion != nil || iphoneBuild != nil
-        guard VPhoneGuestDevice.named(device) != nil else {
-            throw ValidationError("vphone runs \(VPhoneGuestDevice.known.map(\.productType).joined(separator: " and ")) guests, not \(device).")
+        if let device, VPhoneGuestDevice.named(device) == nil {
+            throw ValidationError("vphone runs \(VPhoneGuestDevice.known.map(\.productType).joined(separator: ", ")) guests, not \(device).")
         }
-        let device = device
+        let chosenDevice = device
+        let device = device ?? VPhoneFirmwareCatalog.device
         let urls = if needsCatalog {
             try vphoneRunBlocking {
                 try await VPhoneFirmwareIndex.restoreURLs(forDevice: device)
@@ -282,6 +286,7 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
             ipswCacheDirectory: ipswCache.map {
                 URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true)
             } ?? VPhoneResources.ipswCacheDirectory(),
+            device: chosenDevice,
             bundle: bundle,
             resources: resources,
         )
