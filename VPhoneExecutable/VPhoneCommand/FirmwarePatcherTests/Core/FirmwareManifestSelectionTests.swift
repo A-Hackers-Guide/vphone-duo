@@ -154,4 +154,24 @@ struct FirmwareManifestSelectionTests {
             try FirmwareManifest.findIPhoneErase(identities)
         }
     }
+
+    @Test
+    func `a multi-board iPad manifest yields the guest board's erase identity`() throws {
+        let identities = [
+            Self.identity(deviceClass: "j411ap", variant: "Customer Erase Install (IPSW)"),
+            Self.identity(deviceClass: "j411ap", variant: "Customer Upgrade Install (IPSW)"),
+            Self.identity(deviceClass: "J410AP", variant: "Customer Erase Install (IPSW)"),
+            Self.identity(deviceClass: "j410ap", variant: "Customer Upgrade Install (IPSW)"),
+        ]
+        #expect(try FirmwareManifest.findIPhoneErase(identities, deviceClass: "j410ap") == 2)
+    }
+
+    @Test
+    func `an unknown board falls back to the first erase identity`() throws {
+        let identities = [
+            Self.identity(deviceClass: "d47ap", variant: "Customer Upgrade Install (IPSW)"),
+            Self.identity(deviceClass: "d47ap", variant: "Customer Erase Install (IPSW)"),
+        ]
+        #expect(try FirmwareManifest.findIPhoneErase(identities, deviceClass: "j410ap") == 1)
+    }
 }

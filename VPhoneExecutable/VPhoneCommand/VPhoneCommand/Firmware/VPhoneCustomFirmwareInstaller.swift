@@ -274,7 +274,7 @@ struct VPhoneCustomFirmwareInstaller {
         // VM an environment update is allowed to run against — this run creates
         // no new snapshot to flip.
         if mode == .full {
-            try patchPreboot(volumes: volumes, work: work, plan: plan)
+            try patchPreboot(volumes: volumes, work: work, plan: plan, guestDevice: guestDevice(of: restore))
         }
         _ = try tool("/sbin/umount", [data.path])
         dataMounted = false
@@ -973,15 +973,28 @@ struct VPhoneCustomFirmwareInstaller {
 
     // MARK: - Preboot
 
+    /// The device whose IPSW the restore tree was prepared from.
+    private func guestDevice(of restore: VPhoneConfinedDirectory?) -> VPhoneGuestDevice {
+        guard let data = try? restore?.readData("iPhone-BuildManifest.plist"),
+              let manifest = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any]
+        else { return .default }
+        return VPhoneGuestDevice.detect(buildManifest: manifest) ?? .default
+    }
+
     private func patchPreboot(
         volumes: [[String: Any]],
         work: WorkDirectory,
         plan: VPhoneVirtualMachinePatchPlan?,
+        guestDevice: VPhoneGuestDevice,
     ) throws {
-        // Like every guest patch, a VM with no plan still gets it.
+        // Like every guest patch, a VM with no plan still gets it — except on an
+        // iPad guest, whose installed tree already carries its own identity
+        // from `fw patch`; the rewrite would turn it back into an iPhone17,3.
         let identity = FirmwareGuestIdentityPatchSet.prebootDeviceTreeIdentity
-        let rewriteIdentity = plan?.isEnabled(identity) ?? true
-        if let plan, !rewriteIdentity {
+        let rewriteIdentity = !guestDevice.isPad && (plan?.isEnabled(identity) ?? true)
+        if guestDevice.isPad {
+            print("  [·] \(identity): skipped, the device tree already presents \(guestDevice.productType)")
+        } else if let plan, !rewriteIdentity {
             print("  [·] \(identity): off in preset \(plan.presetIdentifier)")
         }
         guard rewriteIdentity || !(spoofBuild ?? "").isEmpty else { return }

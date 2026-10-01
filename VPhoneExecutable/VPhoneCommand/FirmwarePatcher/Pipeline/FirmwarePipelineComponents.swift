@@ -7,6 +7,7 @@
 // Split out of FirmwarePipeline.swift; the execution loop stays there.
 
 import Foundation
+import VPhoneCoreKit
 import VPhonePatchKit
 
 extension FirmwarePipeline {
@@ -234,7 +235,11 @@ extension FirmwarePipeline {
 
         // 7. DeviceTree — JB includes the former EXP identity and camera
         //    properties so the guest presents a consistent iPhone17,3 identity.
+        //    An iPad guest restores with this tree and boots its own copy (7b).
         let dtIncludeIdentity = variant == .jb || variant == .exp
+        let guestDevice = Self.readGuestDevice(restoreDir)
+        let guestTreeURL = restoreDir.appending(path: FirmwareManifest.guestDeviceTreePath)
+        let hasGuestTree = guestDevice.isPad && FileManager.default.fileExists(atPath: guestTreeURL.path)
         components.append(ComponentDescriptor(
             name: "DeviceTree",
             inRestoreDir: true,
@@ -244,11 +249,34 @@ extension FirmwarePipeline {
                     data: data,
                     verbose: verbose,
                     includeIdentityPatches: dtIncludeIdentity,
+                    device: guestDevice,
+                    role: hasGuestTree ? .restore : .shared,
                 )
                 p.gate = gate
                 return p
             }] : [],
         ))
+
+        // 7b. The iPad's installed DeviceTree, which `fw prepare` split off so it
+        //     can carry the iPad identity through restore.
+        if hasGuestTree {
+            components.append(ComponentDescriptor(
+                name: "GuestDeviceTree",
+                inRestoreDir: true,
+                searchPatterns: [FirmwareManifest.guestDeviceTreePath],
+                patcherFactories: includeDeviceTree ? [{ data, verbose in
+                    let p = DeviceTreePatcher(
+                        data: data,
+                        verbose: verbose,
+                        includeIdentityPatches: dtIncludeIdentity,
+                        device: guestDevice,
+                        role: .installed,
+                    )
+                    p.gate = gate
+                    return p
+                }] : [],
+            ))
+        }
 
         // 8. Filesystem
         //    Not restorable: it reads BuildManifest.plist but writes cryptex images

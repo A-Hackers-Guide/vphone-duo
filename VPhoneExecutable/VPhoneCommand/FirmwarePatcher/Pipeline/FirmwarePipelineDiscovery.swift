@@ -11,6 +11,7 @@
 
 import Darwin
 import Foundation
+import VPhoneCoreKit
 import VPhonePatchKit
 
 extension FirmwarePipeline {
@@ -48,6 +49,13 @@ extension FirmwarePipeline {
     /// iPhone base version (`iPhone-BuildManifest.plist`, preserved by fw_prepare).
     static func readBaseProductVersion(_ restoreDir: URL) -> String? {
         readProductVersion(restoreDir, manifest: "iPhone-BuildManifest.plist")
+    }
+
+    /// The device whose IPSW supplied the guest OS, from the same preserved
+    /// manifest. iPhone17,3 when it names no known device.
+    static func readGuestDevice(_ restoreDir: URL) -> VPhoneGuestDevice {
+        VPhoneGuestDevice.detect(buildManifestAt: restoreDir.appendingPathComponent("iPhone-BuildManifest.plist"))
+            ?? .default
     }
 
     /// cloudOS/kernel version (the live `BuildManifest.plist`).
