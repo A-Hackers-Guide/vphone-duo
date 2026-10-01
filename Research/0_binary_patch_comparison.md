@@ -2097,3 +2097,28 @@ Validated on test-27.0: `idevice_id`, lockdown and `remotectl show` report the
 override after `udid.set` and after a reboot, and the guest's own after
 `udid.clear`. Details and the measurements are in
 `Research/Guest/xcode_install_signature_gate.md`, "The host sees it too".
+
+## vphoned accessibility client entitlements (2026-09-30)
+
+`VPhoneDaemon.entitlements` adds three true booleans:
+`com.apple.private.accessibility.inspection`, `com.apple.accessibility.api`,
+and `com.apple.private.accessibility.look-me-up-setup`. All 258 existing
+upstream 2.2.3 keys and values are preserved, including the USB entitlement
+and keychain access groups. No daemon or AX bootstrap code changes.
+
+**Live evidence is from release 2.1.5, not 2.2.3.** Its actual daemon was
+re-signed with only these three additions: all 257 original entitlement
+values and all 51 file-backed Mach-O sections were unchanged. Strict code
+signature verification, bundle validation, and preflight passed.
+
+With identical fresh application lifecycles, the original daemon's tree
+query and its alias failed with `-25215`. The re-signed daemon returned
+12 nodes for Settings, 23 for Calculator, and 9 for Clock through both tree
+routes, with non-null hit-test results. These results repeated after a
+second full host-assisted VM boot.
+
+Warm queries can work after another client initializes AX, so they alone
+do not establish fresh-client readiness. The three keys were tested
+together; each key's individual necessity was not isolated. Upstream
+2.2.3 has passed the profile-preservation assertion but has not been
+live-tested with this change.
