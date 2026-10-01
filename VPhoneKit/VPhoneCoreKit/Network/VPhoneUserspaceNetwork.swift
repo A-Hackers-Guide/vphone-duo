@@ -77,7 +77,7 @@ public final class VPhoneUserspaceNetwork: @unchecked Sendable {
     /// jumbo-sized IP packet; the guest is expected to stay within `mtu`.
     private static let frameCapacity = 9216
 
-    public init(configuration: VPhoneUserspaceNetworkConfiguration = .default) throws {
+    public convenience init(configuration: VPhoneUserspaceNetworkConfiguration = .default) throws {
         var descriptors: [Int32] = [-1, -1]
         guard socketpair(AF_UNIX, SOCK_DGRAM, 0, &descriptors) == 0 else {
             throw VPhoneUserspaceNetworkError.socketPairFailed(errno: errno)
@@ -115,6 +115,9 @@ public final class VPhoneUserspaceNetwork: @unchecked Sendable {
             // is waiting for a reply, so the reply is never read. The symptom is
             // a guest whose DNS queries leave but whose answers never arrive.
             _ = fcntl(descriptor, F_SETFL, fcntl(descriptor, F_GETFL, 0) | O_NONBLOCK)
+            // VZ closes its end when the device goes away; a frame sent after that
+            // must fail with EPIPE, not kill the VM process with SIGPIPE.
+            _ = fcntl(descriptor, F_SETNOSIGPIPE, 1)
         }
 
         socket = hostDescriptor

@@ -140,11 +140,11 @@ struct VPhoneTCPForwarderTests {
         /// - Parameter session: runs with the accepted socket on a background
         ///   queue and owns closing it.
         init(session: @escaping @Sendable (Int32, LoopbackServer) -> Void) throws {
-            listener = socket(AF_INET, SOCK_STREAM, 0)
-            guard listener >= 0 else { throw Error.socketFailed }
+            let descriptor = socket(AF_INET, SOCK_STREAM, 0)
+            guard descriptor >= 0 else { throw Error.socketFailed }
 
             var reuse: Int32 = 1
-            setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+            setsockopt(descriptor, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
 
             var address = sockaddr_in()
             address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
@@ -153,22 +153,22 @@ struct VPhoneTCPForwarderTests {
             address.sin_addr = in_addr(s_addr: UInt32(0x7F00_0001).bigEndian)
             let bound = withUnsafePointer(to: &address) { pointer in
                 pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    bind(listener, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                    bind(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
                 }
             }
             guard bound == 0 else { throw Error.bindFailed }
-            guard listen(listener, 4) == 0 else { throw Error.listenFailed }
+            guard listen(descriptor, 4) == 0 else { throw Error.listenFailed }
 
             var assigned = sockaddr_in()
             var length = socklen_t(MemoryLayout<sockaddr_in>.size)
             _ = withUnsafeMutablePointer(to: &assigned) { pointer in
                 pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    getsockname(listener, $0, &length)
+                    getsockname(descriptor, $0, &length)
                 }
             }
             port = UInt16(bigEndian: assigned.sin_port)
+            listener = descriptor
 
-            let descriptor = listener
             let server = self
             DispatchQueue.global().async {
                 let client = accept(descriptor, nil, nil)
@@ -299,6 +299,9 @@ struct VPhoneTCPForwarderTests {
         // Advance the window; the transfer must resume.
         var acknowledged = isn &+ 1 &+ UInt32(afterFirstWindow)
         for _ in 2 ... 8 {
+            // `feed` runs synchronously, so whatever the ACK releases is already
+            // sent when it returns. Read the count before it, not after.
+            let before = harness.sentDataBytes
             harness.feed(VPhoneTCPSegment(
                 sourcePort: harness.guestPort,
                 destinationPort: server.port,
@@ -307,7 +310,6 @@ struct VPhoneTCPForwarderTests {
                 flags: VPhoneTCPFlags.ack,
                 windowSize: window,
             ))
-            let before = harness.sentDataBytes
             harness.waitUntil("more data", timeout: 3) { harness.sentDataBytes > before }
             acknowledged = isn &+ 1 &+ UInt32(harness.sentDataBytes)
             if harness.sentDataBytes >= total { break }
@@ -389,7 +391,7 @@ struct VPhoneTCPForwarderTests {
             sequenceNumber: 0, acknowledgmentNumber: 0,
             flags: VPhoneTCPFlags.syn,
             windowSize: 65_535,
-            maximumSegmentSize: 1460,
+            advertisedMSS: 1460,
             advertisedWindowScale: 7,
         )
         let encoded = offered.bytes(
@@ -435,8 +437,8 @@ struct VPhoneTCPForwarderTests {
             acknowledgmentNumber: isn &+ 1,
             flags: VPhoneTCPFlags.ack | VPhoneTCPFlags.psh,
             windowSize: 512,
-            windowScale: 7,
             payload: [0x41],
+            windowScale: 7,
         ))
 
         try #require(harness.waitUntil("a scaled window's worth") { harness.sentDataBytes > 512 * 8 })

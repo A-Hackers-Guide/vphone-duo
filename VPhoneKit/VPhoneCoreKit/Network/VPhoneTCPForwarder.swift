@@ -343,6 +343,9 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
         address.sin_addr = in_addr(s_addr: hostOrder.bigEndian)
 
         _ = fcntl(descriptor, F_SETFL, fcntl(descriptor, F_GETFL, 0) | O_NONBLOCK)
+        // A guest writing to a connection the server already reset makes our
+        // `send` raise SIGPIPE, which would take the whole VM process down.
+        _ = fcntl(descriptor, F_SETNOSIGPIPE, 1)
         var one: Int32 = 1
         _ = setsockopt(descriptor, IPPROTO_TCP, TCP_NODELAY, &one, socklen_t(MemoryLayout<Int32>.size))
 

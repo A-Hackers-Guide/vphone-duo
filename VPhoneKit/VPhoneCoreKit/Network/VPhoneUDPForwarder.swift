@@ -177,6 +177,7 @@ final class VPhoneUDPForwarder: @unchecked Sendable {
         let destination = resolveDestination(for: flow)
         let descriptor = socket(AF_INET, SOCK_DGRAM, 0)
         guard descriptor >= 0 else { return nil }
+        _ = fcntl(descriptor, F_SETNOSIGPIPE, 1)
 
         var address = sockaddr_in()
         address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)

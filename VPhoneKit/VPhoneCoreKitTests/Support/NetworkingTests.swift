@@ -60,13 +60,13 @@ struct NetworkingTests {
     @Test func `make network device tunnel carries an in-process backend`() throws {
         let (dev, backend) = try VPhoneNetworking.makeNetworkDevice(NetworkConfig(mode: .tunnel, macAddress: ""))
         #expect(dev?.attachment is VZFileHandleNetworkDeviceAttachment)
-        let backend = try #require(backend)
-        #expect(backend.configuration == .default)
+        let network = try #require(backend)
+        #expect(network.configuration == .default)
         // Starting and stopping must not trap; the rest of the behaviour is
         // covered by the frame-level tests.
-        backend.start()
-        backend.start()
-        backend.stop()
-        backend.stop()
+        network.start()
+        network.start()
+        network.stop()
+        network.stop()
     }
 }

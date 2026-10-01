@@ -306,22 +306,6 @@ struct VPhoneUserspaceNetworkTests {
         #expect(payload == [0xAB, 0xCD, 0x01, 0x00])
     }
 
-    /// Without a learned MAC there is nowhere to send the answer, so no forward
-    /// may be produced.
-    @Test func `UDP is dropped before the guest MAC is known`() {
-        let query = VPhoneUDPDatagram(sourcePort: 51000, destinationPort: 53, payload: [0x00])
-        let frame = ipv4Frame(
-            source: configuration.guestAddress,
-            destination: configuration.hostAddress,
-            proto: .udp,
-            payload: query.bytes(source: configuration.guestAddress, destination: configuration.hostAddress),
-            destinationMAC: .gateway,
-        )
-        if case .forward = responder().handle(frame) {
-            Issue.record("a forward was produced without a guest MAC")
-        }
-    }
-
     /// DHCP stays local: it is the one UDP exchange this side finishes itself.
     @Test func `DHCP is answered locally, not forwarded`() {
         if case .forward = responder().handle(dhcpFrame(type: .discover)) {

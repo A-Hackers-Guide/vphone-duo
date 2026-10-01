@@ -110,7 +110,7 @@ struct VPhoneInternetProtocolTests {
             acknowledgmentNumber: 0,
             flags: VPhoneTCPFlags.syn,
             windowSize: 65_535,
-            maximumSegmentSize: 1460,
+            advertisedMSS: 1460,
             advertisedWindowScale: 7,
         )
         let bytes = segment.bytes(source: .any, destination: .any)
