@@ -7,7 +7,9 @@ import Foundation
 public struct VPhoneIPv4Address: Sendable, Equatable, Hashable, CustomStringConvertible {
     public var raw: UInt32
 
-    public init(_ raw: UInt32) { self.raw = raw }
+    public init(_ raw: UInt32) {
+        self.raw = raw
+    }
 
     public init(_ a: UInt8, _ b: UInt8, _ c: UInt8, _ d: UInt8) {
         raw = UInt32(a) << 24 | UInt32(b) << 16 | UInt32(c) << 8 | UInt32(d)
@@ -18,7 +20,9 @@ public struct VPhoneIPv4Address: Sendable, Equatable, Hashable, CustomStringConv
          UInt8(truncatingIfNeeded: raw >> 8), UInt8(truncatingIfNeeded: raw)]
     }
 
-    public var description: String { bytes.map(String.init).joined(separator: ".") }
+    public var description: String {
+        bytes.map(String.init).joined(separator: ".")
+    }
 
     /// `255.255.255.255`
     public static let broadcast = VPhoneIPv4Address(255, 255, 255, 255)
@@ -72,13 +76,17 @@ public struct VPhoneUserspaceNetworkConfiguration: Sendable, Equatable {
 public struct VPhoneMACAddress: Sendable, Equatable, Hashable {
     public var bytes: [UInt8]
 
-    public init(_ bytes: [UInt8]) { self.bytes = bytes }
+    public init(_ bytes: [UInt8]) {
+        self.bytes = bytes
+    }
 
     /// The gateway's address. Locally administered, unicast, and unlikely to
     /// collide with anything.
     public static let gateway = VPhoneMACAddress([0x02, 0x00, 0x00, 0x00, 0x00, 0x01])
 
-    var hexString: String { bytes.map { String(format: "%02x", $0) }.joined(separator: ":") }
+    var hexString: String {
+        bytes.map { String(format: "%02x", $0) }.joined(separator: ":")
+    }
 }
 
 // MARK: - Checksums
@@ -92,8 +100,12 @@ enum VPhoneInternetChecksum {
             sum += UInt32(bytes[index]) << 8 | UInt32(bytes[index + 1])
             index += 2
         }
-        if index < bytes.count { sum += UInt32(bytes[index]) << 8 }
-        while sum >> 16 != 0 { sum = (sum & 0xFFFF) + (sum >> 16) }
+        if index < bytes.count {
+            sum += UInt32(bytes[index]) << 8
+        }
+        while sum >> 16 != 0 {
+            sum = (sum & 0xFFFF) + (sum >> 16)
+        }
         return UInt16(~sum & 0xFFFF)
     }
 }
@@ -204,12 +216,16 @@ struct VPhoneIPv4Packet {
         return fragments
     }
 
-    var totalLength: Int { 20 + payload.count }
+    var totalLength: Int {
+        20 + payload.count
+    }
 
     /// True when this is one piece of a larger datagram. Nothing here reassembles,
     /// so such a packet cannot be handled and has to be dropped rather than
     /// misread: only the first fragment even carries the transport header.
-    var isFragment: Bool { moreFragments || fragmentOffset != 0 }
+    var isFragment: Bool {
+        moreFragments || fragmentOffset != 0
+    }
 
     /// Bit 0x2000 marks a fragment that is not the last; bits 0..12 hold the
     /// offset in eight-byte units. A single unfragmented packet leaves both zero.
@@ -222,7 +238,7 @@ struct VPhoneIPv4Packet {
             0x45, 0x00,
             UInt8(truncatingIfNeeded: totalLength >> 8), UInt8(truncatingIfNeeded: totalLength),
             UInt8(truncatingIfNeeded: identification >> 8), UInt8(truncatingIfNeeded: identification),
-            UInt8((flagsAndFragmentOffset) >> 8), UInt8(truncatingIfNeeded: flagsAndFragmentOffset),
+            UInt8(flagsAndFragmentOffset >> 8), UInt8(truncatingIfNeeded: flagsAndFragmentOffset),
             ttl, proto,
         ]
         header += [0, 0] // checksum placeholder
@@ -387,10 +403,21 @@ struct VPhoneTCPSegment {
         self.advertisedWindowScale = advertisedWindowScale
     }
 
-    var hasSYN: Bool { flags & VPhoneTCPFlags.syn != 0 }
-    var hasACK: Bool { flags & VPhoneTCPFlags.ack != 0 }
-    var hasFIN: Bool { flags & VPhoneTCPFlags.fin != 0 }
-    var hasRST: Bool { flags & VPhoneTCPFlags.rst != 0 }
+    var hasSYN: Bool {
+        flags & VPhoneTCPFlags.syn != 0
+    }
+
+    var hasACK: Bool {
+        flags & VPhoneTCPFlags.ack != 0
+    }
+
+    var hasFIN: Bool {
+        flags & VPhoneTCPFlags.fin != 0
+    }
+
+    var hasRST: Bool {
+        flags & VPhoneTCPFlags.rst != 0
+    }
 
     /// Sequence space this segment occupies. A SYN or FIN each cost one, which
     /// matters when acknowledging them.
@@ -408,7 +435,9 @@ struct VPhoneTCPSegment {
         }
         if let advertisedWindowScale {
             options += [3, 3, UInt8(truncatingIfNeeded: advertisedWindowScale)]
-            while options.count % 4 != 0 { options.append(1) } // NOP padding
+            while options.count % 4 != 0 {
+                options.append(1)
+            } // NOP padding
         }
         let headerLength = 20 + options.count
         var header: [UInt8] = [
@@ -465,8 +494,12 @@ struct VPhoneTCPSegment {
         var index = 0
         while index < options.count {
             let kind = options[index]
-            if kind == 0 { break } // end of options
-            if kind == 1 { index += 1; continue } // no-op padding
+            if kind == 0 {
+                break
+            } // end of options
+            if kind == 1 {
+                index += 1; continue
+            } // no-op padding
             guard index + 1 < options.count else { break }
             let length = Int(options[index + 1])
             guard length >= 2, index + length <= options.count else { break }

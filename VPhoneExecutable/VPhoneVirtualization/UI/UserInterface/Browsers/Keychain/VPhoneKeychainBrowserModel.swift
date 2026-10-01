@@ -144,7 +144,9 @@ class VPhoneKeychainBrowserModel {
         let item: VPhoneKeychainItem
         var value: String
 
-        var id: VPhoneKeychainItem.ID { item.id }
+        var id: VPhoneKeychainItem.ID {
+            item.id
+        }
     }
 
     // MARK: - Actions

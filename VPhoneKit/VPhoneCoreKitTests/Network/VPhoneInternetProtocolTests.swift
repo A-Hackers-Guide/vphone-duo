@@ -82,12 +82,12 @@ struct VPhoneInternetProtocolTests {
         let source = VPhoneIPv4Address(192, 168, 127, 3)
         let destination = VPhoneIPv4Address(142, 250, 1, 1)
         let segment = VPhoneTCPSegment(
-            sourcePort: 51_000,
+            sourcePort: 51000,
             destinationPort: 443,
             sequenceNumber: 1234,
             acknowledgmentNumber: 5678,
             flags: VPhoneTCPFlags.ack | VPhoneTCPFlags.psh,
-            windowSize: 65_535,
+            windowSize: 65535,
             payload: Array("hello".utf8),
         )
         let bytes = segment.bytes(source: source, destination: destination)
@@ -109,7 +109,7 @@ struct VPhoneInternetProtocolTests {
             sequenceNumber: 0,
             acknowledgmentNumber: 0,
             flags: VPhoneTCPFlags.syn,
-            windowSize: 65_535,
+            windowSize: 65535,
             advertisedMSS: 1460,
             advertisedWindowScale: 7,
         )

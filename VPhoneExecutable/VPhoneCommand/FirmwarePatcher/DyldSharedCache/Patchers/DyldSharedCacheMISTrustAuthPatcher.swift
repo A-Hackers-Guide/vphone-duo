@@ -133,7 +133,9 @@ public enum DyldSharedCacheMISTrustAuthPatcher {
     static let baseError: UInt32 = 0xE800_8001
 
     /// The high half both seeds share, and the only part that is actually stable.
-    static var errorHighHalf: Int64 { Int64((seededError >> 16) & 0xFFFF) }
+    static var errorHighHalf: Int64 {
+        Int64((seededError >> 16) & 0xFFFF)
+    }
 
     /// How far back from the string reference the function start may sit. The
     /// reference is in the last third of the function; 1024 instructions is

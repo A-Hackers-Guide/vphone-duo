@@ -26,7 +26,8 @@ struct VPhoneARPMessage {
     }
 
     init(operation: UInt16, senderHardware: VPhoneMACAddress, senderProtocol: VPhoneIPv4Address,
-         targetHardware: VPhoneMACAddress, targetProtocol: VPhoneIPv4Address) {
+         targetHardware: VPhoneMACAddress, targetProtocol: VPhoneIPv4Address)
+    {
         self.operation = operation
         self.senderHardware = senderHardware
         self.senderProtocol = senderProtocol
@@ -83,18 +84,23 @@ struct VPhoneDHCPMessage {
         var index = 0
         while index < options.count {
             let code = options[index]
-            if code == 255 { return nil }
+            if code == 255 {
+                return nil
+            }
             guard index + 1 < options.count else { return nil }
             let length = Int(options[index + 1])
             guard index + 2 + length <= options.count else { return nil }
-            if code == 53, length == 1 { return MessageType(rawValue: options[index + 2]) }
+            if code == 53, length == 1 {
+                return MessageType(rawValue: options[index + 2])
+            }
             index += 2 + length
         }
         return nil
     }
 
     init(operation: UInt8, transactionID: UInt32, clientHardware: VPhoneMACAddress,
-         broadcastFlag: Bool, options: [UInt8]) {
+         broadcastFlag: Bool, options: [UInt8])
+    {
         self.operation = operation
         self.transactionID = transactionID
         self.clientHardware = clientHardware
@@ -119,7 +125,7 @@ struct VPhoneDHCPMessage {
         server: VPhoneIPv4Address,
         netmask: VPhoneIPv4Address,
         mtu: Int,
-        leaseSeconds: UInt32 = 86_400,
+        leaseSeconds: UInt32 = 86400,
     ) -> [UInt8] {
         var out = [UInt8](repeating: 0, count: 236)
         out[0] = 2 // BOOTREPLY
@@ -142,15 +148,17 @@ struct VPhoneDHCPMessage {
             options += [code, UInt8(values.count)] + values
         }
         append(53, [type.rawValue])
-        append(54, server.bytes)                                     // server identifier
+        append(54, server.bytes) // server identifier
         append(51, withUnsafeBytes(of: leaseSeconds.bigEndian, Array.init)) // lease time
-        append(1, netmask.bytes)                                     // subnet mask
-        append(3, server.bytes)                                      // router
-        append(6, server.bytes)                                      // DNS
-        append(26, [UInt8(mtu >> 8), UInt8(mtu & 0xFF)])             // interface MTU
+        append(1, netmask.bytes) // subnet mask
+        append(3, server.bytes) // router
+        append(6, server.bytes) // DNS
+        append(26, [UInt8(mtu >> 8), UInt8(mtu & 0xFF)]) // interface MTU
         options.append(255)
         // Pad to the minimum BOOTP payload so short replies stay well-formed.
-        while (out.count + options.count) < 300 { options.append(0) }
+        while (out.count + options.count) < 300 {
+            options.append(0)
+        }
         return out + options
     }
 }
@@ -211,7 +219,9 @@ final class VPhoneUserspaceNetworkResponder {
         self.configuration = configuration
     }
 
-    var netmask: VPhoneIPv4Address { VPhoneIPv4Address(255, 255, 255, 0) }
+    var netmask: VPhoneIPv4Address {
+        VPhoneIPv4Address(255, 255, 255, 0)
+    }
 
     func handle(_ frame: [UInt8]) -> VPhoneUserspaceNetworkOutcome {
         guard let ethernet = VPhoneEthernetFrame(bytes: frame) else { return .drop }
@@ -302,7 +312,9 @@ final class VPhoneUserspaceNetworkResponder {
 
         // DHCP is the one UDP exchange this side finishes itself: the guest is
         // asking us, by definition.
-        if let reply = respondToDHCP(packet, datagram) { return .reply(reply) }
+        if let reply = respondToDHCP(packet, datagram) {
+            return .reply(reply)
+        }
 
         // Everything else is egress. The answer has to reach the guest, so we
         // need its MAC — and until it has sent something we do not have it.
@@ -320,7 +332,7 @@ final class VPhoneUserspaceNetworkResponder {
     }
 
     /// Our own DHCP server, or nil when this is not a request we answer.
-    private func respondToDHCP(_ packet: VPhoneIPv4Packet, _ datagram: VPhoneUDPDatagram) -> [UInt8]? {
+    private func respondToDHCP(_: VPhoneIPv4Packet, _ datagram: VPhoneUDPDatagram) -> [UInt8]? {
         guard datagram.destinationPort == VPhoneDHCPMessage.serverPort,
               let request = VPhoneDHCPMessage(bytes: datagram.payload)
         else { return nil }

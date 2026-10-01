@@ -139,7 +139,9 @@ struct VPhoneUserspaceNetworkTests {
             while index + 1 < options.count, options[index] != 255 {
                 let length = Int(options[index + 1])
                 guard index + 2 + length <= options.count else { return nil }
-                if options[index] == code { return Array(options[(index + 2) ..< (index + 2 + length)]) }
+                if options[index] == code {
+                    return Array(options[(index + 2) ..< (index + 2 + length)])
+                }
                 index += 2 + length
             }
             return nil
@@ -280,7 +282,7 @@ struct VPhoneUserspaceNetworkTests {
     /// UDP that is not DHCP is egress rather than something this side answers.
     /// The flow it names has to carry both ends and the guest's MAC, because the
     /// answer is built later, by the forwarder, with no access to this type.
-    @Test func `UDP for somewhere else becomes a forward`() throws {
+    @Test func `UDP for somewhere else becomes a forward`() {
         let responder = responder()
         // Learn the MAC first, the way a real guest's traffic would.
         _ = responder.handle(arpFrame(targeting: configuration.hostAddress))
@@ -325,7 +327,7 @@ struct VPhoneUserspaceNetworkTests {
 
     /// TCP is terminated, not relayed, so the whole segment goes to the
     /// forwarder along with the flow it belongs to.
-    @Test func `TCP segment becomes a forwardTCP`() throws {
+    @Test func `TCP segment becomes a forwardTCP`() {
         let responder = responder()
         let syn = VPhoneTCPSegment(
             sourcePort: 51000, destinationPort: 80, sequenceNumber: 1000,
@@ -416,7 +418,9 @@ private extension VPhoneUserspaceNetworkResponder {
     /// Added when `respond(to:)` became `handle(_:)` returning an outcome, so
     /// the frame-level tests above kept reading the same way.
     func respond(to frame: [UInt8]) -> [UInt8]? {
-        if case let .reply(reply) = handle(frame) { return reply }
+        if case let .reply(reply) = handle(frame) {
+            return reply
+        }
         return nil
     }
 }

@@ -22,7 +22,9 @@ struct VPhoneTCPForwarderTests {
         private let lock = NSLock()
         private var value: Value
 
-        init(_ value: Value) { self.value = value }
+        init(_ value: Value) {
+            self.value = value
+        }
 
         func withLock<Result>(_ body: (inout Value) -> Result) -> Result {
             lock.lock()
@@ -48,8 +50,8 @@ struct VPhoneTCPForwarderTests {
         init(guestPort: UInt16, destinationPort: UInt16, mss: Int = 1460) {
             self.guestPort = guestPort
             let queue = DispatchQueue(label: "forwarder-tests.\(guestPort)")
-            let recorded = self.recorded
-            let acknowledgesImmediately = self.acknowledgesImmediately
+            let recorded = recorded
+            let acknowledgesImmediately = acknowledgesImmediately
             let flow = VPhoneTCPFlow(
                 sourceAddress: VPhoneUserspaceNetworkConfiguration.default.guestAddress,
                 sourcePort: guestPort,
@@ -72,7 +74,7 @@ struct VPhoneTCPForwarderTests {
                     sequenceNumber: segment.sequenceNumber,
                     acknowledgmentNumber: segment.sequenceNumber &+ UInt32(segment.payload.count),
                     flags: VPhoneTCPFlags.ack,
-                    windowSize: 65_535,
+                    windowSize: 65535,
                 )
                 // Async rather than direct: `receive` re-enters the same object,
                 // and this way the recursion depth stays bounded.
@@ -82,13 +84,19 @@ struct VPhoneTCPForwarderTests {
             _ = mss
         }
 
-        func acknowledgeImmediately() { acknowledgesImmediately.withLock { $0 = true } }
+        func acknowledgeImmediately() {
+            acknowledgesImmediately.withLock { $0 = true }
+        }
 
         /// What the forwarder has put on the wire, oldest first.
-        var sent: [VPhoneTCPSegment] { recorded.withLock { $0 } }
+        var sent: [VPhoneTCPSegment] {
+            recorded.withLock { $0 }
+        }
 
         /// Our ISN, read off the SYN-ACK the only way any peer could.
-        var ourISN: UInt32? { sent.first { $0.hasSYN && $0.hasACK }?.sequenceNumber }
+        var ourISN: UInt32? {
+            sent.first { $0.hasSYN && $0.hasACK }?.sequenceNumber
+        }
 
         /// Bytes of *distinct* sequence numbers. A retransmission repeats a range
         /// rather than extending it, so counting transmissions would overcount.
@@ -109,9 +117,17 @@ struct VPhoneTCPForwarderTests {
             return unique.sorted { $0.key < $1.key }.map { (sequence: $0.key, count: $0.value) }
         }
 
-        func feed(_ segment: VPhoneTCPSegment) { queue.sync { forwarder.receive(segment, for: flow) } }
-        func start() { queue.sync { forwarder.start() } }
-        func stop() { queue.sync { forwarder.stop() } }
+        func feed(_ segment: VPhoneTCPSegment) {
+            queue.sync { forwarder.receive(segment, for: flow) }
+        }
+
+        func start() {
+            queue.sync { forwarder.start() }
+        }
+
+        func stop() {
+            queue.sync { forwarder.stop() }
+        }
 
         /// Wait for something a background socket is responsible for.
         ///
@@ -121,8 +137,10 @@ struct VPhoneTCPForwarderTests {
         func waitUntil(_ what: String, timeout: TimeInterval = 8, _ predicate: () -> Bool) -> Bool {
             let deadline = Date().addingTimeInterval(timeout)
             while Date() < deadline {
-                if predicate() { return true }
-                usleep(10_000)
+                if predicate() {
+                    return true
+                }
+                usleep(10000)
             }
             Issue.record("timed out waiting for \(what)")
             return false
@@ -180,31 +198,42 @@ struct VPhoneTCPForwarderTests {
         }
 
         /// Bytes pulled out of the socket by the session.
-        var bytesReceived: Int { received.withLock { $0 } }
+        var bytesReceived: Int {
+            received.withLock { $0 }
+        }
+
         /// Whether the session has returned.
-        var isFinished: Bool { finished.withLock { $0 } }
+        var isFinished: Bool {
+            finished.withLock { $0 }
+        }
 
         /// Read and count everything the guest sends.
         func drain(_ client: Int32) {
-            var buffer = [UInt8](repeating: 0, count: 65_536)
+            var buffer = [UInt8](repeating: 0, count: 65536)
             while true {
                 let read = recv(client, &buffer, buffer.count, 0)
-                if read <= 0 { return }
+                if read <= 0 {
+                    return
+                }
                 received.withLock { $0 += read }
             }
         }
 
         /// Read and count, stopping early once `target` bytes have arrived.
         func drain(_ client: Int32, until target: Int) {
-            var buffer = [UInt8](repeating: 0, count: 65_536)
+            var buffer = [UInt8](repeating: 0, count: 65536)
             while bytesReceived < target {
                 let read = recv(client, &buffer, buffer.count, 0)
-                if read <= 0 { return }
+                if read <= 0 {
+                    return
+                }
                 received.withLock { $0 += read }
             }
         }
 
-        func stop() { close(listener) }
+        func stop() {
+            close(listener)
+        }
 
         enum Error: Swift.Error {
             case socketFailed
@@ -218,7 +247,7 @@ struct VPhoneTCPForwarderTests {
     private func handshake(
         _ harness: Harness,
         guestSequence: UInt32 = 1000,
-        window: UInt16 = 65_535,
+        window: UInt16 = 65535,
         mss: Int = 1460,
         windowScale: Int? = nil,
     ) throws -> UInt32 {
@@ -246,7 +275,7 @@ struct VPhoneTCPForwarderTests {
     }
 
     /// Ask the host for data: a push with the peek byte.
-    private func request(_ harness: Harness, acknowledged: UInt32, window: UInt16 = 65_535) {
+    private func request(_ harness: Harness, acknowledged: UInt32, window: UInt16 = 65535) {
         harness.feed(VPhoneTCPSegment(
             sourcePort: harness.guestPort,
             destinationPort: harness.flow.destinationPort,
@@ -272,14 +301,16 @@ struct VPhoneTCPForwarderTests {
             var sent = 0
             while sent < payload.count {
                 let written = payload.withUnsafeBytes { send(client, $0.baseAddress, $0.count, 0) }
-                if written <= 0 { break }
+                if written <= 0 {
+                    break
+                }
                 sent += written
             }
             _ = server.drain(client)
         }
         defer { server.stop() }
 
-        let harness = Harness(guestPort: 51_001, destinationPort: server.port)
+        let harness = Harness(guestPort: 51001, destinationPort: server.port)
         harness.start()
         defer { harness.stop() }
 
@@ -312,7 +343,9 @@ struct VPhoneTCPForwarderTests {
             ))
             harness.waitUntil("more data", timeout: 3) { harness.sentDataBytes > before }
             acknowledged = isn &+ 1 &+ UInt32(harness.sentDataBytes)
-            if harness.sentDataBytes >= total { break }
+            if harness.sentDataBytes >= total {
+                break
+            }
         }
 
         #expect(harness.sentDataBytes >= total, "stalled at \(harness.sentDataBytes)B of \(total)B")
@@ -338,7 +371,7 @@ struct VPhoneTCPForwarderTests {
         }
         defer { server.stop() }
 
-        let harness = Harness(guestPort: 51_002, destinationPort: server.port)
+        let harness = Harness(guestPort: 51002, destinationPort: server.port)
         harness.start()
         defer { harness.stop() }
 
@@ -356,7 +389,7 @@ struct VPhoneTCPForwarderTests {
                 sequenceNumber: sequence,
                 acknowledgmentNumber: isn &+ 1,
                 flags: VPhoneTCPFlags.ack | VPhoneTCPFlags.psh,
-                windowSize: 65_535,
+                windowSize: 65535,
                 payload: Array(chunk.prefix(take)),
             ))
             sequence &+= UInt32(take)
@@ -384,13 +417,13 @@ struct VPhoneTCPForwarderTests {
     /// option 3 in our SYN-ACK must keep its window under 64 KiB however much
     /// buffer it has. That ceiling, divided by the round-trip time, is the most
     /// the connection can ever carry.
-    @Test func `window scaling is negotiated and the guest's field read at its true size`() async throws {
+    @Test func `window scaling is negotiated and the guest's field read at its true size`() throws {
         // The option survives a round trip before anything else is meaningful.
         let offered = VPhoneTCPSegment(
             sourcePort: 1, destinationPort: 2,
             sequenceNumber: 0, acknowledgmentNumber: 0,
             flags: VPhoneTCPFlags.syn,
-            windowSize: 65_535,
+            windowSize: 65535,
             advertisedMSS: 1460,
             advertisedWindowScale: 7,
         )
@@ -404,7 +437,7 @@ struct VPhoneTCPForwarderTests {
         #expect(encoded[12] >> 4 == 7, "the option list must pad to a 32-bit boundary")
 
         let total = 400_000
-        let blob = [UInt8](repeating: 0x21, count: 65_536)
+        let blob = [UInt8](repeating: 0x21, count: 65536)
         let server = try LoopbackServer { client, server in
             var buffer = [UInt8](repeating: 0, count: 4096)
             _ = recv(client, &buffer, buffer.count, 0)
@@ -413,14 +446,16 @@ struct VPhoneTCPForwarderTests {
                 let written = blob.withUnsafeBytes { raw in
                     send(client, raw.baseAddress, min(raw.count, total - sent), 0)
                 }
-                if written <= 0 { break }
+                if written <= 0 {
+                    break
+                }
                 sent += written
             }
             _ = server.drain(client)
         }
         defer { server.stop() }
 
-        let harness = Harness(guestPort: 51_003, destinationPort: server.port)
+        let harness = Harness(guestPort: 51003, destinationPort: server.port)
         harness.start()
         defer { harness.stop() }
 
@@ -454,7 +489,7 @@ struct VPhoneTCPForwarderTests {
     /// stands. The link to the guest drops nothing by itself, but that is not the
     /// only way a segment goes unacknowledged, and with no copy kept there is
     /// nothing to send again -- the peer just waits for a timeout.
-    @Test func `data the guest does not acknowledge is sent again`() async throws {
+    @Test func `data the guest does not acknowledge is sent again`() throws {
         let payload = [UInt8](repeating: 0x77, count: 4000)
         let server = try LoopbackServer { client, server in
             var buffer = [UInt8](repeating: 0, count: 4096)
@@ -464,7 +499,7 @@ struct VPhoneTCPForwarderTests {
         }
         defer { server.stop() }
 
-        let harness = Harness(guestPort: 51_004, destinationPort: server.port)
+        let harness = Harness(guestPort: 51004, destinationPort: server.port)
         harness.start()
         defer { harness.stop() }
 
@@ -488,7 +523,7 @@ struct VPhoneTCPForwarderTests {
     /// change to windowing or retransmission has not made it one.
     @Test func `a promptly acknowledging guest gets the payload fast`() throws {
         let total = 4 << 20
-        let blob = [UInt8](repeating: 0x33, count: 65_536)
+        let blob = [UInt8](repeating: 0x33, count: 65536)
         let server = try LoopbackServer { client, server in
             var buffer = [UInt8](repeating: 0, count: 4096)
             _ = recv(client, &buffer, buffer.count, 0)
@@ -497,14 +532,16 @@ struct VPhoneTCPForwarderTests {
                 let written = blob.withUnsafeBytes { raw in
                     send(client, raw.baseAddress, min(raw.count, total - sent), 0)
                 }
-                if written <= 0 { break }
+                if written <= 0 {
+                    break
+                }
                 sent += written
             }
             _ = server.drain(client, until: total)
         }
         defer { server.stop() }
 
-        let harness = Harness(guestPort: 51_005, destinationPort: server.port)
+        let harness = Harness(guestPort: 51005, destinationPort: server.port)
         harness.acknowledgeImmediately()
         harness.start()
         defer { harness.stop() }

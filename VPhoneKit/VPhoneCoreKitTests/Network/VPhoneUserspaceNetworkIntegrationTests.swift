@@ -40,8 +40,13 @@ struct VPhoneUserspaceNetworkIntegrationTests {
             )
         }
 
-        func start() { network.start() }
-        func stop() { network.stop() }
+        func start() {
+            network.start()
+        }
+
+        func stop() {
+            network.stop()
+        }
 
         /// Put a frame on the wire the way the attachment would.
         func write(_ frame: [UInt8]) {
@@ -56,8 +61,10 @@ struct VPhoneUserspaceNetworkIntegrationTests {
             let deadline = Date().addingTimeInterval(timeout)
             while Date() < deadline {
                 let count = recv(descriptor, &buffer, buffer.count, 0)
-                if count > 0 { return Array(buffer[0 ..< count]) }
-                usleep(5_000)
+                if count > 0 {
+                    return Array(buffer[0 ..< count])
+                }
+                usleep(5000)
             }
             return nil
         }
@@ -70,7 +77,9 @@ struct VPhoneUserspaceNetworkIntegrationTests {
         private let lock = NSLock()
         private var value: Value
 
-        init(_ value: Value) { self.value = value }
+        init(_ value: Value) {
+            self.value = value
+        }
 
         func withLock<Result>(_ body: (inout Value) -> Result) -> Result {
             lock.lock()
@@ -231,7 +240,7 @@ struct VPhoneUserspaceNetworkIntegrationTests {
 
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline, !returned.withLock({ $0 }) {
-            usleep(10_000)
+            usleep(10000)
         }
         #expect(
             returned.withLock { $0 },

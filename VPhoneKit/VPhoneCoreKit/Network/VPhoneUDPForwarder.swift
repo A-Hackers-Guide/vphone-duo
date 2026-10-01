@@ -1,6 +1,6 @@
 import Foundation
-import SystemConfiguration
 import os
+import SystemConfiguration
 
 // MARK: - Host resolver lookup
 
@@ -113,7 +113,9 @@ final class VPhoneUDPForwarder: @unchecked Sendable {
     /// queue it reads directly. Hopping unconditionally would deadlock, which is
     /// exactly the bug `start()` had.
     var sessionCount: Int {
-        if DispatchQueue.getSpecific(key: Self.queueKey) != nil { return sessions.count }
+        if DispatchQueue.getSpecific(key: Self.queueKey) != nil {
+            return sessions.count
+        }
         return queue.sync { sessions.count }
     }
 
@@ -133,7 +135,9 @@ final class VPhoneUDPForwarder: @unchecked Sendable {
         isStopped = true
         reaper?.cancel()
         reaper = nil
-        for session in sessions.values { closeSession(session) }
+        for session in sessions.values {
+            closeSession(session)
+        }
         sessions.removeAll()
     }
 
@@ -242,7 +246,9 @@ final class VPhoneUDPForwarder: @unchecked Sendable {
             let received = readBuffer.withUnsafeMutableBytes { raw in
                 recv(session.socket, raw.baseAddress, raw.count, 0)
             }
-            if received <= 0 { return } // EAGAIN, or an ICMP error on the flow
+            if received <= 0 {
+                return
+            } // EAGAIN, or an ICMP error on the flow
             session.lastActivity = Date()
             deliver(session.flow, Array(readBuffer[0 ..< received]))
         }

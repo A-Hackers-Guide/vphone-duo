@@ -598,6 +598,7 @@ struct DyldSharedCacheMISTrustAuthShapeDetectorTests {
 }
 
 // MARK: - The 24A435 shape: a seeded base plus a derivation
+
 //
 // Measured on a pristine `iPhone17,3_27.0_24A435` SystemOS cryptex, decrypted
 // and mounted read-only. `libmis` there does not materialise `0xE8008026`

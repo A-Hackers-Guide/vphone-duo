@@ -69,7 +69,9 @@ extension FirmwarePipeline {
     func pristineInput(for fileURL: URL) throws -> (url: URL, created: Bool) {
         guard let stashURL = originalURL(for: fileURL) else { return (fileURL, false) }
         let fm = FileManager.default
-        if fm.fileExists(atPath: stashURL.path) { return (stashURL, false) }
+        if fm.fileExists(atPath: stashURL.path) {
+            return (stashURL, false)
+        }
         try fm.createDirectory(at: stashURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try fm.copyItem(at: fileURL, to: stashURL)
         return (stashURL, true)
@@ -88,7 +90,9 @@ extension FirmwarePipeline {
         guard let stashURL = originalURL(for: fileURL),
               fm.fileExists(atPath: stashURL.path)
         else { return false }
-        if try filesMatch(stashURL, fileURL) { return false }
+        if try filesMatch(stashURL, fileURL) {
+            return false
+        }
         if fm.fileExists(atPath: fileURL.path) {
             try fm.removeItem(at: fileURL)
         }

@@ -139,6 +139,7 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
         var windowScaleNegotiated = false
 
         // MARK: Sending toward the guest
+
         //
         // The link to the guest is local and does not lose packets, so the only
         // way data can go missing is by sending more than the guest has buffer
@@ -159,6 +160,7 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
         var unacknowledgedBytes: Int {
             Int(Int32(bitPattern: localSequence &- sendUna))
         }
+
         /// When the guest's acknowledgment last moved, so a stalled connection
         /// can be told from a slow one.
         var lastAckAdvance = Date()
@@ -182,6 +184,7 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
         var readSuspended = false
 
         // MARK: Sending toward the host
+
         //
         // The mirror of the problem above: the host's send buffer can fill too,
         // when the guest uploads faster than the server accepts. Waiting for
@@ -210,8 +213,8 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
             self.remoteSequence = remoteSequence
             self.peerMSS = peerMSS
             self.peerWindowScale = peerWindowScale
-            self.sendWindowRight = localSequence
-            self.sendUna = localSequence
+            sendWindowRight = localSequence
+            sendUna = localSequence
         }
     }
 
@@ -222,7 +225,7 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
     private var isStopped = false
     /// Source of initial sequence numbers. Only has to be unpredictable enough
     /// that two connections to the same peer do not look alike.
-    private var sequenceCounter: UInt32 = UInt32.random(in: 0 ... UInt32.max)
+    private var sequenceCounter: UInt32 = .random(in: 0 ... UInt32.max)
 
     /// Marks `queue` as ours, so `connectionCount` can tell whether it is already
     /// on it rather than deadlocking against itself.
@@ -240,7 +243,9 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
     /// queue it reads directly. Hopping unconditionally is what deadlocked
     /// `start()` in the UDP forwarder.
     var connectionCount: Int {
-        if DispatchQueue.getSpecific(key: Self.queueKey) != nil { return connections.count }
+        if DispatchQueue.getSpecific(key: Self.queueKey) != nil {
+            return connections.count
+        }
         return queue.sync { connections.count }
     }
 
@@ -260,7 +265,9 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
         isStopped = true
         reaper?.cancel()
         reaper = nil
-        for connection in connections.values { close(connection) }
+        for connection in connections.values {
+            close(connection)
+        }
         connections.removeAll()
     }
 
@@ -514,7 +521,9 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
                 windowSize: advertisedWindowField(connection),
             ), connection: connection)
             finishIfBothClosed(connection)
-            if connection.state == .closing, connection.pendingToGuest.isEmpty { return }
+            if connection.state == .closing, connection.pendingToGuest.isEmpty {
+                return
+            }
         }
 
         // Room again: resume a source that was paused for backpressure.
@@ -622,7 +631,9 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
                 connection.lastActivity = Date()
                 connection.pendingToGuest += buffer[0 ..< received]
                 flushToGuest(connection)
-                if connection.pendingToGuest.count >= Self.maxPendingToGuest { break }
+                if connection.pendingToGuest.count >= Self.maxPendingToGuest {
+                    break
+                }
                 continue
             }
             if received == 0 {
@@ -675,12 +686,16 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
 
     private func send(_ segment: VPhoneTCPSegment, connection: Connection) {
         if !segment.payload.isEmpty {
-            if connection.sentNotAcked.isEmpty { connection.sentNotAckedSequence = segment.sequenceNumber }
+            if connection.sentNotAcked.isEmpty {
+                connection.sentNotAckedSequence = segment.sequenceNumber
+            }
             connection.sentNotAcked += segment.payload
             connection.localSequence &+= UInt32(segment.payload.count)
             armRetransmission(connection)
         }
-        if segment.hasSYN || segment.hasFIN { connection.localSequence &+= 1 }
+        if segment.hasSYN || segment.hasFIN {
+            connection.localSequence &+= 1
+        }
         deliver(connection.flow, segment)
     }
 

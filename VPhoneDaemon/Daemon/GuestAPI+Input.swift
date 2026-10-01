@@ -77,7 +77,9 @@ extension GuestAPI {
                     throw GuestAPIError.invalidRequest("nested must be a boolean")
                 }
             }
-            if bool(params, "nested") { return try nestedHierarchy(params) }
+            if bool(params, "nested") {
+                return try nestedHierarchy(params)
+            }
             return try uiElements(
                 maxElements: (params["max_elements"] as? NSNumber)?.intValue ?? 500,
                 visibleOnly: bool(params, "visible_only", default: true),

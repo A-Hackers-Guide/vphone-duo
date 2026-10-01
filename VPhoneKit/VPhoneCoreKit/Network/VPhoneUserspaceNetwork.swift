@@ -1,6 +1,6 @@
 import Foundation
-import Virtualization
 import os
+import Virtualization
 
 // MARK: - Errors
 
@@ -21,7 +21,9 @@ extension VPhoneUserspaceNetworkError: CustomStringConvertible, LocalizedError {
         }
     }
 
-    public var errorDescription: String? { description }
+    public var errorDescription: String? {
+        description
+    }
 }
 
 // MARK: - The device
@@ -130,7 +132,9 @@ public final class VPhoneUserspaceNetwork: @unchecked Sendable {
     }
 
     /// The object to hand to `VZVirtioNetworkDeviceConfiguration.attachment`.
-    public var networkAttachment: VZNetworkDeviceAttachment { attachment }
+    public var networkAttachment: VZNetworkDeviceAttachment {
+        attachment
+    }
 
     /// Begin draining the guest's frames. Idempotent, and a no-op after `stop()`.
     public func start() {
@@ -178,7 +182,9 @@ public final class VPhoneUserspaceNetwork: @unchecked Sendable {
             let received = frameBuffer.withUnsafeMutableBytes { raw in
                 recv(socket, raw.baseAddress, raw.count, 0)
             }
-            if received <= 0 { return } // EAGAIN once the queue is empty
+            if received <= 0 {
+                return
+            } // EAGAIN once the queue is empty
             let frame = Array(frameBuffer[0 ..< received])
             switch responder.handle(frame) {
             case .drop:
@@ -266,5 +272,4 @@ public final class VPhoneUserspaceNetwork: @unchecked Sendable {
             write(frame)
         }
     }
-
 }

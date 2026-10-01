@@ -29,7 +29,9 @@ private final class OnceOnlyBytePatcher: Patcher {
     let verbose = false
     let data: Data
 
-    init(data: Data) { self.data = data }
+    init(data: Data) {
+        self.data = data
+    }
 
     func findAll() throws -> [PatchRecord] {
         guard data.first == 0x00 else { return [] }
@@ -45,14 +47,21 @@ private final class OnceOnlyBytePatcher: Patcher {
         ]
     }
 
-    func apply() throws -> Int { 1 }
+    func apply() throws -> Int {
+        1
+    }
 }
 
 /// Bytes in, bytes out. The shipped loader repackages IM4P containers, which these
 /// synthetic files are not.
 private struct RawFirmwareLoader: FirmwarePipeline.FirmwareLoader {
-    func load(from url: URL) throws -> Data { try Data(contentsOf: url) }
-    func save(_ data: Data, to url: URL) throws { try data.write(to: url) }
+    func load(from url: URL) throws -> Data {
+        try Data(contentsOf: url)
+    }
+
+    func save(_ data: Data, to url: URL) throws {
+        try data.write(to: url)
+    }
 }
 
 /// A VM directory holding one restore tree with one patchable file in it.
@@ -72,9 +81,13 @@ private struct FakeVM {
         try Data([0x00, 0x11, 0x22]).write(to: componentURL)
     }
 
-    func remove() { try? FileManager.default.removeItem(at: root) }
+    func remove() {
+        try? FileManager.default.removeItem(at: root)
+    }
 
-    var componentBytes: Data { (try? Data(contentsOf: componentURL)) ?? Data() }
+    var componentBytes: Data {
+        (try? Data(contentsOf: componentURL)) ?? Data()
+    }
 
     var stashURL: URL {
         root.appendingPathComponent(FirmwarePipeline.originalsDirectoryName)
@@ -209,7 +222,7 @@ struct FirmwarePipelineOriginalsTests {
         #expect(pipeline.originalURL(for: vm.stashURL) == nil)
     }
 
-    @Test func `only the two whole-tree components opt out of keeping an original`() throws {
+    @Test func `only the two whole-tree components opt out of keeping an original`() {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
         let pipeline = FirmwarePipeline(vmDirectory: root, variant: .less, verbose: false)
         let components = pipeline.buildComponentList(restoreDir: root, iOSBase: VPhoneVersion("26.6.2"))

@@ -4,8 +4,8 @@ import IcliKit
 import VphonedNative
 
 extension GuestAPI {
-    // AX enable/restore is process-wide. Interface operations share this lock,
-    // so a flat query cannot race this opt-in native snapshot's restoration.
+    /// AX enable/restore is process-wide. Interface operations share this lock,
+    /// so a flat query cannot race this opt-in native snapshot's restoration.
     static let interfaceLock = NSRecursiveLock()
 
     private static func hierarchyInteger(
