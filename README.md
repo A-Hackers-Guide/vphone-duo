@@ -39,6 +39,23 @@ Launchpad downloads the firmware, patches it, restores the system, and boots the
 
 To install a package manager in the VM, see [Package Environment](Documents/Guides/package-environment.md).
 
+### Let an agent do it
+
+If you use a coding agent (Claude Code, Codex, or similar) on this Mac, paste the prompt below instead of following the steps by hand. The agent reads the vphone skill, checks what is already set up, installs Launchpad and `VPhone.bundle`, and stops to ask when a step needs you, such as an administrator password or a change in macOS Recovery.
+
+```text
+Set up vphone on this Mac. Read the skill at
+https://raw.githubusercontent.com/Lakr233/vphone-cli/main/Skills/vphone-guest-control/SKILL.md
+and the files it links under references/ (same folder), then follow them:
+install the newest notarized vphone-launchpad (not every release has a
+-notarized zip), put
+vphone-launchpad-cli on PATH, install the VPhone.bundle that matches
+Launchpad's series, and check `vphone-launchpad-cli status`. Do not change SIP,
+boot-args or any other host security setting, and do not create a machine
+until I confirm the firmware and the free disk space. When a step needs me,
+tell me exactly what to do and wait.
+```
+
 ## Command Line
 
 Launchpad drives VMs through the `vphone-cli` inside `VPhone.bundle`. You can also run it in Terminal:
