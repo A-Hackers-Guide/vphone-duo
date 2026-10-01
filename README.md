@@ -106,6 +106,7 @@ Start with [Troubleshooting](Documents/Guides/troubleshooting.md), which covers 
 | [Create and Run](Documents/Guides/create-and-run.md) | Firmware sources, the creation process, storage and backups |
 | [Compatibility](Documents/Guides/compatibility.md) | Verified firmware pairings |
 | [Troubleshooting](Documents/Guides/troubleshooting.md) | Common errors and how to fix them |
+| [Networking](Documents/Guides/networking.md) | Network modes, and `tunnel` for a Mac behind a VPN or proxy |
 | [Launchpad Command Line](Documents/Guides/launchpad-cli.md) | Install and test a local build with `vphone-launchpad-cli` |
 | [Research Notes](Research/README.md) | Patch and implementation details |
 
