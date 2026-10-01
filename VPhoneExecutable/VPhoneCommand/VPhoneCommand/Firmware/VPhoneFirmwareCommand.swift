@@ -208,6 +208,8 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
     var ipswCache: String?
     @Option(help: "iPhone version to resolve to an IPSW") var iphoneVersion: String?
     @Option(help: "iPhone build to resolve to an IPSW") var iphoneBuild: String?
+    @Option(help: "Device whose IPSWs --list, --iphone-version and --iphone-build look up: iPhone17,3 or iPad16,1")
+    var device: String = VPhoneFirmwareCatalog.device
     @Flag(help: "List downloadable IPSWs and exit") var list = false
     @Option(name: .shortAndLong, help: "Resource base override (default: inferred from the running binary path)")
     var projectRoot: String?
@@ -220,9 +222,13 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
         let bundleGuide = resources.base.appendingPathComponent("docs/guides/compatibility.md")
         let readme = FileManager.default.fileExists(atPath: sourceGuide.path) ? sourceGuide.path : bundleGuide.path
         let needsCatalog = list || iphoneVersion != nil || iphoneBuild != nil
+        guard VPhoneGuestDevice.named(device) != nil else {
+            throw ValidationError("vphone runs \(VPhoneGuestDevice.known.map(\.productType).joined(separator: " and ")) guests, not \(device).")
+        }
+        let device = device
         let urls = if needsCatalog {
             try vphoneRunBlocking {
-                try await VPhoneFirmwareIndex.restoreURLs(forDevice: "iPhone17,3")
+                try await VPhoneFirmwareIndex.restoreURLs(forDevice: device)
             }.joined(separator: "\n")
         } else {
             ""
@@ -230,7 +236,7 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
 
         if list {
             let code = VPhoneFirmwareMatrixCommandLine.list(
-                device: "iPhone17,3",
+                device: device,
                 readmePath: readme,
                 downloadURLs: urls,
             )
@@ -246,7 +252,7 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
                 throw ValidationError("Use either --iphone-source or --iphone-version/--iphone-build.")
             }
             let selection = VPhoneFirmwareMatrix.selection(
-                device: "iPhone17,3",
+                device: device,
                 version: iphoneVersion ?? "",
                 build: iphoneBuild ?? "",
                 readme: try? String(contentsOfFile: readme, encoding: .utf8),

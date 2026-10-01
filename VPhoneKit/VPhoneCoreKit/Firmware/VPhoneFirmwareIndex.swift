@@ -59,8 +59,10 @@ public enum VPhoneFirmwareIndex {
     // MARK: - Queries
 
     /// Every released iOS restore URL for one device identifier, newest first.
+    /// AppleDB files an iPad's releases under iPadOS.
     public static func restoreURLs(forDevice device: String) async throws -> [String] {
-        try await releases(os: "iOS", device: device).map(\.url.absoluteString)
+        try await releases(os: device.hasPrefix("iPad") ? "iPadOS" : "iOS", device: device)
+            .map(\.url.absoluteString)
     }
 
     /// The released macOS restore image for a marketing version like "26.1".

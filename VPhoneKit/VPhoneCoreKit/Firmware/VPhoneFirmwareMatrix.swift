@@ -195,10 +195,11 @@ public enum VPhoneFirmwareMatrix {
     ///
     /// A line counts when it *ends* with `/<device>_<version>_<build>_Restore.ipsw`,
     /// so the surrounding CDN path — which differs per release and is sometimes
-    /// a bare UUID — is ignored.
+    /// a bare UUID — is ignored. An IPSW shared by several models names them
+    /// all, comma-separated (`iPad16,1,iPad16,2_…`); `device` may be any of them.
     public static func releases(downloadURLs: String, device: String) -> [VPhoneFirmwareRelease] {
-        let pattern = "/(" + NSRegularExpression.escapedPattern(for: device)
-            + "_([^_]+)_([A-Za-z0-9]+)_Restore\\.ipsw)$"
+        let pattern = "/((?:[^/_]*,)?" + NSRegularExpression.escapedPattern(for: device)
+            + "(?:,[^/_]*)?_([^_]+)_([A-Za-z0-9]+)_Restore\\.ipsw)$"
         guard let name = try? NSRegularExpression(pattern: pattern) else { return [] }
 
         var seen: Set<VPhoneFirmwareRelease> = []
