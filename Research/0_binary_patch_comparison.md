@@ -2122,3 +2122,46 @@ do not establish fresh-client readiness. The three keys were tested
 together; each key's individual necessity was not isolated. Upstream
 2.2.3 has passed the profile-preservation assertion but has not been
 live-tested with this change.
+
+## Opt-in native accessibility hierarchy (2026-09-30)
+
+The opt-in native bridge behind ui.tree with nested:true follows private iOS
+attribute 5001 (immediate children) and checks each edge against attribute 5002
+(parent) using CFEqual identity. The existing flat interface continues to use
+icli's visible-element query; this bridge does not infer ancestry from frames,
+labels, identifiers, or the visible-element array. Primary attribute mappings
+are in [MCPAXNodeSource.m](https://github.com/witchan/ios-mcp/blob/8f46b68/MCPAXNodeSource.m)
+and [MCPAXAttributeBridge.m](https://github.com/witchan/ios-mcp/blob/8f46b68/MCPAXAttributeBridge.m).
+
+An isolated entitled helper on an iOS 27 research VM returned 176 Settings
+nodes with 173 matching parent back-references and 3 mismatches, 44 Calculator
+nodes with 42 matches and 1 mismatch, and 66 Clock nodes with 65 matches and
+no mismatch. Settings and Calculator are explicitly partial. Tests cover
+unnamed, offscreen, zero-frame, and frameless structure; live snapshots preserve
+unnamed containers and repeated objects through snapshot-local references.
+Node, depth, query, and deadline limits
+are explicit, and a missing or failed messaging timeout blocks the AX query.
+Foreground PID stayed unchanged and accessibility switches were restored for
+each helper run. Temporary services were unloaded and their directories removed.
+Helper evidence is not an integrated daemon
+release or cold-start readiness claim.
+
+Installed-daemon cold-read testing subsequently exposed an initial Settings
+snapshot containing only its unavailable root. The native walker now retries
+only the first root label copy with error -25215 when this invocation actually
+enabled accessibility, after one 400 ms readiness wait. It shares the original
+deadline and query budget, preserves the initial error in readiness metadata,
+and retains unresolved errors. No child error or action is retried.
+
+After a supported bundle installation and VM restart, the first Settings
+CLI read recovered and returned 220 nodes with 217 matching parent checks and
+3 disagreements; subsequent reads returned 176. Fresh Calculator returned
+44 partial nodes and Clock 66 complete nodes. Flat queries and the nested
+alias also worked. These are diagnostic inspection results on that VM,
+not full action-cycle performance acceptance or repeat cold-start reliability.
+
+The Release build also reproduced SIGPIPE failures in bundle validation:
+early-exiting grep and awk closed their file/vtool producers under pipefail.
+Those probes now drain producer output while keeping matching, first-platform
+selection, failure propagation, and all signature checks. The full workspace
+build and strict signatures then passed.

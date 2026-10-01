@@ -47,3 +47,8 @@ char *vp_usb_set_serial(const char *serial, bool force, bool *changed);
 /// The guest's own USB serial, built from `/chosen` `chip-id` and
 /// `unique-chip-id`. malloc-owned, or NULL when the device tree lacks either.
 char *vp_usb_own_serial(void);
+
+#ifdef __OBJC__
+/// Snapshot-local nested accessibility tree, using actual private iOS child links.
+NSDictionary *vp_ax_hierarchy(int pid, int maxElements, int maxDepth, int timeoutMS);
+#endif

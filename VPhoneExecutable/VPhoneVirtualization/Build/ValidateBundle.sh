@@ -26,7 +26,9 @@ file_copy_spawns="$(/usr/bin/find "$root/VPhoneExecutable" "$root/VPhoneKit" \
 require_signed_macho() {
     local file="$1"
     [[ -f "$file" ]] || { print -u2 "Missing binary: ${file#$bundle/}"; exit 1; }
-    /usr/bin/file "$file" | /usr/bin/grep -q 'Mach-O' || {
+    # Drain every architecture line so pipefail does not mistake file's SIGPIPE
+    # after grep's early exit for a malformed universal binary.
+    /usr/bin/file "$file" | /usr/bin/grep 'Mach-O' >/dev/null || {
         print -u2 "Not a Mach-O: ${file#$bundle/}"
         exit 1
     }
@@ -103,8 +105,8 @@ fi
 # Host programs live in Contents/MacOS and guest payloads in guest-resources.
 # The build platform keeps an iOS binary from landing among the host programs.
 while IFS= read -r file; do
-    /usr/bin/file "$file" | /usr/bin/grep -q 'Mach-O' || continue
-    platform="$(/usr/bin/vtool -show-build "$file" 2>/dev/null | /usr/bin/awk '$1 == "platform" {print $2; exit}')"
+    /usr/bin/file "$file" | /usr/bin/grep 'Mach-O' >/dev/null || continue
+    platform="$(/usr/bin/vtool -show-build "$file" 2>/dev/null | /usr/bin/awk '$1 == "platform" && !found {print $2; found=1}')"
     case "$file" in
         "$macos/"*)
             [[ "$platform" != IOS ]] || { print -u2 "iOS binary in Contents/MacOS: ${file#$bundle/}"; exit 1; }

@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 import IcliKit
 
@@ -67,33 +68,41 @@ extension GuestAPI {
     // MARK: - Accessibility and OCR
 
     static func executeInterface(_ method: String, _ params: [String: Any]) throws -> [String: Any]? {
+        interfaceLock.lock()
+        defer { interfaceLock.unlock() }
         switch method {
         case "ui.tree", "accessibility.tree":
-            try uiElements(
+            if let value = params["nested"] {
+                guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
+                    throw GuestAPIError.invalidRequest("nested must be a boolean")
+                }
+            }
+            if bool(params, "nested") { return try nestedHierarchy(params) }
+            return try uiElements(
                 maxElements: (params["max_elements"] as? NSNumber)?.intValue ?? 500,
                 visibleOnly: bool(params, "visible_only", default: true),
                 clickableOnly: bool(params, "clickable_only"),
                 limit: (params["limit"] as? NSNumber)?.intValue,
             )
         case "ui.element_at":
-            try elementAt(x: requiredNumber(params, "x"), y: requiredNumber(params, "y"))
+            return try elementAt(x: requiredNumber(params, "x"), y: requiredNumber(params, "y"))
         case "ui.tap_element":
-            try tapElement(selector(params))
+            return try tapElement(selector(params))
         case "ui.wait", "ui.wait_gone":
-            try waitForElement(
+            return try waitForElement(
                 selector(params),
                 appear: method == "ui.wait",
                 timeout: number(params, "timeout", default: 10),
             )
         case "ui.ocr":
-            try recognizeScreen(
+            return try recognizeScreen(
                 languages: params["languages"] as? [String] ?? ["en-US"],
                 minConfidence: Float(number(params, "min_confidence", default: 0.3)),
             )
         case "ui.describe":
-            try describeScreen()
+            return try describeScreen()
         default:
-            nil
+            return nil
         }
     }
 
