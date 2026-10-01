@@ -17,14 +17,16 @@ static IMP vcc_still_set_handler_orig = NULL;
 static IMP vcc_still_init_orig        = NULL;
 static IMP vcc_still_render_orig      = NULL;
 
-typedef id  (*VccStillInitFn)(id self, SEL _cmd, id mediaType, id sinkID);
+// mediaType is a FourCC ('vide'), not an object: typed as id, ARC retains it
+// and cameracaptured crashes at 0x76696465 on iOS 18 (#541).
+typedef id  (*VccStillInitFn)(id self, SEL _cmd, uint32_t mediaType, id sinkID);
 typedef void (*VccStillSetHandlerFn)(id self, SEL _cmd, id handler);
 typedef void (*VccStillRenderFn)(id self, SEL _cmd, CMSampleBufferRef sb, id input);
 
-static id vcc_still_init_hook(id self, SEL _cmd, id mediaType, id sinkID) {
+static id vcc_still_init_hook(id self, SEL _cmd, uint32_t mediaType, id sinkID) {
   VccStillInitFn orig = (VccStillInitFn)vcc_still_init_orig;
   id ret = orig(self, _cmd, mediaType, sinkID);
-  vcc_log(@"  [StillSink init] self=%p mediaType=%@ sinkID=%@",
+  vcc_log(@"  [StillSink init] self=%p mediaType=0x%08x sinkID=%@",
           ret, mediaType, sinkID);
   if (ret) {
     if (!vcc_still_sinks) vcc_still_sinks = [NSMutableArray new];
