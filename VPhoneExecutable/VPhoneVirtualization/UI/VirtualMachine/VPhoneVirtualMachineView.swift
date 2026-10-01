@@ -7,6 +7,9 @@ import VPhoneCoreKit
 class VPhoneVirtualMachineView: VZVirtualMachineView {
     var keySender: VPhoneVirtualMachineKeySender?
     weak var control: VPhoneGuestControl?
+    /// Whether Esc replays the back gesture (an iPhone, which has no Esc key)
+    /// or reaches the guest as Esc (an iPad). See `VPhoneApplication`.
+    var escapeIsBackGesture = true
 
     /// Whether trackpad scroll/pinch gestures are replayed as guest touches.
     var trackpadGesturesEnabled = VPhoneTrackpadGestures.isEnabled {

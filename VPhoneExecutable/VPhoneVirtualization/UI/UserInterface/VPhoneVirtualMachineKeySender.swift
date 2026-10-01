@@ -2,6 +2,7 @@ import AppKit
 import Dynamic
 import Foundation
 import Virtualization
+import VPhoneCoreKit
 
 // MARK: - Key Helper
 
@@ -67,6 +68,14 @@ class VPhoneVirtualMachineKeySender {
         control.sendHIDDown(page: 0x07, usage: 0xE3) // Cmd down
         control.sendHIDPress(page: 0x07, usage: 0x2C) // Space press
         control.sendHIDUp(page: 0x07, usage: 0xE3) // Cmd up
+    }
+
+    /// A 🌐 tap: the guest switches to its next input source. The Mac's fn key
+    /// does the same while the VM window is key; see `VPhoneApplication`.
+    func sendGlobe() {
+        guard requireConnection() else { return }
+        let globe = VPhoneGuestKeyMap.globe
+        control.sendHIDPress(page: globe.page, usage: globe.usage)
     }
 
     // MARK: - Type ASCII from Clipboard

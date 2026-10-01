@@ -31,6 +31,7 @@ extension VPhoneBootCommand {
             screenPPI: manifest.screenConfig.pixelsPerInch,
             screenScale: manifest.screenConfig.scale,
             kernelDebugPort: kernelDebugPort,
+            isPadGuest: manifest.guestDevice.isPad,
         )
     }
 }

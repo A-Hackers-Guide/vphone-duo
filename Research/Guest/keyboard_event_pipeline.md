@@ -249,3 +249,61 @@ Dynamic(vm)._processHIDReports(UnsafeRawPointer(vecPtr), forDevice: deviceId, de
 | `-[VZVirtualMachine(_VZHIDAdditions) _processHIDReports:forDevice:deviceType:]` | 0x2301b2310 |
 | `-[VZVirtualMachineView _sendKeyEventsToVirtualMachine:]`                       | --          |
 | `-[_VZHIDEventMonitor getHIDReportsFromHIDEvent:]`                              | 0x2301b2af0 |
+
+---
+
+## What Never Reaches the Guest (2026-10-02)
+
+Measured on macOS 27.0.1 (Virtualization 259), against the two lookup tables
+`-[_VZKeyboard sendKeyEvents:]` reads (179 entries each, at `adrp`+`add` in
+the method's prologue; read from the shared cache, whose slide is one per
+boot) and the report descriptor of `VZUSBKeyboardConfiguration`, found in
+`com.apple.Virtualization.VirtualMachine` by its `05 01 09 06 A1 01` prefix:
+
+```
+05 01 09 06 A1 01            Generic Desktop / Keyboard
+05 07 19 E0 29 E7 ... 81 02  8 modifier bits, page 7 0xE0-0xE7
+... 19 00 29 91 ... 95 06    6 keys, page 7 0x00-0x91
+05 08 19 01 29 03 ...        3 LEDs
+C0
+```
+
+A boot-protocol keyboard. Of the 179 virtual key codes, 115 have an index;
+the rest are dropped before any report is built:
+
+| Mac key (`kVK_*`) | Code | Why it is lost | What vphone sends instead (vphoned) |
+| --- | --- | --- | --- |
+| fn / 🌐 (`Function`) | 0x3F | has an index (0x55) but no report field | Apple vendor top-case 0xFF / 0x03, held while fn is |
+| JIS 英数 (`JIS_Eisu`) | 0x66 | no index | page 7 0x91 (LANG2) |
+| JIS かな (`JIS_Kana`) | 0x68 | no index | page 7 0x90 (LANG1) |
+| JIS ¥ (`JIS_Yen`) | 0x5D | no index | page 7 0x89 (International3) |
+| JIS _ (`JIS_Underscore`) | 0x5E | no index | page 7 0x87 (International1) |
+| JIS keypad , (`JIS_KeypadComma`) | 0x5F | no index | page 7 0x85 (Keypad Comma) |
+| Context Menu | 0x6E | no index | page 7 0x65 (Application) |
+| Help / Insert | 0x72 | no index | page 7 0x49 (Insert) |
+| Volume Up / Down / Mute | 0x48 / 0x49 / 0x4A | no index | consumer 0xE9 / 0xEA / 0xE2 |
+
+`VPhoneApplication.sendEvent(_:)` sends these through vphoned's `input.hid`
+(`VPhoneGuestKeyMap`), since nothing the virtual keyboard emits can carry
+them. Everything else — letters, digits, punctuation, Return, Tab, Space,
+Delete, Forward Delete, Caps Lock, all eight modifiers, F1–F20, arrows,
+Home / End / Page Up / Page Down, the keypad and ISO § — goes through the
+virtual keyboard unchanged.
+
+On an iPadOS 26.6.2 guest with English and Simplified Pinyin enabled,
+measured by injecting each usage through vphoned in Notes:
+
+- page 7 `E0` + `2C` (⌃Space) switches the input source;
+- vendor `FF` / `03` (🌐) switches the input source;
+- page 7 `39` (Caps Lock) types capitals in Pinyin rather than switching —
+  iPadOS's default for Chinese input.
+
+Esc: `VPhoneApplication` turns Esc into the back gesture on an iPhone guest,
+which has no Esc key. On an iPad guest Esc goes through as Esc, where it
+cancels a composition, a menu or a sheet.
+
+Host shortcuts still apply before the guest sees anything: with
+`AppleFnUsageType = 1` (System Settings › Keyboard › "Press 🌐 key to: Change
+Input Source") the Mac switches its own input source on the same fn press,
+and a ⌃Space or ⌘Space bound to Spotlight or input-source switching on the
+host is the host's unless the VM view's `capturesSystemKeys` takes it first.

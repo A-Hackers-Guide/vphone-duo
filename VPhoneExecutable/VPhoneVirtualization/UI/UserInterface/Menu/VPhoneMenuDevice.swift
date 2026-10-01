@@ -62,6 +62,7 @@ extension VPhoneMenuController {
         }
         menu.addItem(NSMenuItem.separator())
         menu.addItem(makeItem("Open Guest Spotlight", action: #selector(sendSpotlight), symbol: "magnifyingglass"))
+        menu.addItem(makeItem("Switch Guest Input Source", action: #selector(sendGlobe), symbol: "globe"))
         // Trackpad scroll and pinch arrive as ordinary NSEvents; the view turns
         // them into guest touches. Off hands both back to AppKit untouched.
         let trackpadItem = makeItem(
@@ -119,6 +120,10 @@ extension VPhoneMenuController {
 
     @objc func sendSpotlight() {
         keySender.sendSpotlight()
+    }
+
+    @objc func sendGlobe() {
+        keySender.sendGlobe()
     }
 
     // MARK: - Rotate

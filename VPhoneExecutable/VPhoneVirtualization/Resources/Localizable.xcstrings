@@ -17188,6 +17188,40 @@
         }
       }
     },
+    "Switch Guest Input Source" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch Guest Input Source"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストの入力ソースを切り替える"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트 입력 소스 전환"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chuyển nguồn nhập trên máy khách"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换客体输入法"
+          }
+        }
+      }
+    },
     "The guest removes them from its keychain. This cannot be undone." : {
       "localizations" : {
         "en" : {
