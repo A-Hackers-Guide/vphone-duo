@@ -66,6 +66,11 @@ Only `fw prepare` and `fw patch` differ for an iPad; DFU, `restore` and
 
   The virtual hardware keeps its vphone600 description: GPU feature set,
   framebuffer, memory class and boot flags.
+- **LLB** gets one more patch on an iPad guest, `llb-cfw-display_scale`. LLB
+  fills `/chosen/display-scale` from the paravirtual display's boot video
+  word, which always says 3x; MobileGestalt turns that property into the
+  screen scale, so an iPad would get a 496x755-point canvas. The patch makes
+  LLB write the iPad's own scale (2x, 744x1133 points).
 - **`cfw install`** leaves the installed device tree alone. The iPhone17,3
   post-restore identity rewrite (`preboot-exp-devicetree_identity`) is skipped
   on an iPad guest.

@@ -7,6 +7,7 @@
 //   ibss — serial labels + image4 callback
 //   ibec — serial labels + image4 callback + boot-args + bootx precondition (if present)
 //   llb  — serial labels + image4 callback + boot-args + rootfs bypass (5 patches) + panic bypass
+//          + display scale (iPad guests only)
 //
 // Each patch method is defined as an extension in its own file under IBoot/Patches/.
 
@@ -48,6 +49,11 @@ public class IBootPatcher: BufferedPatcher {
     /// by default, so 26.x bases keep the stock boot-args.
     public var extraBootArgs: String = ""
 
+    /// The `/chosen/display-scale` LLB writes, when the guest is not the phone
+    /// the boot video describes. Nil leaves LLB's own value. See
+    /// IBootPatchDisplayScale.swift.
+    public var displayScale: UInt16?
+
     let buffer: BinaryBuffer
     let mode: Mode
     let disasm = ARM64Disassembler()
@@ -80,6 +86,9 @@ public class IBootPatcher: BufferedPatcher {
             patchBootArgs()
             patchRootfssBypass()
             patchPanicBypass()
+            if let displayScale {
+                patchDisplayScale(displayScale)
+            }
         }
 
         return patches

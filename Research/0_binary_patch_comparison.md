@@ -9,7 +9,7 @@
 > identifier is the record identifier the patcher already emits, or the common
 > prefix when one patch writes several sites — so `jb.kcall10` is one selectable
 > patch covering its four records, and `sandbox_ext` covers every
-> `sandbox_ext_<index>`. 120 patches are declared in total. `vphone-cli fw patches`
+> `sandbox_ext_<index>`. 121 patches are declared in total. `vphone-cli fw patches`
 > prints them; `--json` is what the Launchpad patch editor reads.
 >
 > Two presets ship, prewritten, in
@@ -39,6 +39,23 @@
 > GPU, framebuffer and boot properties stay vphone600's. `cfw install` skips
 > `preboot-exp-devicetree_identity` on an iPad guest. Values were copied from
 > `DeviceTree.j410ap.im4p` in `iPad16,1,iPad16,2_26.6.2_23G90_Restore.ipsw`.
+>
+> A fifth, `llb-cfw-display_scale`, fixes the screen scale. UIScreen's scale is
+> MobileGestalt's `main-screen-scale`, and libMobileGestalt — the only reader
+> of the property in the 26.6.2 userland — takes it from
+> `IODeviceTree:/chosen/display-scale`. LLB (single-stage boot) writes that
+> property as `((v_depth >> 16) & 0xff) + 1` from the boot video word, which
+> the paravirtual display always reports as 3x, whatever the panel's size or
+> the `pixelsPerInch` VZ is given (264 and 326 were tried). At 3x the iPad
+> mini's 1488x2266 panel is 496x755 points and iPadOS lays its home screen
+> out over itself. The patch, anchored on the ADRP+ADD of the `display-scale`
+> literal and the following `ubfx wN, wM, #16, #8 ; add wN, wN, #1 ;
+> str wN, [x0]`, replaces the `add` with `mov wN, #<artwork scale>`
+> (`ARM64Encoder.encodeMovzW`). Found at `LLB.vresearch101.RELEASE` 0xB9CC in
+> cloudOS 26.4 (23E5207q). Editing the MobileGestalt cache's cached screen
+> struct (`oBbtJ8x+s1q0OkaiocPuog`, `{1488, 2266, 326, 3.0f}`) does not change
+> the live scale. Emitted only for an iPad guest.
+>
 > See `Documents/Guides/ipados.md`.
 >
 > **Only the camera remains of EXP by default (2026-09-28).** `standard` is now the

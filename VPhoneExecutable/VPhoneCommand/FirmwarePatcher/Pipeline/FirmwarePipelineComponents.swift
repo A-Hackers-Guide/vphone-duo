@@ -48,6 +48,12 @@ extension FirmwarePipeline {
         let includeKernelCustomFirmware = includesSet(FirmwareKernelCustomFirmwarePatchSet.identifier)
         let includeDeviceTree = includesSet(FirmwareDeviceTreePatchSet.identifier)
 
+        // An iPad guest boots a device tree of its own (7b) and needs LLB to give
+        // it the iPad's display scale (4).
+        let guestDevice = Self.readGuestDevice(restoreDir)
+        let guestTreeURL = restoreDir.appending(path: FirmwareManifest.guestDeviceTreePath)
+        let hasGuestTree = guestDevice.isPad && FileManager.default.fileExists(atPath: guestTreeURL.path)
+
         /// Whether the plan turned a patch on. Without a plan, fall back to the
         /// release the patch is pinned to, which is the same answer the standard
         /// preset gives.
@@ -162,6 +168,7 @@ extension FirmwarePipeline {
             patcherFactories: includeBootChain ? [{ data, verbose in
                 let p = IBootPatcher(data: data, mode: .llb, verbose: verbose)
                 p.extraBootArgs = extraBootArgs
+                p.displayScale = hasGuestTree ? UInt16(guestDevice.artworkScale) : nil
                 p.gate = gate
                 return p
             }] : [],
@@ -237,9 +244,6 @@ extension FirmwarePipeline {
         //    properties so the guest presents a consistent iPhone17,3 identity.
         //    An iPad guest restores with this tree and boots its own copy (7b).
         let dtIncludeIdentity = variant == .jb || variant == .exp
-        let guestDevice = Self.readGuestDevice(restoreDir)
-        let guestTreeURL = restoreDir.appending(path: FirmwareManifest.guestDeviceTreePath)
-        let hasGuestTree = guestDevice.isPad && FileManager.default.fileExists(atPath: guestTreeURL.path)
         components.append(ComponentDescriptor(
             name: "DeviceTree",
             inRestoreDir: true,
