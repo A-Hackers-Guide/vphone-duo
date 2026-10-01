@@ -28,6 +28,9 @@ vphone-cli vm create ipad-mini \
   --cloudos-source 'https://updates.cdn-apple.com/private-cloud-compute/c0ecdb4b310cf5239ab2b248dd3098eec297dc5aa3bbe6ada27273262b0b8b64'
 ```
 
+`fw prepare --device iPad16,1 --list` lists the iPad's downloadable IPSWs,
+and `--device iPad16,1 --iphone-version 26.6.2` resolves one.
+
 In Launchpad, choose **New Machine**, set **Source** to **Custom IPSWs**, and
 put the iPad IPSW in the **iPhone IPSW** field and the cloudOS IPSW in the
 other. The Core Bundle in use must include iPad support.
