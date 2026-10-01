@@ -41,6 +41,21 @@ Launchpad 会下载固件、打补丁、恢复系统并首次启动。完成后�
 
 也可以使用自己的 iPhone 和 cloudOS IPSW，已验证的组合见[兼容性说明](Guides/compatibility.md)。
 
+### 让 Agent 代劳
+
+如果这台 Mac 上有编程 Agent（Claude Code、Codex 等），可以直接粘贴下面的提示词，不必手动操作。Agent 会读取 vphone skill，检查已完成的部分，安装 Launchpad 和 `VPhone.bundle`；遇到需要你处理的步骤（例如管理员密码，或在 macOS 恢复模式中的改动）时会停下来询问。
+
+```text
+在这台 Mac 上安装 vphone。先阅读这个 skill：
+https://raw.githubusercontent.com/Lakr233/vphone-cli/main/Skills/vphone-guest-control/SKILL.md
+以及它在 references/（同一目录）下链接的文件，然后照着做：
+安装最新的已公证 vphone-launchpad（并非每个 release 都有 -notarized 压缩包），
+把 vphone-launchpad-cli 加到 PATH，安装与 Launchpad 系列一致的 VPhone.bundle，
+并运行 `vphone-launchpad-cli status` 检查。不要修改 SIP、boot-args 或任何其他
+主机安全设置；在我确认固件和可用磁盘空间之前，不要创建虚拟机。遇到需要我
+操作的步骤，请准确告诉我该做什么，然后等待。
+```
+
 ## 安装软件包环境
 
 虚拟机默认不带软件包管理器。安装步骤：

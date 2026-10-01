@@ -48,12 +48,11 @@ Set up vphone on this Mac. Read the skill at
 https://raw.githubusercontent.com/Lakr233/vphone-cli/main/Skills/vphone-guest-control/SKILL.md
 and the files it links under references/ (same folder), then follow them:
 install the newest notarized vphone-launchpad (not every release has a
--notarized zip), put
-vphone-launchpad-cli on PATH, install the VPhone.bundle that matches
-Launchpad's series, and check `vphone-launchpad-cli status`. Do not change SIP,
-boot-args or any other host security setting, and do not create a machine
-until I confirm the firmware and the free disk space. When a step needs me,
-tell me exactly what to do and wait.
+-notarized zip), put vphone-launchpad-cli on PATH, install the VPhone.bundle
+that matches Launchpad's series, and check `vphone-launchpad-cli status`.
+Do not change SIP, boot-args or any other host security setting, and do not
+create a machine until I confirm the firmware and the free disk space. When a
+step needs me, tell me exactly what to do and wait.
 ```
 
 ## Command Line

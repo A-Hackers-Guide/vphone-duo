@@ -41,6 +41,23 @@ Launchpad がファームウェアのダウンロード、パッチの適用、�
 
 自分の iPhone と cloudOS の IPSW を使うこともできます。検証済みの組み合わせは[互換性ガイド](Guides/compatibility.md)をご覧ください。
 
+### エージェントに任せる
+
+この Mac でコーディングエージェント（Claude Code、Codex など）を使っている場合は、手順を手作業で進める代わりに、次のプロンプトを貼り付けてください。エージェントは vphone スキルを読み、設定済みの部分を確認して Launchpad と `VPhone.bundle` をインストールします。管理者パスワードや macOS リカバリでの変更など、あなたの操作が必要な手順では止まって確認します。
+
+```text
+この Mac に vphone をセットアップしてください。まず次のスキルを読んでください：
+https://raw.githubusercontent.com/Lakr233/vphone-cli/main/Skills/vphone-guest-control/SKILL.md
+および同じフォルダの references/ 以下にリンクされたファイルを読み、その手順に従います：
+公証済みの最新の vphone-launchpad をインストールし（すべてのリリースに
+-notarized zip があるわけではありません）、vphone-launchpad-cli を PATH に通し、
+Launchpad と同じシリーズの VPhone.bundle をインストールして、
+`vphone-launchpad-cli status` で確認してください。SIP、boot-args などホストの
+セキュリティ設定は変更せず、ファームウェアと空きディスク容量を私が確認するまで
+マシンは作成しないでください。私の操作が必要な手順では、何をすればよいかを
+正確に伝えて待ってください。
+```
+
 ## パッケージ環境のインストール
 
 仮想マシンには標準でパッケージマネージャが入っていません。インストール手順は次のとおりです。
