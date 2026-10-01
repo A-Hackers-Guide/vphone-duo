@@ -8,6 +8,8 @@ cloudOS IPSW (`vresearch101ap` / `vphone600ap`). Only the userland comes from a
 different restore IPSW, an iPad's instead of the iPhone17,3's, and the device
 tree is rewritten so that userland sees an iPad.
 
+![iPadOS home screen in a vphone VM](../ipados-demo.jpeg)
+
 ## Supported devices
 
 | Product | Model | Board | Display |
