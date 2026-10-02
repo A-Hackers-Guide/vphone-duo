@@ -45,6 +45,50 @@ struct DisplayOrientationTests {
         #expect(VPhoneDisplayOrientation.landscapeRight.displayedSize(panel: Self.panel) == sideways)
     }
 
+    // MARK: - Screen and Panel
+
+    @Test func `a view's turn reads back as its orientation`() {
+        for orientation in VPhoneDisplayOrientation.allCases {
+            #expect(VPhoneDisplayOrientation(viewRotation: orientation.viewRotation) == orientation)
+        }
+        // Mid-turn, the nearest quarter turn.
+        #expect(VPhoneDisplayOrientation(viewRotation: 80) == .landscapeRight)
+        #expect(VPhoneDisplayOrientation(viewRotation: -95) == .landscapeLeft)
+        #expect(VPhoneDisplayOrientation(viewRotation: 350) == .portrait)
+    }
+
+    /// Landscape right: the panel is turned a quarter turn counterclockwise,
+    /// so the interface's top is the panel's right edge.
+    @Test func `an upward swipe on a sideways panel runs toward its top edge`() {
+        let up = CGPoint(x: 0, y: 10)
+        #expect(VPhoneDisplayOrientation.portrait.panelVector(fromScreen: up) == up)
+        #expect(VPhoneDisplayOrientation.landscapeRight.panelVector(fromScreen: up) == CGPoint(x: 10, y: 0))
+        #expect(VPhoneDisplayOrientation.landscapeLeft.panelVector(fromScreen: up) == CGPoint(x: -10, y: 0))
+        #expect(VPhoneDisplayOrientation.upsideDown.panelVector(fromScreen: up) == CGPoint(x: 0, y: -10))
+    }
+
+    @Test func `screen and panel directions undo each other`() {
+        let vector = CGPoint(x: 3, y: -7)
+        for orientation in VPhoneDisplayOrientation.allCases {
+            #expect(orientation.screenVector(fromPanel: orientation.panelVector(fromScreen: vector)) == vector)
+        }
+    }
+
+    /// Landscape right shows the panel's right edge as the window's top, and
+    /// its bottom edge as the window's right.
+    @Test func `panel points land where the turned window shows them`() {
+        let panel = CGSize(width: 1032, height: 1376)
+        let landscape = VPhoneDisplayOrientation.landscapeRight
+        #expect(landscape.screenPoint(fromPanel: CGPoint(x: 1032, y: 688), panel: panel) == CGPoint(x: 688, y: 1032))
+        #expect(landscape.screenPoint(fromPanel: CGPoint(x: 516, y: 0), panel: panel) == CGPoint(x: 1376, y: 516))
+        #expect(landscape.panelPoint(fromScreen: CGPoint(x: 0, y: 516), panel: panel) == CGPoint(x: 516, y: 1376))
+        for orientation in VPhoneDisplayOrientation.allCases {
+            let point = CGPoint(x: 100, y: 300)
+            #expect(orientation.panelPoint(fromScreen: orientation.screenPoint(fromPanel: point, panel: panel), panel: panel) == point)
+        }
+        #expect(VPhoneDisplayOrientation.portrait.screenPoint(fromPanel: CGPoint(x: 5, y: 9), panel: panel) == CGPoint(x: 5, y: 9))
+    }
+
     // MARK: - Turning
 
     @Test func `the panel fills the window at rest`() {
