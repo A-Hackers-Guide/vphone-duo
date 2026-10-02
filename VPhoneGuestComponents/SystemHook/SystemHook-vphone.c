@@ -142,6 +142,17 @@ static int vpExecve(const char *path, char *const argv[], char *const envp[]) {
 #define VP_CAMERA_DAEMON_HOOK "/usr/lib/libvcamcaptured.dylib"
 #define VP_CAMERA_APP_HOOK "/usr/lib/libcamfix.dylib"
 #define VP_AVFOUNDATION "/System/Library/Frameworks/AVFoundation.framework/AVFoundation"
+// The haptics fix rides the same route and needs no loader of its own. See
+// HapticsFix/libhapticsfix.c for what it answers and why SpringBoard is the
+// target.
+#define VP_HAPTICS_FIX "/usr/lib/libhapticsfix.dylib"
+
+// The one UIKit process measured creating a CHHapticEngine without first
+// asking CoreHaptics whether the hardware exists. Suffix-matched, like the
+// MIS targets, so it holds however launchd names the binary.
+static int vpIsSpringBoard(const char *path) {
+    return vpPathHasSuffix(path, "/SpringBoard.app/SpringBoard");
+}
 
 // A missing library is expected and stays quiet; anything else is logged.
 static void vpLoadLibrary(const char *kind, const char *library) {
@@ -198,6 +209,11 @@ __attribute__((constructor)) static void vpLogProcess(void) {
         vpLoadLibrary("camera-hook", VP_CAMERA_DAEMON_HOOK);
         return;
     }
+    // Loaded before the app gate: SpringBoard is neither an app path nor a
+    // bootstrap executable, and the swizzle has to be in place before UIKit
+    // first asks CoreHaptics for an engine.
+    if (vpIsSpringBoard(path))
+        vpLoadLibrary("haptics-fix", VP_HAPTICS_FIX);
     if (!vpInBootstrap && !vpIsAppPath(path))
         return;
     if (vpIsAppPath(path) && dlopen(VP_AVFOUNDATION, RTLD_LAZY | RTLD_NOLOAD))

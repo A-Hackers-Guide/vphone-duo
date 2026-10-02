@@ -46,6 +46,11 @@ SYSTEMHOOK_INCLUDES := $(wildcard SystemHook/*.h SystemHook/*.inc Shared/*.h)
 MISFIX := $(STAGE)/misfix/libmisfix.dylib
 MISFIX_SOURCES := $(wildcard MISFix/*.c)
 MISFIX_INCLUDES := $(wildcard MISFix/*.h)
+# CoreHaptics is reached through the ObjC runtime at runtime, so this needs
+# nothing but libobjc at link time.
+HAPTICSFIX := $(STAGE)/hapticsfix/libhapticsfix.dylib
+HAPTICSFIX_SOURCES := $(wildcard HapticsFix/*.c)
+HAPTICSFIX_INCLUDES := $(wildcard HapticsFix/*.h)
 GPU_PLUGIN := $(STAGE)/gpu/libAppleParavirtCompilerPluginIOGPUFamily.dylib
 GPU_PLUGIN_SOURCES := $(wildcard GraphicLoader/*.mm)
 GPU_PLUGIN_INCLUDES := $(wildcard GraphicLoader/*.h GraphicLoader/*.hpp GraphicLoader/*.inc)
@@ -73,7 +78,7 @@ GPU_DYNAMIC_LOOKUP_SYMS := \
 	-Wl,-U,_MTLMetalFunctionCreate \
 	-Wl,-U,_MTLMetalLibInsertFunction \
 	-Wl,-U,_MTLWriteMetalLibToMemoryBuffer
-ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(GPU_PLUGIN)
+ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(HAPTICSFIX) $(GPU_PLUGIN)
 PLISTS := $(STAGE)/camfix/libcamfix.plist $(STAGE)/vcamcaptured/libvcamcaptured.plist \
 	$(STAGE)/misfix/libmisfix.plist
 GPU_PROVENANCE := $(STAGE)/gpu/README.md
@@ -88,7 +93,7 @@ gpu: $(GPU_PLUGIN)
 
 package: all
 	@rm -f $(ARCHIVE)
-	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix gpu
+	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix hapticsfix gpu
 	@echo "Packaged $(ARCHIVE)"
 
 test-loader-links:
@@ -114,7 +119,7 @@ test-vcam-dataplane:
 		-framework CoreGraphics
 	@$(OUT)/VCamDataPlaneTests
 
-$(STAGE)/camfix $(STAGE)/vcamcaptured $(STAGE)/launchhook $(STAGE)/systemhook $(STAGE)/misfix $(STAGE)/gpu:
+$(STAGE)/camfix $(STAGE)/vcamcaptured $(STAGE)/launchhook $(STAGE)/systemhook $(STAGE)/misfix $(STAGE)/hapticsfix $(STAGE)/gpu:
 	@mkdir -p $@
 
 $(CAMFIX): $(CAMFIX_SOURCES) $(CAMFIX_INPUTS) | $(STAGE)/camfix
@@ -151,6 +156,13 @@ $(MISFIX): $(MISFIX_SOURCES) $(MISFIX_INCLUDES) MISFix | $(STAGE)/misfix
 		-install_name /usr/lib/libmisfix.dylib \
 		-o $@ $(MISFIX_SOURCES) \
 		-framework CoreFoundation -lmis -lMobileGestalt -lobjc \
+		-Wl,-not_for_dyld_shared_cache
+	@codesign --force --sign - $@
+
+$(HAPTICSFIX): $(HAPTICSFIX_SOURCES) $(HAPTICSFIX_INCLUDES) HapticsFix | $(STAGE)/hapticsfix
+	$(CLANG) $(GUEST_C_FLAGS) -dynamiclib \
+		-install_name /usr/lib/libhapticsfix.dylib \
+		-o $@ $(HAPTICSFIX_SOURCES) -lobjc \
 		-Wl,-not_for_dyld_shared_cache
 	@codesign --force --sign - $@
 

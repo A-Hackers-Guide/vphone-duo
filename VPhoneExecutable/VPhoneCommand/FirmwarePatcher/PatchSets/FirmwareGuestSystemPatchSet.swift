@@ -170,7 +170,10 @@ public enum FirmwareGuestSystemPatchSet {
                 launchd and SystemHook insert at spawn. Among them is libmisfix.dylib, inserted \
                 into installd, misagent and SpringBoard, which lets Xcode install and launch an \
                 app signed for someone else's team, or ad hoc, without writing the shared cache, \
-                and into lockdownd and remoted, which tell the host a configured UDID.
+                and into lockdownd and remoted, which tell the host a configured UDID. It also \
+                ships libhapticsfix.dylib, which SystemHook loads into SpringBoard so UIKit's \
+                feedback engine takes the no-haptics path instead of crashing on the VM's absent \
+                haptic hardware.
                 """,
                 target: .guestFile(path: "/Library/LaunchDaemons"),
                 bootEssential: true,

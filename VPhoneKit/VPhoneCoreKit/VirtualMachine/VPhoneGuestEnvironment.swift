@@ -12,5 +12,6 @@ public enum VPhoneGuestEnvironment {
         "libvcamcaptured.dylib",
         "libcamfix.dylib",
         "libmisfix.dylib",
+        "libhapticsfix.dylib",
     ]
 }
