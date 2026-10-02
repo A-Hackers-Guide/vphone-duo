@@ -28,6 +28,10 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(command.noGraphics ? .prohibited : .regular)
         VPhoneDockName.set(VPhoneDockName.name(forConfig: command.config))
 
+        if !command.noGraphics {
+            VPhoneHostHotKeys.shared.recoverAfterCrash()
+        }
+
         signal(SIGINT, SIG_IGN)
         let src = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
         src.setEventHandler {

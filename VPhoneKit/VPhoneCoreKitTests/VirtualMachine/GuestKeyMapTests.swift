@@ -30,4 +30,26 @@ struct GuestKeyMapTests {
             #expect([0x07, 0x0C].contains(usage.page))
         }
     }
+
+    @Test
+    func `keys held with 🌐 go as their keyboard usages, arrows restored`() {
+        // 🌐H, 🌐A, 🌐C, 🌐N, 🌐Q, 🌐E.
+        #expect(VPhoneGuestKeyMap.usage(whileGlobeHeld: 0x04) == .init(page: 0x07, usage: 0x0B))
+        #expect(VPhoneGuestKeyMap.usage(whileGlobeHeld: 0x00) == .init(page: 0x07, usage: 0x04))
+        #expect(VPhoneGuestKeyMap.usage(whileGlobeHeld: 0x08) == .init(page: 0x07, usage: 0x06))
+        #expect(VPhoneGuestKeyMap.usage(whileGlobeHeld: 0x2D) == .init(page: 0x07, usage: 0x11))
+        #expect(VPhoneGuestKeyMap.usage(whileGlobeHeld: 0x0C) == .init(page: 0x07, usage: 0x14))
+        #expect(VPhoneGuestKeyMap.usage(whileGlobeHeld: 0x0E) == .init(page: 0x07, usage: 0x08))
+        // macOS sends fn+← as Home; the guest gets 🌐←.
+        #expect(VPhoneGuestKeyMap.usage(whileGlobeHeld: 0x73) == .init(page: 0x07, usage: 0x50))
+        #expect(VPhoneGuestKeyMap.usage(whileGlobeHeld: 0x79) == .init(page: 0x07, usage: 0x51))
+    }
+
+    @Test
+    func `the 🌐 table covers every letter and digit once`() {
+        let usages = VPhoneGuestKeyMap.keyboardUsages.values
+        for usage in UInt32(0x04) ... 0x27 {
+            #expect(usages.filter { $0 == usage }.count == 1)
+        }
+    }
 }

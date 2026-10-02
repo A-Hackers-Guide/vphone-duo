@@ -19,9 +19,9 @@ final class VPhoneApplication: NSApplication {
     /// the guest never sees a release without a press.
     private var menuKeyCodes = Set<UInt16>()
 
-    /// Keys whose key-down went to the guest through vphoned, so their key-up
-    /// goes the same way.
-    private var forwardedKeyCodes = Set<UInt16>()
+    /// Keys whose key-down went to the guest through vphoned, with the usage
+    /// sent, so their key-up goes the same way even after 🌐 is let go.
+    private var forwardedKeys: [UInt16: (control: VPhoneGuestControl, usage: VPhoneGuestKeyMap.Usage)] = [:]
 
     /// The guest 🌐 is held through, while it is held. fn's release only arrives
     /// while the window is key, so leaving the window lets go of it here.
@@ -41,10 +41,19 @@ final class VPhoneApplication: NSApplication {
             super.sendEvent(event)
             return
         }
+        if !takeKeyEvent(event, view: view) {
+            super.sendEvent(event)
+        }
+    }
+
+    /// Whatever this class does with a key event for the VM view before the
+    /// view's own handling. Returns true when the event stops here; false when
+    /// it goes on to the virtual keyboard, which `VPhoneHostKeyEvents` then
+    /// delivers to the view itself.
+    func takeKeyEvent(_ event: NSEvent, view: VPhoneVirtualMachineView) -> Bool {
         if event.type == .flagsChanged {
             forwardGlobe(event, view: view)
-            super.sendEvent(event)
-            return
+            return false
         }
         // Esc replays the guest's back gesture: iOS has no back key, and a
         // forwarded Escape only reads as cancel. The press and its release both
@@ -55,22 +64,19 @@ final class VPhoneApplication: NSApplication {
             if event.type == .keyDown {
                 view.performBackGesture()
             }
-            return
+            return true
         }
-        if forwardDroppedKey(event, view: view) {
-            return
+        if forwardThroughGuest(event, view: view) {
+            return true
         }
         if event.type == .keyUp {
-            if menuKeyCodes.remove(event.keyCode) == nil {
-                super.sendEvent(event)
-            }
-            return
+            return menuKeyCodes.remove(event.keyCode) != nil
         }
         if mainMenu?.performKeyEquivalent(with: event) == true {
             menuKeyCodes.insert(event.keyCode)
-            return
+            return true
         }
-        super.sendEvent(event)
+        return false
     }
 
     // MARK: - Keys the Virtual Keyboard Drops
@@ -92,38 +98,51 @@ final class VPhoneApplication: NSApplication {
                 object: event.window,
                 queue: .main,
             ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.releaseGlobe() }
+                MainActor.assumeIsolated { self?.releaseGlobe(leavingWindow: true) }
             }
         } else {
-            releaseGlobe()
+            releaseGlobe(leavingWindow: false)
         }
     }
 
-    private func releaseGlobe() {
+    /// Lets go of 🌐 in the guest. Leaving the window also lets go of every key
+    /// still held through vphoned, whose release would never arrive.
+    private func releaseGlobe(leavingWindow: Bool) {
         if let resignObserver {
             NotificationCenter.default.removeObserver(resignObserver)
         }
         resignObserver = nil
         guard let holder = globeHolder else { return }
         globeHolder = nil
+        if leavingWindow {
+            for (keyCode, key) in forwardedKeys {
+                key.control.sendHIDUp(page: key.usage.page, usage: key.usage.usage)
+                forwardedKeys[keyCode] = nil
+            }
+        }
         let globe = VPhoneGuestKeyMap.globe
         holder.sendHIDUp(page: globe.page, usage: globe.usage)
     }
 
-    /// Sends a key `_VZKeyboard` would drop — the JIS input-mode and character
-    /// keys, Context Menu, Insert, volume — through vphoned. Returns whether the
-    /// event was one of them; it then goes no further.
-    private func forwardDroppedKey(_ event: NSEvent, view: VPhoneVirtualMachineView) -> Bool {
-        guard let usage = VPhoneGuestKeyMap.usage(forDroppedKeyCode: event.keyCode),
-              let control = view.control
-        else { return false }
-        if event.type == .keyDown {
-            // The guest repeats a held key itself.
-            guard !event.isARepeat, forwardedKeyCodes.insert(event.keyCode).inserted else { return true }
-            control.sendHIDDown(page: usage.page, usage: usage.usage)
-        } else if forwardedKeyCodes.remove(event.keyCode) != nil {
-            control.sendHIDUp(page: usage.page, usage: usage.usage)
+    /// Sends a key through vphoned instead of the virtual keyboard: a key
+    /// `_VZKeyboard` would drop — the JIS input-mode and character keys,
+    /// Context Menu, Insert, volume — and, while 🌐 is held, every key, so the
+    /// guest sees 🌐 and the key from one keyboard and combines them (🌐H, 🌐A,
+    /// 🌐←). Returns whether the event went this way; it then goes no further.
+    private func forwardThroughGuest(_ event: NSEvent, view: VPhoneVirtualMachineView) -> Bool {
+        if event.type == .keyUp {
+            guard let key = forwardedKeys.removeValue(forKey: event.keyCode) else { return false }
+            key.control.sendHIDUp(page: key.usage.page, usage: key.usage.usage)
+            return true
         }
+        let usage = globeHolder != nil
+            ? VPhoneGuestKeyMap.usage(whileGlobeHeld: event.keyCode)
+            : VPhoneGuestKeyMap.usage(forDroppedKeyCode: event.keyCode)
+        guard let usage, let control = view.control else { return false }
+        // The guest repeats a held key itself.
+        guard !event.isARepeat, forwardedKeys[event.keyCode] == nil else { return true }
+        forwardedKeys[event.keyCode] = (control, usage)
+        control.sendHIDDown(page: usage.page, usage: usage.usage)
         return true
     }
 }
