@@ -7,6 +7,9 @@ import VPhoneCoreKit
 class VPhoneVirtualMachineView: VZVirtualMachineView {
     var keySender: VPhoneVirtualMachineKeySender?
     weak var control: VPhoneGuestControl?
+    /// Whether Esc replays the back gesture (an iPhone, which has no Esc key)
+    /// or reaches the guest as Esc (an iPad). See `VPhoneApplication`.
+    var escapeIsBackGesture = true
 
     /// Whether trackpad scroll/pinch gestures are replayed as guest touches.
     var trackpadGesturesEnabled = VPhoneTrackpadGestures.isEnabled {
@@ -253,6 +256,11 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     /// share a baseline: on hardware the vertical axis came out matching the
     /// fingers while the horizontal axis was mirrored, hence the extra sign on
     /// x. This is the one place the convention lives.
+    ///
+    /// The deltas are the window's; the finger moves on the panel, which the
+    /// window shows turned when the guest is sideways. Unturned, a vertical
+    /// swipe on a landscape guest dragged the finger across it, into the
+    /// panel's edge, where the re-anchor pressed it down again as a tap.
     private func scrollDelta(of event: NSEvent) -> CGPoint {
         var dx = -event.scrollingDeltaX
         var dy = event.scrollingDeltaY
@@ -260,7 +268,15 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
             dx = -dx
             dy = -dy
         }
-        return CGPoint(x: dx * Self.scrollToTouchScale, y: dy * Self.scrollToTouchScale)
+        return screenOrientation.panelVector(
+            fromScreen: CGPoint(x: dx * Self.scrollToTouchScale, y: dy * Self.scrollToTouchScale),
+        )
+    }
+
+    /// How the window shows the panel: this view is turned with the guest's
+    /// interface, and keeps its portrait bounds.
+    private var screenOrientation: VPhoneDisplayOrientation {
+        VPhoneDisplayOrientation(viewRotation: frameCenterRotation)
     }
 
     /// Where to press the synthetic finger: the pointer, except for an upward
@@ -272,11 +288,18 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     /// is an ordinary drag, which is why unlocking worked with the pointer
     /// parked on the bar and stopped as soon as it moved up a little. Snapping
     /// only in that strip keeps the rest of the window usable for scrolling.
+    ///
+    /// Up and the bottom strip are the window's, which is the interface's: on
+    /// a sideways guest the Home indicator runs along a long side of the panel.
     private func scrollStartPoint(for pointer: NSPoint, travel: CGPoint) -> NSPoint {
-        guard travel.y > abs(travel.x),
-              pointer.y <= bounds.height * Self.homeEdgeSnapFraction
+        let orientation = screenOrientation
+        let screenTravel = orientation.screenVector(fromPanel: travel)
+        let screenPointer = orientation.screenPoint(fromPanel: pointer, panel: bounds.size)
+        let screenHeight = orientation.displayedSize(panel: bounds.size).height
+        guard screenTravel.y > abs(screenTravel.x),
+              screenPointer.y <= screenHeight * Self.homeEdgeSnapFraction
         else { return pointer }
-        return NSPoint(x: pointer.x, y: 0)
+        return orientation.panelPoint(fromScreen: CGPoint(x: screenPointer.x, y: 0), panel: bounds.size)
     }
 
     /// Press the synthetic finger down at `point`, so the drag starts where the
@@ -417,11 +440,13 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         pinchTouchRadius = 0
     }
 
+    /// The two fingers sit side by side as the window shows the panel.
     private func sendPinchTouch(phase: Int) {
         guard let center = pinchTouchCenter else { return }
+        let offset = screenOrientation.panelVector(fromScreen: CGPoint(x: pinchTouchRadius, y: 0))
         let points = [
-            clampedTouchPoint(NSPoint(x: center.x - pinchTouchRadius, y: center.y)),
-            clampedTouchPoint(NSPoint(x: center.x + pinchTouchRadius, y: center.y)),
+            clampedTouchPoint(NSPoint(x: center.x - offset.x, y: center.y - offset.y)),
+            clampedTouchPoint(NSPoint(x: center.x + offset.x, y: center.y + offset.y)),
         ]
         sendTouchEvent(
             phase: phase, localPoints: points, swipeAim: 0,
@@ -645,8 +670,9 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
 
     // MARK: - Back Gesture
 
-    /// Replay the system back gesture: a drag from the left edge toward the
-    /// centre.
+    /// Replay the system back gesture: a drag from the interface's left edge
+    /// toward the centre, which on a sideways guest is a long side of the
+    /// panel.
     ///
     /// iOS has no back key. This is the gesture every app honours, so both the
     /// Esc key and the Device menu's Back item come through here.
@@ -676,11 +702,17 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
             self?.backGestureInFlight = false
         }
 
+        // Laid out on the interface, y up, then carried onto the panel's
+        // pixels, y down.
+        let orientation = screenOrientation
+        let screen = orientation.displayedSize(panel: size)
+        let from = orientation.panelPoint(fromScreen: CGPoint(x: screen.width * 0.004, y: screen.height * 0.5), panel: size)
+        let to = orientation.panelPoint(fromScreen: CGPoint(x: screen.width * 0.85, y: screen.height * 0.5), panel: size)
         injectSwipe(
-            fromX: size.width * 0.004,
-            fromY: size.height * 0.5,
-            toX: size.width * 0.85,
-            toY: size.height * 0.5,
+            fromX: from.x,
+            fromY: size.height - from.y,
+            toX: to.x,
+            toY: size.height - to.y,
             screenWidth: Int(size.width),
             screenHeight: Int(size.height),
             durationMs: durationMS,

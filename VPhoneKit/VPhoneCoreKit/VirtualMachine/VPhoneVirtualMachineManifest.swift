@@ -120,6 +120,18 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
     /// SEP storage filename
     public let sepStorage: String
 
+    // MARK: - Guest Device
+
+    /// Product type of the device whose IPSW supplied the guest OS, as
+    /// `fw prepare` found it. Absent for an iPhone17,3 guest and for every VM
+    /// made before iPad guests existed.
+    public let guestProductType: String?
+
+    /// The guest device `fw patch` presents in the device tree.
+    public var guestDevice: VPhoneGuestDevice {
+        VPhoneGuestDevice.named(guestProductType) ?? .default
+    }
+
     // MARK: - Nested Types
 
     public enum PlatformType: String, Codable, Sendable {
@@ -131,7 +143,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         case dev
     }
 
-    public struct ScreenConfig: Codable, Sendable {
+    public struct ScreenConfig: Codable, Equatable, Sendable {
         public let width: Int
         public let height: Int
         public let pixelsPerInch: Int
@@ -211,6 +223,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         nvramStorage: String = "nvram.bin",
         romImages: ROMImages?,
         sepStorage: String = "SEPStorage",
+        guestProductType: String? = nil,
     ) {
         schemaVersion = Self.currentSchemaVersion
         self.platformType = platformType
@@ -224,6 +237,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         self.nvramStorage = nvramStorage
         self.romImages = romImages
         self.sepStorage = sepStorage
+        self.guestProductType = guestProductType
     }
 
     // MARK: - Creation
@@ -404,6 +418,27 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
             nvramStorage: nvramStorage,
             romImages: romImages,
             sepStorage: sepStorage,
+            guestProductType: guestProductType,
+        )
+    }
+
+    /// This manifest for a guest running `device`'s OS: its product type and
+    /// its display. An iPhone17,3 guest records no product type, so its
+    /// configuration stays readable by bundles that predate iPad guests.
+    public func updating(guestDevice device: VPhoneGuestDevice) -> VPhoneVirtualMachineManifest {
+        VPhoneVirtualMachineManifest(
+            platformType: platformType,
+            platformFusing: platformFusing,
+            machineIdentifier: machineIdentifier,
+            cpuCount: cpuCount,
+            memorySize: memorySize,
+            screenConfig: device.screen,
+            networkConfig: networkConfig,
+            diskImage: diskImage,
+            nvramStorage: nvramStorage,
+            romImages: romImages,
+            sepStorage: sepStorage,
+            guestProductType: device == .default ? nil : device.productType,
         )
     }
 }

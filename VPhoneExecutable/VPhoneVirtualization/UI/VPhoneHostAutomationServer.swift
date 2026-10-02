@@ -27,6 +27,9 @@ import ImageIO
 ///   {"t":"swipe","x1":645,"y1":2600,"x2":645,"y2":1400,"ms":300}  → swipe
 ///   {"t":"key","name":"home"}                   → hardware key (home/power/volup/voldown)
 ///   {"t":"key","name":"cmd+v"}                  → any other name goes to vphoned `input.key`
+///   {"t":"hostkey","keys":"ctrl+space"}         → the same key events a Mac keyboard gives the VM
+///                                                 window, through `VPhoneApplication` and the virtual
+///                                                 keyboard (windowed launches only)
 ///   {"t":"type","text":"Hello"}                 → set guest clipboard
 ///   {"t":"ping"}                                → vphoned request/response
 ///   {"t":"rpc","method":"input.type","params":{"text":"ls\n"}}
@@ -206,6 +209,15 @@ class VPhoneHostAutomationServer {
                     )
                 }
                 try await pressKey(name)
+
+            case "hostkey":
+                guard let keys = json["keys"] as? String else {
+                    return Self.reply(ok: false, error: "hostkey requires keys, such as ctrl+space, fn, esc or vk:0x66")
+                }
+                guard let view = windowedView else {
+                    return Self.reply(ok: false, error: "hostkey needs a VM window; this launch is headless")
+                }
+                try await VPhoneHostKeyEvents.press(keys, in: view)
 
             case "type":
                 guard let text = json["text"] as? String else {

@@ -212,4 +212,25 @@ struct IPSWCacheTests {
             }
         }
     }
+
+    @Test func `an iPad IPSW the guest device list knows pairs with cloudOS`() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pad = try ipsw(in: root, "pad", productTypes: ["iPad16,1", "iPad16,2"], deviceClasses: ["j410ap", "j411ap"])
+        let cloud = try ipsw(in: root, "cloud", productTypes: ["iProd99,1"], deviceClasses: ["vresearch101ap", "vphone600ap"])
+        let otherPad = try ipsw(in: root, "other-pad", productTypes: ["iPad13,1"], deviceClasses: ["j307ap"])
+
+        try VPhoneIPSWCache.checkPair(iPhone: pad, cloudOS: cloud)
+        #expect(VPhoneIPSWCache.guestDevice(for: pad) == .iPad16_1)
+        #expect {
+            try VPhoneIPSWCache.checkPair(iPhone: otherPad, cloudOS: cloud)
+        } throws: { error in
+            if case .notIPhoneSource? = error as? VPhoneIPSWCache.Error {
+                true
+            } else {
+                false
+            }
+        }
+    }
 }

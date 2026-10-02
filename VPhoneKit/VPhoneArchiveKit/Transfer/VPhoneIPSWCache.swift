@@ -37,7 +37,7 @@ public enum VPhoneIPSWCache {
             case let .swappedSources(iPhone, cloudOS):
                 "The iPhone and cloudOS IPSWs are swapped: \(iPhone.lastPathComponent) is a cloudOS IPSW and \(cloudOS.lastPathComponent) is an iPhone IPSW. Swap the two sources, then try again."
             case let .notIPhoneSource(file, productTypes):
-                "\(file.lastPathComponent) is not an \(VPhoneIPSWCache.iPhoneProductType) IPSW; it is for \(productTypes.isEmpty ? "no listed product" : productTypes.joined(separator: ", ")). Choose an \(VPhoneIPSWCache.iPhoneProductType) IPSW as the iPhone source."
+                "\(file.lastPathComponent) is not an IPSW vphone can run; it is for \(productTypes.isEmpty ? "no listed product" : productTypes.joined(separator: ", ")). Choose an IPSW for \(VPhoneIPSWCache.guestProductTypes.joined(separator: " or ")) as the iPhone source."
             case let .notCloudOSSource(file):
                 "\(file.lastPathComponent) is not a cloudOS IPSW: it has no \(VPhoneIPSWCache.cloudOSDeviceClass) build identity. Choose a cloudOS IPSW as the cloudOS source."
             }
@@ -248,14 +248,27 @@ public enum VPhoneIPSWCache {
     public static let iPhoneProductType = VPhoneFirmwareCatalog.device
     public static let cloudOSDeviceClass = "vresearch101ap"
 
+    /// Every product whose IPSW can supply the guest OS: the iPhone17,3 the
+    /// catalog targets, and the iPads `VPhoneGuestDevice` knows.
+    public static var guestProductTypes: [String] {
+        VPhoneGuestDevice.known.map(\.productType)
+    }
+
+    /// The guest device an IPSW supplies, or nil for any other product. An IPSW
+    /// that covers several models gives `preferring` when it is one of them, and
+    /// its first known model otherwise.
+    public static func guestDevice(for archive: Archive, preferring productType: String? = nil) -> VPhoneGuestDevice? {
+        VPhoneGuestDevice.detect(buildManifest: ["SupportedProductTypes": archive.productTypes], preferring: productType)
+    }
+
     /// Checks each BuildManifest before anything is extracted, so a swapped
     /// or wrong IPSW fails at once with the fix instead of deep in the merge.
     public static func checkPair(iPhone: Archive, cloudOS: Archive) throws {
-        let iPhoneIsPhone = iPhone.productTypes.contains(iPhoneProductType)
+        let iPhoneIsPhone = guestDevice(for: iPhone) != nil
         let cloudOSIsCloudOS = cloudOS.deviceClasses.contains(cloudOSDeviceClass)
         if !iPhoneIsPhone, !cloudOSIsCloudOS,
            iPhone.deviceClasses.contains(cloudOSDeviceClass),
-           cloudOS.productTypes.contains(iPhoneProductType)
+           guestDevice(for: cloudOS) != nil
         {
             throw Error.swappedSources(iPhone: iPhone.file, cloudOS: cloudOS.file)
         }

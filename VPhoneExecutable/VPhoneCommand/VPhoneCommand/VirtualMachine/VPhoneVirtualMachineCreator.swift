@@ -232,6 +232,7 @@ public struct VPhoneVirtualMachineCreator {
             iPhoneSource: phone, cloudOSSource: cloud,
             gpuDriverBundle: options.gpuDriverBundle,
             ipswCacheDirectory: options.ipswCacheDirectory,
+            device: options.device,
             bundle: bundle, resources: resources,
         )
         print("[+] Firmware prepared (iPhone + cloudOS merged into bundle).")

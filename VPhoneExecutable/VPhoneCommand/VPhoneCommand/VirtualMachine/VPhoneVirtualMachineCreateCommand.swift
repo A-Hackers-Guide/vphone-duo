@@ -18,6 +18,11 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
     var gpuDriverBundle: String?
     @Option(help: "Directory for downloaded IPSWs, shared by every VM (default: ~/.vphone/ipsws or $VPHONE_ROOT/ipsws)")
     var ipswCache: String?
+    @Option(help: ArgumentHelp(
+        "Guest device, when the IPSW covers several models (iPad15,5 from the iPad Air IPSW)",
+        valueName: "product-type",
+    ))
+    var device: String?
     @Option(name: .shortAndLong, help: "Disk size (GB)") var diskSize: UInt64 = 64
     @Option(
         name: .customLong("preset"),
@@ -56,6 +61,7 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
             ipswCacheDirectory: ipswCache.map {
                 URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true)
             } ?? VPhoneResources.ipswCacheDirectory(),
+            device: device,
             patchPreset: preset,
             diskSizeGB: diskSize,
             verbosity: VPhoneVerbosity(count: verboseCount),

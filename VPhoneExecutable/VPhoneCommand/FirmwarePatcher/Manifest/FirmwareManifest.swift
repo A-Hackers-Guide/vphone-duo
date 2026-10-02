@@ -7,6 +7,7 @@
 // Build Identity.
 
 import Foundation
+import VPhoneCoreKit
 
 // MARK: - Plist type aliases
 
@@ -54,6 +55,7 @@ public enum FirmwareManifest {
     public static func generate(
         iPhoneDir: URL,
         cloudOSDir: URL,
+        device chosen: VPhoneGuestDevice? = nil,
         verbose: Bool = true,
     ) throws {
         // Load source plists.
@@ -69,15 +71,17 @@ public enum FirmwareManifest {
             throw ManifestError.missingKey("BuildIdentities in iPhone BuildManifest")
         }
 
-        // Discover source identities.
+        // Discover source identities. An iPad IPSW carries one erase identity
+        // per board it covers, so the userland one is picked by board.
+        let device = chosen ?? VPhoneGuestDevice.detect(buildManifest: iPhoneBM) ?? .default
         let (prod, res) = try findCloudOS(cloudIdentities, deviceClass: "vresearch101ap")
         let (vp, vpr) = try findCloudOS(cloudIdentities, deviceClass: "vphone600ap")
-        let iErase = try findIPhoneErase(iPhoneIdentities)
+        let iErase = try findIPhoneErase(iPhoneIdentities, deviceClass: device.deviceClass)
 
         if verbose {
             print("  cloudOS vresearch101ap: release=#\(prod), research=#\(res)")
             print("  cloudOS vphone600ap:    release=#\(vp), research=#\(vpr)")
-            print("  iPhone  erase: #\(iErase)")
+            print("  \(device.productType) erase: #\(iErase)")
         }
 
         // Build the single DFU erase identity.
@@ -90,10 +94,16 @@ public enum FirmwareManifest {
             vpr: vpr,
             iErase: iErase,
         )
+        let guestIdentity = try separateGuestDeviceTree(
+            for: device,
+            identity: buildIdentity,
+            restoreDir: iPhoneDir,
+            verbose: verbose,
+        )
 
         // Assemble BuildManifest.
         let buildManifest: PlistDict = [
-            "BuildIdentities": [buildIdentity],
+            "BuildIdentities": [guestIdentity],
             "ManifestVersion": cloudOSBM["ManifestVersion"] as Any,
             "ProductBuildVersion": cloudOSBM["ProductBuildVersion"] as Any,
             "ProductVersion": cloudOSBM["ProductVersion"] as Any,
@@ -104,6 +114,7 @@ public enum FirmwareManifest {
         let restore = try buildRestorePlist(
             cloudOSRP: cloudOSRP,
             iPhoneRP: iPhoneRP,
+            boardConfig: device.deviceClass,
         )
 
         // Write output.
@@ -166,17 +177,80 @@ public enum FirmwareManifest {
     }
 
     /// Return the index of the first iPhone erase identity.
-    static func findIPhoneErase(_ identities: [PlistDict]) throws -> Int {
+    ///
+    /// With `deviceClass`, an erase identity for that board wins; the first
+    /// erase identity of any board is the fallback, which is all a single-board
+    /// iPhone manifest has.
+    static func findIPhoneErase(_ identities: [PlistDict], deviceClass: String? = nil) throws -> Int {
+        var first: Int?
         for (i, bi) in identities.enumerated() {
-            let variant = ((bi["Info"] as? PlistDict)?["Variant"] as? String ?? "").lowercased()
-            if !variant.contains("research"),
-               !variant.contains("upgrade"),
-               !variant.contains("recovery")
-            {
+            let info = bi["Info"] as? PlistDict
+            let variant = (info?["Variant"] as? String ?? "").lowercased()
+            guard !variant.contains("research"),
+                  !variant.contains("upgrade"),
+                  !variant.contains("recovery")
+            else { continue }
+            let board = (info?["DeviceClass"] as? String ?? "").lowercased()
+            if let deviceClass, board == deviceClass.lowercased() {
                 return i
             }
+            first = first ?? i
         }
-        throw ManifestError.identityNotFound("erase identity in the iPhone BuildManifest")
+        guard let first else {
+            throw ManifestError.identityNotFound("erase identity in the iPhone BuildManifest")
+        }
+        return first
+    }
+
+    // MARK: - Guest Device Tree
+
+    /// Where an iPad guest's installed device tree is kept, beside the
+    /// vphone600 one that restore boots with.
+    public static let guestDeviceTreePath = "Firmware/all_flash/DeviceTree.vphone600ap.guest.im4p"
+
+    /// Points an iPad identity's installed `DeviceTree` at a copy of the
+    /// vphone600 tree, so `fw patch` can give that copy the iPad identity.
+    ///
+    /// The DFU device restores with `RestoreDeviceTree`, and `restored_external`
+    /// checks its root `model` and `target-type` against the manifest — the
+    /// reason the iPhone identity is only rewritten after restore. The
+    /// installed `DeviceTree` is a separate manifest entry that restore only
+    /// personalizes and writes to Preboot, so giving it its own file lets the
+    /// iPad identity ride through restore without a root-only rewrite on the
+    /// host. An iPhone identity is returned unchanged.
+    static func separateGuestDeviceTree(
+        for device: VPhoneGuestDevice,
+        identity: PlistDict,
+        restoreDir: URL,
+        verbose: Bool,
+    ) throws -> PlistDict {
+        guard device.isPad else { return identity }
+        guard var manifest = identity["Manifest"] as? PlistDict,
+              var deviceTree = manifest["DeviceTree"] as? PlistDict,
+              var info = deviceTree["Info"] as? PlistDict,
+              let path = info["Path"] as? String
+        else {
+            throw ManifestError.missingKey("DeviceTree in the hybrid build identity")
+        }
+        let fm = FileManager.default
+        let source = restoreDir.appending(path: path)
+        let destination = restoreDir.appending(path: guestDeviceTreePath)
+        guard fm.fileExists(atPath: source.path) else {
+            throw ManifestError.fileNotFound(source.path)
+        }
+        if fm.fileExists(atPath: destination.path) {
+            try fm.removeItem(at: destination)
+        }
+        try fm.copyItem(at: source, to: destination)
+        info["Path"] = guestDeviceTreePath
+        deviceTree["Info"] = info
+        manifest["DeviceTree"] = deviceTree
+        var separated = identity
+        separated["Manifest"] = manifest
+        if verbose {
+            print("  \(device.productType): installed DeviceTree -> \(guestDeviceTreePath)")
+        }
+        return separated
     }
 
     // MARK: - Build Identity Construction
@@ -296,6 +370,7 @@ public enum FirmwareManifest {
     static func buildRestorePlist(
         cloudOSRP: PlistDict,
         iPhoneRP: PlistDict,
+        boardConfig: String? = nil,
     ) throws -> PlistDict {
         // DeviceMap: iPhone first entry + cloudOS vphone600ap/vresearch101ap entries.
         guard let iPhoneDeviceMap = iPhoneRP["DeviceMap"] as? [PlistDict],
@@ -307,7 +382,11 @@ public enum FirmwareManifest {
             throw ManifestError.missingKey("DeviceMap in cloudOS Restore.plist")
         }
 
-        var deviceMap: [PlistDict] = [iPhoneDeviceMap[0]]
+        // A multi-board iPad IPSW lists one entry per board; keep the guest's.
+        let guestEntry = iPhoneDeviceMap.first {
+            ($0["BoardConfig"] as? String)?.lowercased() == boardConfig?.lowercased()
+        } ?? iPhoneDeviceMap[0]
+        var deviceMap: [PlistDict] = [guestEntry]
         for d in cloudDeviceMap {
             if let bc = d["BoardConfig"] as? String,
                bc == "vphone600ap" || bc == "vresearch101ap"

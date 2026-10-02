@@ -31,6 +31,8 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         var screenPPI: Int = 460
         var screenScale: Double = 3.0
         var kernelDebugPort: Int?
+        /// The guest runs iPadOS: Esc is a key there, not the back gesture.
+        var isPadGuest = false
     }
 
     private struct DeviceIdentity {

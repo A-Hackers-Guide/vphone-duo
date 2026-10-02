@@ -18,6 +18,14 @@ These are the two iPhone17,3 combinations exercised with the native JB pipeline 
 
 The cloudOS 26.4 image was the latest one **verified to contain `vphone600ap` during that investigation**. This is a dated observation, not a promise that it remains the newest available release. Use `vphone-cli fw catalog` to inspect the current catalogue. Other versions may work, but they have not passed this same end-to-end check.
 
+## iPadOS
+
+See [iPadOS guests](ipados.md).
+
+| Host | iPad restore IPSW | PCC/cloudOS IPSW | Observed result |
+| --- | --- | --- | --- |
+| Mac17,9 (M5 Pro) 27.0.1 | `iPad16,1,iPad16,2_26.6.2_23G90` | `26.4-23E5207q` | prepare, patch, restore, CFW (2.2.5 helper), boot to the iPadOS home screen at 744x1133 pt @2x, `model` iPad16,1, vphoned ping |
+
 ## Earlier reported combinations
 
 The previous README recorded the following host and firmware pairings. They predate the current single-mode flow or lack the same vphoned acceptance evidence, so treat them as research history rather than the current support matrix.

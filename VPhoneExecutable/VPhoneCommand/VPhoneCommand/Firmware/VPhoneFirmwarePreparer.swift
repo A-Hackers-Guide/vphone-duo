@@ -13,6 +13,7 @@ enum VPhoneFirmwarePreparer {
         case existingRestore(URL)
         case missingComponent(URL)
         case sourceNameMismatch(URL, version: String, build: String)
+        case deviceNotInSource(String, available: [String])
 
         var errorDescription: String? {
             switch self {
@@ -22,6 +23,8 @@ enum VPhoneFirmwarePreparer {
                 "A firmware component is missing: \(path.path). Check that the IPSW is complete, then prepare the firmware again."
             case let .sourceNameMismatch(path, version, build):
                 "The IPSW file name does not match its contents (\(version)/\(build)): \(path.path). Use the original file name or download the IPSW again."
+            case let .deviceNotInSource(productType, available):
+                "The IPSW does not contain \(productType); it covers \(available.joined(separator: ", ")). Choose one of those with --device, or use that model's IPSW."
             }
         }
     }
@@ -31,6 +34,7 @@ enum VPhoneFirmwarePreparer {
         cloudOSSource: String,
         gpuDriverBundle: URL? = nil,
         ipswCacheDirectory: URL = VPhoneResources.ipswCacheDirectory(),
+        device productType: String? = nil,
         bundle: VPhoneBundle,
         resources: VPhoneResources,
     ) throws {
@@ -70,10 +74,14 @@ enum VPhoneFirmwarePreparer {
             try await VPhoneIPSWCache.resolve(cloudOSSource, in: ipswCacheDirectory)
         }
         try VPhoneIPSWCache.checkPair(iPhone: phone, cloudOS: cloud)
-        try checkIPhoneName(iPhoneSource, archive: phone)
-        print("[+] iPhone \(phone.version) (\(phone.build)); cloudOS \(cloud.version) (\(cloud.build))")
+        let device = VPhoneIPSWCache.guestDevice(for: phone, preferring: productType) ?? .default
+        if let productType, VPhoneGuestDevice.named(productType) != device {
+            throw Error.deviceNotInSource(productType, available: phone.productTypes)
+        }
+        try checkIPhoneName(iPhoneSource, archive: phone, device: device)
+        print("[+] \(device.productType) \(phone.version) (\(phone.build)); cloudOS \(cloud.version) (\(cloud.build))")
 
-        let name = "iPhone17,3_\(phone.version)_\(phone.build)_Restore"
+        let name = device.restoreTreeName(version: phone.version, build: phone.build)
         let destination = bundle.url.appendingPathComponent(name)
         let staging = bundle.url.appendingPathComponent(".firmware-prepare-\(UUID().uuidString)")
         let phoneTree = staging.appendingPathComponent(name)
@@ -90,7 +98,7 @@ enum VPhoneFirmwarePreparer {
         try fm.createDirectory(at: phoneTree, withIntermediateDirectories: false)
         try fm.createDirectory(at: cloudTree, withIntermediateDirectories: false)
 
-        print("[*] Extracting iPhone IPSW...")
+        print("[*] Extracting \(device.productType) IPSW...")
         try VPhoneArchiveExtractor.extract(phone.file, into: phoneTree, options: .intoHostDirectory)
         print("[*] Extracting cloudOS IPSW...")
         try VPhoneArchiveExtractor.extract(cloud.file, into: cloudTree, options: .intoHostDirectory)
@@ -99,7 +107,7 @@ enum VPhoneFirmwarePreparer {
         try mergeCloudOS(from: cloudTree, into: phoneTree)
         let originalManifest = phoneTree.appendingPathComponent("BuildManifest.plist")
         try clone(originalManifest, to: phoneTree.appendingPathComponent("iPhone-BuildManifest.plist"))
-        try FirmwareManifest.generate(iPhoneDir: phoneTree, cloudOSDir: cloudTree, verbose: true)
+        try FirmwareManifest.generate(iPhoneDir: phoneTree, cloudOSDir: cloudTree, device: device, verbose: true)
         let cachedDriver = cachedGPUDriver(for: cloud)
         if let gpuDriverBundle {
             print("[*] Staging GPU driver from local bundle...")
@@ -145,6 +153,23 @@ enum VPhoneFirmwarePreparer {
         guard !fm.fileExists(atPath: destination.path) else { throw Error.existingRestore(destination) }
         try fm.moveItem(at: phoneTree, to: destination)
         print("[+] Restore tree ready: \(destination.path)")
+        try recordGuestDevice(device, in: bundle)
+    }
+
+    /// Records which device's OS the VM runs, and gives it that device's
+    /// display. `fw patch` reads the device back from the restore tree; the
+    /// manifest is what the VM window and the guest's screen size follow.
+    static func recordGuestDevice(_ device: VPhoneGuestDevice, in bundle: VPhoneBundle) throws {
+        let configURL = bundle.url.appendingPathComponent("config.plist")
+        guard FileManager.default.fileExists(atPath: configURL.path) else { return }
+        let manifest = try VPhoneVirtualMachineManifest.load(from: configURL)
+        let updated = manifest.updating(guestDevice: device)
+        guard updated.guestProductType != manifest.guestProductType
+            || updated.screenConfig != manifest.screenConfig
+        else { return }
+        try updated.write(to: configURL)
+        let screen = updated.screenConfig
+        print("[+] Guest device: \(device.productName) (\(device.productType)), display \(screen.width)x\(screen.height) @ \(screen.pixelsPerInch) ppi")
     }
 
     // MARK: - GPU driver cache
@@ -189,10 +214,16 @@ enum VPhoneFirmwarePreparer {
         }
     }
 
-    private static func checkIPhoneName(_ source: String, archive: VPhoneIPSWCache.Archive) throws {
+    private static func checkIPhoneName(
+        _ source: String,
+        archive: VPhoneIPSWCache.Archive,
+        device: VPhoneGuestDevice,
+    ) throws {
         let basename = URL(string: source)?.lastPathComponent
             ?? URL(fileURLWithPath: source).lastPathComponent
-        let pattern = #"^iPhone17,3_([^_]+)_([^_]+)_Restore\.ipsw$"#
+        // An iPad IPSW names every model it covers: `iPad16,1,iPad16,2_…`.
+        let product = NSRegularExpression.escapedPattern(for: device.productType)
+        let pattern = "^(?:[^_/]*,)?" + product + "(?:,[^_/]*)?_([^_]+)_([^_]+)_Restore\\.ipsw$"
         guard let range = basename.range(of: pattern, options: .regularExpression) else { return }
         let components = basename[range].split(separator: "_")
         guard components.count == 4 else { return }

@@ -118,6 +118,12 @@ public enum FirmwareBootChainPatchSet {
                 target: .firmware(.llb),
                 bootEssential: true,
             ),
+            VPhonePatchDeclaration(
+                identifier: "llb-cfw-display_scale",
+                title: "LLB display scale",
+                summary: "Gives an iPad guest its own screen scale instead of the virtual phone's 3x.",
+                target: .firmware(.llb),
+            ),
 
             // MARK: TXM
 

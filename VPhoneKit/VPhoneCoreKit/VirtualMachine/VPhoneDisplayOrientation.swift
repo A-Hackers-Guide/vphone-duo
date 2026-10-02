@@ -45,6 +45,55 @@ public enum VPhoneDisplayOrientation: Int, CaseIterable, Sendable {
         isSideways ? CGSize(width: panel.height, height: panel.width) : panel
     }
 
+    // MARK: - Screen and Panel
+
+    /// The orientation a view turned by `rotation` degrees counterclockwise
+    /// shows, to the nearest quarter turn: the inverse of `viewRotation`.
+    public init(viewRotation rotation: CGFloat) {
+        let quarters = Int((rotation / 90).rounded())
+        self = VPhoneDisplayOrientation(degrees: -quarters * 90) ?? .portrait
+    }
+
+    /// A direction as the window shows it, x right and y up, in the panel's
+    /// own portrait coordinates, also y up. A trackpad gesture or a swipe
+    /// described on screen goes through here before it moves a finger on the
+    /// panel, or a vertical swipe on a sideways panel runs across it.
+    public func panelVector(fromScreen vector: CGPoint) -> CGPoint {
+        switch self {
+        case .portrait: vector
+        case .landscapeRight: CGPoint(x: vector.y, y: -vector.x)
+        case .upsideDown: CGPoint(x: -vector.x, y: -vector.y)
+        case .landscapeLeft: CGPoint(x: -vector.y, y: vector.x)
+        }
+    }
+
+    /// A panel direction as the window shows it: the inverse of
+    /// `panelVector(fromScreen:)`.
+    public func screenVector(fromPanel vector: CGPoint) -> CGPoint {
+        switch self {
+        case .portrait: vector
+        case .landscapeRight: CGPoint(x: -vector.y, y: vector.x)
+        case .upsideDown: CGPoint(x: -vector.x, y: -vector.y)
+        case .landscapeLeft: CGPoint(x: vector.y, y: -vector.x)
+        }
+    }
+
+    /// A point on a `panel`-sized portrait panel, origin bottom left, as the
+    /// window shows it, in `displayedSize(panel:)`'s coordinates.
+    public func screenPoint(fromPanel point: CGPoint, panel: CGSize) -> CGPoint {
+        let screen = displayedSize(panel: panel)
+        let turned = screenVector(fromPanel: CGPoint(x: point.x - panel.width / 2, y: point.y - panel.height / 2))
+        return CGPoint(x: turned.x + screen.width / 2, y: turned.y + screen.height / 2)
+    }
+
+    /// The panel point the window shows at `point`: the inverse of
+    /// `screenPoint(fromPanel:panel:)`.
+    public func panelPoint(fromScreen point: CGPoint, panel: CGSize) -> CGPoint {
+        let screen = displayedSize(panel: panel)
+        let turned = panelVector(fromScreen: CGPoint(x: point.x - screen.width / 2, y: point.y - screen.height / 2))
+        return CGPoint(x: turned.x + panel.width / 2, y: turned.y + panel.height / 2)
+    }
+
     // MARK: - Turning
 
     /// The largest size with the panel's aspect ratio whose box, turned by

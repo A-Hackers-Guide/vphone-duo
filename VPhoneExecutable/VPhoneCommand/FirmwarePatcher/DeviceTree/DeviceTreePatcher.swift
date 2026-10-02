@@ -9,6 +9,7 @@
 //   3. Serialize the modified tree back to flat binary.
 
 import Foundation
+import VPhoneCoreKit
 import VPhonePatchKit
 
 /// Patcher for DeviceTree payloads.
@@ -23,6 +24,16 @@ public final class DeviceTreePatcher: BufferedPatcher {
     /// that flip device identity towards iPhone17,3 / D47AP. Enabled for
     /// public JB and the historical internal EXP variant.
     let includeIdentityPatches: Bool
+
+    /// The device whose OS the guest runs, and which of its trees this is.
+    /// An iPhone guest has one `.shared` tree; an iPad guest boots its
+    /// `.installed` tree and restores with a `.restore` one. See
+    /// DeviceTreeGuestDevicePatches.swift.
+    let device: VPhoneGuestDevice
+    let role: TreeRole
+    /// The guest device's own flat device tree payload, which an iPad's
+    /// installed tree takes its identity and `/product` answers from.
+    let sourceTree: Data?
 
     let buffer: BinaryBuffer
     var patches: [PatchRecord] = []
@@ -58,10 +69,20 @@ public final class DeviceTreePatcher: BufferedPatcher {
 
     // MARK: - Init
 
-    public init(data: Data, verbose: Bool = true, includeIdentityPatches: Bool = false) {
+    public init(
+        data: Data,
+        verbose: Bool = true,
+        includeIdentityPatches: Bool = false,
+        device: VPhoneGuestDevice = .default,
+        role: TreeRole = .shared,
+        sourceTree: Data? = nil,
+    ) {
         buffer = BinaryBuffer(data)
         self.verbose = verbose
         self.includeIdentityPatches = includeIdentityPatches
+        self.device = device
+        self.role = role
+        self.sourceTree = sourceTree
     }
 
     // MARK: - Patcher
@@ -162,7 +183,7 @@ public final class DeviceTreePatcher: BufferedPatcher {
     }
 
     /// Parse the entire device tree payload.
-    private func parsePayload(_ blob: Data) throws -> DTNode {
+    func parsePayload(_ blob: Data) throws -> DTNode {
         let (root, end) = try parseNode(blob, offset: 0)
         guard end == blob.count else {
             throw PatcherError.invalidFormat(
@@ -224,7 +245,7 @@ public final class DeviceTreePatcher: BufferedPatcher {
     }
 
     /// Resolve a node path like ["device-tree", "buttons"] from the root.
-    private func resolveNode(_ root: DTNode, path: [String]) throws -> DTNode {
+    func resolveNode(_ root: DTNode, path: [String]) throws -> DTNode {
         guard !path.isEmpty, path[0] == "device-tree" else {
             throw PatcherError.patchSiteNotFound("DeviceTree: invalid node path \(path)")
         }
@@ -303,6 +324,12 @@ public final class DeviceTreePatcher: BufferedPatcher {
         if includeIdentityPatches {
             patchesToApply.append(contentsOf: Self.identityPropertyPatches)
         }
+        // An iPad's installed tree takes its artwork, notch and camera geometry
+        // from the iPad edits, and none of the iPhone17,3 identity.
+        let presentsGuest = device.isPad && role == .installed
+        if presentsGuest {
+            patchesToApply.removeAll { !Self.deviceNeutralPatches.contains($0.patchID) }
+        }
         for patch in patchesToApply {
             // Before the property is rewritten, not after: the tree is serialised
             // from these nodes, so a skipped record with a mutated node would
@@ -353,7 +380,18 @@ public final class DeviceTreePatcher: BufferedPatcher {
                 try applyNodeAddition(root: root, patch: nodeAdd)
             }
         }
+
+        if presentsGuest {
+            try applyGuestEdits(root: root)
+        }
     }
+
+    /// Property patches that describe the virtual board rather than a phone,
+    /// and so apply to an iPad's installed tree as well.
+    static let deviceNeutralPatches: Set<String> = [
+        "devicetree-cfw-serial_number",
+        "devicetree-cfw-home_button_type",
+    ]
 
     /// Apply a single `AddChildNodePatch`: construct the new `DTNode`,
     /// fill its `name` + caller-supplied properties, attach to the

@@ -69,6 +69,7 @@ class VPhoneVirtualMachineWindowController: NSObject {
             window.center()
         }
         window.setFrameAutosaveName(sceneName)
+        observeKeyState(of: window)
         // A frame saved while the guest was sideways is turned back: the guest
         // boots in portrait, and the orientation poll turns it again if not.
         applyOrientation(.portrait, to: window, force: true)
@@ -162,6 +163,25 @@ class VPhoneVirtualMachineWindowController: NSObject {
             }
         }
         container.turn(to: orientation, windowFrame: frame, animated: !force)
+    }
+
+    // MARK: - Mac Shortcuts
+
+    /// The Mac's own shortcuts on keys the guest uses are off while this window
+    /// is key; see `VPhoneHostHotKeys`.
+    private func observeKeyState(of window: NSWindow) {
+        let center = NotificationCenter.default
+        center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { _ in
+            MainActor.assumeIsolated { VPhoneHostHotKeys.shared.suspend() }
+        }
+        for name in [NSWindow.didResignKeyNotification, NSWindow.willCloseNotification] {
+            center.addObserver(forName: name, object: window, queue: .main) { _ in
+                MainActor.assumeIsolated { VPhoneHostHotKeys.shared.resume() }
+            }
+        }
+        if window.isKeyWindow {
+            VPhoneHostHotKeys.shared.suspend()
+        }
     }
 
     // MARK: - Title

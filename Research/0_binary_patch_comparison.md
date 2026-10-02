@@ -9,7 +9,7 @@
 > identifier is the record identifier the patcher already emits, or the common
 > prefix when one patch writes several sites — so `jb.kcall10` is one selectable
 > patch covering its four records, and `sandbox_ext` covers every
-> `sandbox_ext_<index>`. 116 patches are declared in total. `vphone-cli fw patches`
+> `sandbox_ext_<index>`. 121 patches are declared in total. `vphone-cli fw patches`
 > prints them; `--json` is what the Launchpad patch editor reads.
 >
 > Two presets ship, prewritten, in
@@ -18,6 +18,50 @@
 > unless `--preset` says otherwise) blocks the two Frida Stalker relaxations, the
 > three `hv_vmm_present` concealment patches, and the iPhone17,3 identity rewrites;
 > `extended` blocks nothing.
+>
+> **iPad guests (2026-10-01; every current iPad 2026-10-02):** four DeviceTree
+> patches, on in `standard`, exist only for a VM whose userland comes from an
+> iPad restore IPSW (iPad mini A17 Pro, iPad A16, iPad Air M3 11/13, iPad Pro
+> M4 and M5 11/13 — see `VPhoneGuestDevice.known`). Since 2026-10-02 their
+> values are read at `fw patch` time from the board's own
+> `DeviceTree.<board>.im4p` in the restore tree rather than a table, so an
+> M-series board keeps Stage Manager (no `disable-chamois`) and the iPad (A16)
+> has no `medusa-overlay-app-capability`: `devicetree-cfw-ipad_artwork`,
+> `devicetree-cfw-ipad_product`, `devicetree-cfw-ipad_buttons` and
+> `devicetree-cfw-ipad_identity`. They are written to a second device tree,
+> `Firmware/all_flash/DeviceTree.vphone600ap.guest.im4p`, which `fw prepare`
+> copies from the vphone600 one and the hybrid manifest names as `DeviceTree`;
+> `RestoreDeviceTree` keeps pointing at the original, so restore still boots
+> the `iPhone99,11` identity `restored_external` checks. On that copy the
+> iPhone-shaped base properties (`artwork_device_subtype`,
+> `island_notch_location`, camera offsets) and the `-exp-` identity rewrites
+> are not applied; the iPad edits set the root `model` / `target-type` /
+> `target-sub-type` / `compatible` to iPad16,1 / J410 / J410AP /
+> `J410AP, VPHONE600AP, AppleVirtualPlatformARM`, `/product`
+> `artwork-device-idiom` to `pad` (subtype 2266, scale 2), fill the `syscfg`
+> placeholders J410AP carries with its values, add the iPad multitasking
+> capabilities, and remove the phone-only placeholders and the ringer switch.
+> GPU, framebuffer and boot properties stay vphone600's. `cfw install` skips
+> `preboot-exp-devicetree_identity` on an iPad guest. Values were copied from
+> `DeviceTree.j410ap.im4p` in `iPad16,1,iPad16,2_26.6.2_23G90_Restore.ipsw`.
+>
+> A fifth, `llb-cfw-display_scale`, fixes the screen scale. UIScreen's scale is
+> MobileGestalt's `main-screen-scale`, and libMobileGestalt — the only reader
+> of the property in the 26.6.2 userland — takes it from
+> `IODeviceTree:/chosen/display-scale`. LLB (single-stage boot) writes that
+> property as `((v_depth >> 16) & 0xff) + 1` from the boot video word, which
+> the paravirtual display always reports as 3x, whatever the panel's size or
+> the `pixelsPerInch` VZ is given (264 and 326 were tried). At 3x the iPad
+> mini's 1488x2266 panel is 496x755 points and iPadOS lays its home screen
+> out over itself. The patch, anchored on the ADRP+ADD of the `display-scale`
+> literal and the following `ubfx wN, wM, #16, #8 ; add wN, wN, #1 ;
+> str wN, [x0]`, replaces the `add` with `mov wN, #<artwork scale>`
+> (`ARM64Encoder.encodeMovzW`). Found at `LLB.vresearch101.RELEASE` 0xB9CC in
+> cloudOS 26.4 (23E5207q). Editing the MobileGestalt cache's cached screen
+> struct (`oBbtJ8x+s1q0OkaiocPuog`, `{1488, 2266, 326, 3.0f}`) does not change
+> the live scale. Emitted only for an iPad guest.
+>
+> See `Documents/Guides/ipados.md`.
 >
 > **Only the camera remains of EXP by default (2026-09-28).** `standard` is now the
 > JB baseline plus the virtual camera. Off by default, besides the concealment
