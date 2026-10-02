@@ -19,7 +19,7 @@ enum GuestKeychain {
                 group: nil,
                 includeData: false,
             )
-            let rows = result["items"] as? [[String: Any]] ?? []
+            let rows = try rows(from: result, operation: "Security")
             items += rows.map(adaptItem)
             diagnostics.append("Security: \(rows.count) accessible items")
             succeeded = true
@@ -30,7 +30,7 @@ enum GuestKeychain {
         if requested != "identity" {
             do {
                 let result = try listKeychainDatabaseMetadata(className: requested)
-                let rows = result["items"] as? [[String: Any]] ?? []
+                let rows = try rows(from: result, operation: "Database")
                 items += rows.map(adaptItem)
                 diagnostics.append("Database: \(rows.count) protected metadata rows")
                 succeeded = true
@@ -72,7 +72,7 @@ enum GuestKeychain {
             server: identity.server,
             group: identity.group,
         )
-        let items = result["items"] as? [[String: Any]] ?? []
+        let items = try rows(from: result, operation: "Security")
         guard let item = items.first else {
             throw GuestAPIError.operationFailed("Keychain item not found")
         }
@@ -172,5 +172,20 @@ enum GuestKeychain {
         adapted["valueEncoding"] = item["source"] as? String == "security" ? "hidden" : "protected"
         adapted.removeValue(forKey: "data")
         return adapted
+    }
+
+    /// Validate the response envelope instead of silently treating a malformed
+    /// keychain response as an empty listing.
+    private static func rows(
+        from result: [String: Any],
+        operation: String,
+    ) throws -> [[String: Any]] {
+        guard let raw = result["items"] else {
+            throw GuestAPIError.operationFailed("\(operation) keychain response has no items")
+        }
+        guard let rows = raw as? [[String: Any]] else {
+            throw GuestAPIError.operationFailed("\(operation) keychain response has invalid items")
+        }
+        return rows
     }
 }
