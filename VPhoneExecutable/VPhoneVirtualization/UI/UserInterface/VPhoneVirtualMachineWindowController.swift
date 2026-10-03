@@ -11,6 +11,8 @@ class VPhoneVirtualMachineWindowController: NSObject {
     private(set) var touchIDMonitor: VPhoneTouchIDMonitor?
     private var homeButton: NSButton?
     private var subtitleLabel: NSTextField?
+    private var timers: [Timer] = []
+    private var keyStateObservers: [NSObjectProtocol] = []
 
     var captureView: VPhoneVirtualMachineView? {
         virtualMachineView
@@ -21,6 +23,7 @@ class VPhoneVirtualMachineWindowController: NSObject {
         screenWidth: Int,
         screenHeight: Int,
         screenScale: Double,
+        hardwareKeyboardEnabled: Bool,
         keySender: VPhoneVirtualMachineKeySender,
         control: VPhoneGuestControl,
         name: String,
@@ -30,7 +33,8 @@ class VPhoneVirtualMachineWindowController: NSObject {
 
         let view = VPhoneVirtualMachineView()
         view.virtualMachine = vm
-        view.capturesSystemKeys = true
+        view.hardwareKeyboardEnabled = hardwareKeyboardEnabled
+        view.capturesSystemKeys = hardwareKeyboardEnabled
         view.keySender = keySender
         view.control = control
         view.clipboardSync = VPhoneClipboardSync(control: control)
@@ -102,13 +106,13 @@ class VPhoneVirtualMachineWindowController: NSObject {
         touchIDMonitor = monitor
 
         // Poll vphoned status for the Home button and the subtitle
-        _ = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+        timers.append(Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let control = self.control else { return }
                 self.updateHomeButton(connected: control.isConnected)
                 self.updateSubtitle(control: control)
             }
-        }
+        })
 
         // The menu sets the orientation before the guest turns, and the poll
         // after; either way the window follows it.
@@ -116,9 +120,27 @@ class VPhoneVirtualMachineWindowController: NSObject {
             guard let self, let window else { return }
             applyOrientation(orientation ?? .portrait, to: window)
         }
-        _ = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        timers.append(Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.pollOrientation() }
-        }
+        })
+    }
+
+    /// Disconnect the old display and input devices before rebuilding the VM.
+    func closeForRestart() {
+        timers.forEach { $0.invalidate() }
+        timers.removeAll()
+        keyStateObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        keyStateObservers.removeAll()
+        NotificationCenter.default.removeObserver(self)
+        touchIDMonitor?.stop()
+        touchIDMonitor = nil
+        captureView?.virtualMachine = nil
+        captureView?.keySender = nil
+        captureView?.control = nil
+        captureView?.clipboardSync = nil
+        windowController?.close()
+        windowController = nil
+        VPhoneHostHotKeys.shared.resume()
     }
 
     // MARK: - Orientation
@@ -171,15 +193,19 @@ class VPhoneVirtualMachineWindowController: NSObject {
     /// is key; see `VPhoneHostHotKeys`.
     private func observeKeyState(of window: NSWindow) {
         let center = NotificationCenter.default
-        center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { _ in
-            MainActor.assumeIsolated { VPhoneHostHotKeys.shared.suspend() }
-        }
-        for name in [NSWindow.didResignKeyNotification, NSWindow.willCloseNotification] {
-            center.addObserver(forName: name, object: window, queue: .main) { _ in
-                MainActor.assumeIsolated { VPhoneHostHotKeys.shared.resume() }
+        keyStateObservers.append(center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                if self?.captureView?.hardwareKeyboardEnabled == true {
+                    VPhoneHostHotKeys.shared.suspend()
+                }
             }
+        })
+        for name in [NSWindow.didResignKeyNotification, NSWindow.willCloseNotification] {
+            keyStateObservers.append(center.addObserver(forName: name, object: window, queue: .main) { _ in
+                MainActor.assumeIsolated { VPhoneHostHotKeys.shared.resume() }
+            })
         }
-        if window.isKeyWindow {
+        if window.isKeyWindow, captureView?.hardwareKeyboardEnabled == true {
             VPhoneHostHotKeys.shared.suspend()
         }
     }

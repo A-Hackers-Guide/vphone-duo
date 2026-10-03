@@ -147,6 +147,8 @@ class VPhoneHostAutomationServer {
 
     func stop() {
         if listenFD >= 0 {
+            // Wake the blocked accept before a VM restart creates a new socket.
+            shutdown(listenFD, SHUT_RDWR)
             close(listenFD)
             listenFD = -1
         }

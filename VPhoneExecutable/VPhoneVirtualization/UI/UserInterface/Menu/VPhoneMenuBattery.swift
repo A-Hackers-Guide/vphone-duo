@@ -79,6 +79,13 @@ extension VPhoneMenuController {
 
     // MARK: - Host Sync
 
+    /// Release the run-loop context before replacing this VM's controllers.
+    func stopBatteryMonitoring() {
+        batterySyncEnabled = false
+        stopPowerSourceMonitoring()
+        stopLowPowerMonitoring()
+    }
+
     @objc func toggleBatterySync(_ sender: NSMenuItem) {
         batterySyncEnabled.toggle()
         sender.state = batterySyncEnabled ? .on : .off

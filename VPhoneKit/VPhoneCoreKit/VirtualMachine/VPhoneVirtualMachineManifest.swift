@@ -92,6 +92,11 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
     /// Memory size in bytes
     public let memorySize: UInt64
 
+    /// Missing in older manifests, which keep the original USB keyboard.
+    public let hardwareKeyboardEnabled: Bool?
+
+    public var usesHardwareKeyboard: Bool { hardwareKeyboardEnabled ?? true }
+
     // MARK: - Display
 
     /// Screen configuration
@@ -224,6 +229,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         romImages: ROMImages?,
         sepStorage: String = "SEPStorage",
         guestProductType: String? = nil,
+        hardwareKeyboardEnabled: Bool? = nil,
     ) {
         schemaVersion = Self.currentSchemaVersion
         self.platformType = platformType
@@ -238,6 +244,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         self.romImages = romImages
         self.sepStorage = sepStorage
         self.guestProductType = guestProductType
+        self.hardwareKeyboardEnabled = hardwareKeyboardEnabled
     }
 
     // MARK: - Creation
@@ -405,6 +412,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         memorySize: UInt64? = nil,
         machineIdentifier: Data? = nil,
         networkConfig: NetworkConfig? = nil,
+        hardwareKeyboardEnabled: Bool? = nil,
     ) -> VPhoneVirtualMachineManifest {
         VPhoneVirtualMachineManifest(
             platformType: platformType,
@@ -419,6 +427,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
             romImages: romImages,
             sepStorage: sepStorage,
             guestProductType: guestProductType,
+            hardwareKeyboardEnabled: hardwareKeyboardEnabled ?? self.hardwareKeyboardEnabled,
         )
     }
 
@@ -439,6 +448,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
             romImages: romImages,
             sepStorage: sepStorage,
             guestProductType: device == .default ? nil : device.productType,
+            hardwareKeyboardEnabled: hardwareKeyboardEnabled,
         )
     }
 }
