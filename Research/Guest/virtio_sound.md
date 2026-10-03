@@ -351,6 +351,112 @@ the cheap form of it, and implementing the missing volume/port property
 callbacks is the completion of that path. The iOS 27 binary
 (`VirtualAudio-ios27`) is saved for the N71-side port of the same fix.
 
+## 6. Playing past the first stop, at the right rate, without gaps (2026-10-03, night)
+
+Three faults in the plugin itself survived everything above. Each was found on
+a new iPad16,1 / 26.6.2 guest (`audiotest-ipad`) with counters the plugin now
+writes to `/var/mobile/vpquery.log` at every stream stop:
+
+```
+stream 1: 237 writes, 0 starved, 0 bytes dropped, lead 2 period(s)
+stream 1: 20.16 s, in 888832 frames (44094/s, hal 44100), out 967436 frames (47993/s)
+```
+
+`writes` are periods handed to the kernel, `starved` the ones that found the
+device with nothing left in flight (a gap on the host), `in` what the HAL
+handed the mix block and `out` what went to the ring.
+
+### Every start after the first failed
+
+Symptom: the first playback after audiomxd launches works; after any stop —
+the screen turning off, the next ringtone, pausing in Safari — every start
+ends five seconds later in
+
+```
+HALS_IOContext_Legacy_Impl::IsTimeRunning_Helper: Device PuffinOutput is not running.
+HALS_IOContext_Legacy_Impl::IOWorkLoop: could not establish a timeline after waiting 5000000 microseconds
+```
+
+and the plugin's `getZeroTimestampBlock` is never called during those five
+seconds. AudioServerDriver does that itself (guest framework, image base
+`0x249eae000`; offsets in the image):
+
+* `-[ASDAudioDevice performStartIO]` (`0x5b2c`) copies each I/O block from its
+  property — whose getter (`0x5fd4` for `getZeroTimestampBlock`) returns the
+  very ivar being assigned — into that ivar and its unretained twin, starts
+  the streams, sets `_running` and posts `'goin'`.
+* `-[ASDAudioDevice performStopIO]` (`0x7ae8`) stops the streams, clears
+  `_running`, then **releases every one of those blocks and stores nil in both
+  ivars** (`0x7bc4`…`0x7d40`), and posts `'goin'`.
+* `-[ASDStream stopStream]` (`0x7fb8`) does the same to the stream's blocks,
+  `writeMixBlock` among them.
+
+So a block set once at init survives exactly one start. The plugin now sets
+them before every start: `installIOBlocks` at the top of the device's
+`performStartIO`, `installMixBlock` before `[super startStream]`.
+
+This is also what the "frozen seed" reading in
+`virtualaudio_speaker_route_throws.md` had actually seen. The boot chime was
+the first start and played; the ringtone after it was the second and timed
+out. Moving the seed with every period did not fix that — a later run happened
+to make its first start the tested one.
+
+### The timestamp period must not change with the rate
+
+Symptom, once starts worked: choppy playback, the HAL handing over about
+45,700–46,000 frames a second on a 44100 device, and four times a second
+
+```
+HALS_IORawClock::Update: Re-anchoring IO timeline. Sample time is not consecutive,
+HostTime is increasing, Ring buffer size: 12480.
+```
+
+12480 is the period the device published at init (48000 × 0.26 s). The rate
+change to 44100 (`set nsrt`, answered by the device itself, see item 6
+of the validation list below) had also moved `timestampPeriod` to 11466, but nothing makes the HAL
+read that property again, so it kept checking that every zero timestamp
+advanced by 12480 frames, found 11466, and re-anchored. The clock now keeps
+the period's frame count for the life of the device and changes only how long
+a period lasts (`VPClockSetRate`): 12480 frames take 0.26 s at 48000 and
+0.283 s at 44100. Measured after: 44,086–44,094 frames/s in, zero re-anchors.
+
+The seed follows the same rule the HAL states in that log family: it names the
+timeline and moves only at an anchor (`performStartIO`, a rate change). Moved
+with every period it produced `Re-anchoring IO timeline. Zero timestamp seed
+changed` every 0.26 s.
+
+### Nothing was queued ahead of the host
+
+The virtio device plays what it is handed as it arrives, and the mix arrives
+in real time: a period (4096 frames, 85 ms) is submitted when it fills, by a
+timer that runs every 42 ms. With nothing queued ahead, any period later than
+the one before it finished is a gap. Measured with the clock already fixed:
+89 of 513 writes starved in one 44 s tone, 138 of 203 in the next.
+
+The stream now queues `VPhoneVirtIOSoundLeadPeriods` periods of silence
+(default 2, 171 ms) when the device starts, tops the queue back up when a
+start finds the device still draining, and the device reports the lead plus
+one period as `outputLatency` so video is presented against when the sound is
+heard. Measured: 0 of 499 and 0 of 237 writes starved.
+
+### Nothing left to set by hand
+
+Both settings §4 and §5 asked for are now what the plugin does unasked:
+
+* the device UID is `PuffinOutput` unless `VPhoneVirtIOSoundDeviceUID` names
+  another;
+* on an iPad guest (`hw.machine`), `ProductIDOverride` is set to 8010 in the
+  `com.apple.audio.virtualaudio` domain from `halInitializeWithPluginHost:`
+  when nothing stored names one. The plugin loads before VirtualAudio reads
+  its defaults, and both are in audiomxd, so the in-process value is the one
+  it reads; audiomxd's sandbox keeps the write off disk (`settings.get` still
+  shows the domain empty), which is why it is repeated every launch. 8010
+  rather than §4's 198 because 198's category map has no ringtone-preview
+  entry (`virtualaudio_speaker_route_throws.md`, layer 1).
+
+Verified on a guest with all four keys deleted and rebooted: VirtualAudio
+initializes, the boot chime and a ringtone preview start I/O on
+`PuffinOutput (VAD [vdef] AggDev N)`, no `not initialized yet`.
 
 ## Reveal and validation
 
@@ -359,17 +465,18 @@ callbacks is the completion of that path. The iOS 27 binary
 2. Plugin loaded: `logs.syslog` for `audiomxd` shows
    `com.vphone.audio/virtiosound` lines `stream 0: 48000 Hz, 2 channels…` and
    `published 1 virtio sound device(s)`.
-3. VirtualAudio initialized: with `ProductIDOverride = 198` set (§4), a
-   restarted `audiomxd` logs `PlugIn initialized ? 2` / `VA Init Status: 0`,
-   no `PRECONDITION FAILURE`, and no
-   `VirtualAudio PlugIn is not initialized yet` when an app opens a session.
-4. Sound on the host: audible. The speaker route needs three things beyond
-   the plugin — `ProductIDOverride` (§4), the `PuffinOutput` UID (§5),
-   `system-virtualaudio-cfw-speaker_route_throws` (§ above and
-   `virtualaudio_speaker_route_throws.md`), and the zero-timestamp seed
-   advancing with the timestamp (`VPClockZeroTimestamp`), without which the
-   vdef's aggregate never establishes the device timeline and aborts the
-   start with `nope`.
+3. VirtualAudio initialized: `audiomxd` logs `Defaults key ProductIDOverride
+   was defined to 8010`, `PlugIn initialized ? 2` / `VA Init Status: 0`, no
+   `PRECONDITION FAILURE`, and no `VirtualAudio PlugIn is not initialized yet`
+   when an app opens a session. The plugin supplies the override on an iPad
+   guest (§6); `vpquery.log` says so when it had to.
+4. Sound on the host: audible, and still audible after a stop. Beyond the
+   plugin's own defaults (§6) the speaker route needs the VirtualAudio patches
+   (`virtualaudio_speaker_route_throws.md`). In `vpquery.log`, every
+   `performStartIO` is followed by a `stopStream` whose counters show `writes`
+   in proportion to the seconds played, `0 starved`, and `in` at the nominal
+   rate; `logs.syslog` for audiomxd shows no `Re-anchoring IO timeline` and no
+   `could not establish a timeline`.
 5. Hardware volume: the plugin answers the pspk route's volume queries with a
    real control set — dsrc selector ('ispk' "Speakers"), mute, volume — added
    from `halInitializeWithPluginHost:` after device init, before
@@ -395,8 +502,8 @@ callbacks is the completion of that path. The iOS 27 binary
    `@[@44100, @48000]` and the 48 kHz stream carries a 44100 physical format;
    `setSamplingRate:`/`deviceChangedToSamplingRate:` move an atomic HAL rate
    under the mix block, which linearly resamples 44100→48000 onto the wire
-   while the clock re-derives its period math. Verified booting and answering
-   at both nominal rates — and disproven as the ringtone gate: a 44100-nominal
+   while the clock re-derives how long its period lasts (§6). Verified
+   booting and answering at both nominal rates — and disproven as the ringtone gate: a 44100-nominal
    boot fails the tone tap exactly like a 48000 one. The gate is the
    RingtonePreview category itself; see the session-5 section of
    `virtualaudio_speaker_route_throws.md`.

@@ -97,6 +97,13 @@ timeline failure and no crash (`~/.vphone/va-analysis/clockfix.json`), and
 the system route reads `PVMSetCurrentState [Audio/Video, Default, Speaker,
 PuffinOutput]`.
 
+**Corrected 2026-10-03 (night).** The seed was not the cause. AudioServerDriver
+clears a device's I/O blocks at every stop, so the plugin's zero-timestamp
+block existed for the first start only: the chime was that first start, the
+ringtone the second. A seed that moves with every period is itself a fault —
+the HAL re-anchors its timeline on each one. Both are fixed in the plugin; see
+`virtio_sound.md` §6.
+
 ## Where the audio path stands after the seed fix (open work)
 
 With the walker silenced and the clock seed advancing, ringtone sessions play
@@ -670,3 +677,11 @@ expectation; volume-adjust behavior after it is the next thing to
 re-check, and the earlier HardwareOnly volume-mode suspicion is related
 but separate. In-guest proof standard unchanged: `:252` = 0 and StartIO
 on the `PuffinOutput` aggregate (`VAD [vdef] AggDev 2`), not Null_Device.
+**Verified in the guest (2026-10-03, night).** On a new iPad16,1 / 26.6.2
+guest with all four VirtualAudio patches applied by `cfw install`, a ringtone
+preview logs `PerVAD Volume description of scope 1 present for route
+[ Category: 'crnp'; Mode: 'imdf' ]`, no `Precondition failure`, no `nort`, and
+its I/O context is `PuffinOutput (VAD [vdef] AggDev N)`. Volume adjusts
+(`Setting hardware volume to -11.97 dB` on device `PuffinOutput`). What still
+kept the tone silent after that was not routing: see `virtio_sound.md` §6 for
+the plugin faults and §7 for the haptic track.

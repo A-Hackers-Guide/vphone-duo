@@ -86,6 +86,7 @@ typedef int (^ASDIOBlock)(
 @property (nonatomic) UInt32 timestampPeriod;
 @property (nonatomic) UInt32 inputSafetyOffset;
 @property (nonatomic) UInt32 outputSafetyOffset;
+@property (nonatomic) UInt32 outputLatency;
 @property (nonatomic) UInt32 transportType;
 @property (readonly, nonatomic) BOOL hasOutput;
 /// The rates the device answers `kAudioDevicePropertyAvailableSampleRates`
