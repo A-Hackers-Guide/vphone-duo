@@ -35,7 +35,16 @@ void VPVirtIOSoundRingReset(VPVirtIOSoundRing *ring) {
     ring->submitted = 0;
 }
 
-bool VPVirtIOSoundRingWrite(VPVirtIOSoundRing *ring, const void *source, uint32_t length) {
+/// Copies `length` bytes from `source`, or zeroes them when it is NULL.
+static void copyInto(uint8_t *destination, const uint8_t *source, uint32_t length) {
+    if (source) {
+        memcpy(destination, source, length);
+    } else {
+        memset(destination, 0, length);
+    }
+}
+
+static bool append(VPVirtIOSoundRing *ring, const uint8_t *source, uint32_t length) {
     if (length == 0) {
         return true;
     }
@@ -47,13 +56,26 @@ bool VPVirtIOSoundRingWrite(VPVirtIOSoundRing *ring, const void *source, uint32_
     uint32_t offset = (uint32_t)(written % ring->capacity);
     uint32_t first = ring->capacity - offset;
     if (first >= length) {
-        memcpy(ring->bytes + offset, source, length);
+        copyInto(ring->bytes + offset, source, length);
     } else {
-        memcpy(ring->bytes + offset, source, first);
-        memcpy(ring->bytes, (const uint8_t *)source + first, length - first);
+        copyInto(ring->bytes + offset, source, first);
+        copyInto(ring->bytes, source ? source + first : NULL, length - first);
     }
     atomic_store_explicit(&ring->written, written + length, memory_order_release);
     return true;
+}
+
+bool VPVirtIOSoundRingWrite(VPVirtIOSoundRing *ring, const void *source, uint32_t length) {
+    return append(ring, source, length);
+}
+
+bool VPVirtIOSoundRingWriteSilence(VPVirtIOSoundRing *ring, uint32_t length) {
+    return append(ring, NULL, length);
+}
+
+uint64_t VPVirtIOSoundRingQueued(const VPVirtIOSoundRing *ring) {
+    return atomic_load_explicit(&ring->written, memory_order_relaxed)
+        - atomic_load_explicit(&ring->completed, memory_order_acquire);
 }
 
 bool VPVirtIOSoundRingNextSubmission(

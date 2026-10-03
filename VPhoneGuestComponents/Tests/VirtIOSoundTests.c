@@ -179,6 +179,44 @@ static void testRingWrapsWritesAndSplitsSubmissions(void) {
     VPVirtIOSoundRingDestroy(&ring);
 }
 
+static void testRingQueuesSilenceAhead(void) {
+    VPVirtIOSoundRing ring;
+    CHECK(VPVirtIOSoundRingInit(&ring, 4 * 64, 64));
+    uint8_t frames[160];
+    fill(frames, sizeof(frames), 4);
+    CHECK(VPVirtIOSoundRingWrite(&ring, frames, sizeof(frames)));
+    CHECK(VPVirtIOSoundRingQueued(&ring) == 160);
+    uint32_t offset = 0;
+    uint32_t length = 0;
+    for (int i = 0; i < 2; i++) {
+        CHECK(VPVirtIOSoundRingNextSubmission(&ring, false, &offset, &length));
+        VPVirtIOSoundRingDidSubmit(&ring, length);
+    }
+    CHECK(VPVirtIOSoundRingNextSubmission(&ring, true, &offset, &length));
+    VPVirtIOSoundRingDidSubmit(&ring, length);
+    VPVirtIOSoundRingDidComplete(&ring, 64);
+    // In flight counts as queued until the device returns it.
+    CHECK(VPVirtIOSoundRingQueued(&ring) == 96);
+
+    // Silence lands behind what is queued, wrapping, and goes out in
+    // periods like any other bytes.
+    CHECK(VPVirtIOSoundRingWriteSilence(&ring, 128));
+    CHECK(VPVirtIOSoundRingQueued(&ring) == 224);
+    CHECK(ring.bytes[159] == 4);
+    for (unsigned i = 160; i < 256; i++) {
+        CHECK(ring.bytes[i] == 0);
+    }
+    CHECK(ring.bytes[0] == 0 && ring.bytes[31] == 0);
+    CHECK(ring.bytes[32] == 4);
+    CHECK(VPVirtIOSoundRingNextSubmission(&ring, false, &offset, &length));
+    CHECK(offset == 160 && length == 64);
+    // All or nothing, as a mix write: 64 bytes do not fit in the 32 left.
+    CHECK(!VPVirtIOSoundRingWriteSilence(&ring, 64));
+    CHECK(VPVirtIOSoundRingWriteSilence(&ring, 32));
+    CHECK(VPVirtIOSoundRingQueued(&ring) == 256);
+    VPVirtIOSoundRingDestroy(&ring);
+}
+
 static void testRingResetAndValidation(void) {
     VPVirtIOSoundRing ring;
     CHECK(!VPVirtIOSoundRingInit(&ring, 100, 64));
@@ -203,6 +241,7 @@ int main(void) {
     testRingSubmitsWholePeriods();
     testRingKeepsInFlightBytes();
     testRingWrapsWritesAndSplitsSubmissions();
+    testRingQueuesSilenceAhead();
     testRingResetAndValidation();
     if (failures) {
         fprintf(stderr, "VirtIOSoundTests: %d failure(s)\n", failures);

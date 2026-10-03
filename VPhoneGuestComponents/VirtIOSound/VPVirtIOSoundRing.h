@@ -4,12 +4,13 @@
 //
 //     completed <= submitted <= written
 //
-// The real-time I/O thread appends mixed frames and advances `written`. The
-// stream's serial queue hands `[submitted, written)` to the device and
-// advances `submitted`, and advances `completed` when the device returns the
-// bytes. Only `[written, completed + capacity)` may be overwritten: the
-// kernel reads a submitted region from the caller's pages until it
-// completes, so the space is not free before then.
+// The real-time I/O thread appends mixed frames, and the silence queued
+// ahead of them, and advances `written`; nothing else appends. The stream's
+// serial queue hands `[submitted, written)` to the device and advances
+// `submitted`, and advances `completed` when the device returns the bytes.
+// Only `[written, completed + capacity)` may be overwritten: the kernel reads
+// a submitted region from the caller's pages until it completes, so the
+// space is not free before then.
 
 #ifndef VPVirtIOSoundRing_h
 #define VPVirtIOSoundRing_h
@@ -40,6 +41,14 @@ void VPVirtIOSoundRingReset(VPVirtIOSoundRing *ring);
 /// written, when the free space is short: the device fell behind and these
 /// frames are dropped rather than overwriting bytes still in flight.
 bool VPVirtIOSoundRingWrite(VPVirtIOSoundRing *ring, const void *source, uint32_t length);
+
+/// Append `length` zero bytes, all or none, as `VPVirtIOSoundRingWrite`
+/// does. Real-time safe.
+bool VPVirtIOSoundRingWriteSilence(VPVirtIOSoundRing *ring, uint32_t length);
+
+/// Bytes appended and not yet returned by the device: in flight plus
+/// pending. For the writer, the I/O thread.
+uint64_t VPVirtIOSoundRingQueued(const VPVirtIOSoundRing *ring);
 
 /// The next region to submit, contiguous in memory. Normally a whole period
 /// or nothing; with `partial`, whatever is pending (used when the stream

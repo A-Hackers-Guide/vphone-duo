@@ -371,12 +371,17 @@ typedef struct {
     float *scratch;
     uint32_t bytesPerFrame;
     uint32_t wireRate;
-    /// Since the last device start: frames the HAL handed over, bytes that
-    /// went into the ring, and bytes the ring refused because the device had
-    /// not returned the space.
+    /// The lead, in bytes, that the first write after a start queues ahead
+    /// of its frames. The stream's queue sets it at the start; the I/O thread
+    /// takes it.
+    _Atomic uint32_t leadRequest;
+    /// Since the last start: frames the HAL handed over, bytes that went into
+    /// the ring, bytes the ring refused because the device had not returned
+    /// the space, and bytes of silence queued as the lead.
     _Atomic uint64_t framesIn;
     _Atomic uint64_t bytesOut;
     _Atomic uint64_t dropped;
+    _Atomic uint64_t leadOut;
 } VPMixState;
 
 static void VPMixRingWrite(VPMixState *mix, const void *bytes, uint32_t length) {
@@ -387,7 +392,32 @@ static void VPMixRingWrite(VPMixState *mix, const void *bytes, uint32_t length) 
     }
 }
 
+/// Tops what is queued ahead of the host up to `lead` bytes, right before
+/// the first frames of a run. From here on the mix arrives in real time, so
+/// whatever is queued now is the cushion every later period is handed over
+/// with — however long the HAL took to start its I/O after `startStream`.
+/// What a draining run still has queued counts, except the oldest period in
+/// flight: the host may have all but played it, and counting it whole left
+/// restarts a period short.
+static void VPMixQueueLead(VPMixState *mix, uint32_t lead) {
+    uint64_t queued = VPVirtIOSoundRingQueued(mix->ring);
+    uint64_t ahead = queued > mix->ring->period ? queued - mix->ring->period : 0;
+    if (ahead >= lead) {
+        return;
+    }
+    uint32_t silence = (uint32_t)(lead - ahead);
+    if (VPVirtIOSoundRingWriteSilence(mix->ring, silence)) {
+        atomic_fetch_add_explicit(&mix->leadOut, silence, memory_order_relaxed);
+    } else {
+        atomic_fetch_add_explicit(&mix->dropped, silence, memory_order_relaxed);
+    }
+}
+
 static int VPMixWrite(VPMixState *mix, void *buffer, UInt32 frameCount) {
+    uint32_t lead = atomic_exchange_explicit(&mix->leadRequest, 0, memory_order_acquire);
+    if (lead > 0) {
+        VPMixQueueLead(mix, lead);
+    }
     atomic_fetch_add_explicit(&mix->framesIn, frameCount, memory_order_relaxed);
     uint32_t halRate = atomic_load(mix->halRate);
     if (halRate == mix->wireRate) {
@@ -461,12 +491,27 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     BOOL _reportedTransferError;
     /// Periods of silence queued ahead of the mix at each device start.
     uint32_t _leadPeriods;
-    void *_silence;
-    /// Since the last device start: when it was, writes handed to the device,
-    /// and how many of them found it with nothing left to play.
+    /// Since the last start: when it was, what the device still held then,
+    /// writes handed to the device, and how many of them found it with
+    /// nothing left to play.
     uint64_t _startedAt;
+    uint64_t _inFlightAtStart;
     uint64_t _submissions;
     uint64_t _starved;
+    /// The fewest and most bytes in flight a write after the first found, for
+    /// the run and for the minute `logProgress` last covered.
+    uint64_t _minInFlight;
+    uint64_t _maxInFlight;
+    uint64_t _windowMinInFlight;
+    uint64_t _windowMaxInFlight;
+    uint64_t _reportedAt;
+    /// The host's consumption once the run has settled: when the first write
+    /// came back, the bytes returned after it, and when the last one did;
+    /// and the longest wait between two returns.
+    uint64_t _firstCompletedAt;
+    uint64_t _lastCompletedAt;
+    uint64_t _completedAfterFirst;
+    uint64_t _maxCompletionGap;
     /// The rate CoreAudio runs the stream at, which is the wire rate until a
     /// 44100 aggregate switches the device. The mix block reads it, the rate
     /// change writes it, both lock-free.
@@ -519,9 +564,8 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     }
     IONotificationPortSetDispatchQueue(_port, _queue);
     _leadPeriods = VPLeadPeriods();
-    _silence = calloc(1, _periodBytes);
     _resampleScratch = malloc(kResampleScratchFrames * format.bytesPerFrame);
-    if (!_silence || !_resampleScratch) {
+    if (!_resampleScratch) {
         return nil;
     }
 
@@ -593,7 +637,6 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     if (_port) {
         IONotificationPortDestroy(_port);
     }
-    free(_silence);
     free(_resampleScratch);
     VPVirtIOSoundRingDestroy(&_ring);
 }
@@ -694,12 +737,6 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
         return NO;
     }
     _reportedTransferError = NO;
-    _submissions = 0;
-    _starved = 0;
-    atomic_store(&_mix.framesIn, 0);
-    atomic_store(&_mix.bytesOut, 0);
-    atomic_store(&_mix.dropped, 0);
-    _startedAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
     return YES;
 }
 
@@ -707,34 +744,105 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
 /// real time, so with nothing queued ahead every late period is a gap on the
 /// host: measured, a third to a half of all writes found the device with
 /// nothing left to play. A few periods of silence first put that much audio
-/// between the guest's writes and the host's playback. A restart that finds
-/// the device still draining tops up what the drain consumed.
+/// between the guest's writes and the host's playback. The I/O thread queues
+/// them itself, ahead of its first write (`VPMixQueueLead`): only then is it
+/// known what a draining run still holds and how long the HAL took to start,
+/// and `written` keeps its one writer.
 - (void)queueLead {
     dispatch_assert_queue(_queue);
-    uint32_t queued = (uint32_t)(VPVirtIOSoundRingInFlight(&_ring) / _periodBytes);
-    for (uint32_t period = queued; period < _leadPeriods; period++) {
-        VPVirtIOSoundRingWrite(&_ring, _silence, _periodBytes);
-    }
-    [self submitPending:YES];
+    atomic_store_explicit(&_mix.leadRequest, _leadPeriods * _periodBytes, memory_order_release);
 }
 
 - (UInt32)queuedLatencyFrames {
     return (_leadPeriods + 1) * (_periodBytes / _format.bytesPerFrame);
 }
 
+// MARK: Counters
+
+- (void)resetCounters {
+    dispatch_assert_queue(_queue);
+    _startedAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+    _reportedAt = _startedAt;
+    _inFlightAtStart = VPVirtIOSoundRingInFlight(&_ring);
+    _submissions = 0;
+    _starved = 0;
+    _minInFlight = UINT64_MAX;
+    _maxInFlight = 0;
+    _windowMinInFlight = UINT64_MAX;
+    _windowMaxInFlight = 0;
+    _firstCompletedAt = 0;
+    // A draining run's returns carry on into this one, so a gap between its
+    // tail and this run's lead still shows.
+    if (_inFlightAtStart == 0) {
+        _lastCompletedAt = 0;
+    }
+    _completedAfterFirst = 0;
+    _maxCompletionGap = 0;
+    atomic_store(&_mix.framesIn, 0);
+    atomic_store(&_mix.bytesOut, 0);
+    atomic_store(&_mix.dropped, 0);
+    atomic_store(&_mix.leadOut, 0);
+}
+
+- (double)periodsForBytes:(uint64_t)bytes {
+    return bytes == UINT64_MAX ? 0 : (double)bytes / _periodBytes;
+}
+
+/// Wire frames a second the host has played since the run settled, from the
+/// device's completions. The mix arrives at the wire rate of the guest's
+/// clock, so against it this is how far the host's audio clock runs from
+/// the guest's, and how fast the cushion would erode or grow.
+- (double)hostRate {
+    if (_firstCompletedAt == 0 || _lastCompletedAt <= _firstCompletedAt) {
+        return 0;
+    }
+    return (double)_completedAfterFirst / _format.bytesPerFrame / ((_lastCompletedAt - _firstCompletedAt) / 1e9);
+}
+
+- (double)hostDriftPPM {
+    double rate = self.hostRate;
+    return rate > 0 ? (rate / _format.sampleRate - 1) * 1e6 : 0;
+}
+
 /// One line per run of the device, for telling a gap on the host (`starved`)
 /// from an unhappy HAL clock (`in` far from the nominal rate) from a full
-/// ring (`dropped`).
+/// ring (`dropped`). `start` is what a draining run still held when this one
+/// started, `lead` the silence queued ahead of it, `in flight` the cushion
+/// writes after the first found (whole periods: the device returns whole
+/// writes, each a period after the last while it plays), `host` the rate
+/// the device played at, and `returns` the longest wait between two returns,
+/// which a stall on either side stretches.
 - (void)logCounters {
     double seconds = (double)(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - _startedAt) / 1e9;
     uint64_t framesIn = atomic_load(&_mix.framesIn);
     uint64_t framesOut = atomic_load(&_mix.bytesOut) / _format.bytesPerFrame;
     VPLogToFile("stream %u: %.2f s, %llu writes, %llu starved, %llu bytes dropped, "
-        "in %llu frames (%.0f/s, hal %u), out %llu frames (%.0f/s)",
+        "in %llu frames (%.0f/s, hal %u), out %llu frames (%.0f/s); "
+        "start %.2f, lead %.2f, in flight %.2f-%.2f periods; host %.1f/s (%+.0f ppm), returns <= %.0f ms apart",
         _streamID, seconds, (unsigned long long)_submissions, (unsigned long long)_starved,
         (unsigned long long)atomic_load(&_mix.dropped),
         (unsigned long long)framesIn, seconds > 0 ? framesIn / seconds : 0, atomic_load(&_halRate),
-        (unsigned long long)framesOut, seconds > 0 ? framesOut / seconds : 0);
+        (unsigned long long)framesOut, seconds > 0 ? framesOut / seconds : 0,
+        [self periodsForBytes:_inFlightAtStart], [self periodsForBytes:atomic_load(&_mix.leadOut)],
+        [self periodsForBytes:_minInFlight], [self periodsForBytes:_maxInFlight],
+        self.hostRate, self.hostDriftPPM, _maxCompletionGap / 1e6);
+}
+
+/// A line a minute while the device runs, so a long playback shows whether
+/// the cushion holds.
+- (void)logProgress {
+    uint64_t now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+    if (now - _reportedAt < 60 * NSEC_PER_SEC) {
+        return;
+    }
+    VPLogToFile("stream %u: running %.0f s, %llu writes, %llu starved, in flight %.2f-%.2f periods "
+        "this minute; host %.1f/s (%+.0f ppm)",
+        _streamID, (now - _startedAt) / 1e9, (unsigned long long)_submissions, (unsigned long long)_starved,
+        [self periodsForBytes:_windowMinInFlight], [self periodsForBytes:_windowMaxInFlight],
+        self.hostRate, self.hostDriftPPM);
+    _reportedAt = now;
+    _windowMinInFlight = UINT64_MAX;
+    _windowMaxInFlight = 0;
 }
 
 - (void)stopDevice {
@@ -764,8 +872,15 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
         uint64_t scalar = _streamID;
         // Nothing in flight when a period goes out means the device already
         // played everything it had: a gap on the host.
-        if (_submissions > 0 && VPVirtIOSoundRingInFlight(&_ring) == 0) {
-            _starved++;
+        uint64_t inFlight = VPVirtIOSoundRingInFlight(&_ring);
+        if (_submissions > 0) {
+            if (inFlight == 0) {
+                _starved++;
+            }
+            _minInFlight = MIN(_minInFlight, inFlight);
+            _maxInFlight = MAX(_maxInFlight, inFlight);
+            _windowMinInFlight = MIN(_windowMinInFlight, inFlight);
+            _windowMaxInFlight = MAX(_windowMaxInFlight, inFlight);
         }
         _submissions++;
         VPVirtIOSoundRingDidSubmit(&_ring, length);
@@ -782,6 +897,21 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
 - (void)transferCompletedWithLength:(uint32_t)length result:(IOReturn)result {
     dispatch_assert_queue(_queue);
     VPVirtIOSoundRingDidComplete(&_ring, length);
+    uint64_t now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+    if (_lastCompletedAt > 0) {
+        uint64_t gap = now - _lastCompletedAt;
+        _maxCompletionGap = MAX(_maxCompletionGap, gap);
+    }
+    _lastCompletedAt = now;
+    // The host's rate counts once the run has settled: its first returns
+    // follow the start, a draining run's tail and the host's own buffering.
+    if (now - _startedAt >= 5 * NSEC_PER_SEC) {
+        if (_firstCompletedAt == 0) {
+            _firstCompletedAt = now;
+        } else {
+            _completedAfterFirst += length;
+        }
+    }
     if (result != kIOReturnSuccess && !_reportedTransferError) {
         _reportedTransferError = YES;
         os_log_error(VPLog(), "stream %u: write of %u bytes failed: 0x%x", _streamID, length, result);
@@ -799,6 +929,7 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
             return;
         }
         if (self->_state != VPStreamStateRunning) {
+            [self resetCounters];
             [self queueLead];
         }
         self->_state = VPStreamStateRunning;
@@ -811,6 +942,7 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
         dispatch_source_set_event_handler(_timer, ^{
             if (unretained->_state == VPStreamStateRunning) {
                 [unretained submitPending:NO];
+                [unretained logProgress];
             }
         });
         dispatch_resume(_timer);
@@ -825,6 +957,8 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
             return;
         }
         [self logCounters];
+        // A start the HAL never wrote after leaves no lead behind.
+        atomic_store(&self->_mix.leadRequest, 0);
         [self submitPending:YES];
         self->_state = VPStreamStateDraining;
         if (VPVirtIOSoundRingInFlight(&self->_ring) == 0) {
