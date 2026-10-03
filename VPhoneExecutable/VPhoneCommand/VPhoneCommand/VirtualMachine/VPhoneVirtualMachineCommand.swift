@@ -206,6 +206,13 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "config",
         abstract: "Edit VM manifest fields (cpu/memory/network)",
+        discussion: """
+        --mac-name (on by default) has the guest resolve this Mac's <LocalHostName>.local \
+        at once, to the address the guest reaches the Mac at (nat: the shared network's host \
+        address, usually 192.168.64.1; tunnel: the gateway, which leads to the Mac's loopback; \
+        bridged: the Mac's address on that interface), instead of racing mDNS answers. \
+        --mac-name off withdraws it. Applied each time vphone-vm connects to the guest.
+        """,
     )
 
     @OptionGroup var lib: VPhoneLibraryOption
@@ -215,9 +222,17 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
     @Option(name: [.customShort("n"), .long], help: "Network mode: nat | bridged | tunnel | none") var network: String?
     @Option(name: .long, help: "Host interface to bridge (bridged mode; auto-picks first if omitted)")
     var bridgeInterface: String?
+    @Option(name: .long, help: "Have the guest resolve this Mac's .local name locally: on (default) | off")
+    var macName: String?
 
     func run() throws {
         let mode = try network.map(Self.parseMode)
+        let resolvesMacName: Bool? = switch macName?.lowercased() {
+        case nil: nil
+        case "on": true
+        case "off": false
+        default: throw ValidationError("--mac-name takes on or off.")
+        }
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
         let updated = try VPhoneBundleOperations.updateConfig(
             bundleNamed: name,
@@ -226,6 +241,7 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
             memoryMB: memory,
             networkMode: mode,
             bridgeInterface: bridgeInterface,
+            resolvesMacName: resolvesMacName,
         )
         let m = updated.manifest
         print(
@@ -251,10 +267,14 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
 }
 
 private func describeNetwork(_ net: VPhoneVirtualMachineManifest.NetworkConfig) -> String {
+    var text = net.mode.rawValue
     if net.mode == .bridged, let iface = net.bridgeInterface {
-        return "\(net.mode.rawValue)(\(iface))"
+        text += "(\(iface))"
     }
-    return net.mode.rawValue
+    if net.resolvesMacName == false {
+        text += ", mac-name off"
+    }
+    return text
 }
 
 // MARK: - rename

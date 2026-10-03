@@ -19,6 +19,8 @@ vp_vcam_start()
 _ = vp_hid_load()
 GuestIrisinInstaller.refreshBootstrapOnStartup()
 GuestAPI.restoreUSBSerialOnStartup()
+GuestStaticNames.shared.restoreOnStartup()
+GuestUSBLinkRoute.shared.restoreOnStartup()
 
 let group = MultiThreadedEventLoopGroup(numberOfThreads: 2)
 let filePool = NIOThreadPool(numberOfThreads: 2)

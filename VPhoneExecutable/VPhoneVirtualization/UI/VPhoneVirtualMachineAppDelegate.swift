@@ -87,6 +87,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         let control = VPhoneGuestControl()
         self.control = control
         if !command.dfu {
+            configureGuestNames(control: control, configURL: options.configURL)
             let vphonedURL = URL(fileURLWithPath: command.vphonedBin)
             if FileManager.default.fileExists(atPath: vphonedURL.path) {
                 control.guestBinaryURL = vphonedURL
@@ -273,6 +274,26 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
             screenHeight: options.screenHeight,
         )
         hostAutomationServer = server
+    }
+
+    /// Have the guest resolve this Mac's `.local` name to the address it
+    /// reaches the Mac at, and reach it over the USB link too.
+    @MainActor
+    private func configureGuestNames(control: VPhoneGuestControl, configURL: URL) {
+        guard let network = try? VPhoneVirtualMachineManifest.load(from: configURL).networkConfig else { return }
+        control.guestUSBLinkRoute = VPhoneNetworking.routesLinkLocalOverUSB(network)
+        guard network.mode != .off else { return }
+        control.guestStaticNames = {
+            let bridged = network.mode == .bridged
+                ? network.bridgeInterface.flatMap(VPhoneNetworking.ipv4Address(ofInterface:))
+                : nil
+            return VPhoneNetworking.macStaticNames(
+                network,
+                macName: VPhoneNetworking.macLocalHostName(),
+                sharedNATHost: VPhoneNetworking.sharedNATHostAddress(),
+                bridgedAddress: bridged,
+            )
+        }
     }
 
     @MainActor

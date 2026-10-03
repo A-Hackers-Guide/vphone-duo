@@ -53,6 +53,7 @@ and the app's rules apply to it as they would to any other app.
 | Gateway and DNS | `192.168.127.1` |
 | MTU | 1500 |
 | DNS | Queries to `192.168.127.1` go to the Mac's resolver |
+| Other connections to the gateway | The Mac's loopback, `127.0.0.1` (TCP and UDP) |
 
 ## Limits
 
@@ -87,3 +88,45 @@ and the app's rules apply to it as they would to any other app.
    ```sh
    lsof -nP -a -i -p "$(pgrep -f 'vphone-vm.*<name>')"
    ```
+
+## This Mac's name in the guest
+
+On by default. The guest resolves this Mac's mDNS name (`scutil --get
+LocalHostName`, plus `.local`) at once, to the address it reaches the Mac at:
+
+| Mode | `<Mac>.local` in the guest |
+| --- | --- |
+| `nat` | The Mac on the shared network, usually `192.168.64.1` |
+| `tunnel` | The gateway, `192.168.127.1`. Connections to it reach the Mac's loopback (`127.0.0.1`), the way `10.0.2.2` does in QEMU and VirtualBox |
+| `bridged` | The Mac's address on the bridged interface |
+
+Over mDNS alone, an IPv4 lookup of the Mac's name in the guest could fail. The
+guest also hears the Mac on the network link a USB-connected iPhone gives the
+Mac, where the Mac has no IPv4 address and answers "no such record". Whichever
+link answers first decides the lookup, so an app that wants an IPv4 address
+got an error until a real answer had been cached from another link.
+
+vphoned registers the name with the guest's own mDNSResponder on its loopback
+interface each time `vphone-vm` connects, and again when it starts, so it is in
+place before apps run after a reboot. The guest's system volume is read-only,
+so `/etc/hosts` is not used, and nothing is announced on any network.
+
+Once the guest has also heard the Mac on the USB link, a lookup lists the
+Mac's `169.254` address there first. iOS routes `169.254.0.0/16` through its
+primary interface only, so a plain socket connecting to that address left
+through `en0`, where nothing answers, and hung until it timed out. Apple's own
+networking binds to the right interface and was not affected. In `nat` and
+`tunnel`, vphoned therefore also routes `169.254.0.0/16` through the USB link
+(as two `/17` routes, which win over the `/16` without touching it), and puts
+the routes back if the link is re-created. In `bridged` it does not, since
+`en0` may need link-local addresses on the LAN.
+
+```sh
+vphone-cli vm config <name> --mac-name off   # withdraw both
+```
+
+To see what the guest's resolver returns, and whether each address connects:
+
+```sh
+vphone-launchpad-cli guest rpc <name> network.resolve '{"host":"<Mac>.local","family":"ipv4","port":8000}'
+```

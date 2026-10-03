@@ -97,6 +97,9 @@ enum GuestAPI {
                 "environment_update",
                 "udid_override",
                 "setup_skip",
+                "network_static_names",
+                "network_usb_link_route",
+                "network_resolve",
             ],
         ]
     }

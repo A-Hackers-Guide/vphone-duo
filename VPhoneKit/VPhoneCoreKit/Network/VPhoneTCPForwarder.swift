@@ -231,8 +231,14 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
     /// on it rather than deadlocking against itself.
     private static let queueKey = DispatchSpecificKey<Void>()
 
-    init(queue: DispatchQueue, deliver: @escaping Deliver) {
+    /// Connections to this address go to the Mac's loopback instead: the
+    /// gateway stands for the Mac, the way 10.0.2.2 does in QEMU's and
+    /// VirtualBox's NAT. Nil leaves every destination as it is.
+    private let gatewayAddress: VPhoneIPv4Address?
+
+    init(queue: DispatchQueue, gatewayAddress: VPhoneIPv4Address? = nil, deliver: @escaping Deliver) {
         self.queue = queue
+        self.gatewayAddress = gatewayAddress
         self.deliver = deliver
         queue.setSpecific(key: Self.queueKey, value: ())
     }
@@ -343,7 +349,8 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
         address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         address.sin_family = sa_family_t(AF_INET)
         address.sin_port = flow.destinationPort.bigEndian
-        let octets = flow.destinationAddress.bytes
+        let destination = flow.destinationAddress == gatewayAddress ? VPhoneIPv4Address(127, 0, 0, 1) : flow.destinationAddress
+        let octets = destination.bytes
         // Network order, as in the UDP forwarder: host order asks for a
         // different address entirely.
         let hostOrder = UInt32(octets[0]) << 24 | UInt32(octets[1]) << 16 | UInt32(octets[2]) << 8 | UInt32(octets[3])
@@ -406,7 +413,7 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
         var length = socklen_t(MemoryLayout<Int32>.size)
         _ = getsockopt(connection.socket, SOL_SOCKET, SO_ERROR, &error, &length)
         guard error == 0 else {
-            sendReset(for: connection.flow, inReplyTo: nil)
+            resetGuest(connection)
             finish(connection)
             return
         }
@@ -574,7 +581,7 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
                 }
                 return
             }
-            sendReset(for: connection.flow, inReplyTo: nil)
+            resetGuest(connection)
             finish(connection)
             return
         }
@@ -651,7 +658,7 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
             // EAGAIN. A real error is indistinguishable here from a closed peer,
             // so treat anything else as the end of the connection.
             if errno != EAGAIN, errno != EINTR {
-                sendReset(for: connection.flow, inReplyTo: nil)
+                resetGuest(connection)
                 finish(connection)
             }
             return
@@ -741,6 +748,23 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
         timer.setEventHandler { [weak self] in self?.retransmit(connection) }
         timer.resume()
         connection.retransmitTimer = timer
+    }
+
+    /// A RST for a connection the guest knows about, numbered so it is
+    /// accepted. Before our SYN-ACK the guest is in SYN-SENT and takes a RST
+    /// only if it acknowledges its SYN (RFC 793 section 3.4); after it, only if
+    /// its sequence number is in the window. A bare `seq 0, ack 0` reset was
+    /// dropped either way, so a refused connect left the guest retrying its
+    /// SYN until it timed out.
+    private func resetGuest(_ connection: Connection) {
+        deliver(connection.flow, VPhoneTCPSegment(
+            sourcePort: connection.flow.destinationPort,
+            destinationPort: connection.flow.sourcePort,
+            sequenceNumber: connection.state == .connecting ? 0 : connection.localSequence,
+            acknowledgmentNumber: connection.remoteSequence,
+            flags: VPhoneTCPFlags.rst | VPhoneTCPFlags.ack,
+            windowSize: 0,
+        ))
     }
 
     /// A RST for a flow we are not going to serve.

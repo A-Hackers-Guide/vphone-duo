@@ -30,7 +30,7 @@ enum VPhoneHostResolver {
 extension VPhoneIPv4Address {
     /// Parse `a.b.c.d`, or nil for anything else (including IPv6, which this
     /// stack deliberately does not carry).
-    init?(dotted: String) {
+    public init?(dotted: String) {
         let parts = dotted.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 4 else { return nil }
         var octets: [UInt8] = []
@@ -231,9 +231,15 @@ final class VPhoneUDPForwarder: @unchecked Sendable {
     /// The guest is told its resolver is the gateway (`192.168.127.1`), so a
     /// lookup arrives addressed to us. Send it to the host's resolver instead —
     /// the same one the host itself would use, VPN or not.
+    ///
+    /// Anything else sent to the gateway goes to the Mac's loopback, as TCP
+    /// does (see `VPhoneTCPForwarder.gatewayAddress`).
     private func resolveDestination(for flow: VPhoneUDPFlow) -> (address: VPhoneIPv4Address, port: UInt16) {
-        guard flow.destinationAddress == configuration.hostAddress, flow.destinationPort == 53 else {
+        guard flow.destinationAddress == configuration.hostAddress else {
             return (flow.destinationAddress, flow.destinationPort)
+        }
+        guard flow.destinationPort == 53 else {
+            return (VPhoneIPv4Address(127, 0, 0, 1), flow.destinationPort)
         }
         guard let resolver = VPhoneHostResolver.preferred() else {
             return (flow.destinationAddress, flow.destinationPort)

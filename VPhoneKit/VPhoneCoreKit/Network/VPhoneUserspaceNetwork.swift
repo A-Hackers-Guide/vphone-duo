@@ -71,7 +71,7 @@ public final class VPhoneUserspaceNetwork: @unchecked Sendable {
 
     /// Terminates the guest's TCP against host sockets. Owns one connection per
     /// flow, and emits segments of its own rather than echoing ours.
-    private lazy var tcpForwarder = VPhoneTCPForwarder(queue: queue) { [weak self] flow, segment in
+    private lazy var tcpForwarder = VPhoneTCPForwarder(queue: queue, gatewayAddress: configuration.hostAddress) { [weak self] flow, segment in
         self?.sendTCPReply(flow: flow, segment: segment)
     }
 
