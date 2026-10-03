@@ -16,7 +16,20 @@ These are the two iPhone17,3 combinations exercised with the native JB pipeline 
 | PR #486 | `17,3_26.6.2_23G90` | `26.4-23E5207q` | JB patches, restore, CFW, boot, vphoned ping |
 | PR #486 | `17,3_27.0_24A435` | `26.4-23E5207q` | JB patches, restore, CFW, boot, vphoned ping |
 
-The cloudOS 26.4 image was the latest one **verified to contain `vphone600ap` during that investigation**. This is a dated observation, not a promise that it remains the newest available release. Use `vphone-cli fw catalog` to inspect the current catalogue. Other versions may work, but they have not passed this same end-to-end check.
+The cloudOS 26.4 beta image (`26.4-23E5207q`) is the newest one that contains `vphone600ap`, the identity the guest's kernel, SEP and device tree come from. Every cloudOS release after it was checked on 2026-10-03 and lists only the PCC boards and `vresearch101ap`: `iPhone99,11` is gone from `SupportedProductTypes`, and there is no `kernelcache.*.vphone600`, `sep-firmware.vphone600` or `DeviceTree.vphone600ap`. None of them can boot a guest; `fw prepare` refuses them before extracting anything.
+
+| cloudOS | `vresearch101ap` | `vphone600ap` |
+| --- | --- | --- |
+| `26.4-23E5207q` (beta) | yes | yes |
+| `26.4-23E244` | yes | no |
+| `26.4.1-23E254` | yes | no |
+| `26.5-23F75` | yes | no |
+| `26.5.2-23F83` | yes | no |
+| `26.6-23G71` | yes | no |
+| `26.6.1-23G82` | yes | no |
+| `26.7-23H20` | yes | no |
+
+Use `vphone-cli fw catalog` to inspect the current catalogue. Other iPhone and iPad versions may work with `26.4-23E5207q`, but they have not passed this same end-to-end check.
 
 ## iPadOS
 

@@ -23,6 +23,9 @@ final class VPhoneLaunchpadCreationPipeline {
         var bundleVersion: String
         var iphoneSource: String
         var cloudOSSource: String
+        /// The model `fw prepare --device` picks from an IPSW that covers
+        /// several, such as the 13-inch iPad; nil takes the first.
+        var device: String? = nil
         var cpuCount: Int
         var memoryMB: Int
         var diskSizeGB: Int
@@ -133,11 +136,15 @@ final class VPhoneLaunchpadCreationPipeline {
         ["fw", "patch", options.name] + options.patches.presetArguments
     }
 
+    private var deviceArguments: [String] {
+        options.device.map { ["--device", $0] } ?? []
+    }
+
     func command(for step: Step) -> String {
         let name = options.name
         return switch step {
         case .create: "vm new \(name) --cpu \(options.cpuCount) --memory \(options.memoryMB) --disk-size \(options.diskSizeGB)"
-        case .prepare: "fw prepare \(name)"
+        case .prepare: (["fw", "prepare", name] + deviceArguments).joined(separator: " ")
         case .patch: patchArguments.joined(separator: " ")
         case .bootDFU: "vm launch \(name) --dfu"
         case .waitDFU: "recovery-probe --ecid …"
@@ -290,7 +297,7 @@ final class VPhoneLaunchpadCreationPipeline {
 
         case .prepare:
             try await run(["fw", "prepare", name, "--iphone-source", options.iphoneSource,
-                           "--cloudos-source", options.cloudOSSource] + library)
+                           "--cloudos-source", options.cloudOSSource] + deviceArguments + library)
 
         case .patch:
             // The preset rides on `fw patch` itself; per-patch overrides are

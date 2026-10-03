@@ -261,12 +261,24 @@
 
         static let catalog: VPhoneLaunchpadFirmwareCatalog? = {
             let base = "https://updates.cdn-apple.com/example"
-            let json = """
-            {"device":"iPhone17,3","pairings":[
+            let iPhone = """
+            [
               {"ios":{"name":"iOS 26.4.2","url":"\(base)/iPhone17,3_26.4.2_23E261_Restore.ipsw"},"recommendedCloudOS":{"name":"cloudOS 26.4","url":"\(base)/cloudos-26.4"}},
               {"ios":{"name":"iOS 26.5.2","url":"\(base)/iPhone17,3_26.5.2_23F84_Restore.ipsw"},"recommendedCloudOS":{"name":"cloudOS 26.4","url":"\(base)/cloudos-26.4"}},
               {"ios":{"name":"iOS 26.6.2","url":"\(base)/iPhone17,3_26.6.2_23G90_Restore.ipsw"},"recommendedCloudOS":{"name":"cloudOS 26.4","url":"\(base)/cloudos-26.4"}},
               {"ios":{"name":"iOS 27.0 RC","url":"\(base)/iPhone17,3_27.0_24A435_Restore.ipsw"},"recommendedCloudOS":{"name":"cloudOS 26.4","url":"\(base)/cloudos-26.4"}}
+            ]
+            """
+            let iPad = """
+            [
+              {"ios":{"name":"iPadOS 26.6.2","url":"\(base)/iPad16,1,iPad16,2_26.6.2_23G90_Restore.ipsw"},"recommendedCloudOS":{"name":"cloudOS 26.4","url":"\(base)/cloudos-26.4"}},
+              {"ios":{"name":"iPadOS 27.0.1","url":"\(base)/iPad16,1,iPad16,2_27.0.1_24A446_Restore.ipsw"},"recommendedCloudOS":{"name":"cloudOS 26.4","url":"\(base)/cloudos-26.4"}}
+            ]
+            """
+            let json = """
+            {"device":"iPhone17,3","pairings":\(iPhone),"devices":[
+              {"productType":"iPhone17,3","name":"iPhone 16","family":"iPhone","pairings":\(iPhone)},
+              {"productType":"iPad16,1","name":"iPad mini (A17 Pro)","family":"iPad","pairings":\(iPad)}
             ]}
             """
             return try? JSONDecoder().decode(VPhoneLaunchpadFirmwareCatalog.self, from: Data(json.utf8))

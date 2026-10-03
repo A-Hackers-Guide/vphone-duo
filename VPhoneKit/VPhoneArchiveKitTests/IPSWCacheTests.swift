@@ -213,6 +213,23 @@ struct IPSWCacheTests {
         }
     }
 
+    @Test func `a cloudOS without the virtual iPhone is refused before extraction`() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let phone = try ipsw(in: root, "phone", productTypes: ["iPhone17,3"], deviceClasses: ["D47AP"])
+        // cloudOS 26.4 (23E244) and later: the PCC boards and vresearch101ap, no vphone600ap.
+        let cloud = try ipsw(in: root, "cloud", productTypes: ["ComputeModule14,1", "Mac14,14"],
+                             deviceClasses: ["j226cap", "j236cap", "vresearch101ap"])
+
+        #expect {
+            try VPhoneIPSWCache.checkPair(iPhone: phone, cloudOS: cloud)
+        } throws: { error in
+            guard case .noVirtualPhoneInCloudOS? = error as? VPhoneIPSWCache.Error else { return false }
+            return error.localizedDescription.contains("vphone600ap")
+        }
+    }
+
     @Test func `an iPad IPSW the guest device list knows pairs with cloudOS`() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

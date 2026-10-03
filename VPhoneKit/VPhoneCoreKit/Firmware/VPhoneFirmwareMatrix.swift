@@ -197,9 +197,14 @@ public enum VPhoneFirmwareMatrix {
     /// so the surrounding CDN path — which differs per release and is sometimes
     /// a bare UUID — is ignored. An IPSW shared by several models names them
     /// all, comma-separated (`iPad16,1,iPad16,2_…`); `device` may be any of them.
+    /// A few IPSWs carry a family name instead (`iPad_Pro_M4_…`), which
+    /// `sharedIPSWNames` maps to its models.
     public static func releases(downloadURLs: String, device: String) -> [VPhoneFirmwareRelease] {
-        let pattern = "/((?:[^/_]*,)?" + NSRegularExpression.escapedPattern(for: device)
-            + "(?:,[^/_]*)?_([^_]+)_([A-Za-z0-9]+)_Restore\\.ipsw)$"
+        var models = "(?:[^/_]*,)?" + NSRegularExpression.escapedPattern(for: device) + "(?:,[^/_]*)?"
+        for (name, devices) in sharedIPSWNames where devices.contains(device) {
+            models = "(?:\(models)|\(NSRegularExpression.escapedPattern(for: name)))"
+        }
+        let pattern = "/(\(models)_([^_]+)_([A-Za-z0-9]+)_Restore\\.ipsw)$"
         guard let name = try? NSRegularExpression(pattern: pattern) else { return [] }
 
         var seen: Set<VPhoneFirmwareRelease> = []
@@ -217,6 +222,12 @@ public enum VPhoneFirmwareMatrix {
         }
         return found
     }
+
+    /// IPSW names that name a device family rather than its models, and the
+    /// models each covers.
+    static let sharedIPSWNames: [String: [String]] = [
+        "iPad_Pro_M4": ["iPad16,3", "iPad16,4", "iPad16,5", "iPad16,6"],
+    ]
 
     /// The verdict for one release, given what the compatibility guide records.
     public static func support(

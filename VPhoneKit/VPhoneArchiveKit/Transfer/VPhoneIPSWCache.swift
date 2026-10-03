@@ -25,6 +25,7 @@ public enum VPhoneIPSWCache {
         case swappedSources(iPhone: URL, cloudOS: URL)
         case notIPhoneSource(URL, productTypes: [String])
         case notCloudOSSource(URL)
+        case noVirtualPhoneInCloudOS(URL, version: String, build: String)
 
         public var errorDescription: String? {
             switch self {
@@ -40,6 +41,8 @@ public enum VPhoneIPSWCache {
                 "\(file.lastPathComponent) is not an IPSW vphone can run; it is for \(productTypes.isEmpty ? "no listed product" : productTypes.joined(separator: ", ")). Choose an IPSW for \(VPhoneIPSWCache.guestProductTypes.joined(separator: " or ")) as the iPhone source."
             case let .notCloudOSSource(file):
                 "\(file.lastPathComponent) is not a cloudOS IPSW: it has no \(VPhoneIPSWCache.cloudOSDeviceClass) build identity. Choose a cloudOS IPSW as the cloudOS source."
+            case let .noVirtualPhoneInCloudOS(file, version, build):
+                "cloudOS \(version) (\(build)) in \(file.lastPathComponent) has no \(VPhoneIPSWCache.guestDeviceClass) build identity to boot the guest from; no cloudOS after the 26.4 beta (23E5207q) has one. Choose the cloudOS `vphone-cli fw catalog` recommends."
             }
         }
     }
@@ -247,6 +250,10 @@ public enum VPhoneIPSWCache {
     /// chain matches the VM's DFU hardware. The restore tree needs both.
     public static let iPhoneProductType = VPhoneFirmwareCatalog.device
     public static let cloudOSDeviceClass = "vresearch101ap"
+    /// The cloudOS device class that supplies the guest's kernel, SEP and
+    /// device tree. No cloudOS after the 26.4 beta (23E5207q) carries it,
+    /// including the 26.4 release (23E244) and every one up to 26.7 (23H20).
+    public static let guestDeviceClass = "vphone600ap"
 
     /// Every product whose IPSW can supply the guest OS: the iPhone17,3 the
     /// catalog targets, and the iPads `VPhoneGuestDevice` knows.
@@ -277,6 +284,9 @@ public enum VPhoneIPSWCache {
         }
         guard cloudOSIsCloudOS else {
             throw Error.notCloudOSSource(cloudOS.file)
+        }
+        guard cloudOS.deviceClasses.contains(guestDeviceClass) else {
+            throw Error.noVirtualPhoneInCloudOS(cloudOS.file, version: cloudOS.version, build: cloudOS.build)
         }
     }
 
