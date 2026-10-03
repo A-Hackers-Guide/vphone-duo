@@ -771,6 +771,7 @@ struct VPhoneCustomFirmwareInstaller {
     private static let lateGuestPatches = [
         FirmwareGuestSystemPatchSet.virtioSoundDriver,
         FirmwareGuestSystemPatchSet.prebootBoardAudio,
+        FirmwareGuestSystemPatchSet.prebootBoardHaptics,
         FirmwareGuestSystemPatchSet.virtualAudioSpeakerRouteThrows,
         FirmwareGuestSystemPatchSet.virtualAudioMuteSetThrow,
         FirmwareGuestSystemPatchSet.virtualAudioSpeakerProtectionGate,
@@ -1150,7 +1151,7 @@ struct VPhoneCustomFirmwareInstaller {
     }
 
     /// `includeIdentity` is false for an environment update, which carries
-    /// only the board audio repair. `boardDeviceTree` is the iPad's own device
+    /// only the board audio and haptics repairs. `boardDeviceTree` is the iPad's own device
     /// tree, staged from the VM's `FirmwareOriginals`, or nil for an iPhone
     /// guest or a VM patched before `fw patch` kept it.
     private func patchPreboot(
@@ -1183,7 +1184,8 @@ struct VPhoneCustomFirmwareInstaller {
         }
         let spoofBuild = includeIdentity ? self.spoofBuild : nil
         let boardAudio = boardDeviceTree != nil && on(FirmwareGuestSystemPatchSet.prebootBoardAudio)
-        guard rewriteIdentity || boardAudio || !(spoofBuild ?? "").isEmpty else { return }
+        let boardHaptics = boardDeviceTree != nil && on(FirmwareGuestSystemPatchSet.prebootBoardHaptics)
+        guard rewriteIdentity || boardAudio || boardHaptics || !(spoofBuild ?? "").isEmpty else { return }
         guard
             let preboot = volumes.first(where: { ($0["Roles"] as? [String])?.contains("Preboot") == true }),
             let device = preboot["DeviceIdentifier"] as? String
@@ -1217,6 +1219,15 @@ struct VPhoneCustomFirmwareInstaller {
                     in: root,
                     work: work,
                     verb: "patch-dt-board-audio",
+                    arguments: [boardDeviceTree.path],
+                )
+            }
+            if boardHaptics, let boardDeviceTree {
+                try patchCopy(
+                    of: deviceTree,
+                    in: root,
+                    work: work,
+                    verb: "patch-dt-board-haptics",
                     arguments: [boardDeviceTree.path],
                 )
             }

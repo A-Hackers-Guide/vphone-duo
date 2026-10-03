@@ -458,6 +458,78 @@ Verified on a guest with all four keys deleted and rebooted: VirtualAudio
 initializes, the boot chime and a ringtone preview start I/O on
 `PuffinOutput (VAD [vdef] AggDev N)`, no `not initialized yet`.
 
+## 7. Tones stayed silent: the guest claimed a Taptic Engine (2026-10-03, night)
+
+With routing and the plugin both working, Safari played and a ringtone preview
+still did not. audiomxd shows the tone's route built and its AudioQueue
+created (`AudioQueueObject: New output; format 2 ch, 44100 Hz, aac`) and
+deleted six seconds later without ever starting. The reason is in
+mediaplaybackd, which plays tones for the client:
+
+```
+itemfig_postReadyForInspectionPayload…: Track ID 1 soun … Track ID 2 hapt … Track ID 3 hapt
+FigHapticEngineCreate: called, AudioSession:… Locality:…
+activating connection: mach=true … name=com.apple.audio.hapticd
+XPC timeout
+AVHapticClient.mm:1160  Initial XPC call to server timed out. Invalidating connection to prevent hang
+   (six times, one second apart)
+CHHapticEngine.mm:649   createHapticPlayerWithOptions: ERROR: Server failure: … Code=4099
+<<< FigHapticEngine >>> signalled err=4099
+playerfig_prepareWorkingItem2: itemfig_rebuildRenderPipelinesAndBoss() failed with err=4099
+playerfig_prepareWorkingItem: current item … failed to prepare (4099), advancing to next item
+```
+
+A system tone carries haptic tracks beside its audio. In MediaToolbox
+(26.6.2 cache), `itemfig_rebuildRenderPipelinesAndBossGuts` calls
+`FigHapticEngineCreate` when the item's `PlayHapticTracks` is set, and any
+error from it leaves through the function's failure exit (`cbnz w27` at
+`0x197832dd4`): the item fails as a whole, audio included.
+`com.apple.audio.hapticd` is a Mach service of audiomxd
+(`com.apple.audiomxd.plist`), and on a VM nothing behind it answers.
+
+`PlayHapticTracks` comes from the client. ToneLibrary sets
+`[playerItem setPlayHapticTracks:YES]` when
+`-hasSynchronizedVibrationsCapability` is true, and logs how it decided:
+"MobileGestalt returned %{BOOL}u for the deviceSupportsHaptics capability, and
+%{BOOL}u for the deviceSupportsClosedLoopHaptics capability". Those answers
+come from the device tree:
+
+| Tree | `/product` children | `/product/haptics` |
+| --- | --- | --- |
+| vphone600 (guest) | vphone600-gestalt-variants, maps, haptics, usb-device, util | `closed-loop = 1`, `supports-3rd-party-haptics = 1` |
+| `DeviceTree.j410ap` (iPad16,1) | camera, facetime, maps, audio | none |
+| `DeviceTree.j820ap` (iPad17,3) | camera, facetime, maps, audio | none |
+
+So the guest says it has a Taptic Engine and the iPad it presents does not.
+`devicetree-cfw-ipad_haptics` makes the node follow the board — removed, for
+an iPad — and `preboot-cfw-devicetree_board_haptics` does the same to a guest
+that is already installed.
+
+**The answers are cached.** libMobileGestalt writes
+`/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist`
+at first boot. On the test guest the node was gone from `IODeviceTree` after
+`cfw update-environment`, and Settings still showed the Haptics row and
+mediaplaybackd still timed out on hapticd, until that file was removed and the
+guest rebooted:
+
+```
+vphone-launchpad-cli guest rpc <machine> files.remove \
+  '{"path":"/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist"}'
+vphone-launchpad-cli guest rpc <machine> system.reboot '{"force":true}'
+```
+
+A guest created with the patch never caches the wrong answers. An existing one
+needs this once after the environment update; nothing does it automatically
+yet.
+
+**Verified** (`audiotest-ipad`): after the cache was rebuilt the Ringtone page
+has no Haptics row, mediaplaybackd makes no hapticd connection, and a tone
+preview plays on the Mac — heard, and in `vpquery.log` a 20 s stream with 237
+writes and none starved.
+
+iPhone guests are not changed: an iPhone's own tree has the node, and what a
+tone does there with no haptic server has not been measured.
+
 ## Reveal and validation
 
 1. Kernel side present: `strings` on the decompressed kernelcache shows the

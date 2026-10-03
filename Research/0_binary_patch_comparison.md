@@ -28,8 +28,10 @@
 > M-series board keeps Stage Manager (no `disable-chamois`) and the iPad (A16)
 > has no `medusa-overlay-app-capability`: `devicetree-cfw-ipad_artwork`,
 > `devicetree-cfw-ipad_product`, `devicetree-cfw-ipad_buttons`,
-> `devicetree-cfw-ipad_identity` and (2026-10-02) `devicetree-cfw-ipad_audio`,
-> which takes the board's `/product/audio` node. They are written to a second device tree,
+> `devicetree-cfw-ipad_identity`, (2026-10-02) `devicetree-cfw-ipad_audio`,
+> which takes the board's `/product/audio` node, and (2026-10-03)
+> `devicetree-cfw-ipad_haptics`, which removes `/product/haptics` where the
+> board has none. They are written to a second device tree,
 > `Firmware/all_flash/DeviceTree.vphone600ap.guest.im4p`, which `fw prepare`
 > copies from the vphone600 one and the hybrid manifest names as `DeviceTree`;
 > `RestoreDeviceTree` keeps pointing at the original, so restore still boots
@@ -2223,9 +2225,27 @@ virtio sound device with a host output sink. Two faults; the full reveal is
 | `system-virtiosound-cfw-hal_plugin` (new) | `/System/Library/Audio/Plug-Ins/HAL/VPhoneVirtIOSound.driver`, `cfw install` and `cfw update-environment` | Installs the CoreAudio HAL plugin for `AppleVirtIOSound`, built from `VPhoneGuestComponents/VirtIOSound`. |
 | `devicetree-cfw-ipad_audio` (new) | An iPad guest's installed DeviceTree, `fw patch` | Replaces `/product/audio` with the board tree's node (`DeviceTreePatcher.presentBoardAudio`), all properties as the board has them except its `AAPL,phandle`. |
 | `preboot-cfw-devicetree_board_audio` (new) | Restored Preboot `devicetree.img4`, `cfw install` and `cfw update-environment` | The same replacement for an iPad VM patched before it (`vphone-cli cfw patch-dt-board-audio`), from the board tree in `FirmwareOriginals`. |
+| `devicetree-cfw-ipad_haptics` (new, 2026-10-03) | An iPad guest's installed DeviceTree, `fw patch` | Makes `/product/haptics` what the board tree has (`DeviceTreePatcher.presentBoardHaptics`): removed for every iPad so far, none of which has the node. |
+| `preboot-cfw-devicetree_board_haptics` (new, 2026-10-03) | Restored Preboot `devicetree.img4`, `cfw install` and `cfw update-environment` | The same change for an iPad VM patched before it (`vphone-cli cfw patch-dt-board-haptics`), from the board tree in `FirmwareOriginals`. An existing guest also needs its MobileGestalt cache dropped once, see below. |
 
 `fw patch` now reads an iPad's board tree through the `FirmwareOriginals` stash,
 so `DeviceTree.<board>.im4p` stays in the VM folder after the restore tree goes.
+
+**Why the haptics node goes.** vphone600 carries `/product/haptics`
+(`closed-loop`, `supports-3rd-party-haptics`); `DeviceTree.j410ap` and
+`.j820ap` have no such node. With it MobileGestalt answers yes to
+`DeviceSupportsHaptics` and `DeviceSupportsClosedLoopHaptics`, ToneLibrary sets
+`playHapticTracks` on every tone, and mediaplaybackd builds a `CHHapticEngine`
+whose server, `com.apple.audio.hapticd` in audiomxd, never answers on a VM:
+six one-second XPC timeouts, `FigHapticEngineCreate` fails 4099, and
+`itemfig_rebuildRenderPipelinesAndBoss` fails the item — the ringtone never
+starts although its route and audio queue are built. Without the node the
+guest answers as the iPad does and tones play. The answers are cached in
+`/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist`,
+written at first boot, so a guest that has already booted keeps the old ones
+until that file is removed and the guest restarted (`files.remove`, then
+`system.reboot`); a guest created with the patch never has them. Detail and
+the measurements: `Research/Guest/virtio_sound.md` §7.
 
 **Why a plugin.** The cloudOS kernel has `AppleVirtIOSound` and its user client,
 but only macOS ships the HAL plugin that drives it; neither cloudOS nor any iOS

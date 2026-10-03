@@ -196,6 +196,11 @@ public enum FirmwareDeviceTreePatchSet {
                 "iPad audio configuration",
                 "Takes the audio node from the iPad's tree, so its acoustic ID names tunings the iPad image ships.",
             ),
+            property(
+                "devicetree-cfw-ipad_haptics",
+                "iPad haptics",
+                "Removes the Taptic Engine an iPad does not have, so tones play without the haptic track a VM cannot drive.",
+            ),
         ],
         provides: ["vphone.devicetree"],
     )

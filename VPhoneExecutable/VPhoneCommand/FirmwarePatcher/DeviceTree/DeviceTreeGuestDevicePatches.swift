@@ -52,6 +52,7 @@ extension DeviceTreePatcher {
     static let iPadButtonsPatch = "devicetree-cfw-ipad_buttons"
     static let iPadIdentityPatch = "devicetree-cfw-ipad_identity"
     static let iPadAudioPatch = "devicetree-cfw-ipad_audio"
+    static let iPadHapticsPatch = "devicetree-cfw-ipad_haptics"
 
     // MARK: - What Is Copied
 
@@ -265,6 +266,70 @@ extension DeviceTreePatcher {
         return BoardAudioChange(before: before, after: serialize(node))
     }
 
+    // MARK: - Haptics
+
+    /// What `presentBoardHaptics` changed: the haptics node's serialized bytes
+    /// before and after, empty where there was, or now is, no node.
+    struct BoardHapticsChange {
+        let before: Data
+        let after: Data
+    }
+
+    /// Make `root`'s `/product/haptics` what the board's tree has — which for
+    /// an iPad is nothing.
+    ///
+    /// vphone600 carries the node (`closed-loop`, `supports-3rd-party-haptics`),
+    /// so MobileGestalt answers yes to `DeviceSupportsHaptics` and
+    /// `DeviceSupportsClosedLoopHaptics`. ToneLibrary reads the pair as
+    /// "synchronized vibrations", sets `playHapticTracks` on every tone's player
+    /// item, and mediaplaybackd then builds a `CHHapticEngine` beside the audio
+    /// queue. A VM has no haptic server behind `com.apple.audio.hapticd`: the
+    /// engine's XPC setup times out six times, `FigHapticEngineCreate` fails
+    /// with 4099, and `itemfig_rebuildRenderPipelinesAndBoss` fails the whole
+    /// item with it — the tone's audio never starts. An iPad's tree has no
+    /// haptics node at all, so the real device never asks.
+    ///
+    /// Where the board has a node its properties are copied, as the audio
+    /// node's are; where it has none the guest's is removed. Returns nil when
+    /// the tree already matches the board.
+    static func presentBoardHaptics(in root: DTNode, from source: DTNode) -> BoardHapticsChange? {
+        func named(_ node: DTNode, _ name: String) -> DTNode? {
+            node.children.first { child in
+                child.properties.contains { $0.name == "name" && $0.value.prefix(while: { $0 != 0 }) == Data(name.utf8) }
+            }
+        }
+        guard let sourceProduct = named(source, "product"), let product = named(root, "product") else {
+            return nil
+        }
+        let existing = named(product, "haptics")
+        guard let sourceHaptics = named(sourceProduct, "haptics") else {
+            guard let existing else { return nil }
+            let before = serialize(existing)
+            product.children.removeAll { $0 === existing }
+            return BoardHapticsChange(before: before, after: Data())
+        }
+
+        let copied = sourceHaptics.properties.filter { $0.name != "AAPL,phandle" }
+        if let existing {
+            let current = existing.properties.filter { $0.name != "AAPL,phandle" }
+            if current.count == copied.count, zip(current, copied).allSatisfy({ lhs, rhs in
+                lhs.name == rhs.name && lhs.flags == rhs.flags && lhs.value == rhs.value
+            }) {
+                return nil
+            }
+        }
+        let before = existing.map(serialize) ?? Data()
+        let node = existing ?? DTNode()
+        let phandle = node.properties.filter { $0.name == "AAPL,phandle" }
+        node.properties = copied.map {
+            DTProperty(name: $0.name, flags: $0.flags, value: $0.value, valueOffset: 0)
+        } + phandle
+        if existing == nil {
+            product.children.append(node)
+        }
+        return BoardHapticsChange(before: before, after: serialize(node))
+    }
+
     /// The flat encoding of one node and its children, for the patch record.
     private static func serialize(_ node: DTNode) -> Data {
         var out = Data()
@@ -310,6 +375,23 @@ extension DeviceTreePatcher {
             ))
             if verbose {
                 print("  =node  : /product/audio as on \(device.productType) (\(change.after.count)B)  [\(Self.iPadAudioPatch)]")
+            }
+        }
+        if gateAllows(Self.iPadHapticsPatch), let change = Self.presentBoardHaptics(in: root, from: source) {
+            patches.append(PatchRecord(
+                patchID: Self.iPadHapticsPatch,
+                component: component,
+                fileOffset: 0,
+                virtualAddress: nil,
+                originalBytes: change.before,
+                patchedBytes: change.after,
+                description: change.after.isEmpty
+                    ? "Remove /device-tree/product/haptics, which \(device.productType) does not have"
+                    : "Set /device-tree/product/haptics as on \(device.productType)",
+            ))
+            if verbose {
+                let what = change.after.isEmpty ? "-node  : /product/haptics, absent on" : "=node  : /product/haptics as on"
+                print("  \(what) \(device.productType)  [\(Self.iPadHapticsPatch)]")
             }
         }
         for edit in try Self.guestEdits(from: source) {

@@ -103,6 +103,29 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         }
     }
 
+    /// Make an iPad guest's `devicetree.img4` (or bare `.im4p`) carry the
+    /// haptics node of the iPad's own tree at `boardURL` — none, on every iPad
+    /// so far — in place. See `DeviceTreePatcher.presentBoardHaptics`.
+    @discardableResult
+    public static func presentBoardHaptics(
+        at url: URL,
+        board boardURL: URL,
+        dryRun: Bool = false,
+        verbose: Bool = true,
+    ) throws -> Outcome {
+        let boardData: Data
+        do {
+            boardData = try Data(contentsOf: boardURL)
+        } catch {
+            throw PatcherError.fileNotFound(boardURL.path)
+        }
+        let board = try openDeviceTree(boardData, path: boardURL.path).blob
+        return try rewrite(at: url, dryRun: dryRun, verbose: verbose) { blob in
+            let (newBlob, changes, delta) = try withBoardHaptics(blob, board: board)
+            return (newBlob, changes, blob.count + delta)
+        }
+    }
+
     /// The container, payload and flat tree of a device tree file. Refuses a
     /// payload that is not a device tree, is encrypted, or came back still
     /// compressed.
@@ -300,6 +323,37 @@ public enum CustomFirmwarePostRestoreDeviceTree {
             property: "product/audio",
             before: "acoustic-id \(acousticID(change.before))",
             after: "acoustic-id \(acousticID(change.after)), \(change.after.count)B",
+        )
+        return (serializeNode(root), [record], change.after.count - change.before.count)
+    }
+
+    /// `blob` with `/product/haptics` as the board's flat tree `board` has it,
+    /// through `DeviceTreePatcher.presentBoardHaptics`: removed where the board
+    /// has none. Returns the size change with the changes, as `withBoardAudio`
+    /// does. A tree that already matches comes back unchanged.
+    public static func withBoardHaptics(_ blob: Data, board: Data) throws -> (Data, [Change], Int) {
+        let (root, end) = try parseNode(blob, at: 0)
+        guard end == blob.count else {
+            throw PatcherError.invalidFormat(
+                "DT parse length mismatch: ended at \(end), blob is \(blob.count)",
+            )
+        }
+        let (source, sourceEnd) = try parseNode(board, at: 0)
+        guard sourceEnd == board.count else {
+            throw PatcherError.invalidFormat(
+                "board DT parse length mismatch: ended at \(sourceEnd), blob is \(board.count)",
+            )
+        }
+        guard let change = DeviceTreePatcher.presentBoardHaptics(in: root, from: source) else {
+            return (blob, [], 0)
+        }
+        func describe(_ node: Data) -> String {
+            node.isEmpty ? "absent" : "present, \(node.count)B"
+        }
+        let record = Change(
+            property: "product/haptics",
+            before: describe(change.before),
+            after: describe(change.after),
         )
         return (serializeNode(root), [record], change.after.count - change.before.count)
     }
