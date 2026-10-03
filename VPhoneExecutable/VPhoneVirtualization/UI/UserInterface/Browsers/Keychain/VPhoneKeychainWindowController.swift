@@ -44,6 +44,7 @@ class VPhoneKeychainWindowController: NSObject, NSToolbarDelegate {
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
+        toolbar.allowsDisplayModeCustomization = false
         window.toolbar = toolbar
 
         NSApp.activate(ignoringOtherApps: true)

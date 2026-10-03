@@ -82,7 +82,7 @@ class VPhoneMenuController {
 
         // App menu
         let appMenuItem = NSMenuItem()
-        let appMenu = NSMenu(title: "vphone")
+        let appMenu = NSMenu(title: "VPhone")
         let buildItem = NSMenuItem(
             title: VPhoneLocalization.format("Build: %@", Self.buildDescription()),
             action: nil,
@@ -92,7 +92,7 @@ class VPhoneMenuController {
         appMenu.addItem(buildItem)
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(
-            withTitle: "Quit vphone",
+            withTitle: "Quit VPhone",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q",
         )

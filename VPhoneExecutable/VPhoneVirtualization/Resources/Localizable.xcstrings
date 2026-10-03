@@ -17596,36 +17596,36 @@
         }
       }
     },
-    "Quit vphone" : {
+    "Quit VPhone" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Quit vphone"
+            "value" : "Quit VPhone"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "vphone を終了"
+            "value" : "VPhone を終了"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "vphone 종료"
+            "value" : "VPhone 종료"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Thoát vphone"
+            "value" : "Thoát VPhone"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "退出 vphone"
+            "value" : "退出 VPhone"
           }
         }
       }

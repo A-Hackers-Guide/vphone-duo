@@ -79,6 +79,7 @@ class VPhoneVirtualMachineWindowController: NSObject {
         // narrow window truncates the title instead of moving it to overflow.
         let toolbar = NSToolbar(identifier: "vphone-toolbar")
         toolbar.displayMode = .iconOnly
+        toolbar.allowsDisplayModeCustomization = false
         window.toolbar = toolbar
         window.toolbarStyle = .unified
         let homeAccessory = makeHomeAccessory()
