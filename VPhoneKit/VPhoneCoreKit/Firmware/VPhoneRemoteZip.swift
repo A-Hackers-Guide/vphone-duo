@@ -20,7 +20,7 @@ import Compression
 import Foundation
 
 public struct VPhoneRemoteZip: Sendable {
-    private static let session = URLSession(configuration: .ephemeral)
+    private static let sharedSession = URLSession(configuration: .ephemeral)
 
     public struct Entry: Sendable {
         public let name: String
@@ -60,16 +60,21 @@ public struct VPhoneRemoteZip: Sendable {
 
     public let url: URL
     public let entries: [Entry]
+    let session: URLSession
 
     // MARK: - Opening
 
     public static func open(_ url: URL) async throws -> VPhoneRemoteZip {
-        let size = try await contentLength(of: url)
+        try await open(url, session: sharedSession)
+    }
+
+    static func open(_ url: URL, session: URLSession) async throws -> VPhoneRemoteZip {
+        let size = try await contentLength(of: url, session: session)
 
         // The EOCD is 22 bytes plus up to 64 KiB of comment, so the last 64 KiB
         // and change always contains it.
         let tailLength = min(size, 66000)
-        let tail = try await range(of: url, from: size - tailLength, count: tailLength)
+        let tail = try await range(of: url, from: size - tailLength, count: tailLength, session: session)
 
         guard let eocd = lastIndex(of: [0x50, 0x4B, 0x05, 0x06], in: tail) else {
             throw Error.noEndOfCentralDirectory(url)
@@ -87,7 +92,7 @@ public struct VPhoneRemoteZip: Sendable {
                 throw Error.malformed("ZIP64 fields present but no ZIP64 locator")
             }
             let zip64Offset = u64(tail, locator + 8)
-            let record = try await range(of: url, from: zip64Offset, count: 56)
+            let record = try await range(of: url, from: zip64Offset, count: 56, session: session)
             guard record.count >= 56, record.prefix(4) == Data([0x50, 0x4B, 0x06, 0x06]) else {
                 throw Error.malformed("ZIP64 end-of-central-directory not where the locator says")
             }
@@ -96,10 +101,11 @@ public struct VPhoneRemoteZip: Sendable {
             directoryOffset = u64(record, 48)
         }
 
-        let directory = try await range(of: url, from: directoryOffset, count: directorySize)
+        let directory = try await range(of: url, from: directoryOffset, count: directorySize, session: session)
         return try VPhoneRemoteZip(
             url: url,
             entries: parseCentralDirectory(directory, expected: entryCount),
+            session: session,
         )
     }
 
@@ -129,7 +135,7 @@ public struct VPhoneRemoteZip: Sendable {
         // The local header repeats the name and carries its own extra field,
         // whose length usually differs from the central directory's — so the
         // data offset has to be computed from the local header, not assumed.
-        let header = try await Self.range(of: url, from: entry.localHeaderOffset, count: 30)
+        let header = try await Self.range(of: url, from: entry.localHeaderOffset, count: 30, session: session)
         guard header.count == 30, header.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04]) else {
             throw Error.malformed("no local file header at \(entry.localHeaderOffset)")
         }
@@ -137,7 +143,7 @@ public struct VPhoneRemoteZip: Sendable {
         let extraLength = UInt64(Self.u16(header, 28))
         let dataOffset = entry.localHeaderOffset + 30 + nameLength + extraLength
 
-        let raw = try await Self.range(of: url, from: dataOffset, count: entry.compressedSize)
+        let raw = try await Self.range(of: url, from: dataOffset, count: entry.compressedSize, session: session)
         switch entry.compressionMethod {
         case 0: return raw
         case 8: return try Self.inflate(raw, expecting: Int(entry.uncompressedSize))
@@ -168,19 +174,37 @@ public struct VPhoneRemoteZip: Sendable {
 
     // MARK: - HTTP
 
-    private static func contentLength(of url: URL) async throws -> UInt64 {
+    /// The archive's size, once the server is known to answer range requests.
+    ///
+    /// `Accept-Ranges: bytes` on the HEAD answer settles it. Without the header
+    /// the server is asked for one byte: some CDN edges in front of
+    /// updates.cdn-apple.com leave the header out of every HEAD answer and still
+    /// serve ranges, as every cloudOS URL did from China in October 2026.
+    static func contentLength(of url: URL, session: URLSession) async throws -> UInt64 {
         var request = URLRequest(url: url)
         request.httpMethod = "HEAD"
         let (_, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw Error.notSeekable(url) }
         guard http.statusCode == 200 else { throw Error.http(http.statusCode, url) }
-        guard http.expectedContentLength > 0,
-              (http.value(forHTTPHeaderField: "Accept-Ranges") ?? "").contains("bytes")
-        else { throw Error.notSeekable(url) }
+        guard http.expectedContentLength > 0 else { throw Error.notSeekable(url) }
+        if !(http.value(forHTTPHeaderField: "Accept-Ranges") ?? "").contains("bytes") {
+            try await probeRange(of: url, session: session)
+        }
         return UInt64(http.expectedContentLength)
     }
 
-    private static func range(of url: URL, from offset: UInt64, count: UInt64) async throws -> Data {
+    /// Ask for the first byte and accept only a 206. The body is never read: a
+    /// server that ignores `Range` answers 200 and starts sending the whole
+    /// archive, so the request is cancelled as soon as its headers arrive.
+    private static func probeRange(of url: URL, session: URLSession) async throws {
+        var request = URLRequest(url: url)
+        request.setValue("bytes=0-0", forHTTPHeaderField: "Range")
+        let (bytes, response) = try await session.bytes(for: request)
+        bytes.task.cancel()
+        guard (response as? HTTPURLResponse)?.statusCode == 206 else { throw Error.notSeekable(url) }
+    }
+
+    private static func range(of url: URL, from offset: UInt64, count: UInt64, session: URLSession) async throws -> Data {
         guard count > 0 else { return Data() }
         var request = URLRequest(url: url)
         request.setValue("bytes=\(offset)-\(offset + count - 1)", forHTTPHeaderField: "Range")
