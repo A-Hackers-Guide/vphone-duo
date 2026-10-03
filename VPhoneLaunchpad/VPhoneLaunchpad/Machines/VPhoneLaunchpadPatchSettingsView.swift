@@ -16,6 +16,9 @@ struct VPhoneLaunchpadPatchSettingsView: View {
 
     /// What the boxes start from.
     let initial: VPhoneLaunchpadPatchSelection
+    /// The Core Bundle New Machine creates with; its `vphone-cli` lists the
+    /// patches. Nil reads the default version's.
+    let bundleVersion: String?
     /// Hands the edited choice back; New Machine holds it until the VM exists.
     let onSave: (VPhoneLaunchpadPatchSelection) -> Void
 
@@ -36,9 +39,11 @@ struct VPhoneLaunchpadPatchSettingsView: View {
 
     init(
         initial: VPhoneLaunchpadPatchSelection,
+        bundleVersion: String? = nil,
         onSave: @escaping (VPhoneLaunchpadPatchSelection) -> Void,
     ) {
         self.initial = initial
+        self.bundleVersion = bundleVersion
         self.onSave = onSave
         _selection = State(initialValue: initial)
     }
@@ -294,7 +299,7 @@ struct VPhoneLaunchpadPatchSettingsView: View {
         defer { isLoading = false }
         do {
             let catalog = try await Catalog.read(
-                using: model.bundles.commandLine(),
+                using: bundleVersion.map(model.bundles.commandLine(version:)) ?? model.bundles.commandLine(),
                 machine: nil,
                 preset: preset,
             )

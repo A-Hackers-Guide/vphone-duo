@@ -124,11 +124,11 @@ nonisolated struct VPhoneLaunchpadControlCommand: Sendable {
     let summary: String
 
     var usage: String {
-        var parts = [name.replacingOccurrences(of: ".", with: " ")]
-        parts += arguments.map { "<\($0)>" }
-        parts += options.map { "[--\($0) <value>]" }
-        parts += flags.map { "[--\($0)]" }
-        return parts.joined(separator: " ")
+        let positional = arguments.map { "<\($0)>" }
+        let named = options.map { "[--\($0) <value>]" } + flags.map { "[--\($0)]" }
+        // exec reads its options only before the arguments it passes on.
+        let parts = name == "exec" ? named + positional : positional + named
+        return ([name.replacingOccurrences(of: ".", with: " ")] + parts).joined(separator: " ")
     }
 
     var takesRest: Bool {
@@ -137,25 +137,27 @@ nonisolated struct VPhoneLaunchpadControlCommand: Sendable {
 
     static let all: [Self] = [
         Self(name: "status", arguments: [], options: [], flags: [],
-             summary: "Host checks, helper, active bundle and machine counts."),
+             summary: "Host checks, helper, default bundle and machine counts."),
 
         Self(name: "bundle.list", arguments: [], options: [], flags: [],
-             summary: "Installed VPhone.bundle versions and their checks."),
-        Self(name: "bundle.install-local", arguments: ["path"], options: [], flags: [],
-             summary: "Install a VPhone.bundle folder or .zip built on this Mac as <version>-local, make it active and check it."),
-        Self(name: "bundle.install-release", arguments: ["version"], options: [], flags: [],
-             summary: "Download and install a GitHub release (a version, or \"latest\")."),
+             summary: "Installed VPhone.bundle versions, their checks, and the machines bound to each."),
+        Self(name: "bundle.install-local", arguments: ["path"], options: [], flags: ["keep-default"],
+             summary: "Install a VPhone.bundle folder or .zip built on this Mac as <version>-local.<hash> and check it. It becomes the default unless --keep-default; machines keep their own bundle."),
+        Self(name: "bundle.install-release", arguments: ["version"], options: [], flags: ["keep-default"],
+             summary: "Download and install a GitHub release (a version, or \"latest\"). It becomes the default unless --keep-default."),
+        Self(name: "bundle.set-default", arguments: ["version"], options: [], flags: [],
+             summary: "Make an installed version the default for new machines and library-wide commands, and check it. Machines keep their own bundle."),
         Self(name: "bundle.use", arguments: ["version"], options: [], flags: [],
-             summary: "Make an installed version active and check it."),
+             summary: "The old name of bundle set-default."),
         Self(name: "bundle.verify", arguments: ["version"], options: [], flags: [],
              summary: "Add the execution policy exception, allow vphone-vm if AMFI refuses it, and run host preflight."),
         Self(name: "bundle.accept", arguments: ["version"], options: [], flags: ["off"],
              summary: "Use a version even though its checks failed (--off takes that back)."),
         Self(name: "bundle.remove", arguments: ["version"], options: [], flags: [],
-             summary: "Remove an installed version."),
+             summary: "Remove an installed version no machine is bound to."),
 
         Self(name: "vm.list", arguments: [], options: [], flags: [],
-             summary: "Machines in every library, with their run state."),
+             summary: "Machines in every library, with their run state and Core Bundle."),
         Self(name: "vm.start", arguments: ["name"], options: ["root", "timeout"], flags: ["headless", "wait"],
              summary: "Launch a machine. --wait blocks until vphoned answers on vphone.sock."),
         Self(name: "vm.stop", arguments: ["name"], options: ["root"], flags: [],
@@ -165,22 +167,24 @@ nonisolated struct VPhoneLaunchpadControlCommand: Sendable {
         Self(name: "vm.log", arguments: ["name"], options: ["root", "lines", "kind"], flags: [],
              summary: "The last lines of the console log (--kind create, dfu or patch for those logs)."),
         Self(name: "vm.create", arguments: ["name"], options: [
-            "root", "iphone-source", "cloudos-source", "cpu", "memory", "disk-size", "network", "preset", "from",
+            "root", "bundle", "iphone-source", "cloudos-source", "cpu", "memory", "disk-size", "network", "preset", "from",
         ], flags: ["keep-artifacts", "no-wait"],
-        summary: "Create a machine through every step, as New Machine does. --from <step> retries a failed creation from that step."),
+        summary: "Create a machine through every step, as New Machine does, bound to --bundle (default: the default bundle). --from <step> retries a failed creation from that step."),
+        Self(name: "vm.set-bundle", arguments: ["name", "version"], options: ["root"], flags: ["update-environment"],
+             summary: "Bind a machine to another installed version; its host programs change at the next start. --update-environment also redeploys that version's guest environment into the stopped machine. The boot chain stays as created."),
 
         Self(name: "cfw.install", arguments: ["name"], options: ["root"], flags: ["keep-artifacts"],
-             summary: "Install CFW into a stopped machine through the root helper."),
+             summary: "Install CFW into a stopped machine with its own bundle, through the root helper."),
         Self(name: "cfw.update-environment", arguments: ["name"], options: ["root"], flags: [],
-             summary: "Redeploy the active bundle's guest resources (vphoned and hook dylibs) into a stopped machine, and nothing else."),
+             summary: "Redeploy the machine's own bundle's guest resources (vphoned and hook dylibs) into it while stopped, and nothing else."),
 
         Self(name: "guest.send", arguments: ["name", "json"], options: ["root"], flags: [],
              summary: "Send one raw vphone.sock request, such as {\"t\":\"tap\",\"x\":645,\"y\":1398}."),
         Self(name: "guest.rpc", arguments: ["name", "method", "params..."], options: ["root"], flags: ["screen"],
              summary: "Call a vphoned method; params is one JSON object."),
 
-        Self(name: "exec", arguments: ["arguments..."], options: [], flags: [],
-             summary: "Run the active bundle's vphone-cli with these arguments and stream its output."),
+        Self(name: "exec", arguments: ["arguments..."], options: ["bundle"], flags: [],
+             summary: "Run vphone-cli with these arguments and stream its output: the default bundle's, or that of --bundle <version> given before the arguments."),
     ]
 
     static func named(_ name: String) -> Self? {

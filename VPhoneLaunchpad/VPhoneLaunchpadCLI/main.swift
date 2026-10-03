@@ -3,7 +3,7 @@ import Foundation
 
 // vphone-launchpad-cli: drives a running vphone-launchpad over its control
 // socket. It holds no state and no privileges of its own: the app installs
-// bundles through its helper, runs the active bundle's vphone-cli, and shows
+// bundles through its helper, runs each machine's own bundle, and shows
 // every command in its window. Output lines go to stderr as they arrive; the
 // result, a JSON document, goes to stdout. The exit status is 0 on success.
 
@@ -15,6 +15,10 @@ func usage() -> String {
 
     Drives a running vphone-launchpad, starting it if needed. Progress goes to
     stderr; the result is JSON on stdout.
+
+    Each machine runs with the Core Bundle it is bound to. The default bundle
+    is only what vm create binds by default and what exec and library-wide
+    commands run with.
 
     """
     for command in VPhoneLaunchpadControlCommand.all {
@@ -50,8 +54,20 @@ func parse(_ words: [String]) -> VPhoneLaunchpadControlRequest {
         fail("unknown command \(words.prefix(2).joined(separator: " ")). Run vphone-launchpad-cli help.")
     }
     var request = VPhoneLaunchpadControlRequest(command: command.name)
-    // exec hands everything after it to vphone-cli untouched.
+    // exec hands everything after it to vphone-cli untouched, except a
+    // leading --bundle that picks whose vphone-cli runs.
     if command.name == "exec" {
+        if let first = rest.first, first == "--bundle" || first.hasPrefix("--bundle=") {
+            rest.removeFirst()
+            if first == "--bundle" {
+                guard !rest.isEmpty else {
+                    fail("--bundle needs a value.")
+                }
+                request.options["bundle"] = rest.removeFirst()
+            } else {
+                request.options["bundle"] = String(first.dropFirst("--bundle=".count))
+            }
+        }
         request.arguments = rest
         return request
     }

@@ -1,14 +1,16 @@
 import AppKit
 import SwiftUI
 
-/// Name, location, firmware pairing from `fw catalog`, hardware and options.
-/// Create hands off to the pipeline sheet.
+/// Name, location, Core Bundle, firmware pairing from `fw catalog`, hardware
+/// and options. Create hands off to the pipeline sheet.
 struct VPhoneLaunchpadNewMachineView: View {
     let onCreate: (VPhoneLaunchpadMachinePath) -> Void
     @Environment(VPhoneLaunchpadModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
+    /// The Core Bundle picked here; nil follows the default version.
+    @State private var chosenVersion: String?
     /// The canonical library the machine is created in.
     @State private var location = VPhoneLaunchpadMachineLocations.defaultRoot
     /// A folder chosen with Other… that is not one of the library's locations.
@@ -28,6 +30,16 @@ struct VPhoneLaunchpadNewMachineView: View {
     @State private var patchCatalogError: String?
     @State private var showsAdvanced = false
     @State private var keepArtifacts = false
+
+    /// The version every step of the creation runs with, and the one the
+    /// firmware and patch catalogs are read from.
+    private var bundleVersion: String? {
+        let selectable = model.bundles.selectableVersions
+        if let chosenVersion, selectable.contains(chosenVersion) {
+            return chosenVersion
+        }
+        return model.bundles.defaultVersion ?? selectable.first
+    }
 
     private var selectedPairing: VPhoneLaunchpadFirmwareCatalog.Pairing? {
         catalog?.pairings.first { $0.id == pairing }
@@ -84,7 +96,7 @@ struct VPhoneLaunchpadNewMachineView: View {
     }
 
     private var canCreate: Bool {
-        nameProblem == nil && locationProblem == nil && sources != nil
+        nameProblem == nil && locationProblem == nil && sources != nil && bundleVersion != nil
     }
 
     var body: some View {
@@ -98,6 +110,8 @@ struct VPhoneLaunchpadNewMachineView: View {
                         Text(problem).foregroundStyle(.red)
                     }
                 }
+
+                bundleSection
 
                 firmware
 
@@ -131,11 +145,13 @@ struct VPhoneLaunchpadNewMachineView: View {
                 patchCatalog: patchCatalog,
                 patchCatalogError: patchCatalogError,
                 reloadPatches: { Task { await loadPatchCatalog() } },
+                bundleVersion: bundleVersion,
             )
             .environment(model)
         }
-        .task { await loadCatalog() }
-        .task { await loadPatchCatalog() }
+        // Each bundle version has its own firmware pairings and patch sets.
+        .task(id: bundleVersion) { await loadCatalog() }
+        .task(id: bundleVersion) { await loadPatchCatalog() }
         .onAppear {
             let root = model.machines.preferredRoot
             location = root
@@ -177,6 +193,50 @@ struct VPhoneLaunchpadNewMachineView: View {
             return network
         }
         return "\(network) · \(preset)"
+    }
+
+    // MARK: - Core Bundle
+
+    private var bundleSection: some View {
+        Section {
+            if model.bundles.selectableVersions.isEmpty {
+                Label("No Core Bundle is installed. Install one in Core Bundle.", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+            } else {
+                Picker("Core Bundle", selection: versionBinding) {
+                    ForEach(model.bundles.selectableVersions, id: \.self) { version in
+                        // Store names keep their `-local.` and `-ci.` suffixes,
+                        // so a build that is not a release reads as one.
+                        if version == model.bundles.defaultVersion {
+                            Text("\(version) (Default)").tag(Optional(version))
+                        } else {
+                            Text(verbatim: version).tag(Optional(version))
+                        }
+                    }
+                }
+            }
+        } footer: {
+            Text("The boot chain and patches are fixed when the machine is created; host programs and the guest environment can be changed later.")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// A new version clears what was read from the old one, so Create cannot
+    /// use a pairing or a preset that version never offered.
+    private var versionBinding: Binding<String?> {
+        Binding(
+            get: { bundleVersion },
+            set: { version in
+                guard version != bundleVersion else {
+                    return
+                }
+                chosenVersion = version
+                catalog = nil
+                catalogError = nil
+                patchCatalog = nil
+                patchCatalogError = nil
+            },
+        )
     }
 
     // MARK: - Location
@@ -338,51 +398,78 @@ struct VPhoneLaunchpadNewMachineView: View {
                 return
             }
         #endif
-        guard catalog == nil, let commandLine = model.bundles.commandLine() else {
+        let version = bundleVersion
+        guard let commandLine = version.flatMap(model.bundles.commandLine(version:)) else {
             return
         }
         do {
             let result = try await commandLine.run(["fw", "catalog", "--json"], recordInHistory: false)
+            // Another version may have been chosen meanwhile.
+            guard version == bundleVersion else {
+                return
+            }
             guard result.succeeded, let data = result.jsonData else {
                 catalogError = result.tail
                 return
             }
             let catalog = try JSONDecoder().decode(VPhoneLaunchpadFirmwareCatalog.self, from: data)
             self.catalog = catalog
-            pairing = catalog.pairings.last?.id
+            // The pairing chosen under the previous version stays when this
+            // one offers it too.
+            if !catalog.pairings.contains(where: { $0.id == pairing }) {
+                pairing = catalog.pairings.last?.id
+            }
         } catch {
+            guard version == bundleVersion else {
+                return
+            }
             catalogError = error.localizedDescription
         }
     }
 
-    /// Read again whenever the preset changes: `inPreset`, which the note and the
-    /// editor read the checkmarks against, is reported per preset.
+    /// Read again whenever the preset or the version changes: `inPreset`, which
+    /// the note and the editor read the checkmarks against, is reported per
+    /// preset, and each version declares its own patches.
     private func loadPatchCatalog() async {
+        let version = bundleVersion
         let requested = patches.preset
         do {
             let catalog = try await VPhoneLaunchpadPatchCatalog.read(
-                using: model.bundles.commandLine(),
+                using: version.flatMap(model.bundles.commandLine(version:)),
                 machine: nil,
                 preset: requested,
             )
             // A second switch may have overtaken this read.
-            guard requested == patches.preset else {
+            guard requested == patches.preset, version == bundleVersion else {
                 return
             }
+            // Overrides naming a patch this version does not declare are dropped.
+            patches.normalize(against: catalog)
             patchCatalog = catalog
             patchCatalogError = nil
         } catch {
+            guard requested == patches.preset, version == bundleVersion else {
+                return
+            }
+            // The first read after a version change: that version may not
+            // have the chosen preset, so fall back to the default one.
+            if patchCatalog == nil, requested != VPhoneLaunchpadPatchSelection.defaultPreset {
+                patches = VPhoneLaunchpadPatchSelection()
+                await loadPatchCatalog()
+                return
+            }
             patchCatalogError = VPhoneLaunchpadError.message(for: error)
         }
     }
 
     private func create() {
-        guard let (iphone, cloudOS) = sources else {
+        guard let (iphone, cloudOS) = sources, let bundleVersion else {
             return
         }
         let options = VPhoneLaunchpadCreationPipeline.Options(
             name: effectiveName,
             libraryRoot: location,
+            bundleVersion: bundleVersion,
             iphoneSource: iphone,
             cloudOSSource: cloudOS,
             cpuCount: cpu,

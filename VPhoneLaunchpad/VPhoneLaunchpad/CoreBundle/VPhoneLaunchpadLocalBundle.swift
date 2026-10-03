@@ -10,11 +10,14 @@ import Foundation
 /// has no published digest, so the hash only proves that the helper installs
 /// the bytes prepared here.
 nonisolated struct VPhoneLaunchpadLocalBundle: Sendable {
-    /// Local builds are stored as `<version>-local`. They never replace a
-    /// release of the same version, and a newer local build of that version
-    /// replaces the older one.
+    /// Local builds are stored as `<version>-local.<build>`, where `<build>`
+    /// is the start of the SHA-256 of the bundle's code signature seal. They
+    /// never replace a release of the same version, and two different builds
+    /// of one version are kept side by side, so machines can stay on either.
+    /// Installing the same build again keeps its name.
     static let versionSuffix = "-local"
     static let bundleIdentifier = "com.vphone.bundle"
+    private static let sealPath = "Contents/_CodeSignature/CodeResources"
 
     let version: String
     let archive: URL
@@ -24,17 +27,17 @@ nonisolated struct VPhoneLaunchpadLocalBundle: Sendable {
     let workDirectory: URL
 
     static func isLocal(version: String) -> Bool {
-        version.hasSuffix(versionSuffix)
+        VPhoneLaunchpadNames.isLocalBuild(version)
     }
 
     // MARK: - Prepare
 
     /// Reads the version from the bundle's Info.plist and produces the zip
     /// and digest the helper expects. A GitHub Actions build passes its own
-    /// suffix in place of `-local`.
+    /// suffix in place of `-local.<build>`.
     @concurrent static func prepare(
         _ source: URL,
-        suffix: String = versionSuffix,
+        suffix: String? = nil,
     ) async throws -> VPhoneLaunchpadLocalBundle {
         let values = try? source.resourceValues(forKeys: [.isDirectoryKey])
         let isDirectory = values?.isDirectory ?? false
@@ -45,6 +48,7 @@ nonisolated struct VPhoneLaunchpadLocalBundle: Sendable {
 
         do {
             let infoPlist: Data
+            let seal: Data?
             let archive: URL
             if isDirectory {
                 guard source.pathExtension == "bundle" else {
@@ -54,6 +58,7 @@ nonisolated struct VPhoneLaunchpadLocalBundle: Sendable {
                     throw notVPhoneBundle(source)
                 }
                 infoPlist = data
+                seal = try? Data(contentsOf: source.appendingPathComponent(sealPath))
                 // The helper expects VPhone.bundle at the top of the zip, so a
                 // renamed build is copied under that name first.
                 var bundle = source
@@ -76,20 +81,36 @@ nonisolated struct VPhoneLaunchpadLocalBundle: Sendable {
                     )
                 }
                 infoPlist = data
+                seal = try? run("/usr/bin/unzip", ["-p", source.path, "VPhone.bundle/\(sealPath)"])
                 archive = source
             }
 
-            let version = try version(from: infoPlist, source: source, suffix: suffix)
-            return try VPhoneLaunchpadLocalBundle(
+            let digest = try sha256(of: archive)
+            let version = try version(
+                from: infoPlist,
+                source: source,
+                suffix: suffix ?? localSuffix(seal: seal, archiveDigest: digest),
+            )
+            return VPhoneLaunchpadLocalBundle(
                 version: version,
                 archive: archive,
-                sha256: sha256(of: archive),
+                sha256: digest,
                 workDirectory: work,
             )
         } catch {
             try? fileManager.removeItem(at: work)
             throw error
         }
+    }
+
+    /// `-local.<build>`. The seal lists the digest of every file in the
+    /// bundle, so it names the build however it was zipped; a bundle without
+    /// one is named by its archive instead.
+    private static func localSuffix(seal: Data?, archiveDigest: String) -> String {
+        let build = seal.flatMap { $0.isEmpty ? nil : $0 }
+            .map { SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined() }
+            ?? archiveDigest
+        return "\(versionSuffix).\(build.prefix(8))"
     }
 
     private static func version(from infoPlist: Data, source: URL, suffix: String) throws -> String {

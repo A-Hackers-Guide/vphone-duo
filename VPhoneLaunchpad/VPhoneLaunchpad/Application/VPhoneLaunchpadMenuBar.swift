@@ -38,8 +38,8 @@ struct VPhoneLaunchpadMenuBarMenu: View {
                         Task { await model.machines.stop(machine.path) }
                     }
                 case .stopped:
-                    Button("Start") { model.machines.start(machine.path) }
-                    Button("Start Headless") { model.machines.start(machine.path, headless: true) }
+                    Button("Start") { Task { await model.machines.start(machine.path) } }
+                    Button("Start Headless") { Task { await model.machines.start(machine.path, headless: true) } }
                 case let .busy(activity):
                     Text(activity)
                 }

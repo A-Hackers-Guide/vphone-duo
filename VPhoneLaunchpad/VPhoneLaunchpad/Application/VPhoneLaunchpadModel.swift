@@ -43,6 +43,7 @@ final class VPhoneLaunchpadModel {
         host = VPhoneLaunchpadHostSetup(helper: helper, libraryRoot: libraryRoot)
         bundles = VPhoneLaunchpadCoreBundle(helper: helper, history: history)
         machines = VPhoneLaunchpadMachineLibrary(bundles: bundles, helper: helper)
+        bundles.boundMachines = { [machines] version in machines.machineNames(boundTo: version) }
     }
 
     // MARK: - Panels
@@ -109,12 +110,12 @@ final class VPhoneLaunchpadModel {
         machines.startMonitoring()
         async let listed: Void = machines.refresh()
         async let hostChecked: Void = host.refresh()
-        await bundles.checkActive()
+        await bundles.checkDefault()
         await hostChecked
         if case .outdated = helper.state {
             await host.installHelper()
             await host.refresh()
-            await bundles.checkActive()
+            await bundles.checkDefault()
         }
         await listed
         // An unfinished install reopens its own sheet instead.
@@ -156,9 +157,11 @@ final class VPhoneLaunchpadModel {
 
     /// An install shows its progress in a sheet of its own, which replaces
     /// the Core Bundle sheet it started from.
-    func installBundle(_ release: VPhoneLaunchpadRelease) async {
+    /// `keepsDefault` leaves the default version as it is, as
+    /// `vphone-launchpad-cli bundle install-* --keep-default` asks.
+    func installBundle(_ release: VPhoneLaunchpadRelease, keepsDefault: Bool = false) async {
         revealInstall()
-        await bundles.install(release)
+        await bundles.install(release, keepsDefault: keepsDefault)
         await machines.refresh()
     }
 
@@ -168,9 +171,9 @@ final class VPhoneLaunchpadModel {
         await machines.refresh()
     }
 
-    func installLocalBundle(_ source: URL) async {
+    func installLocalBundle(_ source: URL, keepsDefault: Bool = false) async {
         revealInstall()
-        await bundles.installLocal(source)
+        await bundles.installLocal(source, keepsDefault: keepsDefault)
         await machines.refresh()
     }
 
@@ -187,10 +190,13 @@ final class VPhoneLaunchpadModel {
 
     var showsInspector = true
 
+    /// Refused while a machine is bound to the version; the error lands in
+    /// `bundles.actionError`.
     func removeBundle(_ version: String) async {
+        await machines.refresh()
         await bundles.remove(version)
-        if let active = bundles.activeVersion, bundles.active?.preflight == .pending {
-            await bundles.verify(active)
+        if let fallback = bundles.defaultVersion, bundles.defaultBundle?.preflight == .pending {
+            await bundles.verify(fallback)
         }
     }
 }

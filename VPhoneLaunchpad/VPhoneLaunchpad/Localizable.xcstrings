@@ -5363,40 +5363,6 @@
         }
       }
     },
-    "In use" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In use"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用中"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "사용 중"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang dùng"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在使用"
-          }
-        }
-      }
-    },
     "Include the restore IPSW directory" : {
       "localizations" : {
         "en" : {
@@ -12159,40 +12125,6 @@
         }
       }
     },
-    "Use This Version" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Use This Version"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このバージョンを使用"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 버전 사용"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dùng phiên bản này"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用此版本"
-          }
-        }
-      }
-    },
     "Use this version without the failed checks." : {
       "localizations" : {
         "en" : {
@@ -12903,6 +12835,348 @@
         "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트에서 이 Mac의 이름 확인" } },
         "vi" : { "stringUnit" : { "state" : "translated", "value" : "Phân giải tên của máy Mac này trong máy khách" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在客户机内解析这台 Mac 的名称" } }
+      }
+    },
+    "%@ (Default)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ (Default)" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@（デフォルト）" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@(기본값)" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%@ (Mặc định)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@（默认）" } }
+      }
+    },
+    "Apply" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Apply" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "適用" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "적용" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Áp dụng" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "应用" } }
+      }
+    },
+    "Boot Chain" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Boot Chain" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブートチェーン" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "부트 체인" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chuỗi khởi động" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动链" } }
+      }
+    },
+    "Change Core Bundle of %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Change Core Bundle of %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ のコアバンドルを変更" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@의 코어 번들 변경" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đổi Bundle lõi của %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更改 %@ 的核心 Bundle" } }
+      }
+    },
+    "Change Core Bundle of %lld Machines" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Change Core Bundle of %lld Machines" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%lld 台のマシンのコアバンドルを変更" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "머신 %lld대의 코어 번들 변경" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đổi Bundle lõi của %lld máy" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更改 %lld 台机器的核心 Bundle" } }
+      }
+    },
+    "Change Core Bundle…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Change Core Bundle…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "コアバンドルを変更…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "코어 번들 변경…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đổi Bundle lõi…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更改核心 Bundle…" } }
+      }
+    },
+    "Change…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Change…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "変更…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "변경…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Thay đổi…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更改…" } }
+      }
+    },
+    "Checking Core Bundle…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Checking Core Bundle…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "コアバンドルを確認中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "코어 번들 확인 중…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang kiểm tra Bundle lõi…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在检查核心 Bundle…" } }
+      }
+    },
+    "Choose another Core Bundle for its machines first." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose another Core Bundle for its machines first." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "先に、このバージョンを使うマシンに別のコアバンドルを選択してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "먼저 이 버전을 사용하는 머신에 다른 코어 번들을 선택하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hãy chọn Bundle lõi khác cho các máy đang dùng phiên bản này trước." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请先为使用此版本的机器选择其他核心 Bundle。" } }
+      }
+    },
+    "Current" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Current" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "現在" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "현재" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hiện tại" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前" } }
+      }
+    },
+    "Default" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Default" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "デフォルト" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "기본값" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Mặc định" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "默认" } }
+      }
+    },
+    "Fixed when the machine was created." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fixed when the machine was created." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "マシンの作成時に固定されています。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "머신을 만들 때 고정되었습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Được cố định khi tạo máy." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在创建机器时已固定。" } }
+      }
+    },
+    "Guest Environment" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Guest Environment" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲスト環境" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트 환경" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Môi trường máy khách" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机环境" } }
+      }
+    },
+    "Host Programs" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Host Programs" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ホストプログラム" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "호스트 프로그램" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chương trình máy chủ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主机程序" } }
+      }
+    },
+    "Host programs change at the next start. The guest environment is updated now on stopped machines; running machines keep theirs until it is updated later. The boot chain and patches stay as they were when the machine was created." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Host programs change at the next start. The guest environment is updated now on stopped machines; running machines keep theirs until it is updated later. The boot chain and patches stay as they were when the machine was created." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ホストプログラムは次回の起動時に切り替わります。停止中のマシンではゲスト環境を今すぐ更新します。実行中のマシンは、後で更新するまで現在のゲスト環境のままです。ブートチェーンとパッチはマシン作成時のままです。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "호스트 프로그램은 다음 시작부터 바뀝니다. 정지된 머신은 게스트 환경을 지금 업데이트하고, 실행 중인 머신은 나중에 업데이트할 때까지 기존 환경을 유지합니다. 부트 체인과 패치는 머신을 만들 때 그대로 유지됩니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chương trình máy chủ sẽ thay đổi từ lần khởi động tiếp theo. Môi trường máy khách được cập nhật ngay trên các máy đang dừng; máy đang chạy giữ môi trường hiện tại cho đến khi được cập nhật sau. Chuỗi khởi động và các bản vá giữ nguyên như khi tạo máy." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主机程序在下次启动时切换。已停止的机器会立即更新客户机环境；正在运行的机器保留原有环境，直到之后再更新。启动链和补丁保持创建机器时的状态。" } }
+      }
+    },
+    "Install it in Core Bundle, or choose another version for this machine." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Install it in Core Bundle, or choose another version for this machine." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "「コアバンドル」でインストールするか、このマシンに別のバージョンを選択してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "코어 번들에서 설치하거나 이 머신에 다른 버전을 선택하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hãy cài đặt trong Bundle lõi, hoặc chọn phiên bản khác cho máy này." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请在“核心 Bundle”中安装，或为这台机器选择其他版本。" } }
+      }
+    },
+    "Local build %@ · Installed %@ · SHA-256 %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Local build %@ · Installed %@ · SHA-256 %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ローカルビルド %1$@ · インストール日 %2$@ · SHA-256 %3$@" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "로컬 빌드 %1$@ · 설치 %2$@ · SHA-256 %3$@" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Bản dựng cục bộ %1$@ · Cài đặt %2$@ · SHA-256 %3$@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地构建 %1$@ · 安装于 %2$@ · SHA-256 %3$@" } }
+      }
+    },
+    "New machines use the default version. Each machine keeps its own Core Bundle, which you change from the machine list." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New machines use the default version. Each machine keeps its own Core Bundle, which you change from the machine list." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "新しいマシンはデフォルトのバージョンを使います。各マシンは自分のコアバンドルを保持し、マシン一覧から変更できます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "새 머신은 기본 버전을 사용합니다. 각 머신은 자체 코어 번들을 유지하며, 머신 목록에서 변경할 수 있습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Máy mới dùng phiên bản mặc định. Mỗi máy giữ Bundle lõi riêng, có thể đổi từ danh sách máy." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新机器使用默认版本。每台机器保留自己的核心 Bundle，可在机器列表中更改。" } }
+      }
+    },
+    "No Core Bundle is installed. Install one in Core Bundle." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No Core Bundle is installed. Install one in Core Bundle." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "コアバンドルがインストールされていません。「コアバンドル」でインストールしてください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "설치된 코어 번들이 없습니다. 코어 번들에서 설치하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chưa cài Bundle lõi nào. Hãy cài đặt trong Bundle lõi." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未安装核心 Bundle。请在“核心 Bundle”中安装。" } }
+      }
+    },
+    "No Core Bundle version is installed. Install one in Core Bundle." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No Core Bundle version is installed. Install one in Core Bundle." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "コアバンドルのバージョンがインストールされていません。「コアバンドル」でインストールしてください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "설치된 코어 번들 버전이 없습니다. 코어 번들에서 설치하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chưa cài phiên bản Bundle lõi nào. Hãy cài đặt trong Bundle lõi." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未安装任何核心 Bundle 版本。请在“核心 Bundle”中安装。" } }
+      }
+    },
+    "Not used by any machine" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Not used by any machine" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "どのマシンにも使われていません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "어떤 머신에서도 사용하지 않음" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không máy nào dùng" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有机器使用" } }
+      }
+    },
+    "Set as Default" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Set as Default" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "デフォルトに設定" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "기본값으로 설정" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đặt làm mặc định" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设为默认" } }
+      }
+    },
+    "The Core Bundle of %@ is not installed. Choose another Core Bundle for it." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The Core Bundle of %@ is not installed. Choose another Core Bundle for it." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ のコアバンドルがインストールされていません。別のコアバンドルを選択してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@의 코어 번들이 설치되어 있지 않습니다. 다른 코어 번들을 선택하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Bundle lõi của %@ chưa được cài đặt. Hãy chọn Bundle lõi khác cho máy này." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 的核心 Bundle 未安装。请为它选择其他核心 Bundle。" } }
+      }
+    },
+    "The boot chain and patches are fixed when the machine is created; host programs and the guest environment can be changed later." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The boot chain and patches are fixed when the machine is created; host programs and the guest environment can be changed later." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブートチェーンとパッチはマシンの作成時に固定されます。ホストプログラムとゲスト環境は後から変更できます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "부트 체인과 패치는 머신을 만들 때 고정됩니다. 호스트 프로그램과 게스트 환경은 나중에 변경할 수 있습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chuỗi khởi động và các bản vá được cố định khi tạo máy; chương trình máy chủ và môi trường máy khách có thể thay đổi sau." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动链和补丁在创建机器时固定；主机程序和客户机环境之后仍可更改。" } }
+      }
+    },
+    "The guest environment is from %@." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The guest environment is from %@." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲスト環境は %@ のものです。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트 환경은 %@에서 가져온 것입니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Môi trường máy khách lấy từ %@." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机环境来自 %@。" } }
+      }
+    },
+    "The host programs and the guest environment come from different Core Bundles. Update the guest environment to match." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The host programs and the guest environment come from different Core Bundles. Update the guest environment to match." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ホストプログラムとゲスト環境が異なるコアバンドルから来ています。ゲスト環境を更新して揃えてください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "호스트 프로그램과 게스트 환경이 서로 다른 코어 번들에서 왔습니다. 게스트 환경을 업데이트해 맞추세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chương trình máy chủ và môi trường máy khách đến từ các Bundle lõi khác nhau. Hãy cập nhật môi trường máy khách cho khớp." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主机程序与客户机环境来自不同的核心 Bundle。请更新客户机环境以保持一致。" } }
+      }
+    },
+    "These machines use it: %@. Choose another Core Bundle for them first." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "These machines use it: %@. Choose another Core Bundle for them first." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "次のマシンが使用しています：%@。先に別のコアバンドルを選択してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "다음 머신이 사용 중입니다: %@. 먼저 다른 코어 번들을 선택하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Các máy sau đang dùng: %@. Hãy chọn Bundle lõi khác cho chúng trước." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "以下机器正在使用：%@。请先为它们选择其他核心 Bundle。" } }
+      }
+    },
+    "Unable to Change the Core Bundle of %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to Change the Core Bundle of %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ のコアバンドルを変更できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@의 코어 번들을 변경할 수 없음" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không thể đổi Bundle lõi của %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法更改 %@ 的核心 Bundle" } }
+      }
+    },
+    "Unable to record the Core Bundle of %@." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to record the Core Bundle of %@." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ のコアバンドルを記録できません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@의 코어 번들을 기록할 수 없습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không thể ghi lại Bundle lõi của %@." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法记录 %@ 的核心 Bundle。" } }
+      }
+    },
+    "Update guest environment" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Update guest environment" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲスト環境を更新" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트 환경 업데이트" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cập nhật môi trường máy khách" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新客户机环境" } }
+      }
+    },
+    "Used by %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Used by %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "使用中：%@" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "사용 중: %@" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang dùng: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用者：%@" } }
+      }
+    },
+    "Used by %lld machines" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Used by %lld machines" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%lld 台のマシンが使用中" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "머신 %lld대가 사용 중" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%lld máy đang dùng" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 台机器正在使用" } }
+      }
+    },
+    "Used for new machines." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Used for new machines." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "新しいマシンに使われます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "새 머신에 사용됩니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Dùng cho máy mới." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用于新机器。" } }
+      }
+    },
+    "VPhone.bundle %@ did not pass host preflight." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@ did not pass host preflight." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@ はホストの事前チェックに合格しませんでした。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@이(가) 호스트 사전 검사를 통과하지 못했습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@ không vượt qua kiểm tra máy chủ." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@ 未通过主机预检。" } }
+      }
+    },
+    "VPhone.bundle %@ is not installed." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@ is not installed." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@ はインストールされていません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@이(가) 설치되어 있지 않습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@ chưa được cài đặt." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@ 未安装。" } }
+      }
+    },
+    "VPhone.bundle %@ is not installed. Choose Change Core Bundle… to run this machine with another version." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@ is not installed. Choose Change Core Bundle… to run this machine with another version." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@ はインストールされていません。「コアバンドルを変更…」を選択して、このマシンを別のバージョンで実行してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@이(가) 설치되어 있지 않습니다. 코어 번들 변경…을 선택해 이 머신을 다른 버전으로 실행하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@ chưa được cài đặt. Chọn Đổi Bundle lõi… để chạy máy này với phiên bản khác." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "VPhone.bundle %@ 未安装。请选择“更改核心 Bundle…”，用其他版本运行这台机器。" } }
+      }
+    },
+    "vphone-cli and vphone-vm come from this bundle at every start." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "vphone-cli and vphone-vm come from this bundle at every start." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "vphone-cli と vphone-vm は起動のたびにこのバンドルから読み込まれます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "vphone-cli와 vphone-vm은 시작할 때마다 이 번들에서 실행됩니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "vphone-cli và vphone-vm được lấy từ bundle này mỗi lần khởi động." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "每次启动时都使用此 Bundle 中的 vphone-cli 和 vphone-vm。" } }
+      }
+    },
+    "vphoned and the hook libraries in the guest." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "vphoned and the hook libraries in the guest." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲスト内の vphoned とフックライブラリ。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트의 vphoned와 후크 라이브러리." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "vphoned và các thư viện hook trong máy khách." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机中的 vphoned 和 hook 库。" } }
       }
     }
   },

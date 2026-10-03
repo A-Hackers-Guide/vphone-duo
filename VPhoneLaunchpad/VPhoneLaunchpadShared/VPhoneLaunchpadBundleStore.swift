@@ -85,16 +85,25 @@ nonisolated enum VPhoneLaunchpadNames {
     }
 
     /// The bundle's own version inside a store name. Builds that are not
-    /// releases carry a suffix: `-local` for one made on this Mac, and
-    /// `-ci.<commit>` for a GitHub Actions artifact.
+    /// releases carry a suffix: `-local.<build>` for one made on this Mac
+    /// (`-local` alone before builds were told apart), and `-ci.<commit>`
+    /// for a GitHub Actions artifact.
     static func bundleVersion(of value: String) -> String {
-        if value.hasSuffix("-local") {
-            return String(value.dropLast("-local".count))
-        }
-        if let suffix = value.range(of: "-ci\\.[0-9a-f]{7,40}$", options: .regularExpression) {
-            return String(value[..<suffix.lowerBound])
+        for pattern in [localSuffixPattern, "-ci\\.[0-9a-f]{7,40}$"] {
+            if let suffix = value.range(of: pattern, options: .regularExpression) {
+                return String(value[..<suffix.lowerBound])
+            }
         }
         return value
+    }
+
+    /// `-local` followed by an optional build identifier. Each local build is
+    /// stored under its own name, so two builds of one version can be
+    /// installed side by side and machines can stay on either.
+    private static let localSuffixPattern = "-local(\\.[0-9a-f]{8,64})?$"
+
+    static func isLocalBuild(_ value: String) -> Bool {
+        value.range(of: localSuffixPattern, options: .regularExpression) != nil
     }
 
     static func isCompatibleBundleVersion(_ value: String) -> Bool {

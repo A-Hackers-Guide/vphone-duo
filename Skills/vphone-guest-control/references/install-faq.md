@@ -70,7 +70,9 @@ user on an ad hoc build must reset after every switch. `status` →
 - Launchpad refuses a bundle that is too old; it may list bundles from a newer
   series. Stay in the same series (`Documents/Downloads/README.md`).
 - Launchpad never updates itself; the user replaces the app.
-- A rebuilt local bundle needs `install-local` again (new signature).
+- A rebuilt local bundle needs `install-local` again (new signature). It
+  installs as a new `<version>-local.<hash>` beside the old build; machines stay
+  on theirs until `vm set-bundle`.
 
 ## Creating a machine
 

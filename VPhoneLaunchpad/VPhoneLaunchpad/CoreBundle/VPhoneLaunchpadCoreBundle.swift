@@ -2,7 +2,7 @@ import ExecutionPolicy
 import Foundation
 import Observation
 
-/// The second stage: installed VPhone.bundle versions, the one in use, and
+/// The second stage: installed VPhone.bundle versions, the default one, and
 /// installing new ones from GitHub releases.
 @MainActor
 @Observable
@@ -75,6 +75,10 @@ final class VPhoneLaunchpadCoreBundle {
         var errorMessage: String?
         var errorDetail: String?
         var startedAt = Date()
+        /// True when the installed version must not become the default, as
+        /// `vphone-launchpad-cli bundle install-local --keep-default` asks.
+        /// Optional so a progress file from an older Launchpad still reads.
+        var keepsDefault: Bool?
 
         init(release: VPhoneLaunchpadRelease) {
             version = release.version
@@ -147,7 +151,7 @@ final class VPhoneLaunchpadCoreBundle {
 
     private let helper: VPhoneLaunchpadHelperClient
     private let history: VPhoneLaunchpadCommandHistory
-    private static let activeVersionKey = "VPhoneLaunchpadActiveBundleVersion"
+    private static let defaultVersionKey = "VPhoneLaunchpadActiveBundleVersion"
     private static let acceptedVersionsKey = "VPhoneLaunchpadAcceptedBundleVersions"
     /// Version → receipt SHA-256 of bundles whose last check passed.
     private static let passedVersionsKey = "VPhoneLaunchpadPassedBundleVersions"
@@ -185,37 +189,63 @@ final class VPhoneLaunchpadCoreBundle {
             passed[version] = nil
         }
         UserDefaults.standard.set(passed, forKey: Self.passedVersionsKey)
+        if isUsable(version) {
+            checkedThisSession.insert(version)
+        } else {
+            checkedThisSession.remove(version)
+        }
     }
 
-    // MARK: - Active version
+    // MARK: - Default version
 
-    var activeVersion: String? {
+    /// The version New Machine offers first, and the one library-wide
+    /// commands such as `vm list` run with. Each machine runs with the
+    /// version in its own binding (`VPhoneLaunchpadMachineBinding`), so
+    /// changing the default, or installing a bundle, leaves existing
+    /// machines alone. The defaults key keeps its old name.
+    var defaultVersion: String? {
         get {
-            access(keyPath: \.activeVersion)
-            let stored = UserDefaults.standard.string(forKey: Self.activeVersionKey)
+            access(keyPath: \.defaultVersion)
+            let stored = UserDefaults.standard.string(forKey: Self.defaultVersionKey)
             if let stored, installed.contains(where: { $0.version == stored && VPhoneLaunchpadNames.isCompatibleBundleVersion($0.version) }) {
                 return stored
             }
             return installed.first { VPhoneLaunchpadNames.isCompatibleBundleVersion($0.version) }?.version
         }
         set {
-            withMutation(keyPath: \.activeVersion) {
-                UserDefaults.standard.set(newValue, forKey: Self.activeVersionKey)
+            withMutation(keyPath: \.defaultVersion) {
+                UserDefaults.standard.set(newValue, forKey: Self.defaultVersionKey)
             }
         }
     }
 
-    var active: Installed? {
-        installed.first { $0.version == activeVersion }
+    var defaultBundle: Installed? {
+        installed.first { $0.version == defaultVersion }
     }
 
-    /// The active bundle passed host preflight, or the user chose to use it
+    /// The default bundle passed host preflight, or the user chose to use it
     /// without.
     var isReady: Bool {
-        guard let active else {
+        guard let defaultVersion else {
             return false
         }
-        return active.preflight == .passed || isAccepted(active.version)
+        return isUsable(defaultVersion)
+    }
+
+    /// `version` is installed, supported, and passed host preflight or was
+    /// accepted without.
+    func isUsable(_ version: String) -> Bool {
+        guard VPhoneLaunchpadNames.isCompatibleBundleVersion(version),
+              let item = installed.first(where: { $0.version == version })
+        else {
+            return false
+        }
+        return item.preflight == .passed || isAccepted(version)
+    }
+
+    /// Versions offered for a machine: installed and supported, newest first.
+    var selectableVersions: [String] {
+        installed.map(\.version).filter(VPhoneLaunchpadNames.isCompatibleBundleVersion)
     }
 
     var isInstalling: Bool {
@@ -261,8 +291,18 @@ final class VPhoneLaunchpadCoreBundle {
         return latest
     }
 
+    /// The default version's `vphone-cli`, for commands that belong to no
+    /// machine. A machine's own commands go through
+    /// `VPhoneLaunchpadMachineLibrary.commandLine(for:)`.
     func commandLine() -> VPhoneLaunchpadCommandLine? {
-        guard let version = activeVersion else {
+        defaultVersion.flatMap(commandLine(version:))
+    }
+
+    /// `vphone-cli` of one installed, supported version.
+    func commandLine(version: String) -> VPhoneLaunchpadCommandLine? {
+        guard VPhoneLaunchpadNames.isCompatibleBundleVersion(version),
+              installed.contains(where: { $0.version == version })
+        else {
             return nil
         }
         return VPhoneLaunchpadCommandLine(
@@ -271,21 +311,74 @@ final class VPhoneLaunchpadCoreBundle {
         )
     }
 
+    // MARK: - Readiness
+
+    /// Versions checked since Launchpad started that passed, or were
+    /// accepted. The default is checked at launch; another version is
+    /// checked the first time a machine needs it, since its policy exception
+    /// or AMFI admission may be gone after a restart.
+    private var checkedThisSession: Set<String> = []
+    private var checks: [String: Task<Void, Never>] = [:]
+
+    /// True when `version` passed, or was accepted, since Launchpad started,
+    /// so `prepare` returns without checking it again.
+    func isChecked(_ version: String) -> Bool {
+        checkedThisSession.contains(version) && checks[version] == nil
+    }
+
+    /// Makes sure `version` can run a machine: installed, supported, and
+    /// checked in this session. Checks of one version are shared by every
+    /// caller waiting on it.
+    func prepare(_ version: String) async throws {
+        guard installed.contains(where: { $0.version == version }) else {
+            throw VPhoneLaunchpadError(
+                String(localized: "VPhone.bundle \(version) is not installed."),
+                detail: String(localized: "Install it in Core Bundle, or choose another version for this machine."),
+            )
+        }
+        guard VPhoneLaunchpadNames.isCompatibleBundleVersion(version) else {
+            throw VPhoneLaunchpadError(String(localized: "Requires VPhone.bundle \(VPhoneLaunchpadNames.minimumBundleVersion) or newer."))
+        }
+        if checks[version] != nil || !checkedThisSession.contains(version) {
+            await check(version)
+        }
+        guard isUsable(version) else {
+            throw VPhoneLaunchpadError(
+                String(localized: "VPhone.bundle \(version) did not pass host preflight."),
+                detail: installed.first { $0.version == version }?.preflightDetail,
+            )
+        }
+    }
+
     // MARK: - Refresh
 
     func refresh() async {
-        await checkActive()
+        await checkDefault()
         await fetchReleases()
         await fetchArtifacts()
     }
 
-    /// Rereads the store and checks the active bundle again. A bundle that
+    /// Rereads the store and checks the default bundle again. A bundle that
     /// passed keeps showing so while the check runs.
-    func checkActive() async {
+    func checkDefault() async {
         loadInstalled()
-        if let version = activeVersion {
-            await verify(version, showsProgress: false)
+        if let version = defaultVersion {
+            await check(version)
         }
+    }
+
+    /// Verifies `version` without showing progress, or waits for the check
+    /// of it already running, so a machine started during the launch check
+    /// does not run a second preflight beside it.
+    private func check(_ version: String) async {
+        if let running = checks[version] {
+            await running.value
+            return
+        }
+        let check = Task { await verify(version, showsProgress: false) }
+        checks[version] = check
+        await check.value
+        checks[version] = nil
     }
 
     func fetchReleases() async {
@@ -410,8 +503,9 @@ final class VPhoneLaunchpadCoreBundle {
 
     // MARK: - Install
 
-    func install(_ release: VPhoneLaunchpadRelease) async {
+    func install(_ release: VPhoneLaunchpadRelease, keepsDefault: Bool = false) async {
         progress = InstallProgress(release: release)
+        progress?.keepsDefault = keepsDefault
         var archive: URL?
         defer {
             if let archive {
@@ -444,9 +538,10 @@ final class VPhoneLaunchpadCoreBundle {
     }
 
     /// Installs a VPhone.bundle folder or .zip built on this Mac as
-    /// `<version>-local`.
-    func installLocal(_ source: URL) async {
+    /// `<version>-local.<build>`.
+    func installLocal(_ source: URL, keepsDefault: Bool = false) async {
         progress = InstallProgress(local: source)
+        progress?.keepsDefault = keepsDefault
         var work: URL?
         defer {
             if let work {
@@ -470,8 +565,9 @@ final class VPhoneLaunchpadCoreBundle {
     /// `<version>-ci.<commit>`. The artifact is checked against the digest
     /// GitHub published; the bundle zip inside it is then handed over like a
     /// local build.
-    func installArtifact(_ artifact: VPhoneLaunchpadArtifact) async {
+    func installArtifact(_ artifact: VPhoneLaunchpadArtifact, keepsDefault: Bool = false) async {
         progress = InstallProgress(artifact: artifact)
+        progress?.keepsDefault = keepsDefault
         var archive: URL?
         var work: URL?
         defer {
@@ -517,17 +613,34 @@ final class VPhoneLaunchpadCoreBundle {
         }
     }
 
-    /// The steps every source shares: the helper installs the
-    /// archive as root, then the new version becomes active and is checked.
+    /// The steps every source shares: the helper installs the archive as
+    /// root, then the new version becomes the default, unless the install
+    /// keeps it, and is checked. Machines bound to other versions stay on
+    /// them.
+    ///
+    /// A local build already in the store under the same name is the same
+    /// build, since the name comes from its code signature seal, so it is not
+    /// installed again: replacing it would pull the files from under the
+    /// machines running from it.
     private func installAndVerify(version: String, archive: URL, sha256: String) async throws {
         set(.install, .running)
-        let handle = try FileHandle(forReadingFrom: archive)
-        defer { try? handle.close() }
-        try await helper.installBundle(version: version, archive: handle, sha256: sha256)
+        loadInstalled()
+        // A bare `-local` from an older Launchpad names no build, so it is
+        // replaced as before.
+        let isSameBuild = VPhoneLaunchpadNames.isLocalBuild(version)
+            && !version.hasSuffix(VPhoneLaunchpadLocalBundle.versionSuffix)
+            && installed.contains { $0.version == version }
+        if !isSameBuild {
+            let handle = try FileHandle(forReadingFrom: archive)
+            defer { try? handle.close() }
+            try await helper.installBundle(version: version, archive: handle, sha256: sha256)
+            loadInstalled()
+        }
         set(.install, .passed)
 
-        loadInstalled()
-        activeVersion = version
+        if progress?.keepsDefault != true {
+            defaultVersion = version
+        }
         try await checkInstalled(version)
     }
 
@@ -576,13 +689,14 @@ final class VPhoneLaunchpadCoreBundle {
             }
             return
         }
+        let keepsDefault = progress.keepsDefault ?? false
         switch progress.source {
         case let .release(release):
-            await install(release)
+            await install(release, keepsDefault: keepsDefault)
         case let .artifact(artifact):
-            await installArtifact(artifact)
+            await installArtifact(artifact, keepsDefault: keepsDefault)
         case let .local(path):
-            await installLocal(URL(fileURLWithPath: path))
+            await installLocal(URL(fileURLWithPath: path), keepsDefault: keepsDefault)
         }
     }
 
@@ -648,15 +762,31 @@ final class VPhoneLaunchpadCoreBundle {
         progress?.steps[step] = status
     }
 
-    // MARK: - Use and remove
+    // MARK: - Default and remove
 
-    func use(_ version: String) async {
+    /// Makes `version` the default for new machines and library-wide
+    /// commands. Machines keep the version they are bound to.
+    func setDefault(_ version: String) async {
         guard VPhoneLaunchpadNames.isCompatibleBundleVersion(version) else { return }
-        activeVersion = version
+        defaultVersion = version
         await verify(version)
     }
 
+    /// The machines bound to a version, by name. The model connects this to
+    /// the machine library, which knows the bindings.
+    var boundMachines: @MainActor (String) -> [String] = { _ in [] }
+
+    /// Refuses a version a machine is bound to: removing it would leave the
+    /// machine with no `vphone-vm` to start it.
     func remove(_ version: String) async {
+        let bound = boundMachines(version)
+        guard bound.isEmpty else {
+            actionError = VPhoneLaunchpadError(
+                String(localized: "Unable to Remove VPhone.bundle \(version)"),
+                detail: String(localized: "These machines use it: \(bound.joined(separator: ", ")). Choose another Core Bundle for them first."),
+            )
+            return
+        }
         do {
             try await helper.removeBundle(version: version)
         } catch {

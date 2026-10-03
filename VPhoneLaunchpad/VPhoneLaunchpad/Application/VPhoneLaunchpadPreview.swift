@@ -275,6 +275,7 @@
         static let creationOptions = VPhoneLaunchpadCreationPipeline.Options(
             name: "ios27-rc",
             libraryRoot: VPhoneLaunchpadMachineLocations.defaultRoot,
+            bundleVersion: releases[1].version,
             iphoneSource: "https://updates.cdn-apple.com/example/iPhone17,3_27.0_24A435_Restore.ipsw",
             cloudOSSource: "https://updates.cdn-apple.com/example/cloudos-26.4",
             cpuCount: 8,

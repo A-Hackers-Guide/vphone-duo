@@ -277,7 +277,7 @@ final class VPhoneLaunchpadHelperClient {
         }
     }
 
-    /// Runs `cfw update-environment` as root: redeploys the active bundle's
+    /// Runs `cfw update-environment` as root: redeploys the given bundle's
     /// guest resources into a stopped machine. Output lines go to `onLine`.
     func updateGuestEnvironment(
         bundleVersion: String,

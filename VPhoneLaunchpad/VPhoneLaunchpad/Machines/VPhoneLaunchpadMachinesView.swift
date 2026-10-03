@@ -8,6 +8,7 @@ struct VPhoneLaunchpadMachinesView: View {
         case newMachine
         case creation(MachinePath)
         case settings([VPhoneLaunchpadMachine])
+        case changeBundle([VPhoneLaunchpadMachine])
         case rename(MachinePath)
         case clone(MachinePath)
         case export([MachinePath])
@@ -18,6 +19,7 @@ struct VPhoneLaunchpadMachinesView: View {
             case .newMachine: "new"
             case let .creation(machine): "creation-\(machine.url.path)"
             case let .settings(machines): "settings-\(machines.map(\.path.url.path).joined(separator: "|"))"
+            case let .changeBundle(machines): "bundle-\(machines.map(\.path.url.path).joined(separator: "|"))"
             case let .rename(machine): "rename-\(machine.url.path)"
             case let .clone(machine): "clone-\(machine.url.path)"
             case let .export(machines): "export-\(machines.map(\.url.path).joined(separator: "|"))"
@@ -76,6 +78,7 @@ struct VPhoneLaunchpadMachinesView: View {
                         machine: machine,
                         onShowProgress: { path in sheet = .creation(path) },
                         onOpenConsole: { path in sheet = .console(path) },
+                        onChangeBundle: { machine in sheet = .changeBundle([machine]) },
                     )
                 } else if library.selection.count > 1 {
                     ContentUnavailableView("\(library.selection.count) Machines Selected", systemImage: "iphone")
@@ -155,7 +158,7 @@ struct VPhoneLaunchpadMachinesView: View {
             }
             .menuIndicator(.hidden)
             .help("Create a machine")
-            .disabled(model.bundles.activeVersion == nil)
+            .disabled(model.bundles.defaultVersion == nil)
         }
         // Without it, macOS 26 draws New Machine and the search field in
         // one glass capsule.
@@ -227,8 +230,10 @@ struct VPhoneLaunchpadMachinesView: View {
     }
 
     private func start(_ machines: [VPhoneLaunchpadMachine], headless: Bool = false) {
-        for machine in machines {
-            library.start(machine.path, headless: headless)
+        Task {
+            for machine in machines {
+                await library.start(machine.path, headless: headless)
+            }
         }
     }
 
@@ -272,6 +277,7 @@ struct VPhoneLaunchpadMachinesView: View {
             let allStopped = stopped.count == machines.count
             Button("Settings…") { sheet = .settings(machines) }
                 .disabled(!allStopped)
+            changeBundleButton(machines)
             Button("Export…") { sheet = .export(machines.map(\.path)) }
                 .disabled(!allStopped)
             Button("Delete…", role: .destructive) { deletion = machines.map(\.path) }
@@ -289,11 +295,12 @@ struct VPhoneLaunchpadMachinesView: View {
             }
         } else if let machine = machines.first {
             let isStopped = library.state(of: machine.path) == .stopped
-            Button("Start Headless") { library.start(machine.path, headless: true) }
+            Button("Start Headless") { Task { await library.start(machine.path, headless: true) } }
                 .disabled(!isStopped)
             Divider()
             Button("Settings…") { sheet = .settings([machine]) }
                 .disabled(!isStopped)
+            changeBundleButton([machine])
             Button("Rename…") { sheet = .rename(machine.path) }
                 .disabled(!isStopped)
             Button("Clone…") { sheet = .clone(machine.path) }
@@ -306,8 +313,8 @@ struct VPhoneLaunchpadMachinesView: View {
             // Only for an unfinished install: that is when the restore tree it
             // reads is still there. A finished one removes it.
             .disabled(!isStopped || machine.customFirmwareInstalled != false)
-            // The finished-install counterpart: redeploys the active bundle's
-            // guest resources without the restore tree.
+            // The finished-install counterpart: redeploys the machine's own
+            // bundle's guest resources without the restore tree.
             Button("Update Guest Environment") {
                 Task { await library.updateGuestEnvironment(machine.path) }
             }
@@ -330,6 +337,14 @@ struct VPhoneLaunchpadMachinesView: View {
         }
     }
 
+    /// Rebinding applies at the next start, so running machines may change
+    /// too. A machine still being created gets its bundle from the pipeline.
+    private func changeBundleButton(_ machines: [VPhoneLaunchpadMachine]) -> some View {
+        Button("Change Core Bundle…") { sheet = .changeBundle(machines) }
+            .disabled(model.bundles.selectableVersions.isEmpty
+                || machines.contains { library.creations[$0.path]?.isRunning == true })
+    }
+
     // MARK: - Table
 
     private func table(selection: Binding<Set<MachinePath>>) -> some View {
@@ -350,6 +365,10 @@ struct VPhoneLaunchpadMachinesView: View {
                 Text(verbatim: machine.restoreInfo.map { "\($0.ios.version) (\($0.ios.build))" } ?? "—")
             }
             .width(min: 110, ideal: 120)
+            TableColumn("Core Bundle") { machine in
+                VPhoneLaunchpadMachineBundleLabel(machine: machine.path)
+            }
+            .width(min: 70, ideal: 90)
             TableColumn("State") { machine in
                 VPhoneLaunchpadMachineStateLabel(
                     state: library.state(of: machine.path),
@@ -387,7 +406,7 @@ struct VPhoneLaunchpadMachinesView: View {
 
     @ViewBuilder
     private var emptyState: some View {
-        if model.bundles.activeVersion == nil {
+        if model.bundles.defaultVersion == nil {
             ContentUnavailableView {
                 Label("No Core Bundle", systemImage: "shippingbox")
             } description: {
@@ -426,6 +445,8 @@ struct VPhoneLaunchpadMachinesView: View {
             }
         case let .settings(machines):
             VPhoneLaunchpadMachineSettingsView(machines: machines)
+        case let .changeBundle(machines):
+            VPhoneLaunchpadChangeBundleView(machines: machines)
         case let .rename(path):
             VPhoneLaunchpadNameSheet(title: "Rename \(path.name)", action: "Rename", initial: path.name, machine: path) { newName in
                 Task { await library.rename(path, to: newName) }

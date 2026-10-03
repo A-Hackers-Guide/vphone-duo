@@ -43,10 +43,10 @@ struct VPhoneLaunchpadControlCommands {
         }
         switch command.name {
         case "status": return status()
-        case "bundle.list": return bundles.installed.map(report)
+        case "bundle.list": return await listBundles()
         case "bundle.install-local": return try await installLocal(request, emit: emit)
         case "bundle.install-release": return try await installRelease(request, emit: emit)
-        case "bundle.use": return try await use(request)
+        case "bundle.set-default", "bundle.use": return try await setDefault(request)
         case "bundle.verify": return try await verify(request)
         case "bundle.accept": return try accept(request)
         case "bundle.remove": return try await remove(request)
@@ -56,6 +56,7 @@ struct VPhoneLaunchpadControlCommands {
         case "vm.wait": return try await waitMachine(request, emit: emit)
         case "vm.log": return try await log(request)
         case "vm.create": return try await create(request, emit: emit)
+        case "vm.set-bundle": return try await setBundle(request, emit: emit)
         case "cfw.install": return try await installCustomFirmware(request, emit: emit)
         case "cfw.update-environment": return try await updateGuestEnvironment(request, emit: emit)
         case "guest.send": return try await sendToGuest(request)
@@ -80,7 +81,9 @@ struct VPhoneLaunchpadControlCommands {
             "hostReady": model.host.requiredPassed,
             "developerTools": model.host.isDeveloperToolAuthorized,
             "canInstallBundles": model.canInstallBundles,
-            "activeBundle": bundles.activeVersion ?? NSNull(),
+            "defaultBundle": bundles.defaultVersion ?? NSNull(),
+            // The name before machines had their own bundle, kept for scripts.
+            "activeBundle": bundles.defaultVersion ?? NSNull(),
             "bundleReady": bundles.isReady,
             "installing": bundles.isInstalling,
             "machines": library.machines.count,
@@ -91,10 +94,19 @@ struct VPhoneLaunchpadControlCommands {
 
     // MARK: - Bundles
 
+    private func listBundles() async -> Any {
+        await refreshMachines()
+        return bundles.installed.map(report)
+    }
+
     private func report(_ item: VPhoneLaunchpadCoreBundle.Installed) -> [String: Any] {
-        [
+        let isDefault = item.version == bundles.defaultVersion
+        return [
             "version": item.version,
-            "active": item.version == bundles.activeVersion,
+            "default": isDefault,
+            // The name before machines had their own bundle, kept for scripts.
+            "active": isDefault,
+            "machines": library.machineNames(boundTo: item.version),
             "accepted": bundles.isAccepted(item.version),
             "policy": item.policy.rawValue,
             "preflight": item.preflight.rawValue,
@@ -132,8 +144,9 @@ struct VPhoneLaunchpadControlCommands {
             throw VPhoneLaunchpadError("The bundle path must be absolute.")
         }
         try requireInstallable()
+        let keepsDefault = request.flag("keep-default")
         return try await watchInstall(emit: emit) {
-            await model.installLocalBundle(URL(fileURLWithPath: path))
+            await model.installLocalBundle(URL(fileURLWithPath: path), keepsDefault: keepsDefault)
         }
     }
 
@@ -149,8 +162,9 @@ struct VPhoneLaunchpadControlCommands {
         guard let release else {
             throw VPhoneLaunchpadError("No release \(wanted) was found.", detail: bundles.releasesError)
         }
+        let keepsDefault = request.flag("keep-default")
         return try await watchInstall(emit: emit) {
-            await model.installBundle(release)
+            await model.installBundle(release, keepsDefault: keepsDefault)
         }
     }
 
@@ -193,13 +207,15 @@ struct VPhoneLaunchpadControlCommands {
         }
     }
 
-    private func use(_ request: VPhoneLaunchpadControlRequest) async throws -> Any {
+    /// The default only picks what new machines bind and what library-wide
+    /// commands run with; bound machines keep their version.
+    private func setDefault(_ request: VPhoneLaunchpadControlRequest) async throws -> Any {
         let version = request.arguments[0]
         _ = try installed(version)
         guard VPhoneLaunchpadNames.isCompatibleBundleVersion(version) else {
             throw VPhoneLaunchpadError("VPhone.bundle \(version) is older than \(VPhoneLaunchpadNames.minimumBundleVersion).")
         }
-        await bundles.use(version)
+        await bundles.setDefault(version)
         await library.refresh()
         return try checked(version)
     }
@@ -275,6 +291,12 @@ struct VPhoneLaunchpadControlCommands {
             "controlSocket": FileManager.default.fileExists(atPath: Self.controlSocket(path))
                 ? Self.controlSocket(path) : NSNull(),
         ]
+        // Host programs come from `bundle` at each start; the other two were
+        // written by the bundles named, and stay until replaced.
+        let binding = library.bindings[path]
+        report["bundle"] = library.bundleVersion(for: path) ?? NSNull()
+        report["bootChainBundle"] = binding?.bootChain ?? NSNull()
+        report["guestEnvironmentBundle"] = binding?.guestEnvironment ?? NSNull()
         if let udid = machine.udid {
             report["udid"] = udid
         }
@@ -325,11 +347,9 @@ struct VPhoneLaunchpadControlCommands {
         guard library.state(of: machine) == .stopped else {
             throw VPhoneLaunchpadError("\(machine.name) is already running or busy.")
         }
-        guard bundles.isReady else {
-            throw VPhoneLaunchpadError("The active VPhone.bundle has not passed its checks. Run bundle verify.")
-        }
         library.actionError = nil
-        library.start(machine, headless: request.flag("headless"))
+        // Checks the machine's own bundle first, once per Launchpad session.
+        await library.start(machine, headless: request.flag("headless"))
         guard library.launchedProcess(machine) != nil else {
             throw takeLibraryError() ?? VPhoneLaunchpadError("\(machine.name) could not be started.")
         }
@@ -484,9 +504,20 @@ struct VPhoneLaunchpadControlCommands {
         guard VPhoneLaunchpadMachineLocations.socketPathFits(root: machine.libraryRoot, name: machine.name) else {
             throw VPhoneLaunchpadError("The machine path is too long for its vphone.sock. Use a shorter name or library path.")
         }
-        guard bundles.isReady, let commandLine = bundles.commandLine() else {
-            throw VPhoneLaunchpadError("The active VPhone.bundle has not passed its checks. Run bundle verify.")
+        guard let version = request.option("bundle") ?? bundles.defaultVersion else {
+            throw VPhoneLaunchpadError("No Core Bundle version is installed. Run bundle install-local or bundle install-release.")
         }
+        guard bundles.selectableVersions.contains(version) else {
+            throw VPhoneLaunchpadError(
+                "VPhone.bundle \(version) is not installed or not supported.",
+                detail: "Installed: \(bundles.selectableVersions.joined(separator: ", "))",
+            )
+        }
+        try await bundles.prepare(version)
+        guard let commandLine = bundles.commandLine(version: version) else {
+            throw VPhoneLaunchpadError("VPhone.bundle \(version) is not installed.")
+        }
+        emit("Core Bundle: \(version)")
 
         var iphone = request.option("iphone-source")
         var cloudOS = request.option("cloudos-source")
@@ -518,6 +549,7 @@ struct VPhoneLaunchpadControlCommands {
         let options = try VPhoneLaunchpadCreationPipeline.Options(
             name: machine.name,
             libraryRoot: machine.libraryRoot,
+            bundleVersion: version,
             iphoneSource: iphone ?? "",
             cloudOSSource: cloudOS ?? "",
             cpuCount: number("cpu", 8),
@@ -550,6 +582,7 @@ struct VPhoneLaunchpadControlCommands {
         [
             "name": pipeline.machine.name,
             "libraryRoot": pipeline.machine.libraryRoot,
+            "bundle": pipeline.options.bundleVersion,
             "running": pipeline.isRunning,
             "log": pipeline.logFile.path,
             "steps": VPhoneLaunchpadCreationPipeline.Step.allCases.map { step -> [String: Any] in
@@ -562,13 +595,56 @@ struct VPhoneLaunchpadControlCommands {
         ]
     }
 
+    // MARK: - Core Bundle of a machine
+
+    /// Rebinds one machine. `setBundle` skips the environment update of a
+    /// running machine without saying so, so that is refused here instead.
+    private func setBundle(_ request: VPhoneLaunchpadControlRequest, emit: @escaping Emit) async throws -> Any {
+        let machine = try await machine(request)
+        let version = request.arguments[1]
+        guard bundles.selectableVersions.contains(version) else {
+            throw VPhoneLaunchpadError(
+                "VPhone.bundle \(version) is not installed or not supported.",
+                detail: "Installed: \(bundles.selectableVersions.joined(separator: ", "))",
+            )
+        }
+        guard library.creations[machine]?.isRunning != true else {
+            throw VPhoneLaunchpadError("\(machine.name) is still being created.")
+        }
+        let updatesEnvironment = request.flag("update-environment")
+        let state = library.state(of: machine)
+        if updatesEnvironment, state != .stopped {
+            throw VPhoneLaunchpadError("Stop \(machine.name) before updating its guest environment.")
+        }
+        library.actionError = nil
+        if updatesEnvironment {
+            emit("updating the guest environment; console log: \(VPhoneLaunchpadMachineLibrary.consoleLog(machine).path)")
+        }
+        await library.setBundle(version, for: [machine], updateEnvironment: updatesEnvironment)
+        if let error = takeLibraryError() {
+            throw error
+        }
+        if state == .running {
+            emit("\(machine.name) is running; it uses \(version) from its next start")
+        }
+        await library.refresh()
+        return report(machine)
+    }
+
     // MARK: - CFW
+
+    /// The version a machine's own commands run with: its binding, else the
+    /// default.
+    private func bundleVersion(of machine: VPhoneLaunchpadMachinePath) throws -> String {
+        guard let version = library.bundleVersion(for: machine) else {
+            throw VPhoneLaunchpadError("No Core Bundle version is installed. Run bundle install-local or bundle install-release.")
+        }
+        return version
+    }
 
     private func installCustomFirmware(_ request: VPhoneLaunchpadControlRequest, emit: @escaping Emit) async throws -> Any {
         let machine = try await machine(request)
-        guard let version = bundles.activeVersion else {
-            throw VPhoneLaunchpadError("No Core Bundle version is in use.")
-        }
+        let version = try bundleVersion(of: machine)
         guard library.state(of: machine) == .stopped else {
             throw VPhoneLaunchpadError("Stop \(machine.name) before installing CFW.")
         }
@@ -582,14 +658,13 @@ struct VPhoneLaunchpadControlCommands {
         guard status == 0 else {
             throw VPhoneLaunchpadError("Unable to install custom firmware. Check the log for details.")
         }
+        library.recordGuestEnvironment(machine, version)
         return ["name": machine.name, "bundle": version, "status": status]
     }
 
     private func updateGuestEnvironment(_ request: VPhoneLaunchpadControlRequest, emit: @escaping Emit) async throws -> Any {
         let machine = try await machine(request)
-        guard let version = bundles.activeVersion else {
-            throw VPhoneLaunchpadError("No Core Bundle version is in use.")
-        }
+        let version = try bundleVersion(of: machine)
         guard library.state(of: machine) == .stopped else {
             throw VPhoneLaunchpadError("Stop \(machine.name) before updating its guest environment.")
         }
@@ -602,6 +677,7 @@ struct VPhoneLaunchpadControlCommands {
         guard status == 0 else {
             throw VPhoneLaunchpadError("Unable to update the guest environment. Check the log for details.")
         }
+        library.recordGuestEnvironment(machine, version)
         return ["name": machine.name, "bundle": version, "status": status]
     }
 
@@ -636,16 +712,25 @@ struct VPhoneLaunchpadControlCommands {
 
     // MARK: - vphone-cli
 
+    /// Runs the default bundle's `vphone-cli`, or that of `--bundle`. A
+    /// command on one machine should name that machine's own version, which
+    /// `vm list` reports.
     private func exec(_ request: VPhoneLaunchpadControlRequest, emit: @escaping Emit) async throws -> Any {
-        guard let commandLine = bundles.commandLine() else {
-            throw VPhoneLaunchpadError("No Core Bundle version is in use.")
+        guard let version = request.option("bundle") ?? bundles.defaultVersion else {
+            throw VPhoneLaunchpadError("No Core Bundle version is installed. Run bundle install-local or bundle install-release.")
+        }
+        guard let commandLine = bundles.commandLine(version: version) else {
+            throw VPhoneLaunchpadError(
+                "VPhone.bundle \(version) is not installed or not supported.",
+                detail: "Installed: \(bundles.selectableVersions.joined(separator: ", "))",
+            )
         }
         let result = try await commandLine.run(request.arguments, onLine: emit)
         try Task.checkCancellation()
         guard result.succeeded else {
             throw VPhoneLaunchpadError("vphone-cli exited with status \(result.status).")
         }
-        return ["status": result.status, "bundle": bundles.activeVersion ?? ""]
+        return ["status": result.status, "bundle": version]
     }
 }
 
