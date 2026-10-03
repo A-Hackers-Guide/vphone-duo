@@ -211,18 +211,14 @@ static const char *VPMachine(void) {
 /// real routes need: it throws (`RoutingSettings_J98.cpp:805`,
 /// `RoutingSettings_N71.cpp:1167`), never initializes, and every session
 /// gets "VirtualAudio PlugIn is not initialized yet" — no sound anywhere.
-/// 8010 is the one accepted ID whose category map covers an iPad's ringtone
-/// previews; 8018 is the acoustic ID of the D47 audio node an iPhone guest's
-/// tree carries, whose tunings its image ships. Both defaults below key on
-/// this one answer, so a guest gets either the whole route or none of it.
+/// 8010 is the one accepted ID found whose category map also covers ringtone
+/// previews, on both: an iPhone guest initializes with 8018, its own audio
+/// node's acoustic ID, and plays Safari, but a tone's route change dies there
+/// as it does with 198 on an iPad. Both defaults below key on this one
+/// answer, so a guest gets either the whole route or none of it.
 static int VPGuestProductID(void) {
-    if (strncmp(VPMachine(), "iPad", 4) == 0) {
-        return 8010;
-    }
-    if (strncmp(VPMachine(), "iPhone", 6) == 0) {
-        return 8018;
-    }
-    return 0;
+    const char *machine = VPMachine();
+    return strncmp(machine, "iPad", 4) == 0 || strncmp(machine, "iPhone", 6) == 0 ? 8010 : 0;
 }
 
 static NSString *VPDeviceUID(unsigned index) {
