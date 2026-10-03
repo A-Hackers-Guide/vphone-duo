@@ -191,6 +191,11 @@ public enum FirmwareDeviceTreePatchSet {
                 "iPad identity",
                 "Reports the iPad's product type and board, so the guest runs as an iPad.",
             ),
+            property(
+                "devicetree-cfw-ipad_audio",
+                "iPad audio configuration",
+                "Takes the audio node from the iPad's tree, so its acoustic ID names tunings the iPad image ships.",
+            ),
         ],
         provides: ["vphone.devicetree"],
     )

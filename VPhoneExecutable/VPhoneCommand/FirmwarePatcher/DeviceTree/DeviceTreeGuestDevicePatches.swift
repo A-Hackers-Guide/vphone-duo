@@ -51,6 +51,7 @@ extension DeviceTreePatcher {
     static let iPadProductPatch = "devicetree-cfw-ipad_product"
     static let iPadButtonsPatch = "devicetree-cfw-ipad_buttons"
     static let iPadIdentityPatch = "devicetree-cfw-ipad_identity"
+    static let iPadAudioPatch = "devicetree-cfw-ipad_audio"
 
     // MARK: - What Is Copied
 
@@ -198,6 +199,95 @@ extension DeviceTreePatcher {
         throw PatcherError.patchSiteNotFound("DeviceTree: the board's tree has no \(name) node")
     }
 
+    // MARK: - Audio
+
+    /// What `presentBoardAudio` changed: the audio node's serialized bytes
+    /// before and after, empty when there was no node.
+    struct BoardAudioChange {
+        let before: Data
+        let after: Data
+    }
+
+    /// Give `root`'s `/product/audio` the properties of the board's.
+    ///
+    /// The tree's audio node, when there is one, came from
+    /// `devicetree-cfw-product_audio_node`, which copies the D47 iPhone's. Its
+    /// `acoustic-id` (8018) names `/Library/Audio/Tunings/AID8018`, which an iPad
+    /// image does not ship; VirtualAudio then builds no microphone sub-ports, and
+    /// on an iPad, whose board answers yes to stereo and webcam recording, it
+    /// throws `PRECONDITION FAILURE` in `RoutingSettings_J98` and never
+    /// initializes, so the guest has no audio route at all. The board's own node
+    /// names the tunings its image carries (AID2029 on J820).
+    ///
+    /// Every property is copied as the board has it, placeholders included, except
+    /// `AAPL,phandle`, which is the board tree's and could collide in this one; a
+    /// property the board's node lacks is removed. The node is added under
+    /// `/product` when the tree has none. Returns nil when the board has no audio
+    /// node or the tree already matches it.
+    static func presentBoardAudio(in root: DTNode, from source: DTNode) -> BoardAudioChange? {
+        func named(_ node: DTNode, _ name: String) -> DTNode? {
+            node.children.first { child in
+                child.properties.contains { $0.name == "name" && $0.value.prefix(while: { $0 != 0 }) == Data(name.utf8) }
+            }
+        }
+        guard
+            let sourceProduct = named(source, "product"),
+            let sourceAudio = named(sourceProduct, "audio"),
+            let product = named(root, "product")
+        else { return nil }
+
+        let copied = sourceAudio.properties.filter { $0.name != "AAPL,phandle" }
+        func describe(_ properties: [DTProperty]) -> [String: (UInt16, Data)] {
+            Dictionary(properties.map { ($0.name, ($0.flags, $0.value)) }, uniquingKeysWith: { first, _ in first })
+        }
+
+        let existing = named(product, "audio")
+        if let existing {
+            let current = existing.properties.filter { $0.name != "AAPL,phandle" }
+            let lhs = describe(current)
+            let rhs = describe(copied)
+            if lhs.count == rhs.count, lhs.allSatisfy({ name, entry in
+                rhs[name].map { $0.0 == entry.0 && $0.1 == entry.1 } ?? false
+            }) {
+                return nil
+            }
+        }
+
+        let before = existing.map(serialize) ?? Data()
+        let node = existing ?? DTNode()
+        let phandle = node.properties.filter { $0.name == "AAPL,phandle" }
+        node.properties = copied.map {
+            DTProperty(name: $0.name, flags: $0.flags, value: $0.value, valueOffset: 0)
+        } + phandle
+        if existing == nil {
+            product.children.append(node)
+        }
+        return BoardAudioChange(before: before, after: serialize(node))
+    }
+
+    /// The flat encoding of one node and its children, for the patch record.
+    private static func serialize(_ node: DTNode) -> Data {
+        var out = Data()
+        func append(_ value: UInt32) {
+            withUnsafeBytes(of: value.littleEndian) { out.append(contentsOf: $0) }
+        }
+        append(UInt32(node.properties.count))
+        append(UInt32(node.children.count))
+        for property in node.properties {
+            var name = Data(property.name.utf8.prefix(31))
+            name.append(contentsOf: [UInt8](repeating: 0, count: 32 - name.count))
+            out.append(name)
+            withUnsafeBytes(of: UInt16(property.length).littleEndian) { out.append(contentsOf: $0) }
+            withUnsafeBytes(of: property.flags.littleEndian) { out.append(contentsOf: $0) }
+            out.append(property.value)
+            out.append(contentsOf: [UInt8](repeating: 0, count: (4 - property.length % 4) % 4))
+        }
+        for child in node.children {
+            out.append(serialize(child))
+        }
+        return out
+    }
+
     // MARK: - Application
 
     /// Applies `guestEdits(from:)` to the parsed tree and records each change.
@@ -208,6 +298,20 @@ extension DeviceTreePatcher {
             )
         }
         let source = try parsePayload(sourceTree)
+        if gateAllows(Self.iPadAudioPatch), let change = Self.presentBoardAudio(in: root, from: source) {
+            patches.append(PatchRecord(
+                patchID: Self.iPadAudioPatch,
+                component: component,
+                fileOffset: 0,
+                virtualAddress: nil,
+                originalBytes: change.before,
+                patchedBytes: change.after,
+                description: "Set /device-tree/product/audio as on \(device.productType)",
+            ))
+            if verbose {
+                print("  =node  : /product/audio as on \(device.productType) (\(change.after.count)B)  [\(Self.iPadAudioPatch)]")
+            }
+        }
         for edit in try Self.guestEdits(from: source) {
             guard gateAllows(edit.patchID) else { continue }
             let node = try resolveNode(root, path: edit.nodePath)

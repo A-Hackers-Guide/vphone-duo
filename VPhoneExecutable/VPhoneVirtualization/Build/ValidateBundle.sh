@@ -81,6 +81,18 @@ done
 for name in vphoned.plist libcamfix.plist libvcamcaptured.plist libmisfix.plist; do
     [[ -f "$guest/$name" ]] || { print -u2 "Missing guest configuration: $name"; exit 1; }
 done
+# The virtio sound HAL plugin is a whole bundle: audiomxd finds its factory
+# through Info.plist, and the bundle signature seals both.
+require_signed_macho "$guest/VPhoneVirtIOSound.driver/VPhoneVirtIOSound"
+/usr/bin/codesign --verify --strict "$guest/VPhoneVirtIOSound.driver" || {
+    print -u2 "Invalid signature: VPhoneVirtIOSound.driver"
+    exit 1
+}
+/usr/libexec/PlistBuddy -c 'Print :CFPlugInFactories' "$guest/VPhoneVirtIOSound.driver/Info.plist" |
+    /usr/bin/grep -q VPVirtIOSoundFactory || {
+    print -u2 "VPhoneVirtIOSound.driver does not name its factory"
+    exit 1
+}
 [[ ! -e "$guest/libvlocation.dylib" ]] || { print -u2 "Obsolete guest library: libvlocation.dylib"; exit 1; }
 
 for name in vphoned vphoned.signed vphone-app VPhoneAMFIAllow VPhoneEscalator vphone-archive icli vpregister \
