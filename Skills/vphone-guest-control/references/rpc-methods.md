@@ -52,6 +52,7 @@ invalid-request error, read the source named there instead of guessing keys.
 | `screen.screenshot` | none | Base64 JPEG with `mime_type`, `width`, `height` (1290×2796) |
 | `display.brightness`, `audio.volume` | `value?` | Omit `value` to read |
 | `display.rotation`, `display.orientation` | `orientation?` | |
+| `display.auto_lock` | none | Auto-Lock in seconds (`never` when it is Never) and the Lock Screen timeout vphoned sets to match |
 | `device.ioreg` | `plane` | e.g. `IODeviceTree` |
 
 ## Input

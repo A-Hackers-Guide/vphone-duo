@@ -60,6 +60,8 @@ extension GuestAPI {
                 throw GuestAPIError.invalidRequest("locked must be true or false")
             }
             return try setRotationLock(locked)
+        case "display.auto_lock":
+            return GuestLockScreenIdle.describe()
         case "audio.volume":
             let category = optionalString(params, "category") ?? "Audio/Video"
             if params["value"] != nil {
