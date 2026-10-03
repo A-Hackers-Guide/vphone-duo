@@ -1984,7 +1984,20 @@
       }
     },
     "Allow Network" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Network"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许网络访问"
+          }
+        }
+      }
     },
     "Allow Wi-Fi and cellular data for this app" : {
       "localizations" : {
@@ -2015,7 +2028,20 @@
       }
     },
     "Allowing network access…" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allowing network access…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在开启网络访问…"
+          }
+        }
+      }
     },
     "Always" : {
       "localizations" : {
@@ -2210,7 +2236,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "App"
+            "value" : "应用"
           }
         }
       }
@@ -2368,7 +2394,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安装应用时，描述文件会与此 UDID 比对。请输入已在你的团队中注册的设备的 UDID。Xcode 和 devicectl 仍显示客体自身的 UDID。"
+            "value" : "安装应用时，描述文件会与此 UDID 比对。请输入已在你的团队中注册的设备的 UDID。Xcode 和 devicectl 仍显示客户机自身的 UDID。"
           }
         }
       }
@@ -2436,7 +2462,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "现在安装应用时，描述文件会与客体自身的 UDID 比对。"
+            "value" : "现在安装应用时，描述文件会与客户机自身的 UDID 比对。"
           }
         }
       }
@@ -2538,7 +2564,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体中的 App 将退出。客体启动后，客体代理会重新连接。"
+            "value" : "客户机中的应用将退出。客户机启动后，客户机代理会重新连接。"
           }
         }
       }
@@ -2566,7 +2592,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已预备，重启后开启"
+            "value" : "已设定，重启后开启"
           }
         }
       }
@@ -3158,7 +3184,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "引导环境已卸载，客体正在重启。"
+            "value" : "引导环境已卸载，客户机正在重启。"
           }
         }
       }
@@ -3192,7 +3218,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "引导环境已卸载，客体未重启。"
+            "value" : "引导环境已卸载，客户机未重启。"
           }
         }
       }
@@ -4038,7 +4064,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请检查客体代理连接后重试。"
+            "value" : "请检查客户机代理连接后重试。"
           }
         }
       }
@@ -4268,7 +4294,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择“刷新”以读取客体剪贴板的文本、图像和类型。"
+            "value" : "选择“刷新”以读取客户机剪贴板的文本、图像和类型。"
           }
         }
       }
@@ -4302,7 +4328,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择“刷新”以读取客体剪贴板。"
+            "value" : "选择“刷新”以读取客户机剪贴板。"
           }
         }
       }
@@ -4330,7 +4356,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择“开始”以传输客户机统一日志。"
+            "value" : "选择“开始”以流式传输客户机统一日志。"
           }
         }
       }
@@ -4454,7 +4480,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择要安装到客体中的 IPA 或 TIPA 包。"
+            "value" : "选择要安装到客户机中的 IPA 或 TIPA 包。"
           }
         }
       }
@@ -4522,7 +4548,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择要安装到客体的 Irisin .deb 软件包。"
+            "value" : "选择要安装到客户机的 Irisin .deb 软件包。"
           }
         }
       }
@@ -4590,7 +4616,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择引导环境布局。将在客体中安装一次最新版 Irisin。"
+            "value" : "选择引导环境布局。将在客户机中安装一次最新版 Irisin。"
           }
         }
       }
@@ -5194,7 +5220,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已将客体图像复制到 Mac 剪贴板。"
+            "value" : "已将客户机图像拷贝到 Mac 剪贴板。"
           }
         }
       }
@@ -5228,7 +5254,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已将客体文本复制到 Mac 剪贴板。"
+            "value" : "已将客户机文本拷贝到 Mac 剪贴板。"
           }
         }
       }
@@ -5290,7 +5316,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已将结果复制为 JSON。"
+            "value" : "已将结果拷贝为 JSON。"
           }
         }
       }
@@ -5380,7 +5406,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已复制到 Mac 剪贴板。"
+            "value" : "已拷贝到 Mac 剪贴板。"
           }
         }
       }
@@ -5448,7 +5474,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制访问组"
+            "value" : "拷贝访问组"
           }
         }
       }
@@ -5482,7 +5508,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制账户"
+            "value" : "拷贝账户"
           }
         }
       }
@@ -5606,7 +5632,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制图像"
+            "value" : "拷贝图像"
           }
         }
       }
@@ -5640,7 +5666,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制 JSON"
+            "value" : "拷贝 JSON"
           }
         }
       }
@@ -5674,7 +5700,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制键"
+            "value" : "拷贝键"
           }
         }
       }
@@ -5944,7 +5970,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制保护级别"
+            "value" : "拷贝保护级别"
           }
         }
       }
@@ -5978,7 +6004,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制结果"
+            "value" : "拷贝结果"
           }
         }
       }
@@ -6040,7 +6066,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制行（TSV）"
+            "value" : "拷贝行（TSV）"
           }
         }
       }
@@ -6074,7 +6100,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将截屏复制到 Mac 剪贴板"
+            "value" : "将截屏拷贝到 Mac 剪贴板"
           }
         }
       }
@@ -6108,7 +6134,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制所选行"
+            "value" : "拷贝所选行"
           }
         }
       }
@@ -6142,7 +6168,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制服务"
+            "value" : "拷贝服务"
           }
         }
       }
@@ -6210,7 +6236,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制值"
+            "value" : "拷贝值"
           }
         }
       }
@@ -6300,7 +6326,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将诊断信息复制到剪贴板"
+            "value" : "将诊断信息拷贝到剪贴板"
           }
         }
       }
@@ -6390,7 +6416,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将客体图像复制到 Mac 剪贴板"
+            "value" : "将客户机图像拷贝到 Mac 剪贴板"
           }
         }
       }
@@ -6424,7 +6450,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将客体文本复制到 Mac 剪贴板"
+            "value" : "将客户机文本拷贝到 Mac 剪贴板"
           }
         }
       }
@@ -6486,7 +6512,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将结果复制为 JSON"
+            "value" : "将结果拷贝为 JSON"
           }
         }
       }
@@ -8088,7 +8114,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "下载 %@ 需要更新客体代理，以便跟随链接。"
+            "value" : "下载 %@ 需要更新客户机代理，以便跟随链接。"
           }
         }
       }
@@ -8574,7 +8600,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "输入要在客体中打开的 URL。"
+            "value" : "输入要在客户机中打开的 URL。"
           }
         }
       }
@@ -9612,7 +9638,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按类型过滤应用（⌘1、⌘2、⌘3、⌘4）"
+            "value" : "按类型筛选应用（⌘1、⌘2、⌘3、⌘4）"
           }
         }
       }
@@ -9640,7 +9666,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按进程或名称过滤"
+            "value" : "按进程或名称筛选"
           }
         }
       }
@@ -9906,7 +9932,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体工具"
+            "value" : "客户机工具"
           }
         }
       }
@@ -10008,7 +10034,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体代理"
+            "value" : "客户机代理"
           }
         }
       }
@@ -10042,7 +10068,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体代理哈希"
+            "value" : "客户机代理哈希"
           }
         }
       }
@@ -10138,7 +10164,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体工具"
+            "value" : "客户机工具"
           }
         }
       }
@@ -10172,7 +10198,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体剪贴板图像"
+            "value" : "客户机剪贴板图像"
           }
         }
       }
@@ -10206,7 +10232,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体剪贴板文本"
+            "value" : "客户机剪贴板文本"
           }
         }
       }
@@ -10240,7 +10266,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体已连接"
+            "value" : "客户机已连接"
           }
         }
       }
@@ -10274,7 +10300,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体已断开连接"
+            "value" : "客户机已断开连接"
           }
         }
       }
@@ -10308,7 +10334,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体未连接。"
+            "value" : "客户机未连接。"
           }
         }
       }
@@ -10370,7 +10396,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体未连接"
+            "value" : "客户机未连接"
           }
         }
       }
@@ -11000,7 +11026,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "图像已复制到 Mac 剪贴板。"
+            "value" : "图像已拷贝到 Mac 剪贴板。"
           }
         }
       }
@@ -11118,7 +11144,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "查看客体剪贴板，并将文本复制到 Mac。"
+            "value" : "查看客户机剪贴板，并将文本拷贝到 Mac。"
           }
         }
       }
@@ -11520,7 +11546,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在客体中安装 %@。"
+            "value" : "正在客户机中安装 %@。"
           }
         }
       }
@@ -11588,7 +11614,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在客体中安装最新版 Irisin。"
+            "value" : "正在客户机中安装最新版 Irisin。"
           }
         }
       }
@@ -12021,6 +12047,41 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Key"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khóa"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "键"
+          }
+        }
+      }
+    },
+    "Cryptographic Key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cryptographic Key"
           }
         },
         "ja" : {
@@ -13686,7 +13747,20 @@
       }
     },
     "Network Access" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network Access"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网络访问"
+          }
+        }
+      }
     },
     "Network Policy" : {
       "localizations" : {
@@ -13717,10 +13791,36 @@
       }
     },
     "Network access for %@ did not change. Relaunch the app and try again." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network access for %@ did not change. Relaunch the app and try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 的网络访问未更改。请重启该应用后重试。"
+          }
+        }
+      }
     },
     "Network access is restricted" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network access is restricted"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网络访问受限"
+          }
+        }
+      }
     },
     "Network access may be restricted" : {
       "localizations" : {
@@ -14431,7 +14531,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有符合此过滤条件的应用。"
+            "value" : "没有符合此筛选条件的应用。"
           }
         }
       }
@@ -14595,7 +14695,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有已载入的条目符合搜索或级别过滤条件。"
+            "value" : "没有已载入的条目符合搜索或级别筛选条件。"
           }
         }
       }
@@ -14713,7 +14813,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体剪贴板中没有文本。请在客体中复制文本后刷新。"
+            "value" : "客户机剪贴板中没有文本。请在客户机中拷贝文本后刷新。"
           }
         }
       }
@@ -15035,7 +15135,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "确定"
+            "value" : "好"
           }
         }
       }
@@ -15153,7 +15253,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重启后开"
+            "value" : "重启后开启"
           }
         }
       }
@@ -15221,7 +15321,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打开客体聚焦搜索"
+            "value" : "打开客户机的聚焦搜索"
           }
         }
       }
@@ -15937,7 +16037,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "暂停日志流 (⌘P)"
+            "value" : "暂停流式传输 (⌘P)"
           }
         }
       }
@@ -15999,7 +16099,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "确定要永久删除位于 %@ 的引导环境并重启客体吗？"
+            "value" : "确定要永久删除位于 %@ 的引导环境并重启客户机吗？"
           }
         }
       }
@@ -16033,7 +16133,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要永久删除以下引导环境并重启客体吗？\n%@"
+            "value" : "要永久删除以下引导环境并重启客户机吗？\n%@"
           }
         }
       }
@@ -16067,7 +16167,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要永久删除以下引导环境且不重启客体吗？\n%@"
+            "value" : "要永久删除以下引导环境且不重启客户机吗？\n%@"
           }
         }
       }
@@ -17149,7 +17249,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "保存"
+            "value" : "存储"
           }
         }
       }
@@ -17217,7 +17317,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体会将它们从钥匙串中移除，此操作无法撤销。"
+            "value" : "客户机会将它们从钥匙串中移除，此操作无法撤销。"
           }
         }
       }
@@ -17817,7 +17917,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重新读取客体剪贴板 (⌘R)"
+            "value" : "重新读取客户机剪贴板 (⌘R)"
           }
         }
       }
@@ -17997,7 +18097,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在读取客体剪贴板…"
+            "value" : "正在读取客户机剪贴板…"
           }
         }
       }
@@ -19057,7 +19157,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重启客体"
+            "value" : "重启客户机"
           }
         }
       }
@@ -19091,7 +19191,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重启客体…"
+            "value" : "重启客户机…"
           }
         }
       }
@@ -19125,7 +19225,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要重启客体吗？"
+            "value" : "要重启客户机吗？"
           }
         }
       }
@@ -19925,7 +20025,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "SIGKILL 会立即结束进程，不做任何清理。launchd 可能会重新启动它。"
+            "value" : "SIGKILL 会立即结束进程，不做任何清理。launchd 可能会重启它。"
           }
         }
       }
@@ -19981,7 +20081,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "SIGTERM 会要求进程退出。launchd 可能会重新启动它。"
+            "value" : "SIGTERM 会要求进程退出。launchd 可能会重启它。"
           }
         }
       }
@@ -20015,7 +20115,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "保存到此处"
+            "value" : "存储到此处"
           }
         }
       }
@@ -20049,7 +20149,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将截屏存为文件"
+            "value" : "将截屏存储为文件"
           }
         }
       }
@@ -20173,7 +20273,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已保存至 %@"
+            "value" : "已存储至 %@"
           }
         }
       }
@@ -20207,7 +20307,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已将“%1$@”保存到“文件”App 的“我的 iPhone › %2$@”。"
+            "value" : "已将“%1$@”存储到“文件”App 的“我的 iPhone › %2$@”。"
           }
         }
       }
@@ -20359,7 +20459,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "截屏已复制到 Mac 剪贴板。"
+            "value" : "截屏已拷贝到 Mac 剪贴板。"
           }
         }
       }
@@ -21007,7 +21107,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将 Mac 上的文本发送到客体剪贴板。"
+            "value" : "将 Mac 上的文本发送到客户机剪贴板。"
           }
         }
       }
@@ -21109,7 +21209,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在向客体发送文本…"
+            "value" : "正在向客户机发送文本…"
           }
         }
       }
@@ -21279,7 +21379,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已将 1 个字符发送到客体剪贴板。"
+            "value" : "已将 1 个字符发送到客户机剪贴板。"
           }
         }
       }
@@ -21567,7 +21667,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将客体剪贴板设置为此文本 (⌘↩)"
+            "value" : "将客户机剪贴板设置为此文本 (⌘↩)"
           }
         }
       }
@@ -21843,7 +21943,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在文件中显示"
+            "value" : "在“文件”中显示"
           }
         }
       }
@@ -21996,6 +22096,41 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "尺寸"
+          }
+        }
+      }
+    },
+    "File Size" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File Size"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サイズ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "크기"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kích thước"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大小"
           }
         }
       }
@@ -22391,7 +22526,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "开始推流"
+            "value" : "开始流式传输"
           }
         }
       }
@@ -22419,7 +22554,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "开始日志流 (⌘P)"
+            "value" : "开始流式传输 (⌘P)"
           }
         }
       }
@@ -22933,7 +23068,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "停止推流"
+            "value" : "停止流式传输"
           }
         }
       }
@@ -22989,7 +23124,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "停止所选服务，然后重新启动"
+            "value" : "停止所选服务，然后再次启动"
           }
         }
       }
@@ -23169,7 +23304,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "日志流已暂停"
+            "value" : "流式传输已暂停"
           }
         }
       }
@@ -23197,7 +23332,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在传输…"
+            "value" : "正在流式传输…"
           }
         }
       }
@@ -23293,7 +23428,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在读取客体和写入客体之间切换 (⌘1, ⌘2)"
+            "value" : "在读取客户机与写入客户机之间切换 (⌘1, ⌘2)"
           }
         }
       }
@@ -23671,7 +23806,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要写入客体剪贴板的文本"
+            "value" : "要写入客户机剪贴板的文本"
           }
         }
       }
@@ -23705,7 +23840,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "文本已写入客体剪贴板。"
+            "value" : "文本已写入客户机剪贴板。"
           }
         }
       }
@@ -23767,7 +23902,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要发送到客体剪贴板的文本"
+            "value" : "要发送到客户机剪贴板的文本"
           }
         }
       }
@@ -23919,7 +24054,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体代理未连接。请等待连接后重试。"
+            "value" : "客户机代理未连接。请等待连接后重试。"
           }
         }
       }
@@ -23953,7 +24088,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体剪贴板中没有文本或图像。请在客体中复制内容，然后刷新。"
+            "value" : "客户机剪贴板中没有文本或图像。请在客户机中拷贝内容，然后刷新。"
           }
         }
       }
@@ -24021,7 +24156,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体未响应。请检查客体代理连接后重试。"
+            "value" : "客户机未响应。请检查客户机代理连接后重试。"
           }
         }
       }
@@ -24083,7 +24218,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体未连接。请启动虚拟机后重试。"
+            "value" : "客户机未连接。请启动虚拟机后重试。"
           }
         }
       }
@@ -24173,7 +24308,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体会将设置标记为已完成并重启 SpringBoard。仅在已激活的客体上使用。语言、密码、Apple 账户和隐私设置保持默认。"
+            "value" : "客户机会将设置标记为已完成并重启 SpringBoard。仅在已激活的客户机上使用。语言、密码、Apple 账户和隐私设置保持默认。"
           }
         }
       }
@@ -24207,7 +24342,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体拒绝了重启请求。"
+            "value" : "客户机拒绝了重启请求。"
           }
         }
       }
@@ -24303,7 +24438,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客体已响应。"
+            "value" : "客户机已响应。"
           }
         }
       }
@@ -24393,7 +24528,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客户机连接后开始传输日志。"
+            "value" : "客户机连接后即开始流式传输日志。"
           }
         }
       }
@@ -24427,7 +24562,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ 的网络策略未更改。请重新启动该应用后重试。"
+            "value" : "%1$@ 的网络策略未更改。请重启该应用后重试。"
           }
         }
       }
@@ -25233,7 +25368,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要在客体中打开的 URL"
+            "value" : "要在客户机中打开的 URL"
           }
         }
       }
@@ -25391,7 +25526,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法重启客体"
+            "value" : "无法重启客户机"
           }
         }
       }
@@ -25527,7 +25662,20 @@
       }
     },
     "Unable to allow network access for %@." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to allow network access for %@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法为 %@ 开启网络访问。"
+          }
+        }
+      }
     },
     "Unable to capture the guest log. Check the connection. Retrying in 3 seconds." : {
       "localizations" : {
@@ -25558,7 +25706,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法获取客体日志。请检查连接。将在 3 秒后重试。"
+            "value" : "无法获取客户机日志。请检查连接。将在 3 秒后重试。"
           }
         }
       }
@@ -25626,7 +25774,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法复制截屏。请重试。"
+            "value" : "无法拷贝截屏。请重试。"
           }
         }
       }
@@ -25864,7 +26012,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法下载 %@。请更新客体代理，然后重试。"
+            "value" : "无法下载 %@。请更新客户机代理，然后重试。"
           }
         }
       }
@@ -26102,7 +26250,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法安装应用包。请检查文件和客体连接后重试。"
+            "value" : "无法安装应用包。请检查文件和客户机连接后重试。"
           }
         }
       }
@@ -26136,7 +26284,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法安装引导环境。请检查客体代理连接后重试。"
+            "value" : "无法安装引导环境。请检查客户机代理连接后重试。"
           }
         }
       }
@@ -26170,7 +26318,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法安装引导环境。请检查文件和客体连接后重试。"
+            "value" : "无法安装引导环境。请检查文件和客户机连接后重试。"
           }
         }
       }
@@ -26322,7 +26470,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法加载 %1$@ 的详细信息。%2$@"
+            "value" : "无法载入 %1$@ 的详细信息。%2$@"
           }
         }
       }
@@ -26356,7 +26504,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法加载钥匙串项目。请检查客体代理连接后重试。"
+            "value" : "无法载入钥匙串项目。请检查客户机代理连接后重试。"
           }
         }
       }
@@ -26418,7 +26566,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法加载此文件夹。请检查连接，然后重试。"
+            "value" : "无法载入此文件夹。请检查连接，然后重试。"
           }
         }
       }
@@ -26514,7 +26662,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法在客体中打开 URL。请检查 URL 和客体连接后重试。"
+            "value" : "无法在客户机中打开 URL。请检查 URL 和客户机连接后重试。"
           }
         }
       }
@@ -26752,7 +26900,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法读取开发者模式状态。请检查客体代理连接后重试。"
+            "value" : "无法读取开发者模式状态。请检查客户机代理连接后重试。"
           }
         }
       }
@@ -27012,7 +27160,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法读取客体代理哈希。请检查客体代理连接后重试。"
+            "value" : "无法读取客户机代理哈希。请检查客户机代理连接后重试。"
           }
         }
       }
@@ -27046,7 +27194,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法读取客体剪贴板。请检查连接后重试。"
+            "value" : "无法读取客户机剪贴板。请检查连接后重试。"
           }
         }
       }
@@ -27080,7 +27228,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法读取客体剪贴板。请检查连接后重试。"
+            "value" : "无法读取客户机剪贴板。请检查连接后重试。"
           }
         }
       }
@@ -27244,7 +27392,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法卸载引导环境。请检查客体代理连接后重试。"
+            "value" : "无法卸载引导环境。请检查客户机代理连接后重试。"
           }
         }
       }
@@ -27414,7 +27562,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法重新启动 %1$@。%2$@"
+            "value" : "无法重启 %1$@。%2$@"
           }
         }
       }
@@ -27476,7 +27624,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法保存截屏。请重试。"
+            "value" : "无法存储截屏。请重试。"
           }
         }
       }
@@ -27748,7 +27896,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法设置客体剪贴板。请检查连接后重试。"
+            "value" : "无法设置客户机剪贴板。请检查连接后重试。"
           }
         }
       }
@@ -27782,7 +27930,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法设置客体剪贴板。请检查连接后重试。"
+            "value" : "无法设置客户机剪贴板。请检查连接后重试。"
           }
         }
       }
@@ -29306,7 +29454,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "唤醒"
+            "value" : "唤醒次数"
           }
         }
       }
@@ -29848,7 +29996,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "向客体偏好设置键写入指定类型的值。"
+            "value" : "向客户机偏好设置键写入指定类型的值。"
           }
         }
       }
@@ -29882,7 +30030,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将此值写入客体 (⌘↩)"
+            "value" : "将此值写入客户机 (⌘↩)"
           }
         }
       }
@@ -30540,7 +30688,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "launchd 将从其域中卸载该服务，直到再次载入或客户机重新启动。"
+            "value" : "launchd 将从其域中卸载该服务，直到再次载入或客户机重启。"
           }
         }
       }
@@ -30698,7 +30846,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "隐根"
+            "value" : "roothide"
           }
         }
       }
@@ -30732,7 +30880,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无根（弃用）"
+            "value" : "rootless（已弃用）"
           }
         }
       }
