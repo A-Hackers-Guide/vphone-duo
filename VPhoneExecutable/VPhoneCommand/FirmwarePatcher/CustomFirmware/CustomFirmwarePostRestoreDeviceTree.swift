@@ -90,31 +90,6 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         dryRun: Bool = false,
         verbose: Bool = true,
     ) throws -> Outcome {
-        try rewrite(at: url, board: boardURL, dryRun: dryRun, verbose: verbose, edit: withBoardAudio)
-    }
-
-    /// Make an iPad guest's `devicetree.img4` (or bare `.im4p`) carry the
-    /// haptics node of the iPad's own tree at `boardURL` — none, on every iPad
-    /// so far — in place. See `DeviceTreePatcher.presentBoardHaptics`.
-    @discardableResult
-    public static func presentBoardHaptics(
-        at url: URL,
-        board boardURL: URL,
-        dryRun: Bool = false,
-        verbose: Bool = true,
-    ) throws -> Outcome {
-        try rewrite(at: url, board: boardURL, dryRun: dryRun, verbose: verbose, edit: withBoardHaptics)
-    }
-
-    /// `rewrite(at:)` with an edit that also takes the flat tree of the board's
-    /// device tree file and returns the size change it made.
-    private static func rewrite(
-        at url: URL,
-        board boardURL: URL,
-        dryRun: Bool,
-        verbose: Bool,
-        edit: (Data, Data) throws -> (Data, [Change], Int),
-    ) throws -> Outcome {
         let boardData: Data
         do {
             boardData = try Data(contentsOf: boardURL)
@@ -123,7 +98,21 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         }
         let board = try openDeviceTree(boardData, path: boardURL.path).blob
         return try rewrite(at: url, dryRun: dryRun, verbose: verbose) { blob in
-            let (newBlob, changes, delta) = try edit(blob, board)
+            let (newBlob, changes, delta) = try withBoardAudio(blob, board: board)
+            return (newBlob, changes, blob.count + delta)
+        }
+    }
+
+    /// Remove `/product/haptics` from a guest's `devicetree.img4` (or bare
+    /// `.im4p`), in place. See `DeviceTreePatcher.removeHaptics(from:)`.
+    @discardableResult
+    public static func removeHaptics(
+        at url: URL,
+        dryRun: Bool = false,
+        verbose: Bool = true,
+    ) throws -> Outcome {
+        try rewrite(at: url, dryRun: dryRun, verbose: verbose) { blob in
+            let (newBlob, changes, delta) = try withoutHaptics(blob)
             return (newBlob, changes, blob.count + delta)
         }
     }
@@ -301,42 +290,31 @@ public enum CustomFirmwarePostRestoreDeviceTree {
             else { return "none" }
             return String(id.value.loadLE(UInt32.self, at: 0))
         }
-        return try withBoardNode(blob, board: board, property: "product/audio", DeviceTreePatcher.presentBoardAudio) {
-            ("acoustic-id \(acousticID($0.before))", "acoustic-id \(acousticID($0.after)), \($0.after.count)B")
-        }
-    }
-
-    /// `blob` with `/product/haptics` as the board's flat tree `board` has it,
-    /// through `DeviceTreePatcher.presentBoardHaptics`: removed where the board
-    /// has none. Returns the size change with the changes, as `withBoardAudio`
-    /// does. A tree that already matches comes back unchanged.
-    public static func withBoardHaptics(_ blob: Data, board: Data) throws -> (Data, [Change], Int) {
-        func describe(_ node: Data) -> String {
-            node.isEmpty ? "absent" : "present, \(node.count)B"
-        }
-        return try withBoardNode(blob, board: board, property: "product/haptics", DeviceTreePatcher.presentBoardHaptics) {
-            (describe($0.before), describe($0.after))
-        }
-    }
-
-    /// Parses both flat trees, applies `present` to them, and returns the
-    /// serialized result with one change, described by `describe`, and the
-    /// size it added.
-    private static func withBoardNode(
-        _ blob: Data,
-        board: Data,
-        property: String,
-        _ present: (DeviceTreePatcher.DTNode, DeviceTreePatcher.DTNode) -> DeviceTreePatcher.BoardNodeChange?,
-        describe: (DeviceTreePatcher.BoardNodeChange) -> (before: String, after: String),
-    ) throws -> (Data, [Change], Int) {
         let root = try parseTree(blob, label: "DT")
         let source = try parseTree(board, label: "board DT")
-        guard let change = present(root, source) else {
+        guard let change = DeviceTreePatcher.presentBoardAudio(in: root, from: source) else {
             return (blob, [], 0)
         }
-        let described = describe(change)
-        let record = Change(property: property, before: described.before, after: described.after)
+        let record = Change(
+            property: "product/audio",
+            before: "acoustic-id \(acousticID(change.before))",
+            after: "acoustic-id \(acousticID(change.after)), \(change.after.count)B",
+        )
         return (serializeNode(root), [record], change.after.count - change.before.count)
+    }
+
+    /// `blob` without `/product/haptics`, through
+    /// `DeviceTreePatcher.removeHaptics(from:)`, which fw patch uses for every
+    /// new guest. Returns the size change with the changes, as `withBoardAudio`
+    /// does: the node's bytes out. A tree with no haptics node comes back
+    /// unchanged.
+    public static func withoutHaptics(_ blob: Data) throws -> (Data, [Change], Int) {
+        let root = try parseTree(blob, label: "DT")
+        guard let removed = DeviceTreePatcher.removeHaptics(from: root) else {
+            return (blob, [], 0)
+        }
+        let record = Change(property: "product/haptics", before: "present, \(removed.count)B", after: "absent")
+        return (serializeNode(root), [record], -removed.count)
     }
 
     /// The root of a flat tree that must fill `blob` exactly.

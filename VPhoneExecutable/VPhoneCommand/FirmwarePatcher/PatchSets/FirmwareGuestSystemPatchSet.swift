@@ -264,13 +264,13 @@ public enum FirmwareGuestSystemPatchSet {
                 target: .prebootDeviceTree,
             ),
             VPhonePatchDeclaration(
-                identifier: prebootBoardHaptics,
-                title: "iPad haptics",
+                identifier: prebootHaptics,
+                title: "Haptics node",
                 summary: """
-                Removes the haptics node from an iPad guest's restored Preboot device tree, as fw \
-                patch now does. With it iOS believes the guest has a Taptic Engine, plays every \
-                tone with its haptic track, and drops the tone when the haptic engine a VM does \
-                not have fails to start. Needs the iPad's device tree in the VM's FirmwareOriginals.
+                Removes the haptics node from a guest's restored Preboot device tree, iPhone or \
+                iPad, as fw patch now does. With it iOS believes the guest has a Taptic Engine, \
+                plays every tone with its haptic track, and drops the tone when the haptic engine \
+                a VM does not have fails to start.
                 """,
                 target: .prebootDeviceTree,
             ),
@@ -321,7 +321,10 @@ public enum FirmwareGuestSystemPatchSet {
     /// The iPad audio node repair in the restored Preboot device tree, for an
     /// iPad VM patched before `fw patch` copied the board's node.
     public static let prebootBoardAudio = "preboot-cfw-devicetree_board_audio"
-    public static let prebootBoardHaptics = "preboot-cfw-devicetree_board_haptics"
+
+    /// The haptics node removal in the restored Preboot device tree, for any
+    /// VM patched before `fw patch` removed it from every guest's tree.
+    public static let prebootHaptics = "preboot-cfw-devicetree_haptics"
 
     /// The preset parameter `system-systemversion-cfw-build_version` reads.
     public static let buildVersionParameter = "BuildVersion"

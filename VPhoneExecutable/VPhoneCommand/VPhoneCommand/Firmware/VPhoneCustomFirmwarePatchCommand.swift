@@ -354,41 +354,32 @@ struct VPhoneCustomFirmwarePatchBoardAudioCommand: ParsableCommand {
     }
 }
 
-// MARK: - patch-dt-board-haptics
+// MARK: - patch-dt-haptics
 
-struct VPhoneCustomFirmwarePatchBoardHapticsCommand: ParsableCommand {
+struct VPhoneCustomFirmwarePatchHapticsCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "patch-dt-board-haptics",
-        abstract: "Make an iPad guest's device tree carry the iPad's own haptics node, or none",
+        commandName: "patch-dt-haptics",
+        abstract: "Remove the haptics node from a guest's device tree",
         discussion: """
-        Sets /product/haptics in a restored device tree to what the iPad's own
-        tree has (DeviceTree.<board>.im4p from its IPSW), in place, preserving
-        the container's compression, manifest and restore info. An iPad has no
-        haptics node, so the vphone600 one is removed: with it, iOS believes the
-        guest has a Taptic Engine, plays every tone with its haptic track, and
-        drops the tone when the haptic engine a VM does not have fails to start.
-        A tree that already matches is left as it is.
+        Removes /product/haptics from a restored device tree, in place,
+        preserving the container's compression, manifest and restore info. No
+        VM has a haptic actuator or the haptic server behind it: with the node,
+        iOS believes the guest has a Taptic Engine, plays every tone with its
+        haptic track, and drops the tone when the haptic engine fails to start.
+        That holds for an iPhone guest and an iPad guest alike. A tree without
+        the node is left as it is.
 
-        Takes a devicetree.img4 (preferred) or a bare .im4p, and the board's
-        DeviceTree .im4p.
+        Takes a devicetree.img4 (preferred) or a bare .im4p.
         """,
     )
 
     @Argument(help: "Path to devicetree.img4 or devicetree.im4p", transform: URL.init(fileURLWithPath:))
     var deviceTree: URL
 
-    @Argument(help: "Path to the iPad's DeviceTree.<board>.im4p", transform: URL.init(fileURLWithPath:))
-    var board: URL
-
     @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
     var dryRun = false
 
     func run() throws {
-        try CustomFirmwarePostRestoreDeviceTree.presentBoardHaptics(
-            at: deviceTree,
-            board: board,
-            dryRun: dryRun,
-            verbose: true,
-        )
+        try CustomFirmwarePostRestoreDeviceTree.removeHaptics(at: deviceTree, dryRun: dryRun, verbose: true)
     }
 }

@@ -93,7 +93,7 @@ struct DeviceTreeGuestDeviceTests {
         ],
     )
 
-    /// vphone600's `/product/haptics`, which no iPad tree has.
+    /// vphone600's `/product/haptics`, which no VM can back.
     static let haptics = Node(
         properties: [
             .string("name", "haptics"),
@@ -216,14 +216,35 @@ struct DeviceTreeGuestDeviceTests {
         return read(patcher.patchedData)
     }
 
-    /// Run the patcher on an iPad's installed tree, returning the tree it
-    /// writes and its records.
-    static func installed(
-        _ guest: Data,
+    /// The trees a guest is patched in: an iPhone guest's one shared tree, and
+    /// an iPad guest's installed tree and restore tree.
+    enum Guest: CaseIterable, Sendable {
+        case iPhone
+        case iPad
+        case iPadRestore
+
+        var device: VPhoneGuestDevice {
+            self == .iPhone ? .default : .iPad16_1
+        }
+
+        var role: DeviceTreePatcher.TreeRole {
+            switch self {
+            case .iPhone: .shared
+            case .iPad: .installed
+            case .iPadRestore: .restore
+            }
+        }
+    }
+
+    /// Run the patcher on `guest`'s tree, returning the tree it writes and its
+    /// records.
+    static func patched(
+        _ tree: Data,
+        as guest: Guest,
         gate: VPhonePatchGate = .unrestricted,
     ) throws -> (data: Data, records: [PatchRecord]) {
         let patcher = DeviceTreePatcher(
-            data: guest, verbose: false, device: .iPad16_1, role: .installed,
+            data: tree, verbose: false, device: guest.device, role: guest.role,
             sourceTree: board().serialized(),
         )
         patcher.gate = gate
@@ -343,9 +364,10 @@ struct DeviceTreeGuestDeviceTests {
 
     // MARK: - Haptics
 
-    @Test func `an iPad's installed tree loses the haptics node its board does not have`() throws {
-        let guest = Self.guestTree(haptics: Self.haptics).serialized()
-        let (patched, records) = try Self.installed(guest)
+    @Test(arguments: Guest.allCases)
+    func `every guest's tree loses the haptics node`(guest: Guest) throws {
+        let tree = Self.guestTree(haptics: Self.haptics).serialized()
+        let (patched, records) = try Self.patched(tree, as: guest)
 
         #expect(Self.read(patched)["device-tree/product/haptics"] == nil)
         let parser = DeviceTreePatcher(data: Data(), verbose: false)
@@ -355,35 +377,36 @@ struct DeviceTreeGuestDeviceTests {
 
         // The same tree without the node patches to the same bytes: nothing
         // around it moved, and the length is the node's shorter.
-        let (without, _) = try Self.installed(Self.guestTree(haptics: nil).serialized())
+        let (without, _) = try Self.patched(Self.guestTree(haptics: nil).serialized(), as: guest)
         #expect(patched == without)
-        #expect(guest.count - Self.guestTree(haptics: nil).serialized().count == Self.haptics.serialized().count)
+        #expect(tree.count - Self.guestTree(haptics: nil).serialized().count == Self.haptics.serialized().count)
 
-        let haptics = records.filter { $0.patchID == "devicetree-cfw-ipad_haptics" }
+        let haptics = records.filter { $0.patchID == "devicetree-cfw-product_haptics_node" }
         #expect(haptics.count == 1)
         #expect(haptics.first?.originalBytes == Self.haptics.serialized())
         #expect(haptics.first?.patchedBytes.isEmpty == true)
     }
 
-    @Test func `the haptics node stays when its patch is off`() throws {
+    @Test(arguments: Guest.allCases)
+    func `the haptics node stays when its patch is off`(guest: Guest) throws {
         let declared = Set(FirmwareDeviceTreePatchSet.manifest.patches.map(\.identifier))
-        #expect(declared.contains("devicetree-cfw-ipad_haptics"))
-        let gate = VPhonePatchGate(declared: declared, enabled: declared.subtracting(["devicetree-cfw-ipad_haptics"]))
-        let (patched, records) = try Self.installed(Self.guestTree(haptics: Self.haptics).serialized(), gate: gate)
+        #expect(declared.contains("devicetree-cfw-product_haptics_node"))
+        let gate = VPhonePatchGate(declared: declared, enabled: declared.subtracting(["devicetree-cfw-product_haptics_node"]))
+        let (patched, records) = try Self.patched(Self.guestTree(haptics: Self.haptics).serialized(), as: guest, gate: gate)
 
-        #expect(!records.contains { $0.patchID == "devicetree-cfw-ipad_haptics" })
-        let product = try #require(Self.read(patched)["device-tree/product"])
-        #expect(Self.string(product["artwork-device-idiom"]) == "pad", "the other iPad edits still apply")
+        #expect(!records.contains { $0.patchID == "devicetree-cfw-product_haptics_node" })
+        #expect(!records.isEmpty, "the other edits still apply")
         let root = try DeviceTreePatcher(data: Data(), verbose: false).parsePayload(patched)
         #expect(Self.childNames(root, at: ["product"]) == ["maps", "haptics", "util"])
         #expect(Self.integer(Self.read(patched)["device-tree/product/haptics"]?["closed-loop"]) == 1)
     }
 
-    @Test func `removing the haptics node a second time changes nothing`() throws {
-        let (once, _) = try Self.installed(Self.guestTree(haptics: Self.haptics).serialized())
-        let (twice, records) = try Self.installed(once)
+    @Test(arguments: Guest.allCases)
+    func `removing the haptics node a second time changes nothing`(guest: Guest) throws {
+        let (once, _) = try Self.patched(Self.guestTree(haptics: Self.haptics).serialized(), as: guest)
+        let (twice, records) = try Self.patched(once, as: guest)
         #expect(twice == once)
-        #expect(!records.contains { $0.patchID == "devicetree-cfw-ipad_haptics" })
+        #expect(!records.contains { $0.patchID == "devicetree-cfw-product_haptics_node" })
     }
 }
 

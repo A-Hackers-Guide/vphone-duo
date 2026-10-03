@@ -185,7 +185,7 @@ struct VPhoneCustomFirmwareCommand: ParsableCommand {
             VPhoneCustomFirmwarePatchCampoEntitlementsCommand.self,
             VPhoneCustomFirmwarePatchPostRestoreDeviceTreeCommand.self,
             VPhoneCustomFirmwarePatchBoardAudioCommand.self,
-            VPhoneCustomFirmwarePatchBoardHapticsCommand.self,
+            VPhoneCustomFirmwarePatchHapticsCommand.self,
         ] + VPhoneCustomFirmwareMachOVerbs.all + VPhoneCustomFirmwareDyldSharedCacheVerbs.all,
     )
 }

@@ -28,10 +28,12 @@
 > M-series board keeps Stage Manager (no `disable-chamois`) and the iPad (A16)
 > has no `medusa-overlay-app-capability`: `devicetree-cfw-ipad_artwork`,
 > `devicetree-cfw-ipad_product`, `devicetree-cfw-ipad_buttons`,
-> `devicetree-cfw-ipad_identity`, (2026-10-02) `devicetree-cfw-ipad_audio`,
-> which takes the board's `/product/audio` node, and (2026-10-03)
-> `devicetree-cfw-ipad_haptics`, which removes `/product/haptics` where the
-> board has none. They are written to a second device tree,
+> `devicetree-cfw-ipad_identity` and (2026-10-02) `devicetree-cfw-ipad_audio`,
+> which takes the board's `/product/audio` node. (`/product/haptics`, which no
+> iPad tree has, is not one of them: since 2026-10-03
+> `devicetree-cfw-product_haptics_node` removes it from every guest's tree,
+> iPhone and iPad alike — see "Why the haptics node goes" below.) They are
+> written to a second device tree,
 > `Firmware/all_flash/DeviceTree.vphone600ap.guest.im4p`, which `fw prepare`
 > copies from the vphone600 one and the hybrid manifest names as `DeviceTree`;
 > `RestoreDeviceTree` keeps pointing at the original, so restore still boots
@@ -2225,30 +2227,40 @@ virtio sound device with a host output sink. Two faults; the full reveal is
 | `system-virtiosound-cfw-hal_plugin` (new) | `/System/Library/Audio/Plug-Ins/HAL/VPhoneVirtIOSound.driver`, `cfw install` and `cfw update-environment` | Installs the CoreAudio HAL plugin for `AppleVirtIOSound`, built from `VPhoneGuestComponents/VirtIOSound`. |
 | `devicetree-cfw-ipad_audio` (new) | An iPad guest's installed DeviceTree, `fw patch` | Replaces `/product/audio` with the board tree's node (`DeviceTreePatcher.presentBoardAudio`), all properties as the board has them except its `AAPL,phandle`. |
 | `preboot-cfw-devicetree_board_audio` (new) | Restored Preboot `devicetree.img4`, `cfw install` and `cfw update-environment` | The same replacement for an iPad VM patched before it (`vphone-cli cfw patch-dt-board-audio`), from the board tree in `FirmwareOriginals`. |
-| `devicetree-cfw-ipad_haptics` (new, 2026-10-03) | An iPad guest's installed DeviceTree, `fw patch` | Makes `/product/haptics` what the board tree has (`DeviceTreePatcher.presentBoardHaptics`): removed for every iPad so far, none of which has the node. |
-| `preboot-cfw-devicetree_board_haptics` (new, 2026-10-03) | Restored Preboot `devicetree.img4`, `cfw install` and `cfw update-environment` | The same change for an iPad VM patched before it (`vphone-cli cfw patch-dt-board-haptics`), from the board tree in `FirmwareOriginals`. When it changes the tree, the installer also removes the guest's cached MobileGestalt answers, see below. |
+| `devicetree-cfw-product_haptics_node` (new, 2026-10-03) | Every guest's DeviceTree, `fw patch`: an iPhone guest's one tree, an iPad guest's installed tree and its `RestoreDeviceTree` | Removes `/product/haptics` (`DeviceTreePatcher.removeHaptics(from:)`), whatever the variant and the board. |
+| `preboot-cfw-devicetree_haptics` (new, 2026-10-03) | Restored Preboot `devicetree.img4`, `cfw install` and `cfw update-environment`, every guest | The same removal for a VM patched before it (`vphone-cli cfw patch-dt-haptics`); it needs no board tree. When it changes the tree, the installer also removes the guest's cached MobileGestalt answers, see below. |
 
 `fw patch` now reads an iPad's board tree through the `FirmwareOriginals` stash,
 so `DeviceTree.<board>.im4p` stays in the VM folder after the restore tree goes.
 
 **Why the haptics node goes.** vphone600 carries `/product/haptics`
-(`closed-loop`, `supports-3rd-party-haptics`); `DeviceTree.j410ap` and
-`.j820ap` have no such node. With it MobileGestalt answers yes to
-`DeviceSupportsHaptics` and `DeviceSupportsClosedLoopHaptics`, ToneLibrary sets
-`playHapticTracks` on every tone, and mediaplaybackd builds a `CHHapticEngine`
-whose server, `com.apple.audio.hapticd` in audiomxd, never answers on a VM:
-six one-second XPC timeouts, `FigHapticEngineCreate` fails 4099, and
-`itemfig_rebuildRenderPipelinesAndBoss` fails the item — the ringtone never
-starts although its route and audio queue are built. Without the node the
-guest answers as the iPad does and tones play. The answers are cached in
+(`closed-loop`, `supports-3rd-party-haptics`). With it MobileGestalt answers
+yes to `DeviceSupportsHaptics` and `DeviceSupportsClosedLoopHaptics`,
+ToneLibrary sets `playHapticTracks` on every tone, and mediaplaybackd builds a
+`CHHapticEngine` whose server, `com.apple.audio.hapticd` in audiomxd, never
+answers on a VM: six one-second XPC timeouts, `FigHapticEngineCreate` fails
+4099, and `itemfig_rebuildRenderPipelinesAndBoss` fails the item — the
+ringtone never starts although its route and audio queue are built. It was
+first seen on iPad guests, whose own trees (`DeviceTree.j410ap`, `.j820ap`)
+have no such node, and fixed there by making the node follow the board. An
+iPhone guest (iPhone99,11, iOS 27.0) then failed the same way — the same
+hapticd timeouts, the same 4099, the tone dropped — and a real iPhone's tree
+does have the node, so following the board cannot fix it. What is missing is
+the actuator and the haptic server, and no VM has either; every guest's tree
+loses the node, and the board-following patch and its Preboot repair were
+replaced by these two. The restore tree loses it as well: an iPad guest's
+`RestoreDeviceTree` is patched exactly as an iPhone guest's tree is, and
+restore reads nothing from the node. Without it the guest answers as a device
+with no Taptic Engine does and tones play. The answers are cached in
 `/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist`,
 written at first boot, so a guest that has already booted keeps the old ones
 until that file is removed and the guest restarted; a guest created with the
 patch never has them. `cfw install` and `cfw update-environment` remove the
-file from the mounted Data volume whenever a Preboot board repair (haptics or
-audio) changed the tree, and log `[+] MobileGestalt cache removed`; a repair
-that found the tree already matching removes nothing. This is part of those
-two repairs rather than a declaration of its own: it writes no patch, runs
+file from the mounted Data volume whenever a Preboot device tree repair (the
+haptics removal, or the board audio node) changed the tree, and log
+`[+] MobileGestalt cache removed`; a repair that found the tree already right
+removes nothing. This is part of those two repairs rather than a declaration
+of its own: it writes no patch, runs
 only when one of them changed the tree, and turning a repair off already
 turns it off. Removing it by hand (`files.remove`, then `system.reboot`)
 remains the fallback for a tree changed any other way. Detail and the

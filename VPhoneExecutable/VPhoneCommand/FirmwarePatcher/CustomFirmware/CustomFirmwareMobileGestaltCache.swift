@@ -3,13 +3,14 @@
 // libMobileGestalt answers most device questions from the device tree, and at
 // first boot it writes those answers to a cache on the Data volume. It reads
 // the cache from then on, so a guest whose Preboot device tree is repaired
-// later keeps answering as the old tree did: after the board haptics repair
-// removed `/product/haptics`, Settings still showed the Haptics row and tones
-// stayed silent until the file was removed and the guest rebooted. Without the
-// file, libMobileGestalt computes the answers again from the tree it booted.
+// later keeps answering as the old tree did: after the haptics repair removed
+// `/product/haptics`, Settings still showed the Haptics row and tones stayed
+// silent until the file was removed and the guest rebooted. Without the file,
+// libMobileGestalt computes the answers again from the tree it booted.
 //
-// `cfw install` and `cfw update-environment` remove it when a board repair
-// changed the tree, and only then. See `Research/Guest/virtio_sound.md` §7.
+// `cfw install` and `cfw update-environment` remove it when a Preboot device
+// tree repair (the haptics removal or the board audio node) changed the tree,
+// and only then. See `Research/Guest/virtio_sound.md` §7.
 
 import Foundation
 import VPhoneCoreKit

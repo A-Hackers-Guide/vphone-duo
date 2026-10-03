@@ -508,9 +508,23 @@ come from the device tree:
 | `DeviceTree.j820ap` (iPad17,3) | camera, facetime, maps, audio | none |
 
 So the guest says it has a Taptic Engine and the iPad it presents does not.
-`devicetree-cfw-ipad_haptics` makes the node follow the board — removed, for
-an iPad — and `preboot-cfw-devicetree_board_haptics` does the same to a guest
-that is already installed.
+The first fix made the node follow the board, which removed it on an iPad.
+
+**An iPhone guest fails the same way.** On an iPhone99,11 guest running iOS
+27.0, a tone preview logged the same six hapticd timeouts, the same
+`FigHapticEngineCreate` 4099, and the item failed and was dropped. That guest
+boots the shared vphone600 tree, has no board tree of its own to follow, and a
+real iPhone's tree does have `/product/haptics`; following the board can never
+remove it there. What decides it is not the device the guest presents but the
+hardware behind it: no VM has a haptic actuator, and nothing serves
+`com.apple.audio.hapticd`. So the removal is now unconditional.
+`devicetree-cfw-product_haptics_node` takes the node out of every tree
+`fw patch` writes — an iPhone guest's one tree, an iPad guest's installed tree,
+and its `RestoreDeviceTree`, which is patched exactly as an iPhone guest's
+tree is and from which restore reads nothing of the node — and
+`preboot-cfw-devicetree_haptics` (`vphone-cli cfw patch-dt-haptics <dt>`)
+does the same to a guest that is already installed, with no board tree
+needed. `cfw install` and `cfw update-environment` run it for every guest.
 
 **The answers are cached.** libMobileGestalt writes
 `/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist`
@@ -526,8 +540,8 @@ vphone-launchpad-cli guest rpc <machine> system.reboot '{"force":true}'
 ```
 
 A guest created with the patch never caches the wrong answers. For an existing
-one the installer now does the removal: when a Preboot board repair
-(`preboot-cfw-devicetree_board_haptics` or
+one the installer now does the removal: when a Preboot device tree repair
+(`preboot-cfw-devicetree_haptics` or
 `preboot-cfw-devicetree_board_audio`) changes the device
 tree during `cfw install` or `cfw update-environment`, it deletes that file
 from the mounted Data volume (`CustomFirmwareMobileGestaltCache`, through the
@@ -538,7 +552,7 @@ same descriptor-relative access as every other guest write) and prints
 ```
 
 The guest's next boot is then enough. A repair that finds the tree already
-matching the board removes nothing, and a guest that never booted has no file
+right removes nothing, and a guest that never booted has no file
 and gets no line. The two commands above remain the way to do it by hand, for
 a guest whose tree was changed some other way.
 
@@ -547,8 +561,9 @@ has no Haptics row, mediaplaybackd makes no hapticd connection, and a tone
 preview plays on the Mac — heard, and in `vpquery.log` a 20 s stream with 237
 writes and none starved.
 
-iPhone guests are not changed: an iPhone's own tree has the node, and what a
-tone does there with no haptic server has not been measured.
+Not yet verified on an iPhone guest: that, with the node removed and the
+cache rebuilt, a tone there plays as it does on `audiotest-ipad`. The failure
+it removes is the same one, measured above.
 
 ## Reveal and validation
 

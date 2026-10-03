@@ -273,10 +273,10 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
         // The Preboot identity patches go with the boot chain and belong to a
-        // full install only. The board audio repair is the exception: an iPad VM
-        // restored before it has no other way to get its audio back, since its
-        // restore tree is gone and `fw patch` does not run again.
-        let boardTreeChanged = try patchPreboot(
+        // full install only. The device tree repairs are the exception: a VM
+        // restored before the board audio repair or the haptics removal has no
+        // other way to get them, since `fw patch` does not run again.
+        let treeRepaired = try patchPreboot(
             volumes: volumes,
             work: work,
             plan: plan,
@@ -287,7 +287,7 @@ struct VPhoneCustomFirmwareInstaller {
         // A guest that has booted keeps the MobileGestalt answers it cached
         // from the old tree, so a repair that changed the tree drops them; one
         // that found the tree already right leaves them be.
-        if boardTreeChanged {
+        if treeRepaired {
             let dataRoot = try openGuestVolume("data", device: "\(container)s3", in: work)
             if try CustomFirmwareMobileGestaltCache.remove(fromDataVolume: dataRoot) {
                 print("  [+] MobileGestalt cache removed; the guest rebuilds it from the new device tree at next boot")
@@ -780,7 +780,7 @@ struct VPhoneCustomFirmwareInstaller {
     private static let lateGuestPatches = [
         FirmwareGuestSystemPatchSet.virtioSoundDriver,
         FirmwareGuestSystemPatchSet.prebootBoardAudio,
-        FirmwareGuestSystemPatchSet.prebootBoardHaptics,
+        FirmwareGuestSystemPatchSet.prebootHaptics,
         FirmwareGuestSystemPatchSet.virtualAudioSpeakerRouteThrows,
         FirmwareGuestSystemPatchSet.virtualAudioMuteSetThrow,
         FirmwareGuestSystemPatchSet.virtualAudioSpeakerProtectionGate,
@@ -1160,12 +1160,14 @@ struct VPhoneCustomFirmwareInstaller {
     }
 
     /// `includeIdentity` is false for an environment update, which carries
-    /// only the board audio and haptics repairs. `boardDeviceTree` is the
-    /// iPad's own device tree, staged from the VM's `FirmwareOriginals`, or nil
-    /// for an iPhone guest or a VM patched before `fw patch` kept it.
+    /// only the device tree repairs: the board audio repair, which needs
+    /// `boardDeviceTree`, and the haptics removal, which every guest gets.
+    /// `boardDeviceTree` is the iPad's own device tree, staged from the VM's
+    /// `FirmwareOriginals`, or nil for an iPhone guest or a VM patched before
+    /// `fw patch` kept it.
     ///
-    /// Returns whether a board repair changed the device tree, which leaves
-    /// the guest's cached MobileGestalt answers stale.
+    /// Returns whether a repair changed the device tree, which leaves the
+    /// guest's cached MobileGestalt answers stale.
     private func patchPreboot(
         volumes: [[String: Any]],
         work: WorkDirectory,
@@ -1195,11 +1197,14 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
         let spoofBuild = includeIdentity ? self.spoofBuild : nil
-        let boardVerbs = boardDeviceTree == nil ? [] : [
-            (FirmwareGuestSystemPatchSet.prebootBoardAudio, "patch-dt-board-audio"),
-            (FirmwareGuestSystemPatchSet.prebootBoardHaptics, "patch-dt-board-haptics"),
-        ].filter { on($0.0) }.map(\.1)
-        guard rewriteIdentity || !boardVerbs.isEmpty || !(spoofBuild ?? "").isEmpty else { return false }
+        var repairs: [(verb: String, arguments: [String])] = []
+        if let boardDeviceTree, on(FirmwareGuestSystemPatchSet.prebootBoardAudio) {
+            repairs.append(("patch-dt-board-audio", [boardDeviceTree.path]))
+        }
+        if on(FirmwareGuestSystemPatchSet.prebootHaptics) {
+            repairs.append(("patch-dt-haptics", []))
+        }
+        guard rewriteIdentity || !repairs.isEmpty || !(spoofBuild ?? "").isEmpty else { return false }
         guard
             let preboot = volumes.first(where: { ($0["Roles"] as? [String])?.contains("Preboot") == true }),
             let device = preboot["DeviceIdentifier"] as? String
@@ -1227,12 +1232,10 @@ struct VPhoneCustomFirmwareInstaller {
             if rewriteIdentity {
                 try patchCopy(of: deviceTree, in: root, work: work, verb: "patch-post-restore-dt")
             }
-            var boardTreeChanged = false
-            if let boardDeviceTree {
-                for verb in boardVerbs {
-                    if try patchCopy(of: deviceTree, in: root, work: work, verb: verb, arguments: [boardDeviceTree.path]) {
-                        boardTreeChanged = true
-                    }
+            var treeRepaired = false
+            for repair in repairs {
+                if try patchCopy(of: deviceTree, in: root, work: work, verb: repair.verb, arguments: repair.arguments) {
+                    treeRepaired = true
                 }
             }
             if let build = spoofBuild {
@@ -1241,7 +1244,7 @@ struct VPhoneCustomFirmwareInstaller {
                     try patchCopy(of: version, in: root, work: work, verb: "patch-build-version", arguments: [build])
                 }
             }
-            return boardTreeChanged
+            return treeRepaired
         }
     }
 

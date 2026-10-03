@@ -1,7 +1,7 @@
 // CustomFirmwareMobileGestaltCacheTests.swift — the installer drops the guest's cached answers.
 //
 // `cfw install` and `cfw update-environment` remove the MobileGestalt cache
-// from the mounted Data volume after a board repair changed the device tree.
+// from the mounted Data volume after a Preboot repair changed the device tree.
 // These run the removal against a scratch folder standing in for that volume.
 
 import Darwin

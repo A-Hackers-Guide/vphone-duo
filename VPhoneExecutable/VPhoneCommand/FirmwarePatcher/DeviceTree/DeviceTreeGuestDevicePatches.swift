@@ -26,6 +26,10 @@
 // Only the installed tree carries these. Restore boots `RestoreDeviceTree`,
 // which keeps the iPhone99,11 identity `restored_external` checks against the
 // manifest; see `FirmwareManifest.separateGuestDeviceTree`.
+//
+// One edit here is every guest's, not only an iPad's: `/product/haptics` goes
+// from every tree of every role, because no VM has the actuator or the haptic
+// server the node promises. See `removeHaptics(from:)`.
 
 import Foundation
 import VPhoneCoreKit
@@ -52,7 +56,7 @@ extension DeviceTreePatcher {
     static let iPadButtonsPatch = "devicetree-cfw-ipad_buttons"
     static let iPadIdentityPatch = "devicetree-cfw-ipad_identity"
     static let iPadAudioPatch = "devicetree-cfw-ipad_audio"
-    static let iPadHapticsPatch = "devicetree-cfw-ipad_haptics"
+    static let hapticsPatch = "devicetree-cfw-product_haptics_node"
 
     // MARK: - What Is Copied
 
@@ -202,44 +206,43 @@ extension DeviceTreePatcher {
         }
     }
 
-    // MARK: - Board Nodes
+    // MARK: - Audio
 
-    /// What `presentBoardNode` changed: the node's serialized bytes before and
-    /// after, empty where there was, or now is, no node.
-    struct BoardNodeChange {
+    /// What `presentBoardAudio` changed: the audio node's serialized bytes
+    /// before and after, empty when there was no node.
+    struct BoardAudioChange {
         let before: Data
         let after: Data
     }
 
-    /// Give `root`'s `/product/<name>` the properties of the board's.
+    /// Give `root`'s `/product/audio` the properties of the board's.
+    ///
+    /// The tree's audio node, when there is one, came from
+    /// `devicetree-cfw-product_audio_node`, which copies the D47 iPhone's. Its
+    /// `acoustic-id` (8018) names `/Library/Audio/Tunings/AID8018`, which an iPad
+    /// image does not ship; VirtualAudio then builds no microphone sub-ports, and
+    /// on an iPad, whose board answers yes to stereo and webcam recording, it
+    /// throws `PRECONDITION FAILURE` in `RoutingSettings_J98` and never
+    /// initializes, so the guest has no audio route at all. The board's own node
+    /// names the tunings its image carries (AID2029 on J820).
     ///
     /// Every property is copied as the board has it, placeholders included,
     /// except `AAPL,phandle`, which is the board tree's and could collide in
     /// this one; a property the board's node lacks is removed. The node is
-    /// added under `/product` when the tree has none. Where the board has no
-    /// such node the tree's is removed if `removeWhenAbsent`, and otherwise
-    /// left. Returns nil when nothing changes.
-    private static func presentBoardNode(
-        _ name: String,
-        in root: DTNode,
-        from source: DTNode,
-        removeWhenAbsent: Bool,
-    ) -> BoardNodeChange? {
+    /// added under `/product` when the tree has none. Returns nil when the
+    /// board has no audio node or the tree already matches it.
+    static func presentBoardAudio(in root: DTNode, from source: DTNode) -> BoardAudioChange? {
         guard
             let sourceProduct = optionalChild(of: source, named: "product"),
+            let sourceAudio = optionalChild(of: sourceProduct, named: "audio"),
             let product = optionalChild(of: root, named: "product")
         else { return nil }
-        let existing = optionalChild(of: product, named: name)
-        guard let sourceNode = optionalChild(of: sourceProduct, named: name) else {
-            guard removeWhenAbsent, let existing else { return nil }
-            product.children.removeAll { $0 === existing }
-            return BoardNodeChange(before: serialize(existing), after: Data())
-        }
 
-        let copied = sourceNode.properties.filter { $0.name != "AAPL,phandle" }
+        let copied = sourceAudio.properties.filter { $0.name != "AAPL,phandle" }
         func describe(_ properties: [DTProperty]) -> [String: (UInt16, Data)] {
             Dictionary(properties.map { ($0.name, ($0.flags, $0.value)) }, uniquingKeysWith: { first, _ in first })
         }
+        let existing = optionalChild(of: product, named: "audio")
         if let existing {
             let lhs = describe(existing.properties.filter { $0.name != "AAPL,phandle" })
             let rhs = describe(copied)
@@ -259,27 +262,13 @@ extension DeviceTreePatcher {
         if existing == nil {
             product.children.append(node)
         }
-        return BoardNodeChange(before: before, after: serialize(node))
+        return BoardAudioChange(before: before, after: serialize(node))
     }
 
-    /// Give `root`'s `/product/audio` the properties of the board's.
-    ///
-    /// The tree's audio node, when there is one, came from
-    /// `devicetree-cfw-product_audio_node`, which copies the D47 iPhone's. Its
-    /// `acoustic-id` (8018) names `/Library/Audio/Tunings/AID8018`, which an iPad
-    /// image does not ship; VirtualAudio then builds no microphone sub-ports, and
-    /// on an iPad, whose board answers yes to stereo and webcam recording, it
-    /// throws `PRECONDITION FAILURE` in `RoutingSettings_J98` and never
-    /// initializes, so the guest has no audio route at all. The board's own node
-    /// names the tunings its image carries (AID2029 on J820).
-    ///
-    /// Returns nil when the board has no audio node or the tree already matches it.
-    static func presentBoardAudio(in root: DTNode, from source: DTNode) -> BoardNodeChange? {
-        presentBoardNode("audio", in: root, from: source, removeWhenAbsent: false)
-    }
+    // MARK: - Haptics
 
-    /// Make `root`'s `/product/haptics` what the board's tree has — which for
-    /// an iPad is nothing.
+    /// Remove `root`'s `/product/haptics`. Returns the node's serialized bytes,
+    /// or nil when the tree has none.
     ///
     /// vphone600 carries the node (`closed-loop`, `supports-3rd-party-haptics`),
     /// so MobileGestalt answers yes to `DeviceSupportsHaptics` and
@@ -289,12 +278,18 @@ extension DeviceTreePatcher {
     /// queue. A VM has no haptic server behind `com.apple.audio.hapticd`: the
     /// engine's XPC setup times out six times, `FigHapticEngineCreate` fails
     /// with 4099, and `itemfig_rebuildRenderPipelinesAndBoss` fails the whole
-    /// item with it — the tone's audio never starts. An iPad's tree has no
-    /// haptics node at all, so the real device never asks.
-    ///
-    /// Returns nil when the tree already matches the board.
-    static func presentBoardHaptics(in root: DTNode, from source: DTNode) -> BoardNodeChange? {
-        presentBoardNode("haptics", in: root, from: source, removeWhenAbsent: true)
+    /// item with it — the tone's audio never starts. That was measured on an
+    /// iPad guest and on an iPhone guest alike. An iPad's own tree has no
+    /// haptics node and an iPhone's has one, so what the guest's board carries
+    /// does not decide it: no VM has the actuator or the server, so no guest
+    /// tree keeps the node, whatever its role.
+    static func removeHaptics(from root: DTNode) -> Data? {
+        guard
+            let product = optionalChild(of: root, named: "product"),
+            let haptics = optionalChild(of: product, named: "haptics")
+        else { return nil }
+        product.children.removeAll { $0 === haptics }
+        return serialize(haptics)
     }
 
     /// The flat encoding of one node and its children, for the patch record.
@@ -330,29 +325,18 @@ extension DeviceTreePatcher {
             )
         }
         let source = try parsePayload(sourceTree)
-        let boardNodes = [
-            ("audio", Self.iPadAudioPatch, Self.presentBoardAudio),
-            ("haptics", Self.iPadHapticsPatch, Self.presentBoardHaptics),
-        ]
-        for (name, patchID, present) in boardNodes {
-            guard gateAllows(patchID), let change = present(root, source) else { continue }
-            let removed = change.after.isEmpty
+        if gateAllows(Self.iPadAudioPatch), let change = Self.presentBoardAudio(in: root, from: source) {
             patches.append(PatchRecord(
-                patchID: patchID,
+                patchID: Self.iPadAudioPatch,
                 component: component,
                 fileOffset: 0,
                 virtualAddress: nil,
                 originalBytes: change.before,
                 patchedBytes: change.after,
-                description: removed
-                    ? "Remove /device-tree/product/\(name), which \(device.productType) does not have"
-                    : "Set /device-tree/product/\(name) as on \(device.productType)",
+                description: "Set /device-tree/product/audio as on \(device.productType)",
             ))
             if verbose {
-                let what = removed
-                    ? "-node  : /product/\(name), absent on \(device.productType)"
-                    : "=node  : /product/\(name) as on \(device.productType) (\(change.after.count)B)"
-                print("  \(what)  [\(patchID)]")
+                print("  =node  : /product/audio as on \(device.productType) (\(change.after.count)B)  [\(Self.iPadAudioPatch)]")
             }
         }
         for edit in try Self.guestEdits(from: source) {
@@ -396,6 +380,24 @@ extension DeviceTreePatcher {
             if verbose {
                 print("  \(after == nil ? "-prop " : "=prop "): /\(path) \(before.hex) → \((after ?? Data()).hex)  [\(edit.patchID)]")
             }
+        }
+    }
+
+    /// Applies `removeHaptics(from:)` to the parsed tree, whichever guest and
+    /// role it is for, and records the removal.
+    func applyHapticsRemoval(root: DTNode) {
+        guard gateAllows(Self.hapticsPatch), let removed = Self.removeHaptics(from: root) else { return }
+        patches.append(PatchRecord(
+            patchID: Self.hapticsPatch,
+            component: component,
+            fileOffset: 0,
+            virtualAddress: nil,
+            originalBytes: removed,
+            patchedBytes: Data(),
+            description: "Remove /device-tree/product/haptics, which no VM has the hardware for",
+        ))
+        if verbose {
+            print("  -node  : /product/haptics, no actuator or haptic server on a VM (\(removed.count)B)  [\(Self.hapticsPatch)]")
         }
     }
 }
