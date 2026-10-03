@@ -118,7 +118,10 @@ different meaning:
   and vphoned **deletes the file after installing**. It re-signs and places the
   bundle itself, bypassing installd and the profile checks, and keeps the app's
   own entitlements (so `get-task-allow` survives, which is the way to get a
-  debuggable test app in). It proves nothing about installd. To get the file
+  debuggable test app in). Its `PlugIns/*.appex` are registered with the app,
+  so extensions (packet tunnels, share sheets, widgets) launch; the result's
+  `plugins` lists them and `unregistered_plugins` any LaunchServices did not
+  take. It proves nothing about installd. To get the file
   into the guest, see [guest-layout](guest-layout.md) ("Handing a file to
   vphoned").
 
