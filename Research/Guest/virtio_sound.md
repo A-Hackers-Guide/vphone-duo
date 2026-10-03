@@ -448,22 +448,62 @@ heard. Measured: 0 of 499 and 0 of 237 writes starved.
 
 ### Nothing left to set by hand
 
-Both settings §4 and §5 asked for are now what the plugin does unasked:
+Both settings §4 and §5 asked for are now what the plugin does unasked, on an
+iPad or an iPhone guest (`hw.machine` starting "iPad" or "iPhone"; any other
+guest gets neither, so it has the whole speaker route or none of it):
 
 * the device UID is `PuffinOutput` unless `VPhoneVirtIOSoundDeviceUID` names
-  another;
-* on an iPad guest (`hw.machine`), `ProductIDOverride` is set to 8010 in the
-  `com.apple.audio.virtualaudio` domain from `halInitializeWithPluginHost:`
-  when nothing stored names one. The plugin loads before VirtualAudio reads
-  its defaults, and both are in audiomxd, so the in-process value is the one
-  it reads; audiomxd's sandbox keeps the write off disk (`settings.get` still
-  shows the domain empty), which is why it is repeated every launch. 8010
-  rather than §4's 198 because 198's category map has no ringtone-preview
-  entry (`virtualaudio_speaker_route_throws.md`, layer 1).
+  another. Elsewhere the default stays `VPhoneVirtIOSound:0`, which
+  VirtualAudio leaves unclaimed;
+* `ProductIDOverride` is set to 8010 in the `com.apple.audio.virtualaudio`
+  domain from `halInitializeWithPluginHost:` when nothing stored names one.
+  The plugin loads before VirtualAudio reads its defaults, and both are in
+  audiomxd, so the in-process value is the one it reads; audiomxd's sandbox
+  keeps the write off disk (`settings.get` still shows the domain empty),
+  which is why it is repeated every launch. Each launch logs one line after
+  `=== plugin load ===` saying what was done and whether VirtualAudio was
+  already mapped: `ProductIDOverride on 'iPhone99,11': unset, set to 8010 for
+  this launch; VirtualAudio not loaded yet`. 8010 rather than §4's 198
+  because 198's category map has no ringtone-preview entry
+  (`virtualaudio_speaker_route_throws.md`, layer 1).
 
-Verified on a guest with all four keys deleted and rebooted: VirtualAudio
-initializes, the boot chime and a ringtone preview start I/O on
+Verified on an iPad16,1 / 26.6.2 guest with all the keys deleted and rebooted:
+VirtualAudio initializes, the boot chime and a ringtone preview start I/O on
 `PuffinOutput (VAD [vdef] AggDev N)`, no `not initialized yet`.
+
+### iPhone guests (2026-10-04)
+
+An iPhone guest had been left out on the assumption that no ProductID
+initializes there. Measured on a new iPhone99,11 / iOS 27.0 guest
+(`audiotest-iphone`, cloudOS 26.4):
+
+| State | VirtualAudio | Safari (mp3, 91 s) | Ringtone preview |
+| --- | --- | --- | --- |
+| nothing set | `ProductID to int is: 195`, `RoutingSettings_N71.cpp:1167 PRECONDITION FAILURE`, `VA Init Status: 1` | silent (`not initialized yet`) | silent |
+| `ProductIDOverride` 8018, 8010 or 198 | `VA Init Status: 0`, `pspk` port on `PuffinOutput` | plays: 1067 writes, 0 starved, 44099 frames/s in (8018) | — |
+| 8018, haptics node removed | as above | plays | silent: `The routing mutex was left held after handling a route change`, mediaplaybackd `No audio output is available` |
+| 8010, haptics node removed | as above | plays | plays: 14.03 s, 165 writes, 0 starved |
+
+audiomxd did not crash in any of them, including with `PuffinOutput` and no
+override. 8018 is the acoustic ID of the D47 audio node the guest's tree
+carries, and it fails a tone the way 198 does on an iPad, so both families
+use 8010. The four VirtualAudio binary patches found their sites in the
+iOS 27 binary (5 walker sites, the others one each) and the plugin's load
+order held there too (`VirtualAudio not loaded yet`).
+
+A long continuous stream for measurements, without a person: `apps.open_url`
+with `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`; Safari
+plays it on load, and `ui.tap_element {"text":"Pause"}` stops it.
+
+### The clock under a rate change
+
+A rate change is answered by the device's own `setProperty` and can arrive
+while I/O runs. The clock (`VPVirtIOSoundClock.c`) stores no period count —
+it is the whole periods since the anchor at the reader's `now` — and
+publishes each anchor as one snapshot versioned by the seed, so the I/O
+thread never combines an old count with a new anchor. `make -C
+VPhoneGuestComponents test-virtiosound` runs a writer re-anchoring against a
+reader.
 
 ## 7. Tones stayed silent: the guest claimed a Taptic Engine (2026-10-03, night)
 
@@ -579,13 +619,21 @@ has no Haptics row, mediaplaybackd makes no hapticd connection, and a tone
 preview plays on the Mac — heard, and in `vpquery.log` a 20 s stream with 237
 writes and none starved.
 
-Not yet verified on an iPhone guest: that, with the node removed and the
-cache rebuilt, a tone there plays as it does on `audiotest-ipad`. The failure
-it removes is the same one, measured above.
+**Verified on an iPhone guest** (`audiotest-iphone`, iPhone99,11 / iOS 27.0):
+with the node removed and the cache rebuilt the Ringtone page has no Haptics
+row, mediaplaybackd makes no hapticd connection, and with ProductID 8010 a
+tone preview plays (§6, "iPhone guests").
 
-Not yet verified live: vphoned's removal on an existing guest after `cfw
-update-environment` — the log line above on the first boot, then
-`mobilegestalt_restart_pending: false` and no Haptics row after the restart.
+**Verified as an upgrade** (`mgtest-ipad`, iPad16,1 / 26.6.2, created with a
+bundle from before the removal, so it booted with the node and cached the
+old answers, Haptics row showing): after `cfw update-environment` from this
+build the node is gone from `IODeviceTree`; on the first boot vphoned leaves
+its marker for that boot session in
+`/var/root/Library/Caches/com.vphone.vphoned.mobilegestalt-dropped` and the
+cache file is new; after one restart the Haptics row is gone, the cache keeps
+its modification time (nothing removed again), and a tone plays — 16.12 s,
+190 writes, none starved. `/v1/health` was not read in that run; the marker
+file is what its field reports.
 
 ## Reveal and validation
 
