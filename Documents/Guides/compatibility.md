@@ -38,6 +38,7 @@ See [iPadOS guests](ipados.md).
 | Host | iPad restore IPSW | PCC/cloudOS IPSW | Observed result |
 | --- | --- | --- | --- |
 | Mac17,9 (M5 Pro) 27.0.1 | `iPad16,1,iPad16,2_26.6.2_23G90` | `26.4-23E5207q` | prepare, patch, restore, CFW (2.2.5 helper), boot to the iPadOS home screen at 744x1133 pt @2x, `model` iPad16,1, vphoned ping |
+| Mac17,9 (M5 Pro) 27.0.1 | `iPad16,1,iPad16,2_27.0.1_24A446` | `26.4-23E5207q` | Launchpad `vm create --device iPad16,1` from the catalog (2.4.0 bundle): prepare, patch, restore, CFW, boot to the iPadOS home screen at 744x1133 pt @2x, `model` iPad16,1, `ios_version` 27.0.1, vphoned ping |
 
 ## Earlier reported combinations
 
