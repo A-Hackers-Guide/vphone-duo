@@ -277,7 +277,7 @@ request carries `"force": true`.
 | launchd | `services.list`, `status`, `print`, `dump`, `disabled`, `start`, `enable`, `load`; `services.stop`, `disable`, `remove`, `signal`, `unload` **force**; `launchd.getenv`, `setenv`, `unsetenv` |
 | Logs | `logs.syslog {seconds, process?, level?, max_lines?}` (a bounded capture of at most 60 s), `logs.crashes {bundle_id?}`, `logs.crash {path}` |
 | Darwin notifications | `notify.post {name, state?}` (`postDarwinNotification`; `state` is a UInt64, as a number or a decimal string, stored before the post), `notify.state {name}` (`darwinNotificationState`) |
-| Network, security | `network.capture {seconds, interface?, filter?}` (writes a pcap in the guest scratch directory and returns its path), `network.static_names.get`, `network.static_names.set {entries}`, `network.usb_link_route.set {enabled, primary?}`, `network.resolve {host, family?, port?, first_only?, timeout_ms?}` (see below), `security.ssl_killswitch` |
+| Network, security | `network.capture {seconds, interface?, filter?}` (writes a pcap in the guest scratch directory and returns its path), `network.static_names.get`, `network.static_names.set {entries}`, `network.resolve {host, family?, port?, first_only?, timeout_ms?}` (see below), `security.ssl_killswitch` |
 | Apps | `apps.list`, `search`, `refresh`, `launch`, `terminate`, `foreground`, `open_url`, `install`, `info`, `binary`, `data_dir`, `url_schemes`, `handlers`, `registration`, `register`, `network_policy {repair?}`; `apps.uninstall`, `unregister`, `unregister_dir` **force** |
 | System | `system.uicache`, `system.system_apps {visible?}`, `system.respring` **force**, `system.reboot {userspace?}` **force**, `developer_mode.status`, `developer_mode.enable`, `power.low_power_mode`, `diagnostics.self_test` |
 | Files | `files.list`, `mkdir`, `remove`, `rename`, `read {binary?, limit?}`, `write`, `find`, `copy`, `symlink`, `chmod`, `chown`, `plist`, `plist_set {value \| remove}` |
@@ -291,21 +291,12 @@ request carries `"force": true`.
 
 `network.static_names.set` replaces the names the guest resolves locally, given
 as `entries: [{address, names}]` (IPv4 only; an empty list withdraws them).
-vphoned registers each name as a shared A record with the guest's own
-mDNSResponder on `lo0` (`VPhoneDaemon/Daemon/GuestStaticNames.swift`), saves
-them, and registers them again when it starts; `get` lists them. `vphone-vm`
-sets this Mac's `<LocalHostName>.local` after every connect, so an IPv4 lookup
-of it does not depend on which link's mDNS answer arrives first.
-
-`network.usb_link_route.set` with `enabled: true` routes `169.254.0.0/16`, as
-`169.254.0.0/17` and `169.254.128.0/17`, through the guest's USB link to the
-Mac (the Ethernet interface other than `primary`, default `en0`, with a
-`169.254` address), and keeps them there: every 2 seconds until the link has an
-address, every 30 seconds after, and again when vphoned starts
-(`GuestUSBLinkRoute.swift`; routing socket in `Native/vphoned_network.m`). It
-returns `{interface, enabled, routes}`, or `{pending, reason}` while the link
-has no address yet. `enabled: false` removes them. `vphone-vm` turns it on in
-nat and tunnel mode unless the VM's `--mac-name` is off.
+vphoned registers each name as a LocalOnly, known-unique A record with the
+guest's own mDNSResponder (`VPhoneDaemon/Daemon/GuestStaticNames.swift`), the
+kind of record an `/etc/hosts` line becomes: an IPv4 lookup of the name returns
+that address alone, at once, without a query on the wire or cached answers. It
+saves them and registers them again when it starts; `get` lists them.
+`vphone-vm` sets this Mac's `<LocalHostName>.local` after every connect.
 
 `network.resolve` runs `getaddrinfo` in the guest (`family` `ipv4`, `ipv6` or
 any) and returns `{host, status, elapsed_ms, addresses}`, the addresses in the
@@ -321,7 +312,7 @@ Account passwords, boot logo rendering and package installation, removal and
 repository changes are deliberately not exposed. `/v1/health` lists the new
 areas in `capabilities` (`device_info`, `display`, `audio`, `input_gestures`,
 `ui_inspection`, `processes`, `services`, `logs`, `network_capture`,
-`app_details`, `system_control`, `file_tools`, `packages`, `environment_update`, `udid_override`, `setup_skip`, `network_static_names`, `network_usb_link_route`, `network_resolve`) so a host can hide
+`app_details`, `system_control`, `file_tools`, `packages`, `environment_update`, `udid_override`, `setup_skip`, `network_static_names`, `network_resolve`) so a host can hide
 panels an older agent cannot serve. icli failures reach the caller with
 icli's own error `code` (`failed`, `unavailable`, `device_locked`, …) and
 message.

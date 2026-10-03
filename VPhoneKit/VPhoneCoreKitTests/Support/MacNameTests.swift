@@ -39,16 +39,6 @@ struct MacNameTests {
         #expect(on.resolvesMacName == nil)
     }
 
-    /// The USB-link routes go with the Mac's name, except where en0 may need
-    /// link-local itself, and there is nothing to send without a NIC.
-    @Test func `link-local is routed over USB in nat and tunnel only`() {
-        #expect(VPhoneNetworking.routesLinkLocalOverUSB(NetworkConfig(mode: .nat, macAddress: "")) == true)
-        #expect(VPhoneNetworking.routesLinkLocalOverUSB(NetworkConfig(mode: .tunnel, macAddress: "")) == true)
-        #expect(VPhoneNetworking.routesLinkLocalOverUSB(NetworkConfig(mode: .bridged, macAddress: "")) == false)
-        #expect(VPhoneNetworking.routesLinkLocalOverUSB(NetworkConfig(mode: .nat, macAddress: "", resolvesMacName: false)) == false)
-        #expect(VPhoneNetworking.routesLinkLocalOverUSB(NetworkConfig(mode: .off, macAddress: "")) == nil)
-    }
-
     @Test func `configs without the key decode with the default`() throws {
         let plist = Data("""
         <?xml version="1.0" encoding="UTF-8"?>

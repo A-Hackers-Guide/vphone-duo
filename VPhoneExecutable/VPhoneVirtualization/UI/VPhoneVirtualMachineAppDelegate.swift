@@ -277,12 +277,12 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Have the guest resolve this Mac's `.local` name to the address it
-    /// reaches the Mac at, and reach it over the USB link too.
+    /// reaches the Mac at.
     @MainActor
     private func configureGuestNames(control: VPhoneGuestControl, configURL: URL) {
+        // Sent in every mode: without a NIC the list is empty, which withdraws
+        // names a previous launch left in the guest.
         guard let network = try? VPhoneVirtualMachineManifest.load(from: configURL).networkConfig else { return }
-        control.guestUSBLinkRoute = VPhoneNetworking.routesLinkLocalOverUSB(network)
-        guard network.mode != .off else { return }
         control.guestStaticNames = {
             let bridged = network.mode == .bridged
                 ? network.bridgeInterface.flatMap(VPhoneNetworking.ipv4Address(ofInterface:))

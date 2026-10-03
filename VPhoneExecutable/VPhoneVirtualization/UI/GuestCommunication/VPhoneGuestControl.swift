@@ -51,9 +51,6 @@ final class VPhoneGuestControl {
     /// out on each connect, since the Mac's name or a bridged address can
     /// change while the VM runs. Nil sends nothing.
     @ObservationIgnored var guestStaticNames: (() -> [VPhoneNetworking.StaticName])?
-    /// Route the guest's 169.254 traffic over its USB link to the Mac (see
-    /// `VPhoneNetworking.routesLinkLocalOverUSB`). Nil sends nothing.
-    @ObservationIgnored var guestUSBLinkRoute: Bool?
 
     /// The guest interface orientation: the one the window last read, or the
     /// one a menu rotation is turning to. Nil until one is known, and again
@@ -198,9 +195,6 @@ final class VPhoneGuestControl {
                 }
                 if capabilities.contains("network_static_names"), let names = guestStaticNames?() {
                     Task { await applyGuestStaticNames(names) }
-                }
-                if capabilities.contains("network_usb_link_route"), let enabled = guestUSBLinkRoute {
-                    Task { await applyGuestUSBLinkRoute(enabled) }
                 }
             }
         } catch {
@@ -841,19 +835,6 @@ extension VPhoneGuestControl {
             }
         } catch {
             print("[network] could not set the guest's local names: \(error)")
-        }
-    }
-
-    func applyGuestUSBLinkRoute(_ enabled: Bool) async {
-        do {
-            let result = try await call("network.usb_link_route.set", params: ["enabled": enabled])
-            if result["pending"] as? Bool == true {
-                print("[network] guest 169.254 routes pending: \(result["reason"] ?? "")")
-            } else {
-                print("[network] guest 169.254 routes \(enabled ? "via" : "removed from") \(result["interface"] as? String ?? "?")")
-            }
-        } catch {
-            print("[network] guest 169.254 routes not \(enabled ? "set" : "removed"): \(error)")
         }
     }
 }

@@ -2,27 +2,34 @@ import dnssd
 import Foundation
 
 /// Names the guest resolves locally, set by the host: A records registered
-/// with the guest's own mDNSResponder on `lo0`, held for as long as vphoned
-/// runs. They are also saved, and vphoned registers them again as it starts,
-/// before the host has connected. That matters: for a moment after a record is
-/// registered, a lookup can still lose to the Mac's negative answer (seen on
-/// iOS 27 for about half a second), so the host resending the same names on
-/// every connect must not register them anew.
+/// with the guest's own mDNSResponder as LocalOnly and known-unique, held for
+/// as long as vphoned runs, saved, and registered again as vphoned starts so
+/// they are in place before apps run after a reboot.
 ///
 /// This is how the Mac's `.local` name gets a dependable IPv4 answer. Over
 /// multicast the guest also hears the Mac on the virtual iPhone's USB link,
 /// where the Mac has no IPv4 address and answers an IPv4 query with "no such
-/// record"; whichever link answers first wins, so an IPv4 lookup could fail
-/// outright until a real answer had been cached from another link. A record
-/// registered here is answered at once, from the guest itself.
+/// record"; whichever answer arrives first decides the lookup, so IPv4 lookups
+/// of the Mac's name failed now and then, steadily (about one in a thousand at
+/// 20 ms intervals), and outright right after boot.
 ///
-/// - `lo0`, not LocalOnly: a LocalOnly record answers `dns-sd` but not
-///   `getaddrinfo`. On `lo0` every resolver in the guest sees it, and nothing
-///   is ever announced on a network.
-/// - Shared, not unique: the Mac announces the same name, and a unique record
-///   would lose the conflict.
+/// A LocalOnly record of a unique type is what mDNSResponder makes of an
+/// `/etc/hosts` line (`UniqueLocalOnlyRecord` in mDNSCore/mDNS.c): it answers
+/// an address question at once, the question is not sent on the wire, and
+/// cached answers, the negative one included, are not delivered for it
+/// (`LOAddressAnswers`). So a lookup returns exactly this address, every time:
+///
+/// - Known-unique, not unique: an unverified unique record is never delivered
+///   to a question, and a LocalOnly record is never probed or verified.
+/// - Not shared: a shared LocalOnly record answers alongside the cache, so the
+///   race stays (and the Mac's `169.254` address on the USB link comes first).
+/// - Not on `lo0`: that is a multicast record on the loopback interface,
+///   which reaches the resolver only through the cache, with the same race,
+///   and every registration churned the cache for that name.
 /// - Nothing is written to disk: the system volume is sealed and read-only, so
-///   `/etc/hosts` cannot be edited without a remount.
+///   `/etc/hosts` itself cannot be edited without a remount.
+///
+/// Measured on iOS 27.0; see Research/Guest/mac_name_resolution.md.
 ///
 /// Threading: every field is touched under `lock`; the connection's replies
 /// are drained on `queue`. That is the invariant behind `@unchecked Sendable`.
@@ -81,14 +88,13 @@ final class GuestStaticNames: @unchecked Sendable {
             guard error == kDNSServiceErr_NoError, let created else {
                 throw GuestAPIError.operationFailed("DNSServiceCreateConnection failed (\(error))")
             }
-            let loopback = if_nametoindex("lo0")
             for entry in wanted {
                 var address = Self.ipv4Bytes(entry.address)!
                 for name in entry.names {
                     var record: DNSRecordRef?
                     let fullName = name.hasSuffix(".") ? name : name + "."
                     error = DNSServiceRegisterRecord(
-                        created, &record, DNSServiceFlags(kDNSServiceFlagsShared), loopback,
+                        created, &record, DNSServiceFlags(kDNSServiceFlagsKnownUnique), kDNSServiceInterfaceIndexLocalOnly,
                         fullName, UInt16(kDNSServiceType_A), UInt16(kDNSServiceClass_IN),
                         UInt16(address.count), &address, 120, { _, _, _, _, _ in }, nil,
                     )

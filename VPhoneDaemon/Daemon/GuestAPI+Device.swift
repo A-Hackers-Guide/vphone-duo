@@ -37,11 +37,6 @@ extension GuestAPI {
             return GuestStaticNames.shared.describe()
         case "network.static_names.set":
             return try GuestStaticNames.shared.set(params["entries"] as? [[String: Any]] ?? [])
-        case "network.usb_link_route.set":
-            guard let enabled = params["enabled"] as? Bool else {
-                throw GuestAPIError.invalidRequest("enabled must be true or false")
-            }
-            return GuestUSBLinkRoute.shared.set(enabled: enabled, primary: optionalString(params, "primary") ?? "en0")
         case "device.ioreg":
             return try ioregistry(plane: optionalString(params, "plane") ?? "IOService")
         case "device.environment":

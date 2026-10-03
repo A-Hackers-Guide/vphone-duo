@@ -106,23 +106,21 @@ Mac, where the Mac has no IPv4 address and answers "no such record". Whichever
 link answers first decides the lookup, so an app that wants an IPv4 address
 got an error until a real answer had been cached from another link.
 
-vphoned registers the name with the guest's own mDNSResponder on its loopback
-interface each time `vphone-vm` connects, and again when it starts, so it is in
-place before apps run after a reboot. The guest's system volume is read-only,
-so `/etc/hosts` is not used, and nothing is announced on any network.
+vphoned registers the name with the guest's own mDNSResponder the way it
+holds an `/etc/hosts` line: as a local record that answers an IPv4 lookup at
+once, with that one address, without asking the network and without the
+answers it has cached. It does so each time `vphone-vm` connects, and again
+when vphoned starts, so the name is in place before apps run after a reboot.
+The guest's system volume is read-only, so `/etc/hosts` itself is not edited,
+and nothing is announced on any network. IPv6 lookups still go to mDNS.
 
-Once the guest has also heard the Mac on the USB link, a lookup lists the
-Mac's `169.254` address there first. iOS routes `169.254.0.0/16` through its
-primary interface only, so a plain socket connecting to that address left
-through `en0`, where nothing answers, and hung until it timed out. Apple's own
-networking binds to the right interface and was not affected. In `nat` and
-`tunnel`, vphoned therefore also routes `169.254.0.0/16` through the USB link
-(as two `/17` routes, which win over the `/16` without touching it), and puts
-the routes back if the link is re-created. In `bridged` it does not, since
-`en0` may need link-local addresses on the LAN.
+Without it, a lookup also listed the Mac's `169.254` address on the USB link,
+first. iOS routes `169.254.0.0/16` through its primary interface, so a plain
+socket connecting to that address could leave through `en0`, where nothing
+answers, and wait out its timeout.
 
 ```sh
-vphone-cli vm config <name> --mac-name off   # withdraw both
+vphone-cli vm config <name> --mac-name off   # withdraw it
 ```
 
 To see what the guest's resolver returns, and whether each address connects:

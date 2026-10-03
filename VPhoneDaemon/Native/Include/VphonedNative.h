@@ -51,9 +51,4 @@ char *vp_usb_own_serial(void);
 #ifdef __OBJC__
 /// Snapshot-local nested accessibility tree, using actual private iOS child links.
 NSDictionary *vp_ax_hierarchy(int pid, int maxElements, int maxDepth, int timeoutMS);
-
-/// Route 169.254.0.0/16 (as two /17s) through the virtual iPhone's USB link
-/// rather than `primary`, or remove those routes. Returns the interface used and
-/// the outcome for each route.
-NSDictionary *vp_network_usb_link_route_set(BOOL enabled, NSString *primary, NSString **error);
 #endif

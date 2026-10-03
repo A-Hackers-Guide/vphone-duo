@@ -205,19 +205,6 @@ public enum VPhoneNetworking {
         return [StaticName(address: address, names: ["\(macName).local"])]
     }
 
-    /// Whether vphoned should route 169.254.0.0/16 over the virtual iPhone's
-    /// USB link, so the Mac's link-local address there, which lookups of the
-    /// Mac's name list first, is reachable from plain sockets. Not in
-    /// `bridged`, where en0 may need link-local addresses on the LAN. Nil
-    /// without a NIC: nothing to send.
-    public static func routesLinkLocalOverUSB(_ cfg: NetworkConfig) -> Bool? {
-        switch cfg.mode {
-        case .off, .hostOnly: nil
-        case .bridged: false
-        case .nat, .tunnel: cfg.resolvesMacName != false
-        }
-    }
-
     /// Build the VZ network device for a config, or nil for `.off` (no NIC).
     /// The MAC is left framework-assigned; a forced MAC breaks guest networking.
     /// Throws if the config cannot be realized (missing bridge interface, hostOnly).
