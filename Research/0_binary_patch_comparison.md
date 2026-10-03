@@ -2228,7 +2228,7 @@ virtio sound device with a host output sink. Two faults; the full reveal is
 | `devicetree-cfw-ipad_audio` (new) | An iPad guest's installed DeviceTree, `fw patch` | Replaces `/product/audio` with the board tree's node (`DeviceTreePatcher.presentBoardAudio`), all properties as the board has them except its `AAPL,phandle`. |
 | `preboot-cfw-devicetree_board_audio` (new) | Restored Preboot `devicetree.img4`, `cfw install` and `cfw update-environment` | The same replacement for an iPad VM patched before it (`vphone-cli cfw patch-dt-board-audio`), from the board tree in `FirmwareOriginals`. |
 | `devicetree-cfw-product_haptics_node` (new, 2026-10-03) | Every guest's DeviceTree, `fw patch`: an iPhone guest's one tree, an iPad guest's installed tree and its `RestoreDeviceTree` | Removes `/product/haptics` (`DeviceTreePatcher.removeHaptics(from:)`), whatever the variant and the board. |
-| `preboot-cfw-devicetree_haptics` (new, 2026-10-03) | Restored Preboot `devicetree.img4`, `cfw install` and `cfw update-environment`, every guest | The same removal for a VM patched before it (`vphone-cli cfw patch-dt-haptics`); it needs no board tree. When it changes the tree, the installer also removes the guest's cached MobileGestalt answers, see below. |
+| `preboot-cfw-devicetree_haptics` (new, 2026-10-03) | Restored Preboot `devicetree.img4`, `cfw install` and `cfw update-environment`, every guest | The same removal for a VM patched before it (`vphone-cli cfw patch-dt-haptics`); it needs no board tree. A guest that booted before it keeps cached MobileGestalt answers, which vphoned drops at its next startup, see below. |
 
 `fw patch` now reads an iPad's board tree through the `FirmwareOriginals` stash,
 so `DeviceTree.<board>.im4p` stays in the VM folder after the restore tree goes.
@@ -2255,15 +2255,21 @@ with no Taptic Engine does and tones play. The answers are cached in
 `/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist`,
 written at first boot, so a guest that has already booted keeps the old ones
 until that file is removed and the guest restarted; a guest created with the
-patch never has them. `cfw install` and `cfw update-environment` remove the
-file from the mounted Data volume whenever a Preboot device tree repair (the
-haptics removal, or the board audio node) changed the tree, and log
-`[+] MobileGestalt cache removed`; a repair that found the tree already right
-removes nothing. This is part of those two repairs rather than a declaration
-of its own: it writes no patch, runs
-only when one of them changed the tree, and turning a repair off already
-turns it off. Removing it by hand (`files.remove`, then `system.reboot`)
-remains the fallback for a tree changed any other way. Detail and the
+patch never has them. The host cannot remove it: the file is on the guest's
+Data volume, a FileVault volume whose keys are in the guest's SEP, which the
+host sees locked and cannot mount (the volume the installer mounts beside
+System, s3, is xART). vphoned removes it at startup instead, when it is older
+than the Preboot `devicetree.img4` the guest booted
+(`VPhoneDaemon/Daemon/GuestMobileGestaltCache.swift`): the host rewrites that
+tree only with the VM stopped and only when a repair changed it, so an older
+cache was worked out from an older tree. It logs `vphoned: MobileGestalt
+cache predates the device tree, removed it; …`, and `/v1/health` reports
+`mobilegestalt_restart_pending` until the guest restarts, since running
+processes keep the answers they read. An existing guest therefore needs `cfw
+update-environment`, one boot, and one restart. This is no patch declaration
+of its own: it writes nothing to the tree, and with the repairs off the tree
+is not rewritten and the cache stays. Removing the file by hand (`files.remove`, then
+`system.reboot`) is what vphoned does, less the reboot. Detail and the
 measurements: `Research/Guest/virtio_sound.md` §7.
 
 **Why a plugin.** The cloudOS kernel has `AppleVirtIOSound` and its user client,

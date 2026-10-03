@@ -227,17 +227,20 @@ struct VPhoneCustomFirmwareInstaller {
             physicalStore: "\(baseDisk.dropFirst("/dev/".count))s1",
         )
 
+        // s3 is the xART volume, which holds the gigalocker. The guest's Data
+        // and User volumes are FileVault volumes locked to its SEP; the host
+        // cannot mount them, so nothing here writes to them.
         let system = work.file("system")
-        let data = work.file("data")
+        let xart = work.file("xart")
         _ = try work.directory.directory("system", create: true, mode: 0o700)
-        _ = try work.directory.directory("data", create: true, mode: 0o700)
+        _ = try work.directory.directory("xart", create: true, mode: 0o700)
         var systemMounted = false
-        var dataMounted = false
+        var xartMounted = false
         defer {
-            if dataMounted,
-               (try? tool("/sbin/umount", [data.path], quiet: true)) == nil
+            if xartMounted,
+               (try? tool("/sbin/umount", [xart.path], quiet: true)) == nil
             {
-                _ = try? tool("/sbin/umount", ["-f", data.path], quiet: true)
+                _ = try? tool("/sbin/umount", ["-f", xart.path], quiet: true)
             }
             if systemMounted,
                (try? tool("/sbin/umount", [system.path], quiet: true)) == nil
@@ -247,14 +250,14 @@ struct VPhoneCustomFirmwareInstaller {
         }
         systemMounted = true
         try mountGuestVolume("\(container)s1", at: system)
-        dataMounted = true
-        try mountGuestVolume("\(container)s3", at: data)
+        xartMounted = true
+        try mountGuestVolume("\(container)s3", at: xart)
         print("[*] \(mode.summary.capitalized): \(bundle.lastPathComponent)")
         do {
             // Every descriptor on a guest volume lives in this scope, so none
             // is left open to hold the volume busy when it is unmounted.
             let systemRoot = try openGuestVolume("system", device: "\(container)s1", in: work)
-            let dataRoot = try openGuestVolume("data", device: "\(container)s3", in: work)
+            let xartRoot = try openGuestVolume("xart", device: "\(container)s3", in: work)
             switch mode {
             case .full:
                 guard let restore else {
@@ -262,7 +265,7 @@ struct VPhoneCustomFirmwareInstaller {
                 }
                 try installMounted(
                     system: systemRoot,
-                    data: dataRoot,
+                    xart: xartRoot,
                     restore: restore,
                     work: work,
                     owner: callerUID,
@@ -276,7 +279,11 @@ struct VPhoneCustomFirmwareInstaller {
         // full install only. The device tree repairs are the exception: a VM
         // restored before the board audio repair or the haptics removal has no
         // other way to get them, since `fw patch` does not run again.
-        let treeRepaired = try patchPreboot(
+        // A guest that has booted keeps the MobileGestalt answers it cached from
+        // the old tree on its Data volume, which the host cannot reach. vphoned
+        // drops that cache at startup when it is older than the tree; see
+        // VPhoneDaemon/Daemon/GuestMobileGestaltCache.swift.
+        try patchPreboot(
             volumes: volumes,
             work: work,
             plan: plan,
@@ -284,20 +291,11 @@ struct VPhoneCustomFirmwareInstaller {
             includeIdentity: mode == .full,
             boardDeviceTree: stageBoardDeviceTree(in: bundleDirectory, work: work),
         )
-        // A guest that has booted keeps the MobileGestalt answers it cached
-        // from the old tree, so a repair that changed the tree drops them; one
-        // that found the tree already right leaves them be.
-        if treeRepaired {
-            let dataRoot = try openGuestVolume("data", device: "\(container)s3", in: work)
-            if try CustomFirmwareMobileGestaltCache.remove(fromDataVolume: dataRoot) {
-                print("  [+] MobileGestalt cache removed; the guest rebuilds it from the new device tree at next boot")
-            }
-        }
         // The snapshot rename is a full install's alone: it has already been
         // done on any VM an environment update is allowed to run against, and
         // this run creates no new snapshot to flip.
-        _ = try tool("/sbin/umount", [data.path])
-        dataMounted = false
+        _ = try tool("/sbin/umount", [xart.path])
+        xartMounted = false
         _ = try tool("/sbin/umount", [system.path])
         systemMounted = false
         _ = try tool("/usr/bin/hdiutil", ["detach", baseDisk], quiet: true)
@@ -600,7 +598,7 @@ struct VPhoneCustomFirmwareInstaller {
 
     private func installMounted(
         system: VPhoneConfinedDirectory,
-        data: VPhoneConfinedDirectory,
+        xart: VPhoneConfinedDirectory,
         restore: VPhoneConfinedDirectory,
         work: WorkDirectory,
         owner: uid_t?,
@@ -692,7 +690,7 @@ struct VPhoneCustomFirmwareInstaller {
             )
         }
         if on("system-gigalocker-boot-rename") {
-            try renameGigalocker(data: data)
+            try renameGigalocker(xart: xart)
         }
         if on("system-extensions-boot-gpu_bundle") {
             try installGPUBundle(restore: restore, system: system, owner: owner)
@@ -1165,9 +1163,6 @@ struct VPhoneCustomFirmwareInstaller {
     /// `boardDeviceTree` is the iPad's own device tree, staged from the VM's
     /// `FirmwareOriginals`, or nil for an iPhone guest or a VM patched before
     /// `fw patch` kept it.
-    ///
-    /// Returns whether a repair changed the device tree, which leaves the
-    /// guest's cached MobileGestalt answers stale.
     private func patchPreboot(
         volumes: [[String: Any]],
         work: WorkDirectory,
@@ -1175,7 +1170,7 @@ struct VPhoneCustomFirmwareInstaller {
         guestDevice: VPhoneGuestDevice,
         includeIdentity: Bool,
         boardDeviceTree: URL?,
-    ) throws -> Bool {
+    ) throws {
         // Like every guest patch, a VM with no plan still gets it — except the
         // identity rewrite on an iPad guest, whose installed tree already
         // carries its own identity from `fw patch`; the rewrite would turn it
@@ -1204,7 +1199,7 @@ struct VPhoneCustomFirmwareInstaller {
         if on(FirmwareGuestSystemPatchSet.prebootHaptics) {
             repairs.append(("patch-dt-haptics", []))
         }
-        guard rewriteIdentity || !repairs.isEmpty || !(spoofBuild ?? "").isEmpty else { return false }
+        guard rewriteIdentity || !repairs.isEmpty || !(spoofBuild ?? "").isEmpty else { return }
         guard
             let preboot = volumes.first(where: { ($0["Roles"] as? [String])?.contains("Preboot") == true }),
             let device = preboot["DeviceIdentifier"] as? String
@@ -1232,11 +1227,8 @@ struct VPhoneCustomFirmwareInstaller {
             if rewriteIdentity {
                 try patchCopy(of: deviceTree, in: root, work: work, verb: "patch-post-restore-dt")
             }
-            var treeRepaired = false
             for repair in repairs {
-                if try patchCopy(of: deviceTree, in: root, work: work, verb: repair.verb, arguments: repair.arguments) {
-                    treeRepaired = true
-                }
+                try patchCopy(of: deviceTree, in: root, work: work, verb: repair.verb, arguments: repair.arguments)
             }
             if let build = spoofBuild {
                 let version = "Cryptexes/OS/System/Library/CoreServices/SystemVersion.plist"
@@ -1244,7 +1236,6 @@ struct VPhoneCustomFirmwareInstaller {
                     try patchCopy(of: version, in: root, work: work, verb: "patch-build-version", arguments: [build])
                 }
             }
-            return treeRepaired
         }
     }
 
@@ -1293,16 +1284,17 @@ struct VPhoneCustomFirmwareInstaller {
     /// and install the result with its original owner and mode. The verb
     /// never sees a guest path, so it cannot be steered by a link in one.
     ///
-    /// Returns whether the verb changed the file. One that found it already
-    /// as it should be leaves the guest's copy untouched.
-    @discardableResult
+    /// A verb that found the file already as it should be leaves the guest's
+    /// copy untouched, modification time included: vphoned drops the guest's
+    /// MobileGestalt cache when the Preboot device tree is newer than it, so a
+    /// repeated environment update must not make an unchanged tree look new.
     private func patchCopy(
         of relative: String,
         in root: VPhoneConfinedDirectory,
         work: WorkDirectory,
         verb: String,
         arguments: [String] = [],
-    ) throws -> Bool {
+    ) throws {
         guard let original = try root.status(relative), original.st_mode & S_IFMT == S_IFREG else {
             throw ValidationError("\(relative) on the VM is missing or is not a regular file. Restore the VM, then install CFW again.")
         }
@@ -1315,14 +1307,13 @@ struct VPhoneCustomFirmwareInstaller {
         let staged = work.file(folder).appendingPathComponent(leaf)
         let before = try Data(contentsOf: staged)
         try patch(verb, [staged.path] + arguments)
-        guard try Data(contentsOf: staged) != before else { return false }
+        guard try Data(contentsOf: staged) != before else { return }
         try root.replaceFile(
             relative,
             fromFileAt: staged,
             mode: original.st_mode & 0o7777,
             owner: (original.st_uid, original.st_gid),
         )
-        return true
     }
 
     /// Flip the speaker chains in every tuning set's graph_configurations.plist
@@ -1479,16 +1470,18 @@ struct VPhoneCustomFirmwareInstaller {
         try system.replaceFile(target, fromFileAt: staged, mode: 0o755, owner: Self.guestOwner)
     }
 
-    // MARK: - Data volume
+    // MARK: - xART volume
 
-    private func renameGigalocker(data: VPhoneConfinedDirectory) throws {
+    /// The patched seputil looks for the gigalocker as `AA.gl` rather than
+    /// under a UUID, so the one the restore wrote takes that name.
+    private func renameGigalocker(xart: VPhoneConfinedDirectory) throws {
         let destination = "AA.gl"
-        for source in try data.entries() where (source as NSString).pathExtension == "gl" {
+        for source in try xart.entries() where (source as NSString).pathExtension == "gl" {
             if source == destination {
                 continue
             }
-            try data.removeItem(destination)
-            try data.rename(source, to: destination)
+            try xart.removeItem(destination)
+            try xart.rename(source, to: destination)
         }
     }
 

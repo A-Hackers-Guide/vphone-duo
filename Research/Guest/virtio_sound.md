@@ -539,22 +539,40 @@ vphone-launchpad-cli guest rpc <machine> files.remove \
 vphone-launchpad-cli guest rpc <machine> system.reboot '{"force":true}'
 ```
 
-A guest created with the patch never caches the wrong answers. For an existing
-one the installer now does the removal: when a Preboot device tree repair
-(`preboot-cfw-devicetree_haptics` or
-`preboot-cfw-devicetree_board_audio`) changes the device
-tree during `cfw install` or `cfw update-environment`, it deletes that file
-from the mounted Data volume (`CustomFirmwareMobileGestaltCache`, through the
-same descriptor-relative access as every other guest write) and prints
+A guest created with the patch never caches the wrong answers: its tree is
+written before its first boot. An existing one needs the file removed, and
+the host cannot do it. The guest's container holds s1 System, s2 Data, s3
+xART, s4 Hardware, s5 Preboot and s7 User; Data and User are FileVault
+volumes whose keys are in the guest's SEP, and `diskutil mount` on the host
+answers "This is an encrypted and locked APFS Volume". The volume the
+installer mounts beside System is xART, where the gigalocker lives. An
+earlier installer change that removed the cache from that volume could never
+find it: after a live `cfw update-environment` the cache still had its
+first-boot modification time.
+
+So vphoned does what the two commands above do, less the reboot, at startup
+(`VPhoneDaemon/Daemon/GuestMobileGestaltCache.swift`). The rule is the age of
+the cache against the tree the guest booted,
+`/private/preboot/<hash>/usr/standalone/firmware/devicetree.img4`, the file
+the installer patches. The host changes that tree only with the VM stopped,
+and the installer writes a guest file only when its verb changed it, so a
+cache older than the tree was worked out from an older tree and is removed:
 
 ```
-  [+] MobileGestalt cache removed; the guest rebuilds it from the new device tree at next boot
+vphoned: MobileGestalt cache predates the device tree, removed it; a restart makes the new answers take effect
 ```
 
-The guest's next boot is then enough. A repair that finds the tree already
-right removes nothing, and a guest that never booted has no file
-and gets no line. The two commands above remain the way to do it by hand, for
-a guest whose tree was changed some other way.
+A cache written after the tree was written by a boot of that tree, and is
+left alone without a line. That covers every Preboot tree repair (the haptics
+removal, the board audio node) and needs no state, so it works the first
+time a new vphoned runs on an old guest. Processes that read the cache keep
+their answers until they exit, so the removal takes full effect at the next
+boot; vphoned does not restart the guest itself. Until then `/v1/health`
+reports `mobilegestalt_restart_pending: true`.
+
+For an existing guest that is `cfw update-environment`, one boot (vphoned
+drops the cache), and one restart. A new guest, and every later boot of an
+updated one, does nothing: its cache is newer than its tree.
 
 **Verified** (`audiotest-ipad`): after the cache was rebuilt the Ringtone page
 has no Haptics row, mediaplaybackd makes no hapticd connection, and a tone
@@ -564,6 +582,10 @@ writes and none starved.
 Not yet verified on an iPhone guest: that, with the node removed and the
 cache rebuilt, a tone there plays as it does on `audiotest-ipad`. The failure
 it removes is the same one, measured above.
+
+Not yet verified live: vphoned's removal on an existing guest after `cfw
+update-environment` — the log line above on the first boot, then
+`mobilegestalt_restart_pending: false` and no Haptics row after the restart.
 
 ## Reveal and validation
 
