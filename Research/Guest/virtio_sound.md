@@ -366,12 +366,19 @@ a new iPad16,1 / 26.6.2 guest (`audiotest-ipad`) with counters the plugin now
 writes to `/var/mobile/vpquery.log` each time the stream stops:
 
 ```
-stream 1: 20.16 s, 237 writes, 0 starved, 0 bytes dropped, in 888832 frames (44094/s, hal 44100), out 967436 frames (47993/s)
+stream 1: 9.08 s, 108 writes, 0 starved, 0 bytes dropped, in 400384 frames (44079/s, hal 44100), out 435792 frames (47977/s); start 2.54, lead 1.46, in flight 2.00-3.00 periods; host 48000.2/s (+5 ppm), returns <= 86 ms apart
 ```
 
 `writes` are periods handed to the kernel, `starved` the ones that found the
 device with nothing left in flight (a gap on the host), `in` what the HAL
-handed the mix block and `out` what went to the ring.
+handed the mix block and `out` what went to the ring. After the semicolon:
+`start` is what the device still held, in periods, when this run began (0 for
+a fresh start), `lead` the silence queued ahead of its first write, `in
+flight` the range seen at each submission, `host` the rate the device
+returned bytes at once the run was five seconds old, with its distance from
+the wire rate, and the longest gap between two returns. A stream that keeps
+running writes a shorter line every minute. The counters start again at every
+start.
 
 ### Every start after the first failed
 
@@ -441,10 +448,36 @@ the one before it finished is a gap. Measured with the clock already fixed:
 89 of 513 writes starved in one 44 s tone, 138 of 203 in the next.
 
 The stream now queues `VPhoneVirtIOSoundLeadPeriods` periods of silence
-(default 2, 171 ms) when the device starts, tops the queue back up when a
-start finds the device still draining, and the device reports the lead plus
+(default 2, 171 ms) ahead of each run, and the device reports the lead plus
 one period as `outputLatency` so video is presented against when the sound is
 heard. Measured: 0 of 499 and 0 of 237 writes starved.
+
+**Restarts lost the lead.** A tone switch restarts the stream while the device
+is still draining the last one. Queued at `startStream`, the lead was rounded
+down to whole periods in flight, counted a nearly played buffer as whole, and
+the host went on playing until the HAL's first cycle: such restarts starved
+25–28 of about 60 writes, and one slow fresh start 18 of 144. The I/O thread
+now queues the lead itself, before its first write of a run
+(`VPMixQueueLead`): it tops what is queued up to the lead, counting what the
+draining run still holds except the oldest period in flight. `startStream`
+only leaves the request, so the ring's `written` keeps the single writer its
+contract names. Measured after, on `audiotest-ipad`: 21 restarts while
+draining and 7 fresh starts, none starved; on the final build the same on an
+iPhone guest and on an upgraded guest. A restart queues at most one period
+(85 ms) more than a fresh start, and that does not build up.
+
+**Drift needs nothing.** The guest's clock and the host's audio clock are
+different clocks, so the cushion could in principle erode or grow over a long
+stream. Measured over a 13 minute Safari stream: the host returned 48000.0 to
+48000.1 frames a second, 1–2 ppm, about 0.08 periods an hour. (Short runs
+print tens to a few hundred ppm; that is the five-second window, not the
+clocks.) Not measured: other host output devices — USB, Bluetooth — whose
+clocks are their own. Two things in those runs that drift does not explain,
+seen once each and not reproduced: a 13 minute run on an earlier build that
+sat one period low and starved about 5%, and a single 205 ms stall on the
+host. The first return after a start comes 2–80 ms after the write, so the
+host keeps a small buffer of its own, and a `starved` write is not always an
+audible gap.
 
 ### Nothing left to set by hand
 
