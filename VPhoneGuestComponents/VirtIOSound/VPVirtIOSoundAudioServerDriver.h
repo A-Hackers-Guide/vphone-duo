@@ -10,8 +10,37 @@
 #ifndef VPVirtIOSoundAudioServerDriver_h
 #define VPVirtIOSoundAudioServerDriver_h
 
-#import <CoreAudio/AudioServerPlugIn.h>
 #import <Foundation/Foundation.h>
+
+// The iPhoneOS SDK ships <CoreAudio/AudioServerPlugIn.h> from 27.0 on. Built
+// with an older one, the four names this plugin takes from it are declared
+// here as that header declares them; the rest of the HAL vocabulary is in
+// <CoreAudio/AudioHardwareBase.h>, which every iPhoneOS SDK has.
+#if __has_include(<CoreAudio/AudioServerPlugIn.h>)
+#import <CoreAudio/AudioServerPlugIn.h>
+#else
+#import <CoreAudio/AudioHardwareBase.h>
+
+typedef struct AudioServerPlugInHostInterface AudioServerPlugInHostInterface;
+typedef const AudioServerPlugInHostInterface *AudioServerPlugInHostRef;
+typedef struct AudioServerPlugInDriverInterface AudioServerPlugInDriverInterface;
+typedef AudioServerPlugInDriverInterface **AudioServerPlugInDriverRef;
+
+typedef struct AudioServerPlugInIOCycleInfo {
+    UInt64 mIOCycleCounter;
+    UInt32 mNominalIOBufferFrameSize;
+    AudioTimeStamp mCurrentTime;
+    AudioTimeStamp mInputTime;
+    AudioTimeStamp mOutputTime;
+    Float64 mMainHostTicksPerFrame;
+    Float64 mDeviceHostTicksPerFrame;
+} AudioServerPlugInIOCycleInfo;
+
+/// 443ABAB8-E7B3-491A-B985-BEB9187030DB
+#define kAudioServerPlugInTypeUUID \
+    CFUUIDGetConstantUUIDWithBytes(NULL, 0x44, 0x3A, 0xBA, 0xB8, 0xE7, 0xB3, 0x49, 0x1A, 0xB9, 0x85, 0xBE, 0xB9, 0x18, \
+        0x70, 0x30, 0xDB)
+#endif
 
 /// `ASDStreamDirection`: the HAL scope four-character codes.
 typedef UInt32 ASDStreamDirection;
