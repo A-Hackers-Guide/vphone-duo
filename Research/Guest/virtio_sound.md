@@ -272,6 +272,14 @@ never do.
 
 ### The fix
 
+> **Superseded (2026-10-03).** Do not store this value. The plugin now
+> supplies `ProductIDOverride = 8010` in-process on an iPad guest when nothing
+> is stored (§6, "Nothing left to set by hand"), and a stored value wins over
+> it. 198 has no ringtone-preview category, so with it tones stay silent. A
+> guest that still carries a stored 198 should have it deleted:
+> `settings.delete` with domain `com.apple.audio.virtualaudio`, key
+> `ProductIDOverride`. What follows is how the override was found.
+
 ```
 vphone-launchpad-cli guest rpc <machine> settings.set \
   '{"domain":"com.apple.audio.virtualaudio","key":"ProductIDOverride","value":198,"type":"int"}'
@@ -517,9 +525,22 @@ vphone-launchpad-cli guest rpc <machine> files.remove \
 vphone-launchpad-cli guest rpc <machine> system.reboot '{"force":true}'
 ```
 
-A guest created with the patch never caches the wrong answers. An existing one
-needs this once after the environment update; nothing does it automatically
-yet.
+A guest created with the patch never caches the wrong answers. For an existing
+one the installer now does the removal: when a Preboot board repair
+(`preboot-cfw-devicetree_board_haptics` or
+`preboot-cfw-devicetree_board_audio`) changes the device
+tree during `cfw install` or `cfw update-environment`, it deletes that file
+from the mounted Data volume (`CustomFirmwareMobileGestaltCache`, through the
+same descriptor-relative access as every other guest write) and prints
+
+```
+  [+] MobileGestalt cache removed; the guest rebuilds it from the new device tree at next boot
+```
+
+The guest's next boot is then enough. A repair that finds the tree already
+matching the board removes nothing, and a guest that never booted has no file
+and gets no line. The two commands above remain the way to do it by hand, for
+a guest whose tree was changed some other way.
 
 **Verified** (`audiotest-ipad`): after the cache was rebuilt the Ringtone page
 has no Haptics row, mediaplaybackd makes no hapticd connection, and a tone

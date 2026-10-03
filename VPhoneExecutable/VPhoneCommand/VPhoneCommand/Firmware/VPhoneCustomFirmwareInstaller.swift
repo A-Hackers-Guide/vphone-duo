@@ -276,7 +276,7 @@ struct VPhoneCustomFirmwareInstaller {
         // full install only. The board audio repair is the exception: an iPad VM
         // restored before it has no other way to get its audio back, since its
         // restore tree is gone and `fw patch` does not run again.
-        try patchPreboot(
+        let boardTreeChanged = try patchPreboot(
             volumes: volumes,
             work: work,
             plan: plan,
@@ -284,6 +284,15 @@ struct VPhoneCustomFirmwareInstaller {
             includeIdentity: mode == .full,
             boardDeviceTree: stageBoardDeviceTree(in: bundleDirectory, work: work),
         )
+        // A guest that has booted keeps the MobileGestalt answers it cached
+        // from the old tree, so a repair that changed the tree drops them; one
+        // that found the tree already right leaves them be.
+        if boardTreeChanged {
+            let dataRoot = try openGuestVolume("data", device: "\(container)s3", in: work)
+            if try CustomFirmwareMobileGestaltCache.remove(fromDataVolume: dataRoot) {
+                print("  [+] MobileGestalt cache removed; the guest rebuilds it from the new device tree at next boot")
+            }
+        }
         // The snapshot rename is a full install's alone: it has already been
         // done on any VM an environment update is allowed to run against, and
         // this run creates no new snapshot to flip.
@@ -1154,6 +1163,9 @@ struct VPhoneCustomFirmwareInstaller {
     /// only the board audio and haptics repairs. `boardDeviceTree` is the
     /// iPad's own device tree, staged from the VM's `FirmwareOriginals`, or nil
     /// for an iPhone guest or a VM patched before `fw patch` kept it.
+    ///
+    /// Returns whether a board repair changed the device tree, which leaves
+    /// the guest's cached MobileGestalt answers stale.
     private func patchPreboot(
         volumes: [[String: Any]],
         work: WorkDirectory,
@@ -1161,7 +1173,7 @@ struct VPhoneCustomFirmwareInstaller {
         guestDevice: VPhoneGuestDevice,
         includeIdentity: Bool,
         boardDeviceTree: URL?,
-    ) throws {
+    ) throws -> Bool {
         // Like every guest patch, a VM with no plan still gets it — except the
         // identity rewrite on an iPad guest, whose installed tree already
         // carries its own identity from `fw patch`; the rewrite would turn it
@@ -1187,7 +1199,7 @@ struct VPhoneCustomFirmwareInstaller {
             (FirmwareGuestSystemPatchSet.prebootBoardAudio, "patch-dt-board-audio"),
             (FirmwareGuestSystemPatchSet.prebootBoardHaptics, "patch-dt-board-haptics"),
         ].filter { on($0.0) }.map(\.1)
-        guard rewriteIdentity || !boardVerbs.isEmpty || !(spoofBuild ?? "").isEmpty else { return }
+        guard rewriteIdentity || !boardVerbs.isEmpty || !(spoofBuild ?? "").isEmpty else { return false }
         guard
             let preboot = volumes.first(where: { ($0["Roles"] as? [String])?.contains("Preboot") == true }),
             let device = preboot["DeviceIdentifier"] as? String
@@ -1215,9 +1227,12 @@ struct VPhoneCustomFirmwareInstaller {
             if rewriteIdentity {
                 try patchCopy(of: deviceTree, in: root, work: work, verb: "patch-post-restore-dt")
             }
+            var boardTreeChanged = false
             if let boardDeviceTree {
                 for verb in boardVerbs {
-                    try patchCopy(of: deviceTree, in: root, work: work, verb: verb, arguments: [boardDeviceTree.path])
+                    if try patchCopy(of: deviceTree, in: root, work: work, verb: verb, arguments: [boardDeviceTree.path]) {
+                        boardTreeChanged = true
+                    }
                 }
             }
             if let build = spoofBuild {
@@ -1226,6 +1241,7 @@ struct VPhoneCustomFirmwareInstaller {
                     try patchCopy(of: version, in: root, work: work, verb: "patch-build-version", arguments: [build])
                 }
             }
+            return boardTreeChanged
         }
     }
 
@@ -1273,13 +1289,17 @@ struct VPhoneCustomFirmwareInstaller {
     /// instead: copy it out by descriptor, patch the copy in the work folder,
     /// and install the result with its original owner and mode. The verb
     /// never sees a guest path, so it cannot be steered by a link in one.
+    ///
+    /// Returns whether the verb changed the file. One that found it already
+    /// as it should be leaves the guest's copy untouched.
+    @discardableResult
     private func patchCopy(
         of relative: String,
         in root: VPhoneConfinedDirectory,
         work: WorkDirectory,
         verb: String,
         arguments: [String] = [],
-    ) throws {
+    ) throws -> Bool {
         guard let original = try root.status(relative), original.st_mode & S_IFMT == S_IFREG else {
             throw ValidationError("\(relative) on the VM is missing or is not a regular file. Restore the VM, then install CFW again.")
         }
@@ -1290,13 +1310,16 @@ struct VPhoneCustomFirmwareInstaller {
         let leaf = (relative as NSString).lastPathComponent
         try root.copyFile(from: relative, to: leaf, in: stage)
         let staged = work.file(folder).appendingPathComponent(leaf)
+        let before = try Data(contentsOf: staged)
         try patch(verb, [staged.path] + arguments)
+        guard try Data(contentsOf: staged) != before else { return false }
         try root.replaceFile(
             relative,
             fromFileAt: staged,
             mode: original.st_mode & 0o7777,
             owner: (original.st_uid, original.st_gid),
         )
+        return true
     }
 
     /// Flip the speaker chains in every tuning set's graph_configurations.plist
