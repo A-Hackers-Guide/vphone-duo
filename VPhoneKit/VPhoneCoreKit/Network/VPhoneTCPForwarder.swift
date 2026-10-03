@@ -106,6 +106,9 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
         case established
         /// FIN seen from one side; the other may still have data in flight.
         case closing
+        /// Inbound: a host client connected to a forwarded port, our SYN went
+        /// to the guest, and its SYN-ACK has not come back.
+        case synSent
     }
 
     private final class Connection {
@@ -203,6 +206,9 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
         /// Set once we have told the guest our window is shut, so a window update
         /// follows the moment the backlog clears.
         var guestWindowClosed = false
+        /// Resends an inbound SYN the guest has not answered.
+        var handshakeTimer: DispatchSourceTimer?
+        var handshakeAttempts = 0
 
         init(flow: VPhoneTCPFlow, socket: Int32, readSource: DispatchSourceRead, state: State, localSequence: UInt32, remoteSequence: UInt32, peerMSS: Int, peerWindowScale: Int) {
             self.flow = flow
@@ -226,6 +232,8 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
     /// Source of initial sequence numbers. Only has to be unpredictable enough
     /// that two connections to the same peer do not look alike.
     private var sequenceCounter: UInt32 = .random(in: 0 ... UInt32.max)
+    /// The last gateway-side port given to an inbound connection.
+    private var inboundPortCursor: UInt16 = 40000
 
     /// Marks `queue` as ours, so `connectionCount` can tell whether it is already
     /// on it rather than deadlocking against itself.
@@ -326,6 +334,9 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
             connection.sendWindowRight = segment.acknowledgmentNumber &+ Self.expand(segment.windowSize, by: connection.peerWindowScale)
             connection.sendUna = segment.acknowledgmentNumber
             flushPending(connection)
+
+        case .synSent:
+            completeInbound(connection, segment: segment)
 
         case .established, .closing:
             consume(segment, connection: connection)
@@ -806,6 +817,8 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
     private func close(_ connection: Connection) {
         connection.writeSource?.cancel()
         connection.writeSource = nil
+        connection.handshakeTimer?.cancel()
+        connection.handshakeTimer = nil
         connection.retransmitTimer?.cancel()
         connection.retransmitTimer = nil
         // A suspended source must be resumed before it can be cancelled;
@@ -838,5 +851,152 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
         // A simple step is enough: it only has to differ between connections.
         sequenceCounter &+= 0x9E37_79B9
         return sequenceCounter
+    }
+}
+
+// MARK: - Inbound
+
+/// Connections that start on the host: a client reached a forwarded port, and
+/// the guest is the one being connected to. The flow keeps the guest's view,
+/// so the guest's port is the source and the gateway is the far end, and once
+/// the handshake is done every other path above treats it like any other.
+extension VPhoneTCPForwarder {
+    /// How often an unanswered SYN is sent again, and how many times. A guest
+    /// still booting does not answer at all; one with nothing listening sends a
+    /// RST, which ends the attempt at once.
+    private static let handshakeInterval: TimeInterval = 1
+    private static let handshakeAttempts = 5
+    /// The gateway-side ports inbound connections use. Above the guest's own
+    /// ephemeral range in practice, and only ever seen by the guest.
+    private static let inboundPorts: ClosedRange<UInt16> = 40000 ... 59999
+
+    /// Connect `socket`, accepted from a host client, to `guestPort` on the
+    /// guest. Takes ownership of the descriptor. On `queue`.
+    func openInbound(
+        socket descriptor: Int32,
+        guestAddress: VPhoneIPv4Address,
+        guestPort: UInt16,
+        gatewayAddress: VPhoneIPv4Address,
+        guestHardware: VPhoneMACAddress,
+    ) {
+        dispatchPrecondition(condition: .onQueue(queue))
+        guard !isStopped, connections.count < Self.maximumConnections,
+              let gatewayPort = freeInboundPort(guestAddress: guestAddress, guestPort: guestPort, gatewayAddress: gatewayAddress)
+        else {
+            Darwin.close(descriptor)
+            return
+        }
+
+        _ = fcntl(descriptor, F_SETFL, fcntl(descriptor, F_GETFL, 0) | O_NONBLOCK)
+        _ = fcntl(descriptor, F_SETNOSIGPIPE, 1)
+        var one: Int32 = 1
+        _ = setsockopt(descriptor, IPPROTO_TCP, TCP_NODELAY, &one, socklen_t(MemoryLayout<Int32>.size))
+
+        let flow = VPhoneTCPFlow(
+            sourceAddress: guestAddress,
+            sourcePort: guestPort,
+            destinationAddress: gatewayAddress,
+            destinationPort: gatewayPort,
+            guestHardware: guestHardware,
+        )
+        let readSource = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: queue)
+        let connection = Connection(
+            flow: flow,
+            socket: descriptor,
+            readSource: readSource,
+            state: .synSent,
+            localSequence: nextSequence(),
+            remoteSequence: 0,
+            peerMSS: Self.defaultPeerMSS,
+            peerWindowScale: 0,
+        )
+        readSource.setEventHandler { [weak self] in self?.drainHost(connection) }
+        readSource.setCancelHandler { Darwin.close(descriptor) }
+        // Nothing is read from the client until the guest has accepted, or
+        // its FIN could reach the guest before our SYN does. Resumed and then
+        // suspended, not left inactive, because `close` resumes a suspended
+        // source before cancelling it.
+        readSource.resume()
+        readSource.suspend()
+        connection.readSuspended = true
+        connections[flow.key] = connection
+        sendInboundSyn(connection)
+    }
+
+    private func freeInboundPort(
+        guestAddress: VPhoneIPv4Address,
+        guestPort: UInt16,
+        gatewayAddress: VPhoneIPv4Address,
+    ) -> UInt16? {
+        for _ in Self.inboundPorts {
+            inboundPortCursor = inboundPortCursor >= Self.inboundPorts.upperBound
+                ? Self.inboundPorts.lowerBound
+                : inboundPortCursor + 1
+            let key = VPhoneTCPFlowKey(
+                sourceAddress: guestAddress, sourcePort: guestPort,
+                destinationAddress: gatewayAddress, destinationPort: inboundPortCursor,
+            )
+            if connections[key] == nil {
+                return inboundPortCursor
+            }
+        }
+        return nil
+    }
+
+    private func sendInboundSyn(_ connection: Connection) {
+        connection.handshakeAttempts += 1
+        // A resend reuses the first SYN's sequence number.
+        let sequence = connection.handshakeAttempts == 1 ? connection.localSequence : connection.localSequence &- 1
+        let syn = VPhoneTCPSegment(
+            sourcePort: connection.flow.destinationPort,
+            destinationPort: connection.flow.sourcePort,
+            sequenceNumber: sequence,
+            acknowledgmentNumber: 0,
+            flags: VPhoneTCPFlags.syn,
+            windowSize: Self.advertisedWindow,
+            advertisedMSS: Self.ourMSS,
+            advertisedWindowScale: Self.ourWindowScaleShift,
+        )
+        if connection.handshakeAttempts == 1 {
+            send(syn, connection: connection)
+        } else {
+            deliver(connection.flow, syn)
+        }
+
+        connection.handshakeTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + Self.handshakeInterval)
+        timer.setEventHandler { [weak self, weak connection] in
+            guard let self, let connection, connection.state == .synSent, !connection.isClosed else { return }
+            if connection.handshakeAttempts >= Self.handshakeAttempts {
+                finish(connection)
+            } else {
+                sendInboundSyn(connection)
+            }
+        }
+        timer.resume()
+        connection.handshakeTimer = timer
+    }
+
+    /// The guest's answer to our SYN. A SYN-ACK for it completes the
+    /// handshake; anything else is ignored (a RST was handled before here).
+    private func completeInbound(_ connection: Connection, segment: VPhoneTCPSegment) {
+        guard segment.hasSYN, segment.hasACK, segment.acknowledgmentNumber == connection.localSequence else { return }
+        connection.handshakeTimer?.cancel()
+        connection.handshakeTimer = nil
+        connection.remoteSequence = segment.sequenceNumber &+ 1
+        connection.peerMSS = segment.maximumSegmentSize ?? Self.defaultPeerMSS
+        connection.peerWindowScale = segment.windowScale ?? 0
+        connection.windowScaleNegotiated = segment.windowScale != nil
+        // The window in a SYN is never scaled.
+        connection.sendWindowRight = segment.acknowledgmentNumber &+ UInt32(segment.windowSize)
+        connection.sendUna = segment.acknowledgmentNumber
+        connection.sentNotAckedSequence = segment.acknowledgmentNumber
+        connection.state = .established
+        sendAcknowledgment(connection)
+        if connection.readSuspended {
+            connection.readSource.resume()
+            connection.readSuspended = false
+        }
     }
 }

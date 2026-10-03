@@ -12670,6 +12670,240 @@
           }
         }
       }
+    },
+    "IPv4 Address" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "IPv4 Address" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "IPv4 アドレス" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "IPv4 주소" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Địa chỉ IPv4" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "IPv4 地址" } }
+      }
+    },
+    "MAC Address" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "MAC Address" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "MAC アドレス" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "MAC 주소" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Địa chỉ MAC" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "MAC 地址" } }
+      }
+    },
+    "Port Forward" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Port Forward" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ポートフォワード" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "포트 포워드" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chuyển tiếp cổng" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "端口转发" } }
+      }
+    },
+    "Address" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Address" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アドレス" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "주소" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Địa chỉ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "地址" } }
+      }
+    },
+    "Configure IPv4" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Configure IPv4" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "IPv4 の構成" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "IPv4 구성" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cấu hình IPv4" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "配置 IPv4" } }
+      }
+    },
+    "Using DHCP" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Using DHCP" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "DHCP を使用" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "DHCP 사용" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Dùng DHCP" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用 DHCP" } }
+      }
+    },
+    "Manually" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Manually" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "手入力" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "수동" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Thủ công" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "手动" } }
+      }
+    },
+    "Gateway" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gateway" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲートウェイ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게이트웨이" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cổng mặc định" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "网关" } }
+      }
+    },
+    "DNS Servers" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "DNS Servers" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "DNS サーバ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "DNS 서버" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Máy chủ DNS" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "DNS 服务器" } }
+      }
+    },
+    "Automatic" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Automatic" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "自動" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "자동" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Tự động" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动" } }
+      }
+    },
+    "Generated at next start" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Generated at next start" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "次回起動時に生成" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "다음 시작 시 생성" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Tạo khi khởi động lần tới" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下次启动时生成" } }
+      }
+    },
+    "Generate" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Generate" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "生成" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "생성" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Tạo" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "生成" } }
+      }
+    },
+    "Use an address on the Mac's shared NAT network, usually 192.168.64.0/24. For another subnet, use Tunnel." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Use an address on the Mac's shared NAT network, usually 192.168.64.0/24. For another subnet, use Tunnel." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Mac の共有 NAT ネットワーク（通常は 192.168.64.0/24）上のアドレスを使用してください。ほかのサブネットにはトンネルを使用します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Mac의 공유 NAT 네트워크(보통 192.168.64.0/24)의 주소를 사용하세요. 다른 서브넷에는 터널을 사용하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hãy dùng địa chỉ trên mạng NAT dùng chung của máy Mac, thường là 192.168.64.0/24. Với mạng con khác, hãy dùng Đường hầm." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请使用 Mac 共享 NAT 网络上的地址，通常是 192.168.64.0/24。其他子网请使用隧道模式。" } }
+      }
+    },
+    "The tunnel hands this address to the guest itself." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The tunnel hands this address to the guest itself." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このアドレスはトンネル自身がゲストに割り当てます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 주소는 터널이 직접 게스트에 할당합니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đường hầm tự cấp địa chỉ này cho máy khách." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这个地址由隧道直接分配给客户机。" } }
+      }
+    },
+    "vphoned sets this address in the guest. Use your network's gateway and DNS servers." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "vphoned sets this address in the guest. Use your network's gateway and DNS servers." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "vphoned がゲスト内にこのアドレスを設定します。ネットワークのゲートウェイと DNS サーバを指定してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "vphoned가 게스트에 이 주소를 설정합니다. 네트워크의 게이트웨이와 DNS 서버를 입력하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "vphoned đặt địa chỉ này trong máy khách. Hãy dùng cổng mặc định và máy chủ DNS của mạng bạn." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "vphoned 会在客户机内设置这个地址。请填写所在网络的网关和 DNS 服务器。" } }
+      }
+    },
+    "Protocol" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Protocol" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "プロトコル" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "프로토콜" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Giao thức" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "协议" } }
+      }
+    },
+    "Mac Port" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mac Port" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Mac のポート" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Mac 포트" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cổng trên Mac" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Mac 端口" } }
+      }
+    },
+    "Guest Port" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Guest Port" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲストのポート" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트 포트" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cổng máy khách" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机端口" } }
+      }
+    },
+    "Add" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "追加" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "추가" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Thêm" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加" } }
+      }
+    },
+    "Reachable from other devices" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reachable from other devices" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ほかのデバイスからアクセス可能" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "다른 기기에서 접근 가능" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Thiết bị khác có thể truy cập" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "允许其他设备访问" } }
+      }
+    },
+    "Port Forwarding" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Port Forwarding" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ポートフォワーディング" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "포트 포워딩" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chuyển tiếp cổng" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "端口转发" } }
+      }
+    },
+    "A forwarded port listens on this Mac only, unless it is reachable from other devices." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "A forwarded port listens on this Mac only, unless it is reachable from other devices." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "転送したポートは、ほかのデバイスからのアクセスを許可しない限り、この Mac 上でのみ待ち受けます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "다른 기기에서 접근 가능으로 설정하지 않으면 전달된 포트는 이 Mac에서만 수신합니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cổng được chuyển tiếp chỉ lắng nghe trên máy Mac này, trừ khi cho phép thiết bị khác truy cập." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "转发的端口只在这台 Mac 上监听，除非允许其他设备访问。" } }
+      }
+    },
+    "This mode cannot forward ports, so saving removes the port forwards." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This mode cannot forward ports, so saving removes the port forwards." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このモードではポートを転送できないため、保存するとポートフォワードが削除されます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 모드는 포트를 전달할 수 없으므로 저장하면 포트 포워드가 제거됩니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chế độ này không chuyển tiếp cổng được, nên khi lưu các chuyển tiếp cổng sẽ bị xóa." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此模式不能转发端口，保存后会移除端口转发。" } }
+      }
+    },
+    "mDNS Name" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "mDNS Name" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "mDNS 名" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "mDNS 이름" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Tên mDNS" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "mDNS 名称" } }
+      }
+    },
+    "Reachable as %@.local" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reachable as %@.local" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@.local でアクセス可能" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@.local(으)로 접근 가능" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Truy cập được qua %@.local" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可通过 %@.local 访问" } }
+      }
+    },
+    "Resolve this Mac's name in the guest" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Resolve this Mac's name in the guest" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲスト内でこの Mac の名前を解決" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트에서 이 Mac의 이름 확인" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Phân giải tên của máy Mac này trong máy khách" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在客户机内解析这台 Mac 的名称" } }
+      }
     }
   },
   "version" : "1.0"

@@ -13,6 +13,7 @@ struct VPhoneVirtualMachineCommand: ParsableCommand {
             VPhoneVirtualMachineInfoCommand.self,
             VPhoneVirtualMachineNewCommand.self,
             VPhoneVirtualMachineConfigCommand.self,
+            VPhoneVirtualMachineNetworkCommand.self,
             VPhoneVirtualMachineRenameCommand.self,
             VPhoneVirtualMachineDeleteCommand.self,
             VPhoneVirtualMachineCloneCommand.self,
@@ -207,6 +208,20 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
         commandName: "config",
         abstract: "Edit VM manifest fields (cpu/memory/network)",
         discussion: """
+        Network settings are read when the VM starts, so a change applies from the next launch.
+
+        --ip fixes the guest's address. In nat mode it must be on the Mac's shared NAT network \
+        (usually 192.168.64.0/24), and vphoned writes it into the guest. In tunnel mode, any \
+        private subnet, handed out by the VM's own DHCP. In bridged mode vphoned writes it into \
+        the guest, so give --gateway and --dns for the LAN.
+
+        --forward carries a host port into the guest (nat and tunnel): tcp:8022:22 listens on \
+        127.0.0.1:8022, tcp:0.0.0.0:8022:22 on every address. Repeat it for more ports.
+
+        --mdns on makes the guest answer to <vm-name>.local over mDNS (or --mdns <name> for \
+        another name), in every network mode: the guest also announces it over its USB link to \
+        this Mac. --mdns off puts the guest's own name back.
+
         --mac-name (on by default) has the guest resolve this Mac's <LocalHostName>.local \
         at once, to the address the guest reaches the Mac at (nat: the shared network's host \
         address, usually 192.168.64.1; tunnel: the gateway, which leads to the Mac's loopback; \
@@ -222,32 +237,87 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
     @Option(name: [.customShort("n"), .long], help: "Network mode: nat | bridged | tunnel | none") var network: String?
     @Option(name: .long, help: "Host interface to bridge (bridged mode; auto-picks first if omitted)")
     var bridgeInterface: String?
+    @Option(name: .long, help: "Guest NIC MAC address: aa:bb:cc:dd:ee:ff | random | auto (a new one at next boot)")
+    var mac: String?
+    @Option(name: .long, help: "Fixed guest IPv4 address, address[/prefix] (default /24), or dhcp")
+    var ip: String?
+    @Option(name: .long, help: "Guest default gateway with a fixed address, or auto")
+    var gateway: String?
+    @Option(name: .long, help: "Guest DNS servers with a fixed address, comma separated, or auto")
+    var dns: String?
+    @Option(name: .long, help: "Forward a host port: [tcp|udp:][host-address:]host-port:guest-port (repeatable)")
+    var forward: [String] = []
+    @Option(name: .long, help: "Remove a forward, as vm info lists it or by host port (repeatable)")
+    var removeForward: [String] = []
+    @Flag(name: .long, help: "Remove every port forward")
+    var clearForwards = false
+    @Option(name: .long, help: "mDNS name: on (<vm-name>.local), off, or a name")
+    var mdns: String?
     @Option(name: .long, help: "Have the guest resolve this Mac's .local name locally: on (default) | off")
     var macName: String?
 
     func run() throws {
-        let mode = try network.map(Self.parseMode)
-        let resolvesMacName: Bool? = switch macName?.lowercased() {
-        case nil: nil
-        case "on": true
-        case "off": false
-        default: throw ValidationError("--mac-name takes on or off.")
-        }
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
+        let edit = try networkEdit(vmName: name)
         let updated = try VPhoneBundleOperations.updateConfig(
             bundleNamed: name,
             in: lib.library,
             cpuCount: cpu,
             memoryMB: memory,
-            networkMode: mode,
-            bridgeInterface: bridgeInterface,
-            resolvesMacName: resolvesMacName,
+            networkEdit: edit,
         )
         let m = updated.manifest
         print(
             "updated \(updated.name): \(m.cpuCount) CPU, \(m.memorySize / (1024 * 1024)) MB, "
                 + "net=\(describeNetwork(m.networkConfig))",
         )
+    }
+
+    private func networkEdit(vmName: String) throws -> VPhoneNetworkEdit {
+        var edit = VPhoneNetworkEdit(
+            mode: try network.map(Self.parseMode),
+            bridgeInterface: bridgeInterface,
+            removeForwards: removeForward,
+            clearForwards: clearForwards,
+        )
+        switch mac?.lowercased() {
+        case nil: break
+        case "auto": edit.mac = .automatic
+        case "random": edit.mac = .random
+        case let value?: edit.mac = .fixed(value)
+        }
+        if let ip {
+            if ip.lowercased() == "dhcp" {
+                edit.address = .dhcp
+            } else {
+                let parsed = try VPhoneNetworking.parseAddress(ip)
+                edit.address = .fixed(address: parsed.address, prefixLength: parsed.prefixLength)
+            }
+        }
+        if let gateway {
+            edit.router = .some(gateway.lowercased() == "auto" ? nil : gateway)
+        }
+        if let dns {
+            edit.dns = .some(
+                dns.lowercased() == "auto"
+                    ? nil
+                    : dns.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) },
+            )
+        }
+        edit.addForwards = try forward.map(VPhoneNetworking.parsePortForward)
+        switch macName?.lowercased() {
+        case nil: break
+        case "on": edit.resolvesMacName = true
+        case "off": edit.resolvesMacName = false
+        default: throw ValidationError("--mac-name takes on or off.")
+        }
+        switch mdns?.lowercased() {
+        case nil: break
+        case "off": edit.localHostName = .some(nil)
+        case "on": edit.localHostName = .some(VPhoneNetworking.localHostName(forVMName: vmName))
+        default: edit.localHostName = .some(mdns)
+        }
+        return edit
     }
 
     private static func parseMode(_ s: String)
@@ -266,15 +336,32 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
     }
 }
 
-private func describeNetwork(_ net: VPhoneVirtualMachineManifest.NetworkConfig) -> String {
-    var text = net.mode.rawValue
-    if net.mode == .bridged, let iface = net.bridgeInterface {
-        text += "(\(iface))"
+/// One line: mode, then whatever is set beyond it.
+func describeNetwork(_ net: VPhoneVirtualMachineManifest.NetworkConfig) -> String {
+    var parts = [net.mode == .bridged ? "bridged(\(net.bridgeInterface ?? "?"))" : net.mode.rawValue]
+    if !net.macAddress.isEmpty {
+        parts.append("mac \(net.macAddress)")
+    }
+    if let ipv4 = net.ipv4 {
+        var address = "ip \(ipv4.address)/\(ipv4.prefixLength)"
+        if let router = ipv4.router {
+            address += " gw \(router)"
+        }
+        if let dns = ipv4.dns, !dns.isEmpty {
+            address += " dns \(dns.joined(separator: ","))"
+        }
+        parts.append(address)
+    }
+    if let forwards = net.portForwards, !forwards.isEmpty {
+        parts.append("forward \(forwards.map(\.description).joined(separator: " "))")
+    }
+    if let name = net.localHostName {
+        parts.append("mdns \(name).local")
     }
     if net.resolvesMacName == false {
-        text += ", mac-name off"
+        parts.append("mac-name off")
     }
-    return text
+    return parts.joined(separator: ", ")
 }
 
 // MARK: - rename

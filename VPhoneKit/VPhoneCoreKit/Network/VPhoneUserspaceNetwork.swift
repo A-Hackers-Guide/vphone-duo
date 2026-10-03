@@ -69,6 +69,11 @@ public final class VPhoneUserspaceNetwork: @unchecked Sendable {
         self?.sendUDPReply(flow: flow, payload: payload)
     }
 
+    /// Host clients of forwarded UDP ports, by the gateway port the guest
+    /// sees them on.
+    private var inboundUDP: [UInt16: InboundUDPSession] = [:]
+    private var inboundUDPCursor: UInt16 = 40000
+
     /// Terminates the guest's TCP against host sockets. Owns one connection per
     /// flow, and emits segments of its own rather than echoing ours.
     private lazy var tcpForwarder = VPhoneTCPForwarder(queue: queue, gatewayAddress: configuration.hostAddress) { [weak self] flow, segment in
@@ -192,6 +197,12 @@ public final class VPhoneUserspaceNetwork: @unchecked Sendable {
             case let .reply(reply):
                 write(reply)
             case let .forward(flow, payload):
+                if flow.destinationAddress == configuration.hostAddress,
+                   let session = inboundUDP[flow.destinationPort], session.guestPort == flow.sourcePort
+                {
+                    replyInbound(payload, session: session, gatewayPort: flow.destinationPort)
+                    continue
+                }
                 // The answer arrives later, on this same queue.
                 forwarder.send(payload, for: flow)
             case let .forwardTCP(flow, segment):
@@ -270,6 +281,101 @@ public final class VPhoneUserspaceNetwork: @unchecked Sendable {
                 payload: fragment,
             ).bytes
             write(frame)
+        }
+    }
+}
+
+// MARK: - Inbound
+
+/// Port forwarding into the guest. The host side (`VPhonePortForwarder`) owns
+/// the listening sockets; this side makes each client look, to the guest, like
+/// a peer at the gateway address, which is the only address it can reach.
+extension VPhoneUserspaceNetwork {
+    /// One host client of a forwarded UDP port.
+    struct InboundUDPSession {
+        let listener: Int32
+        let client: sockaddr_in
+        let guestPort: UInt16
+        var lastActivity: Date
+    }
+
+    /// UDP has no teardown, so a client that goes quiet is forgotten after this.
+    private static let inboundUDPIdleTimeout: TimeInterval = 60
+    private static let inboundUDPPorts: ClosedRange<UInt16> = 40000 ... 59999
+
+    /// Connect an accepted host TCP client to `guestPort`. Takes ownership of
+    /// the descriptor, and closes it when the guest cannot be reached: before
+    /// the guest has sent its first frame there is no MAC to address it by.
+    public func acceptInbound(tcp descriptor: Int32, guestPort: UInt16) {
+        queue.async { [self] in
+            guard !isStopped, let mac = responder.guestMAC else {
+                close(descriptor)
+                return
+            }
+            tcpForwarder.openInbound(
+                socket: descriptor,
+                guestAddress: configuration.guestAddress,
+                guestPort: guestPort,
+                gatewayAddress: configuration.hostAddress,
+                guestHardware: mac,
+            )
+        }
+    }
+
+    /// One datagram a host client sent to a forwarded UDP port. Answers go
+    /// back through `listener`, which the caller keeps open.
+    public func receiveInbound(udp payload: [UInt8], from client: sockaddr_in, listener: Int32, guestPort: UInt16) {
+        queue.async { [self] in
+            guard !isStopped, let mac = responder.guestMAC else { return }
+            let now = Date()
+            inboundUDP = inboundUDP.filter { now.timeIntervalSince($0.value.lastActivity) < Self.inboundUDPIdleTimeout }
+
+            let gatewayPort: UInt16
+            if let existing = inboundUDP.first(where: { _, session in
+                session.listener == listener && session.guestPort == guestPort
+                    && session.client.sin_addr.s_addr == client.sin_addr.s_addr
+                    && session.client.sin_port == client.sin_port
+            }) {
+                gatewayPort = existing.key
+            } else {
+                guard let port = nextInboundUDPPort() else { return }
+                gatewayPort = port
+            }
+            inboundUDP[gatewayPort] = InboundUDPSession(listener: listener, client: client, guestPort: guestPort, lastActivity: now)
+
+            let flow = VPhoneUDPFlow(
+                sourceAddress: configuration.guestAddress,
+                sourcePort: guestPort,
+                destinationAddress: configuration.hostAddress,
+                destinationPort: gatewayPort,
+                guestHardware: mac,
+            )
+            sendUDPReply(flow: flow, payload: payload)
+        }
+    }
+
+    private func nextInboundUDPPort() -> UInt16? {
+        for _ in Self.inboundUDPPorts {
+            inboundUDPCursor = inboundUDPCursor >= Self.inboundUDPPorts.upperBound
+                ? Self.inboundUDPPorts.lowerBound
+                : inboundUDPCursor + 1
+            if inboundUDP[inboundUDPCursor] == nil {
+                return inboundUDPCursor
+            }
+        }
+        return nil
+    }
+
+    /// The guest answered a forwarded UDP client.
+    private func replyInbound(_ payload: [UInt8], session: InboundUDPSession, gatewayPort: UInt16) {
+        inboundUDP[gatewayPort]?.lastActivity = Date()
+        var client = session.client
+        _ = payload.withUnsafeBytes { raw in
+            withUnsafePointer(to: &client) { pointer in
+                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    sendto(session.listener, raw.baseAddress, raw.count, 0, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                }
+            }
         }
     }
 }

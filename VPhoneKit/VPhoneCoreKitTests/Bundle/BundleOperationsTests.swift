@@ -202,6 +202,61 @@ struct BundleOperationsTests {
         #expect(try lib.bundle(named: "bad").manifest.networkConfig.mode == .nat)
     }
 
+    /// A fixed address and forwards are written to config.plist and read back.
+    @Test func `update config saves address and forwards`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let rom = try fakeROM(); let seprom = try fakeROM()
+        defer { try? FileManager.default.removeItem(at: rom); try? FileManager.default.removeItem(at: seprom) }
+        let lib = VPhoneLibrary(root: root)
+        _ = try VPhoneBundleOperations.create(
+            .init(name: "fixed", cpuCount: 2, memoryMB: 2048, diskSizeGB: 1, romSource: rom, sepromSource: seprom),
+            in: lib,
+        )
+
+        _ = try VPhoneBundleOperations.updateConfig(
+            bundleNamed: "fixed",
+            in: lib,
+            cpuCount: nil,
+            memoryMB: nil,
+            networkMode: .tunnel,
+            networkEdit: VPhoneNetworkEdit(
+                address: .fixed(address: "10.20.0.5", prefixLength: 16),
+                addForwards: [.init(hostPort: 8022, guestPort: 22)],
+            ),
+        )
+        let network = try lib.bundle(named: "fixed").manifest.networkConfig
+        #expect(network.mode == .tunnel)
+        #expect(network.ipv4 == .init(address: "10.20.0.5", prefixLength: 16))
+        #expect(network.portForwards == [.init(hostPort: 8022, guestPort: 22)])
+    }
+
+    /// A name `--mdns on` derived follows a rename; a hand-picked one stays.
+    @Test func `rename carries a derived mDNS name`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let rom = try fakeROM(); let seprom = try fakeROM()
+        defer { try? FileManager.default.removeItem(at: rom); try? FileManager.default.removeItem(at: seprom) }
+        let lib = VPhoneLibrary(root: root)
+        for name in ["lab_a", "lab_b"] {
+            _ = try VPhoneBundleOperations.create(
+                .init(name: name, cpuCount: 2, memoryMB: 2048, diskSizeGB: 1, romSource: rom, sepromSource: seprom),
+                in: lib,
+            )
+        }
+        _ = try VPhoneBundleOperations.updateConfig(
+            bundleNamed: "lab_a", in: lib, cpuCount: nil, memoryMB: nil,
+            networkEdit: VPhoneNetworkEdit(localHostName: .some(VPhoneNetworking.localHostName(forVMName: "lab_a"))),
+        )
+        _ = try VPhoneBundleOperations.updateConfig(
+            bundleNamed: "lab_b", in: lib, cpuCount: nil, memoryMB: nil,
+            networkEdit: VPhoneNetworkEdit(localHostName: .some("bench")),
+        )
+        #expect(try VPhoneBundleOperations.rename(bundleNamed: "lab_a", to: "phone_a", in: lib).manifest.networkConfig.localHostName == "phone-a")
+        #expect(try VPhoneBundleOperations.rename(bundleNamed: "lab_b", to: "phone_b", in: lib).manifest.networkConfig.localHostName == "bench")
+        #expect(try lib.bundle(named: "phone_a").manifest.networkConfig.localHostName == "phone-a")
+    }
+
     @Test func `rename then delete`() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }

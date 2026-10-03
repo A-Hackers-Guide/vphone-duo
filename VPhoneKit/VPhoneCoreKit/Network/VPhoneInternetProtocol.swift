@@ -30,20 +30,95 @@ public struct VPhoneIPv4Address: Sendable, Equatable, Hashable, CustomStringConv
     public static let any = VPhoneIPv4Address(0, 0, 0, 0)
 }
 
+// MARK: - Subnet
+
+/// An IPv4 network, `network/prefixLength`.
+public struct VPhoneIPv4Subnet: Sendable, Equatable, Hashable, CustomStringConvertible {
+    /// The network address, with every host bit clear.
+    public let network: VPhoneIPv4Address
+    public let prefixLength: Int
+
+    /// The subnet `address` sits in. Nil for a prefix outside 0...32.
+    public init?(containing address: VPhoneIPv4Address, prefixLength: Int) {
+        guard (0 ... 32).contains(prefixLength) else { return nil }
+        self.prefixLength = prefixLength
+        network = VPhoneIPv4Address(address.raw & Self.mask(prefixLength))
+    }
+
+    /// The subnet named by an address and a dotted mask, nil when the mask's
+    /// bits are not contiguous.
+    public init?(containing address: VPhoneIPv4Address, mask: VPhoneIPv4Address) {
+        let length = mask.raw.nonzeroBitCount
+        guard Self.mask(length) == mask.raw else { return nil }
+        self.init(containing: address, prefixLength: length)
+    }
+
+    private static func mask(_ length: Int) -> UInt32 {
+        length == 0 ? 0 : UInt32.max << UInt32(32 - length)
+    }
+
+    public var mask: VPhoneIPv4Address {
+        VPhoneIPv4Address(Self.mask(prefixLength))
+    }
+
+    public var broadcast: VPhoneIPv4Address {
+        VPhoneIPv4Address(network.raw | ~Self.mask(prefixLength))
+    }
+
+    /// The first assignable address, where `nat` and `tunnel` put the host.
+    public var firstHost: VPhoneIPv4Address {
+        VPhoneIPv4Address(network.raw &+ 1)
+    }
+
+    public func contains(_ address: VPhoneIPv4Address) -> Bool {
+        address.raw & Self.mask(prefixLength) == network.raw
+    }
+
+    /// Whether `address` can be given to a node: inside, and neither the
+    /// network nor the broadcast address.
+    public func isAssignable(_ address: VPhoneIPv4Address) -> Bool {
+        contains(address) && address != network && address != broadcast
+    }
+
+    public func overlaps(_ other: VPhoneIPv4Subnet) -> Bool {
+        contains(other.network) || other.contains(network)
+    }
+
+    /// RFC 1918 space, the only addresses `nat` and `tunnel` hand out.
+    public static let privateRanges = [
+        VPhoneIPv4Subnet(containing: VPhoneIPv4Address(10, 0, 0, 0), prefixLength: 8)!,
+        VPhoneIPv4Subnet(containing: VPhoneIPv4Address(172, 16, 0, 0), prefixLength: 12)!,
+        VPhoneIPv4Subnet(containing: VPhoneIPv4Address(192, 168, 0, 0), prefixLength: 16)!,
+    ]
+
+    public var isPrivate: Bool {
+        Self.privateRanges.contains { $0.contains(network) && $0.prefixLength <= prefixLength }
+    }
+
+    public var description: String {
+        "\(network)/\(prefixLength)"
+    }
+}
+
 // MARK: - Configuration
 
 /// Addressing for the userspace network.
 ///
-/// The subnet deliberately differs from vmnet's `192.168.64.0/24` so `tunnel`
-/// and `nat` can coexist on one host without their DHCP servers answering each
-/// other. It also sits inside `192.168.0.0/16`, which every mainstream VPN keeps
-/// out of its tunnel.
+/// The default subnet deliberately differs from vmnet's `192.168.64.0/24` so
+/// `tunnel` and `nat` can coexist on one host without their DHCP servers
+/// answering each other. It also sits inside `192.168.0.0/16`, which every
+/// mainstream VPN keeps out of its tunnel. A VM's `ipv4` setting replaces it.
 public struct VPhoneUserspaceNetworkConfiguration: Sendable, Equatable {
     /// The address the host answers ARP for, serves DHCP from, and later
     /// appears to be the DNS resolver. Also the DHCP `server-id`.
     public var hostAddress: VPhoneIPv4Address
     /// The lease handed to the guest. One address is enough: one guest per VM.
     public var guestAddress: VPhoneIPv4Address
+    /// The guest's subnet, advertised as DHCP option 1.
+    public var prefixLength: Int
+    /// Resolvers advertised as DHCP option 6. Empty means `hostAddress`, whose
+    /// port 53 is answered by the host's own resolver.
+    public var dnsServers: [VPhoneIPv4Address]
     /// Advertised through DHCP option 26, and the ceiling for everything we send
     /// the guest.
     ///
@@ -63,29 +138,81 @@ public struct VPhoneUserspaceNetworkConfiguration: Sendable, Equatable {
         mtu: 1500,
     )
 
-    public init(hostAddress: VPhoneIPv4Address, guestAddress: VPhoneIPv4Address, mtu: Int = 1500) {
+    public init(
+        hostAddress: VPhoneIPv4Address,
+        guestAddress: VPhoneIPv4Address,
+        prefixLength: Int = 24,
+        dnsServers: [VPhoneIPv4Address] = [],
+        mtu: Int = 1500,
+    ) {
         self.hostAddress = hostAddress
         self.guestAddress = guestAddress
+        self.prefixLength = prefixLength
+        self.dnsServers = dnsServers
         self.mtu = mtu
+    }
+
+    /// The guest's subnet.
+    public var subnet: VPhoneIPv4Subnet {
+        VPhoneIPv4Subnet(containing: guestAddress, prefixLength: prefixLength)
+            ?? VPhoneIPv4Subnet(containing: guestAddress, prefixLength: 24)!
+    }
+
+    /// What DHCP option 6 carries.
+    public var advertisedDNSServers: [VPhoneIPv4Address] {
+        dnsServers.isEmpty ? [hostAddress] : dnsServers
     }
 }
 
 /// A 48-bit Ethernet address. The host side uses a locally administered address
-/// of its own; the guest's is learned from the first frame it sends, because
-/// Virtualization.framework assigns the MAC and never tells us what it picked.
-public struct VPhoneMACAddress: Sendable, Equatable, Hashable {
+/// of its own; the tunnel learns the guest's from the first frame it sends, so
+/// it works whether or not the manifest names one.
+public struct VPhoneMACAddress: Sendable, Equatable, Hashable, CustomStringConvertible {
     public var bytes: [UInt8]
 
     public init(_ bytes: [UInt8]) {
         self.bytes = bytes
     }
 
+    /// Parse `aa:bb:cc:dd:ee:ff` (or with `-`), nil for anything else.
+    public init?(string: String) {
+        let parts = string.split(omittingEmptySubsequences: false) { $0 == ":" || $0 == "-" }
+        guard parts.count == 6 else { return nil }
+        var bytes: [UInt8] = []
+        for part in parts {
+            guard part.count == 2, let value = UInt8(part, radix: 16) else { return nil }
+            bytes.append(value)
+        }
+        self.init(bytes)
+    }
+
+    /// A random unicast, locally administered address: the kind no vendor
+    /// assigns, so it cannot collide with real hardware.
+    public static func randomLocallyAdministered() -> VPhoneMACAddress {
+        var bytes = (0 ..< 6).map { _ in UInt8.random(in: 0 ... 255) }
+        bytes[0] = (bytes[0] & 0xFC) | 0x02
+        return VPhoneMACAddress(bytes)
+    }
+
     /// The gateway's address. Locally administered, unicast, and unlikely to
     /// collide with anything.
     public static let gateway = VPhoneMACAddress([0x02, 0x00, 0x00, 0x00, 0x00, 0x01])
 
+    /// Not a group address. A NIC with the multicast bit set is not reachable.
+    public var isUnicast: Bool {
+        bytes.count == 6 && bytes[0] & 0x01 == 0
+    }
+
+    public var isZero: Bool {
+        bytes.allSatisfy { $0 == 0 }
+    }
+
     var hexString: String {
         bytes.map { String(format: "%02x", $0) }.joined(separator: ":")
+    }
+
+    public var description: String {
+        hexString
     }
 }
 

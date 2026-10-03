@@ -16,6 +16,12 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
     /// The in-process network backing `.tunnel` mode; nil for every other mode.
     /// Held because the sockets live only as long as this reference does.
     private var userspaceNetwork: VPhoneUserspaceNetwork?
+    /// How the manifest's network was realized: attachment, MAC, the address
+    /// vphoned should hold the guest to, and the ports forwarded into it.
+    private(set) var networkPlan: VPhoneNetworkPlan?
+    /// The attachment the VM booted with, put back by `setNetworkLink(up: true)`
+    /// after a runtime change.
+    private var bootAttachment: VZNetworkDeviceAttachment?
 
     struct Options {
         var configURL: URL
@@ -81,6 +87,17 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
             try VPhoneHostFilePermissions.makeAccessible(at: options.configURL)
 
             print("[vphone] \(reason)")
+        }
+
+        // --- MAC: generated once, then kept, like the machine identifier ---
+        // A fixed MAC keeps the guest on one DHCP lease and is what a custom
+        // NAT network reserves its address for.
+        if manifest.networkConfig.mode != .off, manifest.networkConfig.macAddress.isEmpty {
+            let mac = VPhoneMACAddress.randomLocallyAdministered()
+            manifest = manifest.updating(networkConfig: manifest.networkConfig.with(macAddress: mac.description))
+            try manifest.write(to: options.configURL)
+            try VPhoneHostFilePermissions.makeAccessible(at: options.configURL)
+            print("[vphone] Created MAC address \(mac) -> saved to config.plist")
         }
 
         // --- Platform ---
@@ -174,14 +191,13 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         let attachment = try VZDiskImageStorageDeviceAttachment(url: options.diskURL, readOnly: false)
         config.storageDevices = [VZVirtioBlockDeviceConfiguration(attachment: attachment)]
 
-        // Network (mode + MAC from the bundle manifest; nat/bridged/tunnel/none)
-        let (networkDevice, networkBackend) = try VPhoneNetworking.makeNetworkDevice(manifest.networkConfig)
-        if let networkDevice {
-            config.networkDevices = [networkDevice]
-        } else {
-            config.networkDevices = []
-        }
-        userspaceNetwork = networkBackend
+        // Network (mode, MAC, address and forwards from the bundle manifest)
+        let plan = try VPhoneNetworking.plan(manifest.networkConfig)
+        let network = try VPhoneNetworking.makeNetworkDevice(plan)
+        config.networkDevices = network.configuration.map { [$0] } ?? []
+        networkPlan = plan
+        userspaceNetwork = network.userspaceNetwork
+        print("[vphone] Network: \(Self.describe(plan))")
 
         // Serial port (PL011 UART - pipes for input/output with boot detection)
         if let serialPort = Dynamic._VZPL011SerialPortConfiguration().asObject
@@ -285,6 +301,7 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         print("[vphone] Configuration validated")
 
         virtualMachine = VZVirtualMachine(configuration: config)
+        bootAttachment = virtualMachine.networkDevices.first?.attachment
         super.init()
         virtualMachine.delegate = self
 
@@ -359,6 +376,91 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         guard let source = batterySource else { return }
         Dynamic(source).setCharge(charge)
         Dynamic(source).setConnectivity(connectivity)
+    }
+
+    // MARK: - Network
+
+    enum NetworkControlError: Error, CustomStringConvertible {
+        case noNetworkDevice
+
+        var description: String {
+            "This VM has no network device (network mode none)."
+        }
+    }
+
+    /// The in-process network when the VM runs in `tunnel` mode.
+    var tunnelNetwork: VPhoneUserspaceNetwork? {
+        userspaceNetwork
+    }
+
+    /// The NIC as it is now, for `vphone.sock`'s `network` command.
+    var networkStatus: [String: Any] {
+        var status: [String: Any] = [:]
+        if let plan = networkPlan {
+            status["configured"] = Self.describe(plan)
+            status["mac"] = plan.macAddress?.description ?? ""
+            status["guest_ipv4"] = plan.guestIPv4?.description ?? ""
+            status["forwards"] = plan.portForwards.map(\.description)
+            status["local_host_name"] = plan.localHostName.map { "\($0).local" } ?? ""
+        }
+        guard let device = virtualMachine.networkDevices.first else {
+            status["device"] = false
+            return status
+        }
+        status["device"] = true
+        status["link"] = device.attachment == nil ? "down" : "up"
+        status["attachment"] = Self.describe(device.attachment)
+        return status
+    }
+
+    /// Unplug or replug the guest's cable without stopping it. Down detaches
+    /// the NIC from every network; up puts back the attachment it booted with.
+    /// Neither is saved: the next launch reads config.plist again.
+    ///
+    /// Only that one attachment ever goes back. Handing a running VM a new
+    /// attachment, even another `VZNATNetworkDeviceAttachment`, stopped it with
+    /// an internal virtualization error (macOS 27 host, iOS 27 guest), so
+    /// switching networks needs a restart.
+    func setNetworkLink(up: Bool) throws {
+        guard let device = virtualMachine.networkDevices.first else {
+            throw NetworkControlError.noNetworkDevice
+        }
+        device.attachment = up ? bootAttachment : nil
+        print("[vphone] Network link \(up ? "up" : "down")")
+    }
+
+
+    static func describe(_ plan: VPhoneNetworkPlan) -> String {
+        var parts: [String] = switch plan.attachment {
+        case .none: ["none"]
+        case .sharedNAT: ["nat"]
+        case let .bridged(interface): ["bridged(\(interface))"]
+        case let .tunnel(configuration):
+            ["tunnel(\(configuration.guestAddress)/\(configuration.prefixLength) via \(configuration.hostAddress))"]
+        }
+        if let mac = plan.macAddress {
+            parts.append("mac \(mac)")
+        }
+        if case .manual = plan.guestIPv4 {
+            parts.append("guest \(plan.guestIPv4!)")
+        }
+        if !plan.portForwards.isEmpty {
+            parts.append("forwards \(plan.portForwards.map(\.description).joined(separator: ", "))")
+        }
+        if let name = plan.localHostName {
+            parts.append("mdns \(name).local")
+        }
+        return parts.joined(separator: "  ")
+    }
+
+    static func describe(_ attachment: VZNetworkDeviceAttachment?) -> String {
+        switch attachment {
+        case nil: "none"
+        case is VZNATNetworkDeviceAttachment: "nat"
+        case let bridged as VZBridgedNetworkDeviceAttachment: "bridged(\(bridged.interface.identifier))"
+        case is VZFileHandleNetworkDeviceAttachment: "tunnel"
+        case let other?: String(describing: type(of: other))
+        }
     }
 
     // MARK: - Start

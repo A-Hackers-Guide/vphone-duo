@@ -47,10 +47,18 @@ final class VPhoneGuestControl {
     @ObservationIgnored var guestBinaryURL: URL?
     @ObservationIgnored var onConnect: (([String]) -> Void)?
     @ObservationIgnored var onDisconnect: (() -> Void)?
-    /// Names the guest resolves locally (this Mac's `.local` name), worked
-    /// out on each connect, since the Mac's name or a bridged address can
-    /// change while the VM runs. Nil sends nothing.
+    /// What en0 should be configured as, from the manifest. Applied on every
+    /// connect, so a guest that was changed while the host was away is put back.
+    @ObservationIgnored var guestIPv4Setting: VPhoneGuestIPv4Setting?
+    /// The guest's mDNS name from the manifest, applied on every connect; nil
+    /// puts back a name vphoned replaced, and leaves any other alone.
+    @ObservationIgnored var guestLocalHostName: String?
+    /// Names the guest resolves locally, worked out on each connect (the Mac's
+    /// name or a bridged address can change while the VM runs). Nil sends
+    /// nothing.
     @ObservationIgnored var guestStaticNames: (() -> [VPhoneNetworking.StaticName])?
+    /// Called whenever the address the guest reports changes, nil on disconnect.
+    @ObservationIgnored var onGuestIPAddressChange: ((String?) -> Void)?
 
     /// The guest interface orientation: the one the window last read, or the
     /// one a menu rotation is turning to. Nil until one is known, and again
@@ -177,6 +185,7 @@ final class VPhoneGuestControl {
             let ip = info["ip"] as? String
             if ip != guestIPAddress {
                 guestIPAddress = ip
+                onGuestIPAddressChange?(ip)
             }
             let ios = info["ios"] as? String
             if ios != guestIOSVersion {
@@ -193,8 +202,14 @@ final class VPhoneGuestControl {
                 if capabilities.contains("environment_update") {
                     Task { await syncEnvironment() }
                 }
-                if capabilities.contains("network_static_names"), let names = guestStaticNames?() {
-                    Task { await applyGuestStaticNames(names) }
+                if capabilities.contains("network_ipv4"), let setting = guestIPv4Setting {
+                    Task { await applyGuestIPv4(setting) }
+                }
+                if capabilities.contains("network_hostname") {
+                    Task { await applyGuestLocalHostName(guestLocalHostName) }
+                }
+                if capabilities.contains("network_static_names"), let entries = guestStaticNames?() {
+                    Task { await applyGuestStaticNames(entries) }
                 }
             }
         } catch {
@@ -212,6 +227,7 @@ final class VPhoneGuestControl {
         isConnected = false
         guestCapabilities = []
         guestIPAddress = nil
+        onGuestIPAddressChange?(nil)
         guestIOSVersion = nil
         interfaceOrientation = nil
         isSetupAssistantPending = false
@@ -821,16 +837,46 @@ private final class VPhoneHTTPTransaction: @unchecked Sendable {
     }
 }
 
-// MARK: - The Mac's name
+// MARK: - Network
+
+extension VPhoneGuestControl {
+    /// Hold en0 to `setting`. vphoned leaves a configuration the user made in
+    /// the guest alone when asked for DHCP, so this only ever undoes its own.
+    func applyGuestIPv4(_ setting: VPhoneGuestIPv4Setting) async {
+        do {
+            let result = try await call("network.ipv4.set", params: setting.parameters)
+            if result["changed"] as? Bool == true {
+                print("[network] guest en0 set to \(setting)")
+            }
+        } catch {
+            print("[network] could not set guest en0 to \(setting): \(error)")
+        }
+    }
+}
+
+extension VPhoneGuestControl {
+    /// Hold the guest's mDNS name to `name`, or with nil put back the name
+    /// vphoned replaced. A name the user set in the guest is never touched.
+    func applyGuestLocalHostName(_ name: String?) async {
+        do {
+            let result = try await call("network.hostname.set", params: ["local_host_name": name ?? NSNull()])
+            if result["changed"] as? Bool == true {
+                print("[network] guest mDNS name \(name.map { "set to \($0).local" } ?? "restored")")
+            }
+        } catch {
+            print("[network] could not set the guest's mDNS name: \(error)")
+        }
+    }
+}
 
 extension VPhoneGuestControl {
     /// Replace the names vphoned has the guest resolve locally; an empty list
     /// withdraws them.
-    func applyGuestStaticNames(_ names: [VPhoneNetworking.StaticName]) async {
+    func applyGuestStaticNames(_ entries: [VPhoneNetworking.StaticName]) async {
         do {
-            let result = try await call("network.static_names.set", params: ["entries": names.map(\.parameters)])
+            let result = try await call("network.static_names.set", params: ["entries": entries.map(\.parameters)])
             if result["changed"] as? Bool == true {
-                let lines = names.map { "\($0.names.joined(separator: " ")) -> \($0.address)" }
+                let lines = entries.map { "\($0.address) \($0.names.joined(separator: " "))" }
                 print("[network] guest resolves \(lines.isEmpty ? "no names locally" : lines.joined(separator: ", "))")
             }
         } catch {

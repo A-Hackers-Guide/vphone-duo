@@ -87,6 +87,18 @@ struct VPhoneLaunchpadMachineInspector: View {
                 LabeledContent("Memory", value: VPhoneLaunchpadMachinesView.memory(machine.memoryMB))
                 LabeledContent("Disk", value: VPhoneLaunchpadMachinesView.disk(machine.diskSizeBytes))
                 LabeledContent("Network", value: machine.networkDescription)
+                if let address = machine.addressDescription {
+                    LabeledContent("IPv4 Address", value: address)
+                }
+                if !machine.network.macAddress.isEmpty {
+                    LabeledContent("MAC Address", value: machine.network.macAddress)
+                }
+                if let name = machine.network.localHostName {
+                    LabeledContent("mDNS Name", value: "\(name).local")
+                }
+                ForEach(machine.network.portForwards ?? [], id: \.self) { forward in
+                    LabeledContent("Port Forward", value: "\(forward.transport.uppercased()) \(forward.hostAddress ?? "127.0.0.1"):\(forward.hostPort) → \(forward.guestPort)")
+                }
             }
 
             Section("Identity") {

@@ -2,37 +2,20 @@ import Foundation
 import Testing
 @testable import VPhoneCoreKit
 
-/// This Mac's `.local` name in the guest: where it points in each mode, and
-/// how it is turned off.
+/// This Mac's `.local` name in the guest: how it is turned off and stored.
+/// Where it points in each mode is in `NetworkPlanTests`.
 struct MacNameTests {
     typealias NetworkConfig = VPhoneVirtualMachineManifest.NetworkConfig
 
-    private let shared = VPhoneIPv4Address(192, 168, 64, 1)
-
-    @Test func `the Mac's name points where the guest reaches the Mac`() {
-        #expect(VPhoneNetworking.macStaticNames(NetworkConfig(mode: .nat, macAddress: ""), macName: "Lab-Mac", sharedNATHost: shared) == [
-            .init(address: shared, names: ["Lab-Mac.local"]),
-        ])
-        #expect(
-            VPhoneNetworking.macStaticNames(NetworkConfig(mode: .tunnel, macAddress: ""), macName: "Lab-Mac", sharedNATHost: shared).first?.address
-                == VPhoneUserspaceNetworkConfiguration.default.hostAddress,
-        )
-        let bridged = NetworkConfig(mode: .bridged, macAddress: "", bridgeInterface: "en0")
-        #expect(VPhoneNetworking.macStaticNames(bridged, macName: "Lab-Mac", sharedNATHost: shared).isEmpty)
-        #expect(
-            VPhoneNetworking.macStaticNames(bridged, macName: "Lab-Mac", sharedNATHost: shared, bridgedAddress: VPhoneIPv4Address(10, 0, 0, 7)).first?.address
-                == VPhoneIPv4Address(10, 0, 0, 7),
-        )
-        #expect(VPhoneNetworking.macStaticNames(NetworkConfig(mode: .off, macAddress: ""), macName: "Lab-Mac", sharedNATHost: shared).isEmpty)
-        #expect(VPhoneNetworking.macStaticNames(NetworkConfig(mode: .nat, macAddress: ""), macName: nil, sharedNATHost: shared).isEmpty)
-    }
+    private static let sharedSubnet = VPhoneIPv4Subnet(containing: VPhoneIPv4Address(192, 168, 64, 1), prefixLength: 24)!
+    private let host = VPhoneNetworkHost(sharedNATSubnet: sharedSubnet, sharedNATHost: VPhoneIPv4Address(192, 168, 64, 1))
 
     /// On by default and stored as an absent key, so only `off` reaches the
     /// plist, and changing the mode keeps it.
     @Test func `the Mac's name can be turned off and stays off`() throws {
         let off = try VPhoneNetworking.merge(into: .default, mode: nil, bridgeInterface: nil, resolvesMacName: false)
         #expect(off.resolvesMacName == false)
-        #expect(VPhoneNetworking.macStaticNames(off, macName: "Lab-Mac", sharedNATHost: shared).isEmpty)
+        #expect(VPhoneNetworking.macStaticNames(plan: try VPhoneNetworking.plan(off, host: host), macName: "Lab-Mac").isEmpty)
         let tunnel = try VPhoneNetworking.merge(into: off, mode: .tunnel, bridgeInterface: nil)
         #expect(tunnel.resolvesMacName == false)
         let on = try VPhoneNetworking.merge(into: tunnel, mode: nil, bridgeInterface: nil, resolvesMacName: true)

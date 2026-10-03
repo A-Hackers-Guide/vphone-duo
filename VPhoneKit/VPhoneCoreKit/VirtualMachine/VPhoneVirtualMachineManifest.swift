@@ -166,13 +166,23 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
 
     public struct NetworkConfig: Codable, Equatable, Sendable {
         public let mode: NetworkMode
+        /// The guest NIC's MAC, `aa:bb:cc:dd:ee:ff`. Empty until first boot
+        /// generates one and saves it here, so the guest keeps one identity
+        /// (and one DHCP lease) across launches.
         public let macAddress: String
         /// Host interface identifier to bridge (bridged mode only); nil otherwise.
         public let bridgeInterface: String?
+        /// A fixed guest address; nil leaves the address to DHCP. How each mode
+        /// realizes it is in `VPhoneNetworking.plan`.
+        public let ipv4: IPv4Config?
+        /// Host ports carried into the guest. Nil and empty both forward nothing.
+        public let portForwards: [PortForward]?
+        /// The name the guest answers to as `<name>.local` over mDNS. Nil, the
+        /// default, leaves the guest's own name alone.
+        public let localHostName: String?
         /// Whether the guest resolves this Mac's `.local` name to the address it
         /// reaches the Mac at, through a record vphoned registers with the
-        /// guest's mDNSResponder. Nil means yes; see
-        /// `VPhoneNetworking.macStaticNames`.
+        /// guest's mDNSResponder. Nil means yes; see `VPhoneNetworking.plan`.
         public let resolvesMacName: Bool?
 
         public enum NetworkMode: String, Codable, Sendable {
@@ -191,11 +201,102 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
 
         public static let `default` = NetworkConfig(mode: .nat, macAddress: "")
 
-        public init(mode: NetworkMode, macAddress: String, bridgeInterface: String? = nil, resolvesMacName: Bool? = nil) {
+        public init(
+            mode: NetworkMode,
+            macAddress: String,
+            bridgeInterface: String? = nil,
+            ipv4: IPv4Config? = nil,
+            portForwards: [PortForward]? = nil,
+            localHostName: String? = nil,
+            resolvesMacName: Bool? = nil,
+        ) {
             self.mode = mode
             self.macAddress = macAddress
             self.bridgeInterface = bridgeInterface
+            self.ipv4 = ipv4
+            self.portForwards = portForwards
+            self.localHostName = localHostName
             self.resolvesMacName = resolvesMacName
+        }
+
+        /// The same configuration with one field replaced.
+        public func with(
+            mode: NetworkMode? = nil,
+            macAddress: String? = nil,
+            bridgeInterface: String?? = nil,
+            ipv4: IPv4Config?? = nil,
+            portForwards: [PortForward]?? = nil,
+            localHostName: String?? = nil,
+            resolvesMacName: Bool?? = nil,
+        ) -> NetworkConfig {
+            NetworkConfig(
+                mode: mode ?? self.mode,
+                macAddress: macAddress ?? self.macAddress,
+                bridgeInterface: bridgeInterface ?? self.bridgeInterface,
+                ipv4: ipv4 ?? self.ipv4,
+                portForwards: portForwards ?? self.portForwards,
+                localHostName: localHostName ?? self.localHostName,
+                resolvesMacName: resolvesMacName ?? self.resolvesMacName,
+            )
+        }
+
+        /// A fixed IPv4 configuration for the guest's NIC.
+        ///
+        /// Addresses are kept as dotted strings so `config.plist` stays readable
+        /// and editable by hand. `VPhoneNetworking.validate` is what gives them
+        /// meaning, and it runs both when the config is edited and at boot.
+        public struct IPv4Config: Codable, Equatable, Sendable {
+            public let address: String
+            public let prefixLength: Int
+            /// The default route. Nil means the first host of the subnet, which
+            /// is where `nat` and `tunnel` put the host.
+            public let router: String?
+            /// Resolvers handed to the guest. Nil or empty means the router.
+            public let dns: [String]?
+
+            public init(address: String, prefixLength: Int, router: String? = nil, dns: [String]? = nil) {
+                self.address = address
+                self.prefixLength = prefixLength
+                self.router = router
+                self.dns = dns
+            }
+        }
+
+        /// One host port carried to a guest port.
+        public struct PortForward: Codable, Equatable, Hashable, Sendable, CustomStringConvertible {
+            public enum TransportProtocol: String, Codable, Sendable, CaseIterable {
+                case tcp
+                case udp
+            }
+
+            public let transport: TransportProtocol
+            /// The host address to listen on. Nil is loopback only, so a guest
+            /// service is not on the LAN unless someone asks for that.
+            public let hostAddress: String?
+            public let hostPort: Int
+            public let guestPort: Int
+
+            private enum CodingKeys: String, CodingKey {
+                case transport = "protocol"
+                case hostAddress, hostPort, guestPort
+            }
+
+            public init(transport: TransportProtocol = .tcp, hostAddress: String? = nil, hostPort: Int, guestPort: Int) {
+                self.transport = transport
+                self.hostAddress = hostAddress
+                self.hostPort = hostPort
+                self.guestPort = guestPort
+            }
+
+            /// The address actually listened on.
+            public var listenAddress: String {
+                hostAddress ?? "127.0.0.1"
+            }
+
+            /// `tcp:127.0.0.1:8022:22`, the form `--forward` accepts.
+            public var description: String {
+                "\(transport.rawValue):\(listenAddress):\(hostPort):\(guestPort)"
+            }
         }
     }
 
@@ -252,9 +353,8 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
     ///
     /// Replaces `scripts/vm_manifest.py`. Everything not named here is a
     /// default that the guest or the framework fills in later:
-    /// `machineIdentifier` is empty until first boot persists one, and
-    /// `macAddress` is empty so Virtualization assigns it — forcing a MAC
-    /// breaks guest networking.
+    /// `machineIdentifier` and `macAddress` are empty until first boot
+    /// generates and persists them.
     ///
     /// `platformFusing` stays nil unless asked for, which leaves the key out
     /// of the plist entirely and lets the host OS decide.

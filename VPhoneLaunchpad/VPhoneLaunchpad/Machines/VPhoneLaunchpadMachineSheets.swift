@@ -5,10 +5,12 @@ import SwiftUI
 
 /// Hardware and network for one machine, or for several at once. The fields
 /// start from the first machine; only the ones edited are written, to every
-/// machine, so values the machines do not share are left alone.
+/// machine, so values the machines do not share are left alone. A fixed
+/// address, a MAC and forwarded ports belong to one machine, so they are only
+/// offered when one is selected.
 struct VPhoneLaunchpadMachineSettingsView: View {
     private enum Field {
-        case cpu, memory, network
+        case cpu, memory, network, address, mac, forwards, mdns, macName
     }
 
     let machines: [VPhoneLaunchpadMachine]
@@ -18,6 +20,18 @@ struct VPhoneLaunchpadMachineSettingsView: View {
     @State private var memoryMB: Int
     @State private var network: String
     @State private var bridgeInterface: String
+    @State private var manualAddress: Bool
+    @State private var address: String
+    @State private var gateway: String
+    @State private var dns: String
+    @State private var macAddress: String
+    @State private var forwards: [String]
+    @State private var advertisesName: Bool
+    @State private var resolvesMacName: Bool
+    @State private var newTransport = "tcp"
+    @State private var newHostPort = ""
+    @State private var newGuestPort = ""
+    @State private var newOnAllAddresses = false
     @State private var edited: Set<Field> = []
 
     init(machines: [VPhoneLaunchpadMachine]) {
@@ -27,10 +41,63 @@ struct VPhoneLaunchpadMachineSettingsView: View {
         _memoryMB = State(initialValue: first?.memoryMB ?? 8192)
         _network = State(initialValue: first.map { $0.network.mode == "hostOnly" ? "none" : $0.network.mode } ?? "nat")
         _bridgeInterface = State(initialValue: first?.network.bridgeInterface ?? "")
+        let ipv4 = first?.network.ipv4
+        _manualAddress = State(initialValue: ipv4 != nil)
+        _address = State(initialValue: ipv4.map { "\($0.address)/\($0.prefixLength)" } ?? "")
+        _gateway = State(initialValue: ipv4?.router ?? "")
+        _dns = State(initialValue: ipv4?.dns?.joined(separator: ", ") ?? "")
+        _macAddress = State(initialValue: first?.network.macAddress ?? "")
+        _forwards = State(initialValue: first?.network.portForwards?.map(\.argument) ?? [])
+        _advertisesName = State(initialValue: first?.network.localHostName != nil)
+        _resolvesMacName = State(initialValue: first?.network.resolvesMacName != false)
     }
 
     private var title: Text {
         machines.count == 1 ? Text("\(machines[0].name) Settings") : Text("Settings for \(machines.count) Machines")
+    }
+
+    private var single: Bool {
+        machines.count == 1
+    }
+
+    private var forwardsSupported: Bool {
+        network == "nat" || network == "tunnel"
+    }
+
+    /// The mDNS name the machine has, or the one `--mdns on` would give it:
+    /// its name with everything but letters and digits turned into hyphens.
+    private var localHostName: String {
+        if let name = machines.first?.network.localHostName {
+            return name
+        }
+        let name = machines.first?.name ?? ""
+        var label = ""
+        for character in name {
+            if character.isASCII, character.isLetter || character.isNumber {
+                label.append(character)
+            } else if !label.hasSuffix("-") {
+                label.append("-")
+            }
+        }
+        label = String(label.trimmingCharacters(in: CharacterSet(charactersIn: "-")).prefix(63))
+        label = label.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return label.isEmpty ? "vphone" : label
+    }
+
+    /// Bridged and none have no port forwarding; switching to them drops it.
+    private var dropsForwards: Bool {
+        single && !forwardsSupported && !forwards.isEmpty
+    }
+
+    private var newForward: String? {
+        guard let host = Int(newHostPort), (1 ... 65535).contains(host),
+              let guest = Int(newGuestPort), (1 ... 65535).contains(guest)
+        else { return nil }
+        return "\(newTransport):\(newOnAllAddresses ? "0.0.0.0" : "127.0.0.1"):\(host):\(guest)"
+    }
+
+    private var canSave: Bool {
+        !edited.isEmpty && !(manualAddress && address.trimmingCharacters(in: .whitespaces).isEmpty)
     }
 
     var body: some View {
@@ -56,6 +123,10 @@ struct VPhoneLaunchpadMachineSettingsView: View {
                         Text("Traffic leaves through this Mac's own connections, so it follows the Mac's VPN.")
                             .foregroundStyle(.secondary)
                     }
+                    if dropsForwards {
+                        Text("This mode cannot forward ports, so saving removes the port forwards.")
+                            .foregroundStyle(.secondary)
+                    }
                 } header: {
                     Text("Network")
                 } footer: {
@@ -64,6 +135,12 @@ struct VPhoneLaunchpadMachineSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                if single {
+                    addressSection
+                }
+                if single, forwardsSupported {
+                    forwardsSection
+                }
             }
             .formStyle(.grouped)
         } actions: {
@@ -71,14 +148,122 @@ struct VPhoneLaunchpadMachineSettingsView: View {
                 .keyboardShortcut(.cancelAction)
             Button("Save") { save() }
                 .keyboardShortcut(.defaultAction)
-                .disabled(edited.isEmpty)
+                .disabled(!canSave)
         }
-        .frame(width: 440)
+        .frame(width: 480)
         .fixedSize(horizontal: false, vertical: true)
         .onChange(of: cpu) { edited.insert(.cpu) }
         .onChange(of: memoryMB) { edited.insert(.memory) }
         .onChange(of: network) { edited.insert(.network) }
         .onChange(of: bridgeInterface) { edited.insert(.network) }
+        .onChange(of: manualAddress) { edited.insert(.address) }
+        .onChange(of: address) { edited.insert(.address) }
+        .onChange(of: gateway) { edited.insert(.address) }
+        .onChange(of: dns) { edited.insert(.address) }
+        .onChange(of: macAddress) { edited.insert(.mac) }
+        .onChange(of: forwards) { edited.insert(.forwards) }
+        .onChange(of: advertisesName) { edited.insert(.mdns) }
+        .onChange(of: resolvesMacName) { edited.insert(.macName) }
+    }
+
+    private var addressSection: some View {
+        Section {
+            if network != "none" {
+                Picker("Configure IPv4", selection: $manualAddress) {
+                    Text("Using DHCP").tag(false)
+                    Text("Manually").tag(true)
+                }
+                if manualAddress {
+                    TextField("Address", text: $address, prompt: Text(verbatim: network == "tunnel" ? "192.168.127.3/24" : "192.168.64.50/24"))
+                    TextField("Gateway", text: $gateway, prompt: Text("Automatic"))
+                    TextField("DNS Servers", text: $dns, prompt: Text("Automatic"))
+                }
+                HStack {
+                    TextField("MAC Address", text: $macAddress, prompt: Text("Generated at next start"))
+                    Button("Generate") { macAddress = Self.randomMACAddress() }
+                }
+                Toggle("Resolve this Mac's name in the guest", isOn: $resolvesMacName)
+            }
+            // The guest also announces over its USB link to the Mac, so this
+            // works without a network device too.
+            Toggle("Reachable as \(localHostName).local", isOn: $advertisesName)
+        } header: {
+            Text("Address")
+        } footer: {
+            Group {
+                switch network {
+                case "none":
+                    EmptyView()
+                case "nat":
+                    Text("Use an address on the Mac's shared NAT network, usually 192.168.64.0/24. For another subnet, use Tunnel.")
+                case "tunnel":
+                    Text("The tunnel hands this address to the guest itself.")
+                default:
+                    Text("vphoned sets this address in the guest. Use your network's gateway and DNS servers.")
+                }
+            }
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private var forwardsSection: some View {
+        Section {
+            ForEach(forwards, id: \.self) { forward in
+                HStack {
+                    Text(Self.forwardLabel(forward))
+                    Spacer()
+                    Button {
+                        forwards.removeAll { $0 == forward }
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Remove")
+                }
+            }
+            HStack {
+                Picker("Protocol", selection: $newTransport) {
+                    Text(verbatim: "TCP").tag("tcp")
+                    Text(verbatim: "UDP").tag("udp")
+                }
+                .labelsHidden()
+                .fixedSize()
+                TextField("Mac Port", text: $newHostPort)
+                TextField("Guest Port", text: $newGuestPort)
+                Button {
+                    if let newForward, !forwards.contains(newForward) {
+                        forwards.append(newForward)
+                        newHostPort = ""
+                        newGuestPort = ""
+                    }
+                } label: {
+                    Image(systemName: "plus.circle")
+                }
+                .buttonStyle(.borderless)
+                .disabled(newForward == nil)
+                .help("Add")
+            }
+            Toggle("Reachable from other devices", isOn: $newOnAllAddresses)
+        } header: {
+            Text("Port Forwarding")
+        } footer: {
+            Text("A forwarded port listens on this Mac only, unless it is reachable from other devices.")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// `tcp:127.0.0.1:8022:22` as `TCP 127.0.0.1:8022 → 22`.
+    private static func forwardLabel(_ argument: String) -> String {
+        let parts = argument.split(separator: ":")
+        guard parts.count == 4 else { return argument }
+        return "\(parts[0].uppercased()) \(parts[1]):\(parts[2]) → \(parts[3])"
+    }
+
+    /// A unicast, locally administered address, the kind no vendor assigns.
+    private static func randomMACAddress() -> String {
+        var bytes = (0 ..< 6).map { _ in UInt8.random(in: 0 ... 255) }
+        bytes[0] = (bytes[0] & 0xFC) | 0x02
+        return bytes.map { String(format: "%02x", $0) }.joined(separator: ":")
     }
 
     private func save() {
@@ -86,11 +271,49 @@ struct VPhoneLaunchpadMachineSettingsView: View {
         let memoryMB = edited.contains(.memory) ? memoryMB : nil
         let network = edited.contains(.network) ? network : nil
         let bridgeInterface = network == "bridged" ? bridgeInterface : nil
+        var networkArguments: [String] = []
+        if single {
+            if edited.contains(.address) {
+                if manualAddress {
+                    let trimmedGateway = gateway.trimmingCharacters(in: .whitespaces)
+                    let trimmedDNS = dns.replacingOccurrences(of: " ", with: "")
+                    networkArguments += [
+                        "--ip", address.trimmingCharacters(in: .whitespaces),
+                        "--gateway", trimmedGateway.isEmpty ? "auto" : trimmedGateway,
+                        "--dns", trimmedDNS.isEmpty ? "auto" : trimmedDNS,
+                    ]
+                } else {
+                    networkArguments += ["--ip", "dhcp"]
+                }
+            }
+            if edited.contains(.macName) {
+                networkArguments += ["--mac-name", resolvesMacName ? "on" : "off"]
+            }
+            if edited.contains(.mdns) {
+                networkArguments += ["--mdns", advertisesName ? "on" : "off"]
+            }
+            if edited.contains(.mac) {
+                let trimmed = macAddress.trimmingCharacters(in: .whitespaces)
+                networkArguments += ["--mac", trimmed.isEmpty ? "auto" : trimmed]
+            }
+            if dropsForwards {
+                networkArguments += ["--clear-forwards"]
+            } else if edited.contains(.forwards) {
+                networkArguments += ["--clear-forwards"] + forwards.flatMap { ["--forward", $0] }
+            }
+        }
         let paths = machines.map(\.path)
         let library = model.machines
         Task {
             for path in paths {
-                await library.configure(path, cpu: cpu, memoryMB: memoryMB, network: network, bridgeInterface: bridgeInterface)
+                await library.configure(
+                    path,
+                    cpu: cpu,
+                    memoryMB: memoryMB,
+                    network: network,
+                    bridgeInterface: bridgeInterface,
+                    networkArguments: networkArguments,
+                )
             }
         }
         dismiss()
