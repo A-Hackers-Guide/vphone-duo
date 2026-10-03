@@ -31,7 +31,8 @@ is not supported.
 Most iPad IPSWs cover several models — the iPad Air and iPad Pro IPSWs carry
 both sizes. Without `--device`, `fw prepare` takes the first model the IPSW
 lists (the 11-inch); pass `--device iPad17,3` to `fw prepare` or `vm create` for
-the 13-inch. Launchpad's New Machine takes the first model.
+the 13-inch. Launchpad's New Machine passes the model chosen under **Device**;
+with **Custom IPSWs** it takes the first.
 
 Adding another iPad takes one line in `VPhoneGuestDevice`: its product type,
 board and panel. Everything the device tree needs is read from the board's own
@@ -40,7 +41,10 @@ board and panel. Everything the device tree needs is read from the board's own
 ## Create one
 
 Pass the iPad restore IPSW where the iPhone one would go. The cloudOS is the
-same one an iPhone guest of that release would use; `fw catalog` lists it.
+same one an iPhone guest of that release would use. `fw catalog` lists every
+supported iPad's iPadOS releases with that cloudOS, and `fw catalog --device
+iPad16,1` lists one iPad's. With `--device` and no sources, `vm create` offers
+that iPad's releases to choose from.
 
 ```sh
 vphone-cli vm create ipad-mini \
@@ -56,9 +60,13 @@ vphone-cli vm create ipad-pro-13 --device iPad17,3 \
 `fw prepare --device iPad16,1 --list` lists the iPad's downloadable IPSWs,
 and `--device iPad16,1 --iphone-version 26.6.2` resolves one.
 
-In Launchpad, choose **New Machine**, set **Source** to **Custom IPSWs**, and
-put the iPad IPSW in the **iPhone IPSW** field and the cloudOS IPSW in the
-other. The Core Bundle in use must include iPad support.
+In Launchpad, choose **New Machine**, pick the iPad under **Device** and an
+iPadOS release under **iPadOS**; the recommended cloudOS comes with it. For an
+IPSW that is not in the catalog, set **Source** to **Custom IPSWs** and put the
+iPad IPSW in the **iPhone IPSW** field and the cloudOS IPSW in the other. The
+Core Bundle in use must include iPad support; the **Device** menu appears only
+with a Core Bundle whose catalog lists iPads. `vphone-launchpad-cli vm create
+<name> --device iPad16,1` does the same from a terminal.
 
 The manual stages are the same as for an iPhone guest (`vm new`,
 `fw prepare`, `fw patch`, DFU + `restore`, `cfw install`, `vm launch`).

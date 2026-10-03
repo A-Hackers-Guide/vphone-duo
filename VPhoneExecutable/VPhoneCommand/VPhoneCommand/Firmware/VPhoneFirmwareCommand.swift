@@ -168,10 +168,12 @@ struct VPhoneFirmwareManifestCommand: ParsableCommand {
 struct VPhoneFirmwareCatalogCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "catalog",
-        abstract: "Show the known iOS ↔ cloudOS firmware pairings (recommended per iOS build)",
+        abstract: "Show the known iOS/iPadOS ↔ cloudOS firmware pairings (recommended per build)",
     )
 
     @Flag(name: .shortAndLong, help: "Emit JSON") var json = false
+    @Option(help: ArgumentHelp("Show only this guest device's pairings, e.g. iPad16,1", valueName: "product-type"))
+    var device: String?
 
     func run() throws {
         let report = VPhoneFirmwareCatalog.report
@@ -179,13 +181,25 @@ struct VPhoneFirmwareCatalogCommand: ParsableCommand {
             try print(String(decoding: JSONEncoder().encode(report), as: UTF8.self))
             return
         }
-        print("Firmware catalog (\(report.device))")
-        let width = report.pairings.map(\.ios.name.count).max() ?? 0
-        let header = "iOS".padding(toLength: width, withPad: " ", startingAt: 0)
-        print("\(header)  recommended cloudOS")
-        for e in report.pairings {
-            let ios = e.ios.name.padding(toLength: width, withPad: " ", startingAt: 0)
-            print("\(ios)  \(e.recommendedCloudOS.name)")
+        var devices = report.devices
+        if let device {
+            guard let guest = VPhoneGuestDevice.named(device) else {
+                throw ValidationError("vphone runs \(VPhoneGuestDevice.known.map(\.productType).joined(separator: ", ")) guests, not \(device).")
+            }
+            devices = devices.filter { $0.productType == guest.productType }
+        }
+        for (index, entry) in devices.enumerated() {
+            if index > 0 {
+                print("")
+            }
+            print("Firmware catalog (\(entry.productType), \(entry.name))")
+            let os = entry.family == "iPad" ? "iPadOS" : "iOS"
+            let width = max(os.count, entry.pairings.map(\.ios.name.count).max() ?? 0)
+            print("\(os.padding(toLength: width, withPad: " ", startingAt: 0))  recommended cloudOS")
+            for e in entry.pairings {
+                let ios = e.ios.name.padding(toLength: width, withPad: " ", startingAt: 0)
+                print("\(ios)  \(e.recommendedCloudOS.name)")
+            }
         }
     }
 }
@@ -270,7 +284,7 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
             }
         }
 
-        let selected = try VPhoneFirmwareSourceSelection.resolve(iphone: source, cloudos: cloudosSource)
+        let selected = try VPhoneFirmwareSourceSelection.resolve(iphone: source, cloudos: cloudosSource, device: chosenDevice)
         guard let phone = selected.iphoneSource, let cloud = selected.cloudosSource else {
             throw ValidationError("Specify both --iphone-source and --cloudos-source when running without a terminal.")
         }

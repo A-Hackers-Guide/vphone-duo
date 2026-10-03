@@ -43,8 +43,12 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         // also where a missing vphone-vm should be reported — before any of the
         // long-running download and patch work, not after it.
         let launcher = try VPhoneGuestLaunchPlanner()
-        // Prompt for any firmware component not supplied on the command line.
-        let sources = try VPhoneFirmwareSourceSelection.resolve(iphone: iphoneSource, cloudos: cloudosSource)
+        if let device, VPhoneGuestDevice.named(device) == nil {
+            throw ValidationError("vphone runs \(VPhoneGuestDevice.known.map(\.productType).joined(separator: ", ")) guests, not \(device).")
+        }
+        // Prompt for any firmware component not supplied on the command line,
+        // from the guest device's builds.
+        let sources = try VPhoneFirmwareSourceSelection.resolve(iphone: iphoneSource, cloudos: cloudosSource, device: device)
         guard sources.iphoneSource != nil, sources.cloudosSource != nil else {
             throw ValidationError("Specify both --iphone-source and --cloudos-source when running without a terminal.")
         }

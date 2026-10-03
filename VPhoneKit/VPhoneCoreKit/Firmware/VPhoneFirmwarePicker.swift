@@ -34,10 +34,13 @@ public enum VPhoneFirmwarePicker {
     /// what's missing. Both given → passthrough. Non-interactive → passthrough
     /// so the caller can report which source is missing. Neither given → pick a full pairing.
     /// One given → prompt for just the other. Prompts show friendly names; the
-    /// result carries URLs. I/O is injected so the logic is unit-testable.
+    /// result carries URLs. `device` chooses the builds on offer: an iPad's
+    /// iPadOS releases, or the iPhone list when nil. I/O is injected so the
+    /// logic is unit-testable.
     public static func resolve(
         iphone: String?,
         cloudos: String?,
+        device: String? = nil,
         isInteractive: Bool,
         maxRetries: Int = 5,
         read: () -> String?,
@@ -45,18 +48,20 @@ public enum VPhoneFirmwarePicker {
     ) throws -> VPhoneFirmwareSources {
         let iphone = (iphone?.isEmpty == true) ? nil : iphone
         let cloudos = (cloudos?.isEmpty == true) ? nil : cloudos
+        let pairings = VPhoneFirmwareCatalog.pairings(for: device ?? VPhoneFirmwareCatalog.device)
 
-        // Nothing to prompt for: both supplied, or we can't prompt anyway.
-        if (iphone != nil && cloudos != nil) || !isInteractive {
+        // Nothing to prompt for: both supplied, we can't prompt anyway, or the
+        // catalog has nothing for this device.
+        if (iphone != nil && cloudos != nil) || !isInteractive || (iphone == nil && pairings.isEmpty) {
             return VPhoneFirmwareSources(iphoneSource: iphone, cloudosSource: cloudos)
         }
 
         if iphone == nil, cloudos == nil {
-            let p = try pickPairing(maxRetries: maxRetries, read: read, write: write)
+            let p = try pickPairing(pairings, maxRetries: maxRetries, read: read, write: write)
             return VPhoneFirmwareSources(iphoneSource: p.iosURL, cloudosSource: p.cloudosURL)
         }
         if iphone == nil { // cloudOS supplied, choose the iPhone build
-            let p = try pickIPhone(maxRetries: maxRetries, read: read, write: write)
+            let p = try pickIPhone(pairings, maxRetries: maxRetries, read: read, write: write)
             return VPhoneFirmwareSources(iphoneSource: p.iosURL, cloudosSource: cloudos)
         }
         // iPhone supplied, choose the cloudOS image
@@ -67,11 +72,11 @@ public enum VPhoneFirmwarePicker {
     // MARK: - Prompts
 
     static func pickPairing(
+        _ pairings: [VPhoneFirmwarePairing],
         maxRetries: Int,
         read: () -> String?,
         write: (String) -> Void,
     ) throws -> VPhoneFirmwarePairing {
-        let pairings = VPhoneFirmwareCatalog.pairings
         let w = pairings.map(\.iosName.count).max() ?? 0
         let idx = try choose(
             "Select a firmware pairing to download:",
@@ -88,13 +93,14 @@ public enum VPhoneFirmwarePicker {
     }
 
     static func pickIPhone(
+        _ pairings: [VPhoneFirmwarePairing],
         maxRetries: Int,
         read: () -> String?,
         write: (String) -> Void,
     ) throws -> VPhoneFirmwarePairing {
-        let pairings = VPhoneFirmwareCatalog.pairings
+        let os = VPhoneGuestDevice.named(pairings.first?.device)?.isPad == true ? "iPadOS" : "iPhone"
         let idx = try choose(
-            "Select an iPhone firmware to download:",
+            "Select an \(os) firmware to download:",
             pairings.map(\.iosName),
             maxRetries: maxRetries,
             read: read,

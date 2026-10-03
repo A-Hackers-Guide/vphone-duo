@@ -108,7 +108,7 @@ version while a machine is bound to it; rebind or delete those machines first.
 | `vm list` | Machines in every library with run state, Core Bundle and log path |
 | `vm start <name> [--headless] [--wait]` / `vm stop <name>` | Launch with the machine's bundle, or stop; `--wait` waits for vphoned |
 | `vm wait <name>` / `vm log <name> [--kind create\|dfu\|patch]` | Wait for vphoned; read a console log |
-| `vm create <name> [--bundle <version>] [...] [--from <step>]` | The New Machine pipeline, bound to `--bundle` or the default; `--from` retries from a step |
+| `vm create <name> [--bundle <version>] [...] [--device <product-type>] [--from <step>]` | The New Machine pipeline, bound to `--bundle` or the default; `--device` makes an iPad guest, `--from` retries from a step |
 | `vm set-bundle <name> <version> [--update-environment]` | Bind a machine to another installed version. `--update-environment` also redeploys that version's guest environment and needs a stopped machine |
 | `cfw install <name>` | Install CFW into a stopped machine with its own bundle, through the helper |
 | `cfw update-environment <name>` | Redeploy the machine's own bundle's guest resources (vphoned, hook dylibs) into it while stopped, through the helper; nothing else changes |

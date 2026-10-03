@@ -521,11 +521,23 @@ struct VPhoneLaunchpadControlCommands {
 
         var iphone = request.option("iphone-source")
         var cloudOS = request.option("cloudos-source")
+        let device = request.option("device")
         if iphone == nil || cloudOS == nil {
             let result = try await commandLine.run(["fw", "catalog", "--json"], recordInHistory: false)
-            guard result.succeeded, let data = result.jsonData,
-                  let pairing = try JSONDecoder().decode(VPhoneLaunchpadFirmwareCatalog.self, from: data).pairings.last
-            else {
+            guard result.succeeded, let data = result.jsonData else {
+                throw VPhoneLaunchpadError("Unable to read the firmware catalog. Pass --iphone-source and --cloudos-source.", detail: result.tail)
+            }
+            let catalog = try JSONDecoder().decode(VPhoneLaunchpadFirmwareCatalog.self, from: data)
+            let guest = if let device {
+                catalog.guests.first { $0.productType == device }
+            } else {
+                catalog.guests.first
+            }
+            guard let guest else {
+                let known = catalog.guests.map(\.productType).joined(separator: ", ")
+                throw VPhoneLaunchpadError("The firmware catalog has no \(device ?? ""). Choose one of \(known), or pass --iphone-source and --cloudos-source.")
+            }
+            guard let pairing = guest.defaultPairing else {
                 throw VPhoneLaunchpadError("Unable to read the firmware catalog. Pass --iphone-source and --cloudos-source.", detail: result.tail)
             }
             iphone = iphone ?? pairing.ios.url
@@ -552,6 +564,7 @@ struct VPhoneLaunchpadControlCommands {
             bundleVersion: version,
             iphoneSource: iphone ?? "",
             cloudOSSource: cloudOS ?? "",
+            device: device,
             cpuCount: number("cpu", 8),
             memoryMB: number("memory", 8192),
             diskSizeGB: number("disk-size", 64),

@@ -1,8 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// Name, location, Core Bundle, firmware pairing from `fw catalog`, hardware
-/// and options. Create hands off to the pipeline sheet.
+/// Name, location, Core Bundle, guest device and firmware pairing from
+/// `fw catalog`, hardware and options.
+/// Create hands off to the pipeline sheet.
 struct VPhoneLaunchpadNewMachineView: View {
     let onCreate: (VPhoneLaunchpadMachinePath) -> Void
     @Environment(VPhoneLaunchpadModel.self) private var model
@@ -17,6 +18,8 @@ struct VPhoneLaunchpadNewMachineView: View {
     @State private var chosenLocation: String?
     @State private var catalog: VPhoneLaunchpadFirmwareCatalog?
     @State private var catalogError: String?
+    /// The guest device's product type.
+    @State private var guest: String?
     @State private var pairing: String?
     @State private var usesCustomSources = false
     @State private var iphoneSource = ""
@@ -31,6 +34,10 @@ struct VPhoneLaunchpadNewMachineView: View {
     @State private var showsAdvanced = false
     @State private var keepArtifacts = false
 
+    private var selectedGuest: VPhoneLaunchpadFirmwareCatalog.Device? {
+        catalog?.guests.first { $0.id == guest }
+    }
+
     /// The version every step of the creation runs with, and the one the
     /// firmware and patch catalogs are read from.
     private var bundleVersion: String? {
@@ -42,7 +49,7 @@ struct VPhoneLaunchpadNewMachineView: View {
     }
 
     private var selectedPairing: VPhoneLaunchpadFirmwareCatalog.Pairing? {
-        catalog?.pairings.first { $0.id == pairing }
+        selectedGuest?.pairings.first { $0.id == pairing }
     }
 
     private var sources: (String, String)? {
@@ -316,8 +323,18 @@ struct VPhoneLaunchpadNewMachineView: View {
                 sourceField("iPhone IPSW", $iphoneSource)
                 sourceField("cloudOS IPSW", $cloudOSSource)
             } else if let catalog {
-                Picker("iOS", selection: $pairing) {
-                    ForEach(catalog.pairings.reversed()) { pairing in
+                if catalog.guests.count > 1 {
+                    Picker("Device", selection: Binding(
+                        get: { guest },
+                        set: { choose($0) },
+                    )) {
+                        ForEach(catalog.guests) { guest in
+                            Text(verbatim: guest.name).tag(Optional(guest.id))
+                        }
+                    }
+                }
+                Picker(selectedGuest?.isPad == true ? "iPadOS" : "iOS", selection: $pairing) {
+                    ForEach((selectedGuest?.pairings ?? []).reversed()) { pairing in
                         Text(verbatim: "\(pairing.ios.name) (\(pairing.build))").tag(Optional(pairing.id))
                     }
                 }
@@ -334,8 +351,8 @@ struct VPhoneLaunchpadNewMachineView: View {
         } header: {
             Text("Firmware")
         } footer: {
-            if !usesCustomSources, let catalog {
-                Text("Recommended firmware pairings for \(catalog.device).")
+            if !usesCustomSources, let selectedGuest {
+                Text("Recommended firmware pairings for \(selectedGuest.name).")
                     .foregroundStyle(.secondary)
             }
         }
@@ -394,7 +411,7 @@ struct VPhoneLaunchpadNewMachineView: View {
         #if DEBUG
             if VPhoneLaunchpadPreview.isActive {
                 catalog = VPhoneLaunchpadPreview.catalog
-                pairing = catalog?.pairings.last?.id
+                choose(catalog?.guests.first?.id)
                 return
             }
         #endif
@@ -414,10 +431,12 @@ struct VPhoneLaunchpadNewMachineView: View {
             }
             let catalog = try JSONDecoder().decode(VPhoneLaunchpadFirmwareCatalog.self, from: data)
             self.catalog = catalog
-            // The pairing chosen under the previous version stays when this
-            // one offers it too.
-            if !catalog.pairings.contains(where: { $0.id == pairing }) {
-                pairing = catalog.pairings.last?.id
+            // The guest and pairing chosen under the previous version stay
+            // when this one offers them too.
+            if !catalog.guests.contains(where: { $0.id == guest }) {
+                choose(catalog.guests.first?.id)
+            } else if selectedGuest?.pairings.contains(where: { $0.id == pairing }) != true {
+                pairing = selectedGuest?.defaultPairing?.id
             }
         } catch {
             guard version == bundleVersion else {
@@ -425,6 +444,12 @@ struct VPhoneLaunchpadNewMachineView: View {
             }
             catalogError = error.localizedDescription
         }
+    }
+
+    /// Select a guest device and its newest release.
+    private func choose(_ productType: String?) {
+        guest = productType
+        pairing = selectedGuest?.defaultPairing?.id
     }
 
     /// Read again whenever the preset or the version changes: `inPreset`, which
@@ -472,6 +497,8 @@ struct VPhoneLaunchpadNewMachineView: View {
             bundleVersion: bundleVersion,
             iphoneSource: iphone,
             cloudOSSource: cloudOS,
+            // An iPad IPSW often covers two sizes; name the one chosen.
+            device: usesCustomSources ? nil : selectedGuest.flatMap { $0.isPad ? $0.productType : nil },
             cpuCount: cpu,
             memoryMB: memoryMB,
             diskSizeGB: diskSizeGB,

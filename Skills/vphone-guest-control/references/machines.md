@@ -37,7 +37,7 @@ that the version you pass to `--bundle` passed its checks in `bundle list`).
 
 ```sh
 vphone-launchpad-cli vm create myphone [--bundle <version>] \
-  [--iphone-source <path-or-url>] [--cloudos-source <path-or-url>] \
+  [--iphone-source <path-or-url>] [--cloudos-source <path-or-url>] [--device <product-type>] \
   [--cpu 8] [--memory 8192] [--disk-size 64] \
   [--network nat|bridged|none] [--preset standard|experimental] \
   [--keep-artifacts] [--no-wait]
@@ -50,6 +50,10 @@ vphone-launchpad-cli vm create myphone [--bundle <version>] \
   Pass both explicitly to pin a pairing; verified pairings are listed in
   `Documents/Guides/compatibility.md`. Local paths are read in place; URLs are
   cached in `~/.vphone/ipsws/`.
+- **`--device`** makes an iPad guest: `iPad16,1`, `iPad15,7`, `iPad15,3`,
+  `iPad15,5`, `iPad16,3`, `iPad16,5`, `iPad17,1` or `iPad17,3`. Without sources
+  it takes that iPad's newest catalog pairing; with an iPad IPSW that covers
+  two sizes it picks the size. See `Documents/Guides/ipados.md`.
 - **Units:** `--cpu` is a count, `--memory` is **MB**, `--disk-size` is **GB**.
   Defaults 8, 8192, 64. All must be positive integers.
 - **Name:** letters, digits, `.`, `-`, `_`. Keep it short: the machine path must

@@ -167,7 +167,7 @@ nonisolated struct VPhoneLaunchpadControlCommand: Sendable {
         Self(name: "vm.log", arguments: ["name"], options: ["root", "lines", "kind"], flags: [],
              summary: "The last lines of the console log (--kind create, dfu or patch for those logs)."),
         Self(name: "vm.create", arguments: ["name"], options: [
-            "root", "bundle", "iphone-source", "cloudos-source", "cpu", "memory", "disk-size", "network", "preset", "from",
+            "root", "bundle", "iphone-source", "cloudos-source", "device", "cpu", "memory", "disk-size", "network", "preset", "from",
         ], flags: ["keep-artifacts", "no-wait"],
         summary: "Create a machine through every step, as New Machine does, bound to --bundle (default: the default bundle). --from <step> retries a failed creation from that step."),
         Self(name: "vm.set-bundle", arguments: ["name", "version"], options: ["root"], flags: ["update-environment"],

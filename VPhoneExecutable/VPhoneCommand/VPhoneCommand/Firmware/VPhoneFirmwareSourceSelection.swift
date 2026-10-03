@@ -11,12 +11,14 @@ enum VPhoneFirmwareSourceSelection {
     }
 
     /// Resolve `vm create`'s iPhone/cloudOS sources, prompting on a TTY for
-    /// whichever component the user didn't pass. Non-interactive or fully
-    /// specified → returns the inputs unchanged for caller validation.
-    static func resolve(iphone: String?, cloudos: String?) throws -> VPhoneFirmwareSources {
+    /// whichever component the user didn't pass, from `device`'s builds (the
+    /// iPhone list when nil). Non-interactive or fully specified → returns the
+    /// inputs unchanged for caller validation.
+    static func resolve(iphone: String?, cloudos: String?, device: String? = nil) throws -> VPhoneFirmwareSources {
         try VPhoneFirmwarePicker.resolve(
             iphone: iphone,
             cloudos: cloudos,
+            device: device,
             isInteractive: isTTY,
             read: { readLine(strippingNewline: true) },
             write: { err($0) },

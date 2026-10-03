@@ -10,8 +10,8 @@ struct FirmwarePickerTests {
 
     // MARK: - Catalog integrity
 
-    @Test func `catalog has twenty five pairings`() {
-        #expect(VPhoneFirmwareCatalog.pairings.count == 25)
+    @Test func `catalog has twenty seven pairings`() {
+        #expect(VPhoneFirmwareCatalog.pairings.count == 27)
     }
 
     @Test func `every pairing is populated`() {
@@ -138,13 +138,44 @@ struct FirmwarePickerTests {
             write: { lines.append($0) },
         )
         let menu = lines.filter { $0.hasPrefix("  [") }
-        #expect(menu.count == 25)
+        #expect(menu.count == 27)
         // Label text starts in one column regardless of 1- vs 2-digit index.
         let labelStarts = Set(menu.map { $0.range(of: "] ")!.upperBound.utf16Offset(in: $0) })
         #expect(labelStarts.count == 1)
         // The "(→ cloudOS …)" arrow lands in one column across every row.
         let arrowCols = Set(menu.map { $0.range(of: "(→")!.lowerBound.utf16Offset(in: $0) })
         #expect(arrowCols.count == 1)
+    }
+
+    // MARK: - iPad
+
+    @Test func `i pad device offers its i pad OS builds`() throws {
+        var lines: [String] = []
+        let pairings = VPhoneFirmwareCatalog.pairings(for: "iPad16,1")
+        let out = try VPhoneFirmwarePicker.resolve(
+            iphone: nil,
+            cloudos: "custom.dmg",
+            device: "iPad16,1",
+            isInteractive: true,
+            read: reader([String(pairings.count)]),
+            write: { lines.append($0) },
+        )
+        #expect(lines.first == "Select an iPadOS firmware to download:")
+        #expect(lines.filter { $0.hasPrefix("  [") }.count == pairings.count)
+        #expect(out.iphoneSource == pairings.last?.iosURL)
+        #expect(out.cloudosSource == "custom.dmg")
+    }
+
+    @Test func `unknown device passes through without prompting`() throws {
+        let out = try VPhoneFirmwarePicker.resolve(
+            iphone: nil,
+            cloudos: nil,
+            device: "iPad15,8",
+            isInteractive: true,
+            read: { Issue.record("prompted"); return nil },
+            write: { _ in },
+        )
+        #expect(out == VPhoneFirmwareSources(iphoneSource: nil, cloudosSource: nil))
     }
 
     // MARK: - Retry / abort semantics

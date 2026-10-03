@@ -167,13 +167,49 @@ nonisolated struct VPhoneLaunchpadFirmwareCatalog: Decodable, Sendable {
             ios.url
         }
 
-        /// The build from an IPSW name such as `iPhone17,3_27.0_24A435_Restore.ipsw`.
+        /// The build from an IPSW name such as `iPhone17,3_27.0_24A435_Restore.ipsw`
+        /// or `iPad_Pro_M4_27.0.1_24A446_Restore.ipsw`: the field before `Restore`.
         var build: String {
             let fields = (ios.url as NSString).lastPathComponent.split(separator: "_")
-            return fields.count >= 4 ? String(fields[2]) : ""
+            return fields.count >= 4 ? String(fields[fields.count - 2]) : ""
+        }
+
+        var isBeta: Bool {
+            ios.name.localizedCaseInsensitiveContains("beta")
         }
     }
 
+    /// One guest device and its pairings, oldest first.
+    struct Device: Decodable, Hashable, Identifiable, Sendable {
+        /// The product type `fw prepare --device` takes.
+        let productType: String
+        let name: String
+        /// `iPhone` or `iPad`.
+        let family: String
+        let pairings: [Pairing]
+
+        var id: String {
+            productType
+        }
+
+        var isPad: Bool {
+            family == "iPad"
+        }
+
+        /// The newest release, or the newest build when every one is a beta.
+        var defaultPairing: Pairing? {
+            pairings.last { !$0.isBeta } ?? pairings.last
+        }
+    }
+
+    /// The iPhone the `pairings` list is for.
     let device: String
     let pairings: [Pairing]
+    /// Every guest device, from a bundle with iPad guests; nil before.
+    let devices: [Device]?
+
+    /// The guest devices, or the iPhone alone from a bundle without `devices`.
+    var guests: [Device] {
+        devices ?? [Device(productType: device, name: device, family: "iPhone", pairings: pairings)]
+    }
 }
