@@ -1,5 +1,6 @@
 // VirtIOSoundTests.c — host checks for the virtio-snd HAL plugin's pure parts:
-// the format the plugin asks the device for, and the output ring's counters.
+// the format the plugin asks the device for, the rings' counters, and how
+// captured frames are served.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -232,6 +233,201 @@ static void testRingResetAndValidation(void) {
     VPVirtIOSoundRingDestroy(&ring);
 }
 
+// MARK: - Input ring
+
+/// Hand the device the next slot and return it filled with `value`, as one
+/// completed read does.
+static void capturePeriod(VPVirtIOSoundInputRing *ring, uint8_t value) {
+    uint32_t offset = 0;
+    CHECK(VPVirtIOSoundInputRingNextSubmission(ring, &offset));
+    VPVirtIOSoundInputRingDidSubmit(ring);
+    fill(ring->bytes + offset, ring->period, value);
+    VPVirtIOSoundInputRingDidComplete(ring);
+}
+
+static void testInputRingHandsOutWholeSlots(void) {
+    VPVirtIOSoundInputRing ring;
+    CHECK(!VPVirtIOSoundInputRingInit(&ring, 100, 64));
+    CHECK(!VPVirtIOSoundInputRingInit(&ring, 128, 0));
+    CHECK(VPVirtIOSoundInputRingInit(&ring, 4 * 64, 64));
+    uint32_t offset = 99;
+    // Four slots, in order, then nothing: a slot in flight is not free.
+    for (uint32_t slot = 0; slot < 4; slot++) {
+        CHECK(VPVirtIOSoundInputRingNextSubmission(&ring, &offset));
+        CHECK(offset == slot * 64);
+        VPVirtIOSoundInputRingDidSubmit(&ring);
+    }
+    CHECK(!VPVirtIOSoundInputRingNextSubmission(&ring, &offset));
+    CHECK(VPVirtIOSoundInputRingInFlight(&ring) == 256);
+    CHECK(VPVirtIOSoundInputRingAvailable(&ring) == 0);
+    // Completion frees nothing either: the frames are not read yet.
+    VPVirtIOSoundInputRingDidComplete(&ring);
+    CHECK(VPVirtIOSoundInputRingInFlight(&ring) == 192);
+    CHECK(VPVirtIOSoundInputRingAvailable(&ring) == 64);
+    CHECK(!VPVirtIOSoundInputRingNextSubmission(&ring, &offset));
+    // Only a whole period read frees a slot, and it is the first one again.
+    uint8_t frames[64];
+    CHECK(VPVirtIOSoundInputRingRead(&ring, frames, 32));
+    CHECK(!VPVirtIOSoundInputRingNextSubmission(&ring, &offset));
+    CHECK(VPVirtIOSoundInputRingRead(&ring, frames, 32));
+    CHECK(VPVirtIOSoundInputRingNextSubmission(&ring, &offset));
+    CHECK(offset == 0);
+    VPVirtIOSoundInputRingDestroy(&ring);
+}
+
+static void testInputRingReadsInOrderAcrossTheEnd(void) {
+    VPVirtIOSoundInputRing ring;
+    CHECK(VPVirtIOSoundInputRingInit(&ring, 2 * 64, 64));
+    uint8_t frames[96];
+    capturePeriod(&ring, 1);
+    // All or none: 65 bytes are not there yet.
+    CHECK(!VPVirtIOSoundInputRingRead(&ring, frames, 65));
+    CHECK(VPVirtIOSoundInputRingAvailable(&ring) == 64);
+    CHECK(VPVirtIOSoundInputRingRead(&ring, frames, 32));
+    capturePeriod(&ring, 2);
+    CHECK(VPVirtIOSoundInputRingRead(&ring, frames, 64));
+    CHECK(frames[0] == 1 && frames[31] == 1 && frames[32] == 2 && frames[63] == 2);
+    // The third period lands in the first slot; a read from 96 wraps into it.
+    capturePeriod(&ring, 3);
+    CHECK(VPVirtIOSoundInputRingRead(&ring, frames, 96));
+    CHECK(frames[0] == 2 && frames[31] == 2 && frames[32] == 3 && frames[95] == 3);
+    CHECK(VPVirtIOSoundInputRingAvailable(&ring) == 0);
+
+    CHECK(!VPVirtIOSoundInputRingSkip(&ring, 1));
+    capturePeriod(&ring, 4);
+    CHECK(VPVirtIOSoundInputRingSkip(&ring, 60));
+    CHECK(VPVirtIOSoundInputRingRead(&ring, frames, 4));
+    CHECK(frames[0] == 4);
+
+    VPVirtIOSoundInputRingReset(&ring);
+    CHECK(VPVirtIOSoundInputRingAvailable(&ring) == 0);
+    CHECK(VPVirtIOSoundInputRingInFlight(&ring) == 0);
+    VPVirtIOSoundInputRingDestroy(&ring);
+}
+
+// MARK: - Input reader
+
+static bool isAll(const uint8_t *bytes, uint32_t length, uint8_t value) {
+    for (uint32_t i = 0; i < length; i++) {
+        if (bytes[i] != value) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Eight-byte frames, 64-byte periods, a two-period lead, and at most four
+/// periods buffered.
+static VPVirtIOSoundInputReader reader(VPVirtIOSoundInputRing *ring) {
+    VPVirtIOSoundInputReader value;
+    memset(&value, 0, sizeof(value));
+    value.ring = ring;
+    value.bytesPerFrame = 8;
+    value.leadBytes = 2 * 64;
+    value.maximumBacklogBytes = 4 * 64;
+    return value;
+}
+
+static void testReaderWaitsForTheLead(void) {
+    VPVirtIOSoundInputRing ring;
+    CHECK(VPVirtIOSoundInputRingInit(&ring, 12 * 64, 64));
+    VPVirtIOSoundInputReader input = reader(&ring);
+    uint8_t frames[32];
+
+    // Nothing captured, then one period: silence, and nothing consumed.
+    fill(frames, sizeof(frames), 0xff);
+    VPVirtIOSoundInputReaderRead(&input, frames, 4);
+    CHECK(isAll(frames, 32, 0));
+    capturePeriod(&ring, 1);
+    fill(frames, sizeof(frames), 0xff);
+    VPVirtIOSoundInputReaderRead(&input, frames, 4);
+    CHECK(isAll(frames, 32, 0));
+    CHECK(VPVirtIOSoundInputRingAvailable(&ring) == 64);
+
+    // The second period is the lead: reads are served, oldest first.
+    capturePeriod(&ring, 2);
+    VPVirtIOSoundInputReaderRead(&input, frames, 4);
+    CHECK(isAll(frames, 32, 1));
+    CHECK(input.servedFrames == 4 && input.silentFrames == 8);
+    // And stay served below the lead, down to the last frame.
+    for (int i = 0; i < 3; i++) {
+        VPVirtIOSoundInputReaderRead(&input, frames, 4);
+    }
+    CHECK(isAll(frames, 32, 2));
+    CHECK(VPVirtIOSoundInputRingAvailable(&ring) == 0);
+
+    // Running dry is silence, and the lead is waited for again.
+    VPVirtIOSoundInputReaderRead(&input, frames, 4);
+    CHECK(isAll(frames, 32, 0));
+    capturePeriod(&ring, 3);
+    VPVirtIOSoundInputReaderRead(&input, frames, 4);
+    CHECK(isAll(frames, 32, 0));
+    capturePeriod(&ring, 4);
+    VPVirtIOSoundInputReaderRead(&input, frames, 4);
+    CHECK(isAll(frames, 32, 3));
+    VPVirtIOSoundInputRingDestroy(&ring);
+}
+
+static void testReaderBoundsTheBacklog(void) {
+    VPVirtIOSoundInputRing ring;
+    CHECK(VPVirtIOSoundInputRingInit(&ring, 12 * 64, 64));
+    VPVirtIOSoundInputReader input = reader(&ring);
+    uint8_t frames[32];
+    // Four periods buffered are allowed and read from the oldest.
+    for (uint8_t period = 1; period <= 4; period++) {
+        capturePeriod(&ring, period);
+    }
+    VPVirtIOSoundInputReaderRead(&input, frames, 4);
+    CHECK(isAll(frames, 32, 1));
+    CHECK(input.skippedBytes == 0);
+    // Two more make 352 bytes: over the limit, so all but the lead goes and
+    // the read continues from what is left.
+    capturePeriod(&ring, 5);
+    capturePeriod(&ring, 6);
+    VPVirtIOSoundInputReaderRead(&input, frames, 4);
+    CHECK(input.skippedBytes == 352 - 128);
+    CHECK(isAll(frames, 32, 5));
+    CHECK(VPVirtIOSoundInputRingAvailable(&ring) == 128 - 32);
+    VPVirtIOSoundInputRingDestroy(&ring);
+}
+
+static void testReaderDropsWhatTheLastRunLeft(void) {
+    VPVirtIOSoundInputRing ring;
+    CHECK(VPVirtIOSoundInputRingInit(&ring, 12 * 64, 64));
+    VPVirtIOSoundInputReader input = reader(&ring);
+    uint8_t frames[32];
+    capturePeriod(&ring, 1);
+    capturePeriod(&ring, 2);
+    capturePeriod(&ring, 3);
+    VPVirtIOSoundInputReaderRead(&input, frames, 4);
+    CHECK(isAll(frames, 32, 1));
+
+    // A new start: the 160 bytes still buffered are old, and the lead is
+    // waited for from scratch.
+    input.restart = true;
+    VPVirtIOSoundInputReaderRead(&input, frames, 4);
+    CHECK(isAll(frames, 32, 0));
+    CHECK(VPVirtIOSoundInputRingAvailable(&ring) == 0);
+    capturePeriod(&ring, 4);
+    capturePeriod(&ring, 5);
+    VPVirtIOSoundInputReaderRead(&input, frames, 4);
+    CHECK(isAll(frames, 32, 4));
+
+    // A read larger than the lead is served once that much is there.
+    uint8_t large[192];
+    input.restart = true;
+    capturePeriod(&ring, 6);
+    capturePeriod(&ring, 7);
+    VPVirtIOSoundInputReaderRead(&input, large, 24);
+    CHECK(isAll(large, 192, 0));
+    capturePeriod(&ring, 8);
+    capturePeriod(&ring, 9);
+    capturePeriod(&ring, 10);
+    VPVirtIOSoundInputReaderRead(&input, large, 24);
+    CHECK(isAll(large, 64, 8) && isAll(large + 64, 64, 9) && isAll(large + 128, 64, 10));
+    VPVirtIOSoundInputRingDestroy(&ring);
+}
+
 int main(void) {
     testPrefersFloat48k();
     testFallsBackToInteger();
@@ -243,6 +439,11 @@ int main(void) {
     testRingWrapsWritesAndSplitsSubmissions();
     testRingQueuesSilenceAhead();
     testRingResetAndValidation();
+    testInputRingHandsOutWholeSlots();
+    testInputRingReadsInOrderAcrossTheEnd();
+    testReaderWaitsForTheLead();
+    testReaderBoundsTheBacklog();
+    testReaderDropsWhatTheLastRunLeft();
     if (failures) {
         fprintf(stderr, "VirtIOSoundTests: %d failure(s)\n", failures);
         return 1;

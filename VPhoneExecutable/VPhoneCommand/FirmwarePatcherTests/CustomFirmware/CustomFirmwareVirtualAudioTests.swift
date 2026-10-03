@@ -82,6 +82,37 @@ struct CustomFirmwareVirtualAudioTests {
         #expect(CustomFirmwareVirtualAudio.spGatePatchID == "system-virtualaudio-cfw-speaker_protection_gate")
     }
 
+    @Test("each SP-gate handler has its own file anchor and a record the declaration covers")
+    func spGateHandlersAreDistinct() {
+        typealias Handler = CustomFirmwareVirtualAudio.SPGateHandler
+        #expect(Handler.allCases == [.playback, .playbackAndRecord])
+        #expect(Handler.playback.file == CustomFirmwareVirtualAudio.spGateFile)
+        #expect(Handler.playback.patchID == CustomFirmwareVirtualAudio.spGatePatchID)
+        #expect(Handler.playbackAndRecord.file == "RoutingHandler_PlaybackAndRecord_GenericConfig1.cpp")
+        // A site of the same declaration: only a dot starts one.
+        #expect(Handler.playbackAndRecord.patchID
+            == "system-virtualaudio-cfw-speaker_protection_gate.playback_and_record")
+        // Neither file name may be found inside the other, or one handler's
+        // anchor would qualify both.
+        #expect(!Handler.playbackAndRecord.file.contains(Handler.playback.file))
+        #expect(!Handler.playback.file.contains(Handler.playbackAndRecord.file))
+    }
+
+    @Test("a binary without the play-and-record decline is refused, not searched past",
+          arguments: [Self.junk, Data()])
+    func refusesBinariesWithoutTheRecordSPGateSite(_ input: Data) throws {
+        var data = input
+        #expect(throws: PatcherError.self) {
+            try CustomFirmwareVirtualAudio.patchSpeakerProtectionGate(
+                &data,
+                handler: .playbackAndRecord,
+                reattest: false,
+                dryRun: true,
+                log: nil,
+            )
+        }
+    }
+
     @Test("a binary without the precondition decline is refused, not searched past",
           arguments: [Self.junk, Data()])
     func refusesBinariesWithoutTheVolumeGateSite(_ input: Data) throws {

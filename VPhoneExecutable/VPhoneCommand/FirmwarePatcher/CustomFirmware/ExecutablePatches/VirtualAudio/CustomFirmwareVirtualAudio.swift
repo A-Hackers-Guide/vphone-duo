@@ -91,6 +91,13 @@
 // orphaned, and leaving the gate's branch intact is what lets the anchor
 // find the site again on an already-patched binary.
 //
+// RoutingHandler_PlaybackAndRecord_GenericConfig1 holds the same gate in the
+// same shape, and a route that plays and records ('cpar', what a recording
+// app asks for) is declined by it once the guest has a microphone port to
+// build that route with. It is the patch's second site, found by that
+// handler's own file name. Its volume-mode test is a plain branch between
+// two ways of building the route, not a precondition, and needs nothing.
+//
 // The volume-mode precondition
 // ----------------------------
 // The gate opened; the route survives its own construction and dies one
@@ -162,6 +169,32 @@ public enum CustomFirmwareVirtualAudio {
     /// three handlers share the decline's format, and this file's string is
     /// the one the ringtone ('crnp') reconfiguration route runs through.
     public static let spGateFile = "RoutingHandler_Playback_GenericConfig1.cpp"
+
+    /// The handlers whose SP gate the patch opens. A route that plays and
+    /// records ('cpar', what a recording app asks for) runs through the
+    /// second, which declines it for the same missing capability once a
+    /// microphone port makes the route buildable at all.
+    public enum SPGateHandler: String, Sendable, CaseIterable {
+        case playback
+        case playbackAndRecord
+
+        /// The handler's source-file string, which its log blocks reference.
+        public var file: String {
+            switch self {
+            case .playback: spGateFile
+            case .playbackAndRecord: "RoutingHandler_PlaybackAndRecord_GenericConfig1.cpp"
+            }
+        }
+
+        /// The record this handler's write emits: the declaration's own
+        /// identifier, or a site of it.
+        public var patchID: String {
+            switch self {
+            case .playback: spGatePatchID
+            case .playbackAndRecord: spGatePatchID + ".playback_and_record"
+            }
+        }
+    }
 
     /// Record identity for the SP-gate patch.
     public static let spGatePatchID = "system-virtualaudio-cfw-speaker_protection_gate"
@@ -527,6 +560,7 @@ public enum CustomFirmwareVirtualAudio {
     @discardableResult
     public static func patchSpeakerProtectionGate(
         fileAt url: URL,
+        handler: SPGateHandler = .playback,
         reattest: Bool = true,
         dryRun: Bool = false,
         log: ((String) -> Void)? = stdoutLog,
@@ -536,17 +570,20 @@ public enum CustomFirmwareVirtualAudio {
         }
         var data = try Data(contentsOfFileToRewrite: url)
         let before = data
-        let report = try patchSpeakerProtectionGate(&data, reattest: reattest, dryRun: dryRun, log: log)
+        let report = try patchSpeakerProtectionGate(
+            &data, handler: handler, reattest: reattest, dryRun: dryRun, log: log,
+        )
         if data != before {
             try data.write(to: url)
         }
         return report
     }
 
-    /// In-memory form of ``patchSpeakerProtectionGate(fileAt:reattest:dryRun:log:)``.
+    /// In-memory form of ``patchSpeakerProtectionGate(fileAt:handler:reattest:dryRun:log:)``.
     @discardableResult
     public static func patchSpeakerProtectionGate(
         _ data: inout Data,
+        handler: SPGateHandler = .playback,
         reattest: Bool = true,
         dryRun: Bool = false,
         log: ((String) -> Void)? = stdoutLog,
@@ -555,12 +592,12 @@ public enum CustomFirmwareVirtualAudio {
             data = Data(data)
         }
 
-        let located = try locateSPGate(in: data)
+        let located = try locateSPGate(in: data, handler: handler)
         let head = located.blockHead
         let headVMA = located.vma(head)
         let site = located.site
         let siteVMA = located.vma(site)
-        log?("  [.] SP-gate handler 0x\(hex(located.functionStartVMA)) … 0x\(hex(located.functionEndVMA))"
+        log?("  [.] SP-gate \(handler.rawValue) handler 0x\(hex(located.functionStartVMA)) … 0x\(hex(located.functionEndVMA))"
             + "; log block 0x\(hex(headVMA)); gate 0x\(hex(siteVMA))")
         let anchor = SPGateAnchor(
             branchFileOffset: site,
@@ -619,7 +656,7 @@ public enum CustomFirmwareVirtualAudio {
             outcome: .patched,
             anchor: anchor,
             records: [PatchRecord(
-                patchID: spGatePatchID,
+                patchID: handler.patchID,
                 component: component,
                 fileOffset: head,
                 virtualAddress: headVMA,
@@ -1059,7 +1096,7 @@ public enum CustomFirmwareVirtualAudio {
     /// the format alone names three routing handlers, and of the functions
     /// holding a reference to it, exactly one — ours — also references the
     /// GenericConfig1 file name.
-    static func locatePlaybackHandler(in data: Data) throws -> PlaybackHandler {
+    static func locatePlaybackHandler(in data: Data, file: String = spGateFile) throws -> PlaybackHandler {
         let sections = MachOParser.parseSections(from: data)
         guard let text = sections["__TEXT,__text"] else {
             throw PatcherError.invalidFormat("\(component): no __TEXT,__text section")
@@ -1074,10 +1111,10 @@ public enum CustomFirmwareVirtualAudio {
                 "\(component): the string \"\(spGateMessage)\" is nowhere in the binary's sections",
             )
         }
-        let fileNames = cStringVMAs(containing: spGateFile, in: data, sections: sections)
+        let fileNames = cStringVMAs(containing: file, in: data, sections: sections)
         guard !fileNames.isEmpty else {
             throw PatcherError.patchSiteNotFound(
-                "\(component): the string \"\(spGateFile)\" is nowhere in the binary's sections",
+                "\(component): the string \"\(file)\" is nowhere in the binary's sections",
             )
         }
 
@@ -1113,7 +1150,7 @@ public enum CustomFirmwareVirtualAudio {
         }
         guard qualified.count == 1, let handler = qualified.first else {
             throw PatcherError.patchSiteNotFound(
-                "\(component): expected exactly 1 \"\(spGateFile)\" handler referencing "
+                "\(component): expected exactly 1 \"\(file)\" handler referencing "
                     + "\"\(spGateMessage)\", found \(qualified.count)",
             )
         }
@@ -1129,8 +1166,8 @@ public enum CustomFirmwareVirtualAudio {
     }
 
     /// Resolve the SP-gate branch, or say why not.
-    static func locateSPGate(in data: Data) throws -> SPGatePlan {
-        let handler = try locatePlaybackHandler(in: data)
+    static func locateSPGate(in data: Data, handler which: SPGateHandler = .playback) throws -> SPGatePlan {
+        let handler = try locatePlaybackHandler(in: data, file: which.file)
         func vma(_ offset: Int) -> UInt64 { handler.vma(offset) }
         func offset(of address: UInt64) -> Int { handler.textStart + Int(address - handler.textAddress) }
 

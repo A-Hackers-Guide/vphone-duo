@@ -38,12 +38,15 @@ enum {
     kAudioHardwareNoError = 0,
     kAudioHardwareUnspecifiedError = 'what',
     kAudioObjectPropertyScopeGlobal = 'glob',
+    kAudioObjectPropertyScopeInput = 'inpt',
     kAudioObjectPropertyScopeOutput = 'outp',
     kAudioObjectPropertyElementMain = 0,
     kAudioDeviceTransportTypeUSB = 'usb ',
     kAudioVolumeControlClassID = 'vlme',
     kAudioMuteControlClassID = 'mute',
     kAudioDataSourceControlClassID = 'dsrc',
+    kAudioStreamPropertyVirtualFormat = 'sfmt',
+    kAudioStreamPropertyPhysicalFormat = 'pft ',
 };
 #endif
 
@@ -71,6 +74,7 @@ typedef struct AudioServerPlugInIOCycleInfo {
 /// `ASDStreamDirection`: the HAL scope four-character codes.
 typedef UInt32 ASDStreamDirection;
 static const ASDStreamDirection ASDStreamDirectionOutput = kAudioObjectPropertyScopeOutput;
+static const ASDStreamDirection ASDStreamDirectionInput = kAudioObjectPropertyScopeInput;
 
 @class ASDPlugin;
 
@@ -141,6 +145,7 @@ typedef int (^ASDIOBlock)(
 @property (nonatomic) UInt32 timestampPeriod;
 @property (nonatomic) UInt32 inputSafetyOffset;
 @property (nonatomic) UInt32 outputSafetyOffset;
+@property (nonatomic) UInt32 inputLatency;
 @property (nonatomic) UInt32 outputLatency;
 @property (nonatomic) UInt32 transportType;
 @property (readonly, nonatomic) BOOL hasOutput;
@@ -151,6 +156,7 @@ typedef int (^ASDIOBlock)(
 @property (copy, nonatomic) ASDGetZeroTimestampBlock getZeroTimestampBlock;
 @property (copy, nonatomic) ASDWillDoBlock willDoReadInputBlock;
 @property (copy, nonatomic) ASDWillDoBlock willDoWriteMixBlock;
+- (void)addInputStream:(id)stream;
 - (void)addOutputStream:(id)stream;
 - (NSArray *)outputStreams;
 - (int)performStartIO;
@@ -243,6 +249,7 @@ typedef int (^ASDIOBlock)(
 @property (copy, nonatomic) ASDStreamFormat *physicalFormat;
 @property (copy, nonatomic) NSArray<ASDStreamFormat *> *physicalFormats;
 @property (nonatomic) BOOL physicalFormatSettable;
+@property (copy, nonatomic) ASDIOBlock readInputBlock;
 @property (copy, nonatomic) ASDIOBlock writeMixBlock;
 /// Sent to every stream when the device's nominal sample rate changed; the
 /// default implementation reconciles the physical format with the new rate.

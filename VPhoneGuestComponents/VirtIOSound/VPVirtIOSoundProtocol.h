@@ -31,6 +31,10 @@ enum {
     /// Async. 1 scalar in (stream ID), the PCM bytes as the input structure.
     /// The kernel keeps the caller's pages until the completion arrives.
     kVPVirtIOSoundSelectorWrite = 8,
+    /// Async. 1 scalar in (stream ID), one period of the caller's pages as the
+    /// output structure. The device fills it with captured PCM and the
+    /// completion arrives when the period is full.
+    kVPVirtIOSoundSelectorRead = 9,
 };
 
 /// The IORegistry key on the `AppleVirtIOSound` service with the stream count.

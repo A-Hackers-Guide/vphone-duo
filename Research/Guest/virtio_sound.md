@@ -60,20 +60,26 @@ timestamp period of `rate × 260 / 1000` frames and safety offsets of 100 frames
 It is written on AudioServerDriver, the private framework `BuiltinAudioPlugin`
 itself uses on iOS (its log shows `ASD_Initialize`); the classes are declared in
 `VPVirtIOSoundAudioServerDriver.h` and bound through `AudioServerDriver.tbd`.
-It publishes one HAL device per `AppleVirtIOSound` service and one output stream
-per virtio output stream, at the format the device offers (32-bit float, 48 kHz,
-2 channels from `VZHostAudioOutputStreamSink`). Input streams are left out, so the
-host microphone is never opened. The virtio stream is released when CoreAudio
-stops and the last transfer has come back, so an idle guest does not keep the
-host audio device running.
+It publishes two HAL devices per `AppleVirtIOSound` service, a speaker with one
+output stream per virtio output stream and a microphone with one input stream
+per virtio input stream, each at the format the device offers (32-bit float,
+48 kHz from `VZHostAudioOutputStreamSink` and `VZHostAudioInputStreamSource`).
+A virtio stream is released when CoreAudio stops and the last transfer has come
+back, so an idle guest does not keep the host audio device running and the host
+microphone is open only while the guest records.
+
+The input side (the macOS plugin's receive path, why the microphone is a
+second device named `Digital Mic`, what VirtualAudio needed, and what is
+verified so far) is in `virtio_sound_microphone.md`.
 
 `cfw install` and `cfw update-environment` install it at
 `/System/Library/Audio/Plug-Ins/HAL/VPhoneVirtIOSound.driver`
 (`system-virtiosound-cfw-hal_plugin`).
 
-Two optional values in the `com.apple.coreaudio` domain exist for routing work
+Optional values in the `com.apple.coreaudio` domain exist for routing work
 and are read when audiomxd loads the plugin: `VPhoneVirtIOSoundTransportType`
-(four characters, default `usb `) and `VPhoneVirtIOSoundDeviceUID`.
+(four characters, default `usb `), `VPhoneVirtIOSoundDeviceUID` and
+`VPhoneVirtIOSoundInputDeviceUID`.
 
 ## 2. VirtualAudio never finished initializing (iPad guests)
 

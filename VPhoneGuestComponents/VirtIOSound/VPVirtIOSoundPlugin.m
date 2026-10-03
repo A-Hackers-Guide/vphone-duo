@@ -2,26 +2,33 @@
 //
 // audiomxd loads this bundle from /System/Library/Audio/Plug-Ins/HAL when the
 // kernel has published `AppleVirtIOSound` (Info.plist's loading condition).
-// One HAL device is created per `AppleVirtIOSound` service, with one output
-// stream per virtio-snd output stream. Input streams are left out: nothing
-// in the guest needs the host microphone yet, and leaving them out keeps
-// the host from opening it.
+// Each `AppleVirtIOSound` service becomes two HAL devices, a speaker with the
+// service's output streams and a microphone with its input streams, because
+// VirtualAudio builds a port from a device's UID and one UID names one kind
+// of port. The host opens its microphone only while the guest records: the
+// virtio input stream is started when CoreAudio starts the microphone device
+// and released when it stops.
 //
-// The device clock (VPVirtIOSoundClock.h) is free running, anchored to
+// Each device clock (VPVirtIOSoundClock.h) is free running, anchored to
 // mach_absolute_time when I/O starts, as the macOS plugin's is. The mixed
 // output goes into a ring (see VPVirtIOSoundRing.h) and a timer hands it to
 // the kernel a period at a time with the async write selector; the virtio
 // device paces playback on the host.
+// Input runs the other way without a timer: a few periods of the input ring
+// are always with the kernel, and each one that comes back full is replaced.
 //
 // Optional settings in the `com.apple.coreaudio` preference domain, read
 // once when audiomxd loads the plugin:
-//   VPhoneVirtIOSoundTransportType  four-character transport ("usb ", "bltn")
-//   VPhoneVirtIOSoundDeviceUID      HAL device UID (default "PuffinOutput" on
-//                                   an iPad or iPhone guest,
-//                                   "VPhoneVirtIOSound:0" elsewhere)
-//   VPhoneVirtIOSoundNominalRate    44100 to start at the alternate rate
-//   VPhoneVirtIOSoundLeadPeriods    periods of silence queued ahead of the
-//                                   mix at each start, 0 to 8
+//   VPhoneVirtIOSoundTransportType   four-character transport ("usb ", "bltn")
+//   VPhoneVirtIOSoundDeviceUID       speaker device UID (default "PuffinOutput"
+//                                    on an iPad or iPhone guest,
+//                                    "VPhoneVirtIOSound:0" elsewhere)
+//   VPhoneVirtIOSoundInputDeviceUID  microphone device UID (default "Digital
+//                                    Mic" on an iPad or iPhone guest,
+//                                    "VPhoneVirtIOSoundInput:0" elsewhere)
+//   VPhoneVirtIOSoundNominalRate     44100 to start at the alternate rate
+//   VPhoneVirtIOSoundLeadPeriods     periods of silence queued ahead of the
+//                                    mix at each start, 0 to 8
 
 #import "VPVirtIOSoundAudioServerDriver.h"
 
@@ -59,12 +66,24 @@ static const UInt32 kSafetyOffsetFrames = 100;
 /// plugin flushes, a little under half a period.
 static const uint64_t kFlushIntervalNanoseconds = NSEC_PER_SEC / 24;
 static const uint32_t kAsyncReferenceCount = 3;
+/// Periods of the input ring the kernel holds at a time, as the macOS plugin
+/// keeps (`kInputInitialBuffers`).
+static const uint32_t kInputReadsInFlight = 4;
+/// Periods captured before reads are served (VPVirtIOSoundRing.h, the input
+/// reader), and the most that may be buffered before the oldest are dropped.
+static const uint32_t kInputLeadPeriods = 2;
+static const uint32_t kInputMaximumBacklogPeriods = 4;
+/// How long a stopped input stream waits for its reads to come back before
+/// it releases the device with them still out.
+static const uint64_t kInputDrainNanoseconds = NSEC_PER_SEC;
 
 static CFStringRef const kSettingsDomain = CFSTR("com.apple.coreaudio");
 
-/// The internal-speaker data source the macOS plugin selects for its output
-/// ('ispk'; no SDK constant carries it).
+/// The data sources the macOS plugin selects: the internal speaker for its
+/// output and the internal microphone for its input ('ispk', 'imic'; no SDK
+/// constant carries them).
 static const UInt32 kVPDataSourceInternalSpeaker = 0x6973706b;
+static const UInt32 kVPDataSourceInternalMicrophone = 0x696d6963;
 
 /// `kAudioDevicePropertyMute` ('mute'), which the trimmed iPhoneOS CoreAudio
 /// headers leave out (AudioHardwareBase.h stops at the server-side set).
@@ -221,22 +240,28 @@ static int VPGuestProductID(void) {
     return strncmp(machine, "iPad", 4) == 0 || strncmp(machine, "iPhone", 6) == 0 ? 8010 : 0;
 }
 
-static NSString *VPDeviceUID(unsigned index) {
-    NSString *uid = CFBridgingRelease(
-        CFPreferencesCopyAppValue(CFSTR("VPhoneVirtIOSoundDeviceUID"), kSettingsDomain));
+static NSString *VPDeviceUID(ASDStreamDirection direction, unsigned index) {
+    BOOL input = direction == ASDStreamDirectionInput;
+    NSString *uid = CFBridgingRelease(CFPreferencesCopyAppValue(
+        input ? CFSTR("VPhoneVirtIOSoundInputDeviceUID") : CFSTR("VPhoneVirtIOSoundDeviceUID"),
+        kSettingsDomain));
     if ([uid isKindOfClass:NSString.class] && uid.length > 0) {
         return index == 0 ? uid : [NSString stringWithFormat:@"%@:%u", uid, index];
     }
-    // VirtualAudio builds a physical device, and a speaker port, only for the
-    // UIDs its device factory knows. "PuffinOutput" is the built-in output of
+    // VirtualAudio builds a physical device, and a port, only for the UIDs
+    // its device factory knows. "PuffinOutput" is the built-in output of
     // Apple-silicon host audio, and the one such UID that publishes a routable
-    // speaker; under any name of our own the device is claimed by nothing.
+    // speaker ('pspk'). Its twin "PuffinInput" publishes the built-in
+    // microphone ('pmbi') too, but bare: record routes ask the port for the
+    // product's microphone sub-ports ('btm1', 'vcrg') and throw when it has
+    // none. "Digital Mic" is the codec microphone VirtualAudio builds those
+    // sub-ports for. Under any name of our own a device is claimed by nothing.
     // Only where the route is set up: a speaker route on a VirtualAudio that
     // was not deadlocked audiomxd and crash-looped it across launches.
     if (index == 0 && VPGuestProductID() != 0) {
-        return @"PuffinOutput";
+        return input ? @"Digital Mic" : @"PuffinOutput";
     }
-    return [NSString stringWithFormat:@"VPhoneVirtIOSound:%u", index];
+    return [NSString stringWithFormat:@"VPhoneVirtIOSound%s:%u", input ? "Input" : "", index];
 }
 
 /// Gives VirtualAudio `VPGuestProductID()` through its own defaults key,
@@ -444,218 +469,118 @@ static int VPMixWrite(VPMixState *mix, void *buffer, UInt32 frameCount) {
 typedef NS_ENUM(NSInteger, VPStreamState) {
     /// The virtio stream is released; SET_PARAMS comes first.
     VPStreamStateIdle,
-    /// Started on the device, and CoreAudio is writing.
+    /// Started on the device, and CoreAudio is doing I/O.
     VPStreamStateRunning,
     /// CoreAudio stopped; the device stops once what it holds comes back.
     VPStreamStateDraining,
+    /// Input only: the device was released with reads still out, and the
+    /// stream waits for them before it can be set up again.
+    VPStreamStateReleasing,
 };
 
-@interface VPVirtIOSoundStream : ASDStream
-- (instancetype)initWithConnection:(io_connect_t)connection
-                                   streamID:(uint32_t)streamID
-                                     format:(VPVirtIOSoundStreamFormat)format
-                                     plugin:(ASDPlugin *)plugin;
-/// Frames, at the wire rate, between a write and the host playing it: the
-/// lead queued ahead plus the period a write waits to fill.
-@property (nonatomic, readonly) UInt32 queuedLatencyFrames;
-- (void)transferCompletedWithLength:(uint32_t)length result:(IOReturn)result;
-@end
-
-/// The refcon of one async write.
+/// The refcon of one async transfer: the stream, and the transfer's bytes in
+/// its ring.
 typedef struct {
     void *stream;
+    uint32_t offset;
     uint32_t length;
 } VPTransfer;
 
-static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UInt32 argumentCount) {
-    (void)arguments;
-    (void)argumentCount;
-    VPTransfer *transfer = refcon;
-    VPVirtIOSoundStream *stream = (__bridge VPVirtIOSoundStream *)transfer->stream;
-    uint32_t length = transfer->length;
-    free(transfer);
-    [stream transferCompletedWithLength:length result:result];
-}
-
-@implementation VPVirtIOSoundStream {
+/// What the output and input streams share: the virtio stream's identity and
+/// format, the serial queue its device commands and completions run on, and
+/// the property inventory.
+@interface VPVirtIOSoundStream : ASDStream {
+@protected
     io_connect_t _connection;
+    ASDStreamDirection _direction;
     uint32_t _streamID;
     VPVirtIOSoundStreamFormat _format;
     uint32_t _periodBytes;
     uint32_t _bufferBytes;
-    VPVirtIOSoundRing _ring;
     dispatch_queue_t _queue;
     IONotificationPortRef _port;
-    dispatch_source_t _timer;
     VPStreamState _state;
     BOOL _reportedTransferError;
-    /// Periods of silence queued ahead of the mix at each device start.
-    uint32_t _leadPeriods;
-    /// Since the last start: when it was, what the device still held then,
-    /// writes handed to the device, and how many of them found it with
-    /// nothing left to play.
+    /// When CoreAudio last started the stream, for the counters' rates.
     uint64_t _startedAt;
-    uint64_t _inFlightAtStart;
-    uint64_t _submissions;
-    uint64_t _starved;
-    /// The fewest and most bytes in flight a write after the first found, for
-    /// the run and for the minute `logProgress` last covered.
-    uint64_t _minInFlight;
-    uint64_t _maxInFlight;
-    uint64_t _windowMinInFlight;
-    uint64_t _windowMaxInFlight;
-    uint64_t _reportedAt;
-    /// The host's consumption once the run has settled: when the first write
-    /// came back, the bytes returned after it, and when the last one did;
-    /// and the longest wait between two returns.
-    uint64_t _firstCompletedAt;
-    uint64_t _lastCompletedAt;
-    uint64_t _completedAfterFirst;
-    uint64_t _maxCompletionGap;
-    /// The rate CoreAudio runs the stream at, which is the wire rate until a
-    /// 44100 aggregate switches the device. The mix block reads it, the rate
-    /// change writes it, both lock-free.
-    _Atomic uint32_t _halRate;
-    VPResampler _resampler;
-    float *_resampleScratch;
-    VPMixState _mix;
 }
+- (instancetype)initWithConnection:(io_connect_t)connection
+                          streamID:(uint32_t)streamID
+                            format:(VPVirtIOSoundStreamFormat)format
+                         direction:(ASDStreamDirection)direction
+                            plugin:(ASDPlugin *)plugin;
+/// Frames, at the wire rate, between the guest's I/O and the host's.
+@property (nonatomic, readonly) UInt32 queuedLatencyFrames;
+/// The device the stream belongs to, which is where its rate is changed.
+@property (weak, nonatomic) ASDAudioDevice *device;
+@end
 
-/// ASDStream's `stopStream` releases every I/O block the stream holds and
-/// `startStream` copies them again from the same properties, so a block set
-/// once at init is gone after the first stop: the next start runs with no
-/// write block and nothing reaches the ring. It goes back in before every
-/// start. The I/O thread must not touch Objective-C or take locks, so the
-/// block captures plain state; the stream lives as long as its device.
-- (void)installMixBlock {
-    VPMixState *mix = &_mix;
-    self.writeMixBlock = ^int(UInt32 frameCount, const AudioServerPlugInIOCycleInfo *cycleInfo,
-        void *mainBuffer, void *secondaryBuffer, UInt32 clientID) {
-        (void)cycleInfo;
-        (void)secondaryBuffer;
-        (void)clientID;
-        return VPMixWrite(mix, mainBuffer, frameCount);
-    };
-}
+@implementation VPVirtIOSoundStream
 
 - (instancetype)initWithConnection:(io_connect_t)connection
-                                   streamID:(uint32_t)streamID
-                                     format:(VPVirtIOSoundStreamFormat)format
-                                     plugin:(ASDPlugin *)plugin {
-    self = [super initWithDirection:ASDStreamDirectionOutput withPlugin:plugin];
+                          streamID:(uint32_t)streamID
+                            format:(VPVirtIOSoundStreamFormat)format
+                         direction:(ASDStreamDirection)direction
+                            plugin:(ASDPlugin *)plugin {
+    self = [super initWithDirection:direction withPlugin:plugin];
     if (!self) {
         return nil;
     }
     _connection = connection;
+    _direction = direction;
     _streamID = streamID;
     _format = format;
-    // Returning nil from here releases self, so `dealloc` runs on whatever
-    // was set up so far: it owns every release, and these branches only
-    // return.
     VPVirtIOSoundBufferSizes(&format, (uint32_t)getpagesize(), &_periodBytes, &_bufferBytes);
-    if (!VPVirtIOSoundRingInit(&_ring, _bufferBytes, _periodBytes)) {
-        os_log_error(VPLog(), "stream %u: cannot allocate a %u-byte ring", streamID, _bufferBytes);
-        return nil;
-    }
     _queue = dispatch_queue_create("com.vphone.audio.virtiosound.stream", DISPATCH_QUEUE_SERIAL);
     _port = IONotificationPortCreate(kIOMainPortDefault);
     if (!_port) {
         return nil;
     }
     IONotificationPortSetDispatchQueue(_port, _queue);
-    _leadPeriods = VPLeadPeriods();
-    _resampleScratch = malloc(kResampleScratchFrames * format.bytesPerFrame);
-    if (!_resampleScratch) {
-        return nil;
-    }
-
-    AudioStreamBasicDescription description = {
-        .mSampleRate = format.sampleRate,
-        .mFormatID = kAudioFormatLinearPCM,
-        .mFormatFlags = (format.isFloat ? kAudioFormatFlagIsFloat : kAudioFormatFlagIsSignedInteger)
-            | kAudioFormatFlagIsPacked,
-        .mBytesPerPacket = format.bytesPerFrame,
-        .mFramesPerPacket = 1,
-        .mBytesPerFrame = format.bytesPerFrame,
-        .mChannelsPerFrame = format.channels,
-        .mBitsPerChannel = format.bitsPerChannel,
-    };
-    ASDStreamFormat *physical = [[ASDStreamFormat alloc] initWithAudioStreamBasicDescription:description];
-    physical.minimumSampleRate = format.sampleRate;
-    physical.maximumSampleRate = format.sampleRate;
-    self.streamName = @"Output Stream";
+    ASDStreamFormat *physical = [self physicalFormatAtRate:format.sampleRate];
+    self.streamName = direction == ASDStreamDirectionInput ? @"Input Stream" : @"Output Stream";
     self.physicalFormat = physical;
     self.physicalFormats = @[physical];
-    double nominalRate = 0;
-    // The 44100 twin: a ringtone-preview aggregate runs the vdef at 44100,
-    // and the aggregate only carries devices that answer that rate. The
-    // virtio stream itself stays at the wire rate; the mix resamples. The
-    // current format follows the nominal-rate override so the device boots
-    // already answering 44100, matching how the vdef composes.
-    if (format.sampleRate == 48000.0) {
-        AudioStreamBasicDescription alternate = description;
-        alternate.mSampleRate = kVPAlternateRate;
-        ASDStreamFormat *reduced = [[ASDStreamFormat alloc] initWithAudioStreamBasicDescription:alternate];
-        reduced.minimumSampleRate = kVPAlternateRate;
-        reduced.maximumSampleRate = kVPAlternateRate;
-        self.physicalFormats = @[physical, reduced];
-        self.physicalFormatSettable = YES;
-        double override = VPNominalRateOverride();
-        if (override == kVPAlternateRate) {
-            nominalRate = override;
-            self.physicalFormat = reduced;
-        }
-    }
-
-    atomic_init(&_halRate, nominalRate > 0 ? (uint32_t)nominalRate : (uint32_t)format.sampleRate);
-    VPResamplerReset(&_resampler);
-    _mix = (VPMixState){
-        .ring = &_ring,
-        .halRate = &_halRate,
-        .resampler = &_resampler,
-        .scratch = _resampleScratch,
-        .bytesPerFrame = format.bytesPerFrame,
-        .wireRate = (uint32_t)format.sampleRate,
-    };
-    [self installMixBlock];
-    os_log(VPLog(), "stream %u: %.0f Hz, %u channels, %u-bit %{public}s, period %u bytes",
-        streamID, format.sampleRate, format.channels, format.bitsPerChannel,
-        format.isFloat ? "float" : "integer", _periodBytes);
-    VPLogToFile("stream %u: %.0f Hz, %u channels, %u-bit %s, period %u bytes, lead %u period(s)",
-        streamID, format.sampleRate, format.channels, format.bitsPerChannel,
-        format.isFloat ? "float" : "integer", _periodBytes, _leadPeriods);
     return self;
 }
 
-/// Also the cleanup of a failed init, so it takes any prefix of it: ivars
-/// start zeroed, `free(NULL)` is a no-op, and a ring that `RingInit` refused
-/// or never saw is zeroed, which `RingDestroy` frees as NULL.
 - (void)dealloc {
-    if (_timer) {
-        dispatch_source_cancel(_timer);
-    }
     if (_port) {
         IONotificationPortDestroy(_port);
     }
-    free(_resampleScratch);
-    VPVirtIOSoundRingDestroy(&_ring);
 }
 
-// MARK: Rate changes
+/// The stream's format as CoreAudio is told it, at one fixed rate.
+- (ASDStreamFormat *)physicalFormatAtRate:(double)rate {
+    AudioStreamBasicDescription description = {
+        .mSampleRate = rate,
+        .mFormatID = kAudioFormatLinearPCM,
+        .mFormatFlags = (_format.isFloat ? kAudioFormatFlagIsFloat : kAudioFormatFlagIsSignedInteger)
+            | kAudioFormatFlagIsPacked,
+        .mBytesPerPacket = _format.bytesPerFrame,
+        .mFramesPerPacket = 1,
+        .mBytesPerFrame = _format.bytesPerFrame,
+        .mChannelsPerFrame = _format.channels,
+        .mBitsPerChannel = _format.bitsPerChannel,
+    };
+    ASDStreamFormat *format = [[ASDStreamFormat alloc] initWithAudioStreamBasicDescription:description];
+    format.minimumSampleRate = rate;
+    format.maximumSampleRate = rate;
+    return format;
+}
 
-- (void)deviceChangedToSamplingRate:(double)rate {
-    os_log(VPLog(), "rate-probe: stream %u deviceChangedToSamplingRate %.0f (hal %.0f, format %.0f)",
-        _streamID, rate, (double)atomic_load(&_halRate), self.physicalFormat.sampleRate);
-    VPLogToFile("rate-probe: stream %u deviceChangedToSamplingRate %.0f (hal %.0f, format %.0f)",
-        _streamID, rate, (double)atomic_load(&_halRate), self.physicalFormat.sampleRate);
-    [super deviceChangedToSamplingRate:rate];
-    uint32_t previous = atomic_load(&_halRate);
-    if (rate > 0 && (uint32_t)rate != previous) {
-        atomic_store(&_halRate, (uint32_t)rate);
-        VPResamplerReset(&_resampler);
-        os_log(VPLog(), "stream %u: device rate %.0f -> %.0f, physical format %.0f Hz",
-            _streamID, (double)previous, rate, self.physicalFormat.sampleRate);
-    }
+- (void)logFormatWithLeadPeriods:(uint32_t)leadPeriods {
+    const char *direction = _direction == ASDStreamDirectionInput ? "input" : "output";
+    os_log(VPLog(), "stream %u: %{public}s, %.0f Hz, %u channels, %u-bit %{public}s, period %u bytes",
+        _streamID, direction, _format.sampleRate, _format.channels, _format.bitsPerChannel,
+        _format.isFloat ? "float" : "integer", _periodBytes);
+    VPLogToFile("stream %u: %s, %.0f Hz, %u channels, %u-bit %s, period %u bytes, lead %u period(s)",
+        _streamID, direction, _format.sampleRate, _format.channels, _format.bitsPerChannel,
+        _format.isFloat ? "float" : "integer", _periodBytes, leadPeriods);
+}
+
+- (UInt32)queuedLatencyFrames {
+    return 0;
 }
 
 // MARK: Property inventory
@@ -701,9 +626,31 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
                  andData:(const void *)data
               forClient:(UInt32)clientID {
     VPLogSelectorQuery("stream-set", address);
-    return [super setProperty:address withQualifierSize:qualifierSize
-                 qualifierData:qualifierData dataSize:dataSize
-                       andData:data forClient:clientID];
+    if ([super setProperty:address withQualifierSize:qualifierSize
+             qualifierData:qualifierData dataSize:dataSize
+                   andData:data forClient:clientID]) {
+        return YES;
+    }
+    // A route that plays and records puts both devices in one aggregate and
+    // sets each stream's format there, where a playback route sets the
+    // device's nominal rate. ASDStream refuses a plugin stream's format the
+    // way ASDAudioDevice refuses its rate (see the device's `setProperty:`):
+    // the HAL reports 'what' and the route fails with "failed to set the new
+    // format on the aggregate device". The formats of a stream differ only
+    // in rate, so the change is the device's rate change, which reaches
+    // every stream.
+    if ((address->mSelector == kAudioStreamPropertyPhysicalFormat
+            || address->mSelector == kAudioStreamPropertyVirtualFormat)
+        && dataSize >= sizeof(AudioStreamBasicDescription) && data != NULL) {
+        double rate = ((const AudioStreamBasicDescription *)data)->mSampleRate;
+        ASDAudioDevice *device = self.device;
+        if (rate > 0 && [device supportsSamplingRate:rate]) {
+            VPLogToFile("stream %u: format set to %.0f Hz through the device", _streamID, rate);
+            device.samplingRate = rate;
+            return YES;
+        }
+    }
+    return NO;
 }
 
 // MARK: Device commands
@@ -717,9 +664,9 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     return result;
 }
 
-- (BOOL)startDevice {
+/// SET_PARAMS and PREPARE: the device stream is set up and waits for START.
+- (BOOL)prepareDevice {
     dispatch_assert_queue(_queue);
-    VPVirtIOSoundRingReset(&_ring);
     VPVirtIOSoundPCMParameters parameters = VPVirtIOSoundParameters(&_format, _periodBytes, _bufferBytes);
     uint64_t scalar = _streamID;
     kern_return_t result = IOConnectCallMethod(_connection, kVPVirtIOSoundSelectorSetParameters,
@@ -732,11 +679,185 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
         [self callSelector:kVPVirtIOSoundSelectorRelease];
         return NO;
     }
+    _reportedTransferError = NO;
+    return YES;
+}
+
+- (void)releaseDevice {
+    dispatch_assert_queue(_queue);
+    [self callSelector:kVPVirtIOSoundSelectorStop];
+    [self callSelector:kVPVirtIOSoundSelectorRelease];
+}
+
+- (void)reportTransferError:(IOReturn)result length:(uint32_t)length {
+    if (result != kIOReturnSuccess && !_reportedTransferError) {
+        _reportedTransferError = YES;
+        os_log_error(VPLog(), "stream %u: transfer of %u bytes failed: 0x%x", _streamID, length, result);
+        VPLogToFile("stream %u: transfer of %u bytes failed: 0x%x", _streamID, length, result);
+    }
+}
+
+@end
+
+// MARK: - Output stream
+
+@interface VPVirtIOSoundOutputStream : VPVirtIOSoundStream
+- (instancetype)initWithConnection:(io_connect_t)connection
+                          streamID:(uint32_t)streamID
+                            format:(VPVirtIOSoundStreamFormat)format
+                            plugin:(ASDPlugin *)plugin;
+- (void)transferCompletedWithLength:(uint32_t)length result:(IOReturn)result;
+@end
+
+static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UInt32 argumentCount) {
+    (void)arguments;
+    (void)argumentCount;
+    VPTransfer *transfer = refcon;
+    VPVirtIOSoundOutputStream *stream = (__bridge VPVirtIOSoundOutputStream *)transfer->stream;
+    uint32_t length = transfer->length;
+    free(transfer);
+    [stream transferCompletedWithLength:length result:result];
+}
+
+@implementation VPVirtIOSoundOutputStream {
+    VPVirtIOSoundRing _ring;
+    dispatch_source_t _timer;
+    /// Periods of silence queued ahead of the mix at each device start.
+    uint32_t _leadPeriods;
+    /// Since the last start: what the device still held then, writes handed
+    /// to the device, and how many of them found it with nothing left to
+    /// play.
+    uint64_t _inFlightAtStart;
+    uint64_t _submissions;
+    uint64_t _starved;
+    /// The fewest and most bytes in flight a write after the first found, for
+    /// the run and for the minute `logProgress` last covered.
+    uint64_t _minInFlight;
+    uint64_t _maxInFlight;
+    uint64_t _windowMinInFlight;
+    uint64_t _windowMaxInFlight;
+    uint64_t _reportedAt;
+    /// The host's consumption once the run has settled: when the first write
+    /// came back, the bytes returned after it, and when the last one did;
+    /// and the longest wait between two returns.
+    uint64_t _firstCompletedAt;
+    uint64_t _lastCompletedAt;
+    uint64_t _completedAfterFirst;
+    uint64_t _maxCompletionGap;
+    /// The rate CoreAudio runs the stream at, which is the wire rate until a
+    /// 44100 aggregate switches the device. The mix block reads it, the rate
+    /// change writes it, both lock-free.
+    _Atomic uint32_t _halRate;
+    VPResampler _resampler;
+    float *_resampleScratch;
+    VPMixState _mix;
+}
+
+/// ASDStream's `stopStream` releases every I/O block the stream holds and
+/// `startStream` copies them again from the same properties, so a block set
+/// once at init is gone after the first stop: the next start runs with no
+/// write block and nothing reaches the ring. It goes back in before every
+/// start. The I/O thread must not touch Objective-C or take locks, so the
+/// block captures plain state; the stream lives as long as its device.
+- (void)installMixBlock {
+    VPMixState *mix = &_mix;
+    self.writeMixBlock = ^int(UInt32 frameCount, const AudioServerPlugInIOCycleInfo *cycleInfo,
+        void *mainBuffer, void *secondaryBuffer, UInt32 clientID) {
+        (void)cycleInfo;
+        (void)secondaryBuffer;
+        (void)clientID;
+        return VPMixWrite(mix, mainBuffer, frameCount);
+    };
+}
+
+- (instancetype)initWithConnection:(io_connect_t)connection
+                          streamID:(uint32_t)streamID
+                            format:(VPVirtIOSoundStreamFormat)format
+                            plugin:(ASDPlugin *)plugin {
+    self = [super initWithConnection:connection streamID:streamID format:format
+                           direction:ASDStreamDirectionOutput plugin:plugin];
+    if (!self) {
+        return nil;
+    }
+    if (!VPVirtIOSoundRingInit(&_ring, _bufferBytes, _periodBytes)) {
+        os_log_error(VPLog(), "stream %u: cannot allocate a %u-byte ring", streamID, _bufferBytes);
+        return nil;
+    }
+    _leadPeriods = VPLeadPeriods();
+    _resampleScratch = malloc(kResampleScratchFrames * format.bytesPerFrame);
+    if (!_resampleScratch) {
+        return nil;
+    }
+
+    double nominalRate = 0;
+    // The 44100 twin: a ringtone-preview aggregate runs the vdef at 44100,
+    // and the aggregate only carries devices that answer that rate. The
+    // virtio stream itself stays at the wire rate; the mix resamples. The
+    // current format follows the nominal-rate override so the device boots
+    // already answering 44100, matching how the vdef composes.
+    if (format.sampleRate == 48000.0) {
+        ASDStreamFormat *reduced = [self physicalFormatAtRate:kVPAlternateRate];
+        self.physicalFormats = @[self.physicalFormat, reduced];
+        self.physicalFormatSettable = YES;
+        double override = VPNominalRateOverride();
+        if (override == kVPAlternateRate) {
+            nominalRate = override;
+            self.physicalFormat = reduced;
+        }
+    }
+
+    atomic_init(&_halRate, nominalRate > 0 ? (uint32_t)nominalRate : (uint32_t)format.sampleRate);
+    VPResamplerReset(&_resampler);
+    _mix = (VPMixState){
+        .ring = &_ring,
+        .halRate = &_halRate,
+        .resampler = &_resampler,
+        .scratch = _resampleScratch,
+        .bytesPerFrame = format.bytesPerFrame,
+        .wireRate = (uint32_t)format.sampleRate,
+    };
+    [self installMixBlock];
+    [self logFormatWithLeadPeriods:_leadPeriods];
+    return self;
+}
+
+- (void)dealloc {
+    if (_timer) {
+        dispatch_source_cancel(_timer);
+    }
+    free(_resampleScratch);
+    VPVirtIOSoundRingDestroy(&_ring);
+}
+
+// MARK: Rate changes
+
+- (void)deviceChangedToSamplingRate:(double)rate {
+    os_log(VPLog(), "rate-probe: stream %u deviceChangedToSamplingRate %.0f (hal %.0f, format %.0f)",
+        _streamID, rate, (double)atomic_load(&_halRate), self.physicalFormat.sampleRate);
+    VPLogToFile("rate-probe: stream %u deviceChangedToSamplingRate %.0f (hal %.0f, format %.0f)",
+        _streamID, rate, (double)atomic_load(&_halRate), self.physicalFormat.sampleRate);
+    [super deviceChangedToSamplingRate:rate];
+    uint32_t previous = atomic_load(&_halRate);
+    if (rate > 0 && (uint32_t)rate != previous) {
+        atomic_store(&_halRate, (uint32_t)rate);
+        VPResamplerReset(&_resampler);
+        os_log(VPLog(), "stream %u: device rate %.0f -> %.0f, physical format %.0f Hz",
+            _streamID, (double)previous, rate, self.physicalFormat.sampleRate);
+    }
+}
+
+// MARK: Device commands
+
+- (BOOL)startDevice {
+    dispatch_assert_queue(_queue);
+    VPVirtIOSoundRingReset(&_ring);
+    if (![self prepareDevice]) {
+        return NO;
+    }
     if ([self callSelector:kVPVirtIOSoundSelectorStart] != KERN_SUCCESS) {
         [self callSelector:kVPVirtIOSoundSelectorRelease];
         return NO;
     }
-    _reportedTransferError = NO;
     return YES;
 }
 
@@ -846,9 +967,7 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
 }
 
 - (void)stopDevice {
-    dispatch_assert_queue(_queue);
-    [self callSelector:kVPVirtIOSoundSelectorStop];
-    [self callSelector:kVPVirtIOSoundSelectorRelease];
+    [self releaseDevice];
     _state = VPStreamStateIdle;
 }
 
@@ -865,6 +984,7 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
             return;
         }
         transfer->stream = (__bridge void *)self;
+        transfer->offset = offset;
         transfer->length = length;
         uint64_t reference[kOSAsyncRef64Count] = {0};
         reference[kIOAsyncCalloutFuncIndex] = (uint64_t)(uintptr_t)VPWriteCompleted;
@@ -912,10 +1032,7 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
             _completedAfterFirst += length;
         }
     }
-    if (result != kIOReturnSuccess && !_reportedTransferError) {
-        _reportedTransferError = YES;
-        os_log_error(VPLog(), "stream %u: write of %u bytes failed: 0x%x", _streamID, length, result);
-    }
+    [self reportTransferError:result length:length];
     if (_state == VPStreamStateDraining && VPVirtIOSoundRingInFlight(&_ring) == 0) {
         [self stopDevice];
     }
@@ -938,7 +1055,7 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
         _timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _queue);
         dispatch_source_set_timer(_timer, dispatch_time(DISPATCH_TIME_NOW, kFlushIntervalNanoseconds),
             kFlushIntervalNanoseconds, kFlushIntervalNanoseconds / 10);
-        __unsafe_unretained VPVirtIOSoundStream *unretained = self;
+        __unsafe_unretained VPVirtIOSoundOutputStream *unretained = self;
         dispatch_source_set_event_handler(_timer, ^{
             if (unretained->_state == VPStreamStateRunning) {
                 [unretained submitPending:NO];
@@ -970,16 +1087,369 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
 
 @end
 
+// MARK: - Input stream
+
+@interface VPVirtIOSoundInputStream : VPVirtIOSoundStream
+- (instancetype)initWithConnection:(io_connect_t)connection
+                          streamID:(uint32_t)streamID
+                            format:(VPVirtIOSoundStreamFormat)format
+                            plugin:(ASDPlugin *)plugin;
+- (void)readCompletedAtOffset:(uint32_t)offset result:(IOReturn)result argument:(uint64_t)argument;
+@end
+
+/// IOKit calls an async completion with as many arguments as the kernel
+/// sent, so with one this is `IOAsyncCallback1`. The macOS plugin's block
+/// receives the same pair and reads neither; the argument is only logged
+/// here, once.
+static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
+    VPTransfer *transfer = refcon;
+    VPVirtIOSoundInputStream *stream = (__bridge VPVirtIOSoundInputStream *)transfer->stream;
+    uint32_t offset = transfer->offset;
+    free(transfer);
+    [stream readCompletedAtOffset:offset result:result argument:(uint64_t)(uintptr_t)argument];
+}
+
+@implementation VPVirtIOSoundInputStream {
+    VPVirtIOSoundInputRing _ring;
+    VPVirtIOSoundInputReader _reader;
+    /// Counts stops, so a drain deadline knows the stop it was set for.
+    uint64_t _stops;
+    /// CoreAudio started the stream while it was `Releasing`.
+    BOOL _startWhenReleased;
+    BOOL _refillScheduled;
+    BOOL _loggedFirstRead;
+    /// Reads the device returned since CoreAudio last started the stream.
+    uint64_t _completions;
+}
+
+/// ASDStream releases this block at every stop, as it does the output
+/// stream's (`installMixBlock`), so it goes back in before every start.
+- (void)installReadBlock {
+    VPVirtIOSoundInputReader *reader = &_reader;
+    self.readInputBlock = ^int(UInt32 frameCount, const AudioServerPlugInIOCycleInfo *cycleInfo,
+        void *mainBuffer, void *secondaryBuffer, UInt32 clientID) {
+        (void)cycleInfo;
+        (void)secondaryBuffer;
+        (void)clientID;
+        VPVirtIOSoundInputReaderRead(reader, mainBuffer, frameCount);
+        return kAudioHardwareNoError;
+    };
+}
+
+- (instancetype)initWithConnection:(io_connect_t)connection
+                          streamID:(uint32_t)streamID
+                            format:(VPVirtIOSoundStreamFormat)format
+                            plugin:(ASDPlugin *)plugin {
+    self = [super initWithConnection:connection streamID:streamID format:format
+                           direction:ASDStreamDirectionInput plugin:plugin];
+    if (!self) {
+        return nil;
+    }
+    if (!VPVirtIOSoundInputRingInit(&_ring, _bufferBytes, _periodBytes)) {
+        os_log_error(VPLog(), "stream %u: cannot allocate a %u-byte ring", streamID, _bufferBytes);
+        return nil;
+    }
+    _reader = (VPVirtIOSoundInputReader){
+        .ring = &_ring,
+        .bytesPerFrame = format.bytesPerFrame,
+        .leadBytes = kInputLeadPeriods * _periodBytes,
+        .maximumBacklogBytes = kInputMaximumBacklogPeriods * _periodBytes,
+    };
+    [self installReadBlock];
+    [self logFormatWithLeadPeriods:kInputLeadPeriods];
+    return self;
+}
+
+- (void)dealloc {
+    VPVirtIOSoundInputRingDestroy(&_ring);
+}
+
+/// What the reader keeps between the host's capture and the guest's read.
+- (UInt32)queuedLatencyFrames {
+    return kInputLeadPeriods * (_periodBytes / _format.bytesPerFrame);
+}
+
+// MARK: Device commands
+
+/// The macOS plugin's order: the reads go to the device between PREPARE and
+/// START, so capture has somewhere to land from its first frame.
+- (BOOL)startDevice {
+    dispatch_assert_queue(_queue);
+    VPVirtIOSoundInputRingReset(&_ring);
+    if (![self prepareDevice]) {
+        return NO;
+    }
+    _state = VPStreamStateRunning;
+    [self submitReads];
+    if ([self callSelector:kVPVirtIOSoundSelectorStart] != KERN_SUCCESS) {
+        [self stopDevice];
+        return NO;
+    }
+    return YES;
+}
+
+/// STOP and RELEASE. Reads still out keep their ring slots until the kernel
+/// returns them, so the stream is not `Idle` before then.
+- (void)stopDevice {
+    [self releaseDevice];
+    _state = VPVirtIOSoundInputRingInFlight(&_ring) == 0 ? VPStreamStateIdle : VPStreamStateReleasing;
+}
+
+/// One line per run, the input twin of the output stream's: `in` is what
+/// the host captured, `out` what CoreAudio read of it, `silent` the frames
+/// it was handed as silence instead (the lead at each start, then gaps), and
+/// `skipped` what was dropped to bound the backlog.
+- (void)logCounters {
+    double seconds = (double)(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - _startedAt) / 1e9;
+    uint64_t framesIn = _completions * (_periodBytes / _format.bytesPerFrame);
+    uint64_t framesOut = atomic_load(&_reader.servedFrames);
+    VPLogToFile("stream %u: %.2f s, %llu reads, in %llu frames (%.0f/s), out %llu frames (%.0f/s), "
+        "%llu silent, %llu bytes skipped",
+        _streamID, seconds, (unsigned long long)_completions,
+        (unsigned long long)framesIn, seconds > 0 ? framesIn / seconds : 0,
+        (unsigned long long)framesOut, seconds > 0 ? framesOut / seconds : 0,
+        (unsigned long long)atomic_load(&_reader.silentFrames),
+        (unsigned long long)atomic_load(&_reader.skippedBytes));
+}
+
+// MARK: Transfers
+
+/// Keeps `kInputReadsInFlight` periods with the device. A full ring leaves
+/// fewer out, and a failed read is not replaced at once, so either way the
+/// stream looks again a period later instead of waiting for a completion
+/// that may not come.
+- (void)submitReads {
+    dispatch_assert_queue(_queue);
+    mach_port_t wakePort = IONotificationPortGetMachPort(_port);
+    uint32_t offset = 0;
+    while (VPVirtIOSoundInputRingInFlight(&_ring) < kInputReadsInFlight * _periodBytes
+        && VPVirtIOSoundInputRingNextSubmission(&_ring, &offset)) {
+        VPTransfer *transfer = malloc(sizeof(*transfer));
+        if (!transfer) {
+            break;
+        }
+        transfer->stream = (__bridge void *)self;
+        transfer->offset = offset;
+        transfer->length = _periodBytes;
+        uint64_t reference[kOSAsyncRef64Count] = {0};
+        reference[kIOAsyncCalloutFuncIndex] = (uint64_t)(uintptr_t)VPReadCompleted;
+        reference[kIOAsyncCalloutRefconIndex] = (uint64_t)(uintptr_t)transfer;
+        uint64_t scalar = _streamID;
+        size_t size = _periodBytes;
+        VPVirtIOSoundInputRingDidSubmit(&_ring);
+        kern_return_t result = IOConnectCallAsyncMethod(_connection, kVPVirtIOSoundSelectorRead, wakePort,
+            reference, kAsyncReferenceCount, &scalar, 1, NULL, 0, NULL, NULL, _ring.bytes + offset, &size);
+        if (result != KERN_SUCCESS) {
+            // Nothing will complete this one, so return its slot now.
+            free(transfer);
+            [self readCompletedAtOffset:offset result:result argument:0];
+            return;
+        }
+    }
+    if (VPVirtIOSoundInputRingInFlight(&_ring) < kInputReadsInFlight * _periodBytes) {
+        [self scheduleRefill];
+    }
+}
+
+- (void)scheduleRefill {
+    if (_refillScheduled) {
+        return;
+    }
+    _refillScheduled = YES;
+    uint64_t period = NSEC_PER_SEC * (_periodBytes / _format.bytesPerFrame) / (uint64_t)_format.sampleRate;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)period), _queue, ^{
+        self->_refillScheduled = NO;
+        if (self->_state == VPStreamStateRunning) {
+            [self submitReads];
+        }
+    });
+}
+
+- (void)readCompletedAtOffset:(uint32_t)offset result:(IOReturn)result argument:(uint64_t)argument {
+    dispatch_assert_queue(_queue);
+    if (!_loggedFirstRead) {
+        _loggedFirstRead = YES;
+        VPLogToFile("stream %u: first read back: result 0x%x, argument 0x%llx",
+            _streamID, result, (unsigned long long)argument);
+    }
+    if (result != kIOReturnSuccess) {
+        // Whatever the slot holds is not this period's capture.
+        memset(_ring.bytes + offset, 0, _periodBytes);
+        [self reportTransferError:result length:_periodBytes];
+    }
+    VPVirtIOSoundInputRingDidComplete(&_ring);
+    _completions++;
+    BOOL returned = VPVirtIOSoundInputRingInFlight(&_ring) == 0;
+    switch (_state) {
+    case VPStreamStateRunning:
+        if (result == kIOReturnSuccess) {
+            [self submitReads];
+        } else {
+            [self scheduleRefill];
+        }
+        break;
+    case VPStreamStateDraining:
+        if (returned) {
+            [self stopDevice];
+        }
+        break;
+    case VPStreamStateReleasing:
+        if (returned) {
+            _state = VPStreamStateIdle;
+            if (_startWhenReleased) {
+                _startWhenReleased = NO;
+                [self startDevice];
+            }
+        }
+        break;
+    case VPStreamStateIdle:
+        break;
+    }
+}
+
+// MARK: ASDStream
+
+- (void)startStream {
+    dispatch_sync(_queue, ^{
+        self->_completions = 0;
+        atomic_store(&self->_reader.servedFrames, 0);
+        atomic_store(&self->_reader.silentFrames, 0);
+        atomic_store(&self->_reader.skippedBytes, 0);
+        self->_startedAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+        // What an earlier run left in the ring is old by now.
+        atomic_store(&self->_reader.restart, true);
+        switch (self->_state) {
+        case VPStreamStateIdle:
+            [self startDevice];
+            break;
+        case VPStreamStateDraining:
+            // Still started on the device: capture carries on.
+            self->_state = VPStreamStateRunning;
+            [self submitReads];
+            break;
+        case VPStreamStateReleasing:
+            self->_startWhenReleased = YES;
+            break;
+        case VPStreamStateRunning:
+            break;
+        }
+    });
+    [self installReadBlock];
+    [super startStream];
+}
+
+/// The reads still out come back as the host fills them, a period apart, and
+/// the device is released after the last. Releasing it first would leave the
+/// kernel holding ring slots with nothing said about when it returns them;
+/// that is the fallback, for a host that has stopped filling them.
+- (void)stopStream {
+    dispatch_sync(_queue, ^{
+        self->_startWhenReleased = NO;
+        if (self->_state != VPStreamStateRunning) {
+            return;
+        }
+        [self logCounters];
+        if (VPVirtIOSoundInputRingInFlight(&self->_ring) == 0) {
+            [self stopDevice];
+            return;
+        }
+        self->_state = VPStreamStateDraining;
+        uint64_t stop = ++self->_stops;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)kInputDrainNanoseconds), self->_queue, ^{
+            if (self->_state == VPStreamStateDraining && self->_stops == stop) {
+                VPLogToFile("stream %u: %llu bytes of reads still out, releasing",
+                    self->_streamID, (unsigned long long)VPVirtIOSoundInputRingInFlight(&self->_ring));
+                [self stopDevice];
+            }
+        });
+    });
+    [super stopStream];
+}
+
+@end
+
 // MARK: - Device
 
+/// One open user client of an `AppleVirtIOSound` service. The service's
+/// speaker and microphone devices share it, as the output and input streams
+/// of the macOS plugin's one device do; each stream still talks to the
+/// kernel from its own queue.
+@interface VPVirtIOSoundConnection : NSObject
+- (instancetype)initWithService:(io_service_t)service;
+@property (nonatomic, readonly) io_connect_t port;
+@property (nonatomic, readonly) uint32_t streamCount;
+/// PCM_INFO for one virtio stream.
+- (BOOL)getInfo:(VPVirtIOSoundPCMInfo *)info forStream:(uint32_t)streamID;
+@end
+
+@implementation VPVirtIOSoundConnection
+
+- (instancetype)initWithService:(io_service_t)service {
+    self = [super init];
+    if (!self) {
+        return nil;
+    }
+    kern_return_t result = IOServiceOpen(service, mach_task_self(), 0, &_port);
+    if (result != KERN_SUCCESS) {
+        os_log_error(VPLog(), "cannot open AppleVirtIOSound: 0x%x", result);
+        return nil;
+    }
+    CFTypeRef value = IORegistryEntryCreateCFProperty(
+        service, CFSTR(kVPVirtIOSoundStreamCountKey), kCFAllocatorDefault, 0);
+    if (value && CFGetTypeID(value) == CFNumberGetTypeID()) {
+        CFNumberGetValue(value, kCFNumberSInt32Type, &_streamCount);
+    }
+    if (value) {
+        CFRelease(value);
+    }
+    // What the device offers, for the record: the format choice below and
+    // the split into two devices both follow from these.
+    for (uint32_t streamID = 0; streamID < _streamCount; streamID++) {
+        VPVirtIOSoundPCMInfo info;
+        if ([self getInfo:&info forStream:streamID]) {
+            VPLogToFile("stream %u: direction %u, formats 0x%llx, rates 0x%llx, channels %u-%u",
+                streamID, info.direction, info.formats, info.rates,
+                info.channelsMinimum, info.channelsMaximum);
+        }
+    }
+    return self;
+}
+
+- (void)dealloc {
+    if (_port) {
+        IOServiceClose(_port);
+    }
+}
+
+- (BOOL)getInfo:(VPVirtIOSoundPCMInfo *)info forStream:(uint32_t)streamID {
+    memset(info, 0, sizeof(*info));
+    uint64_t scalar = streamID;
+    size_t size = sizeof(*info);
+    kern_return_t result = IOConnectCallMethod(_port, kVPVirtIOSoundSelectorPCMInfo,
+        &scalar, 1, NULL, 0, NULL, NULL, info, &size);
+    if (result != KERN_SUCCESS || size != sizeof(*info)) {
+        os_log_error(VPLog(), "stream %u: PCM_INFO failed: 0x%x", streamID, result);
+        return NO;
+    }
+    return YES;
+}
+
+@end
+
 @interface VPVirtIOSoundDevice : ASDAudioDevice
-- (instancetype)initWithService:(io_service_t)service index:(unsigned)index plugin:(ASDPlugin *)plugin;
-- (void)addSpeakerControls;
+/// The device for one direction of a service's streams, or nil when the
+/// service has no usable stream that way.
+- (instancetype)initWithConnection:(VPVirtIOSoundConnection *)connection
+                         direction:(ASDStreamDirection)direction
+                             index:(unsigned)index
+                            plugin:(ASDPlugin *)plugin;
+- (void)addControls;
 @end
 
 @implementation VPVirtIOSoundDevice {
-    io_service_t _service;
-    io_connect_t _connection;
+    VPVirtIOSoundConnection *_connection;
+    /// The scope of everything the device has: its streams and its controls.
+    ASDStreamDirection _direction;
     VPVirtIOSoundClock _clock;
     /// The virtio wire rate, the only rate the device actually runs at.
     double _wireRate;
@@ -989,7 +1459,7 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     /// The nominal rate the clock last ran, so a re-set of the current rate
     /// does not re-anchor it.
     double _clockRate;
-    /// The mute control `addSpeakerControls` registered, for the device-level
+    /// The mute control `addControls` registered, for the device-level
     /// mute selector's forwarding below.
     ASDBooleanControl *_muteControl;
     /// The mute state the device-level selector answers; shadowed beside the
@@ -998,51 +1468,26 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     UInt32 _muteState;
 }
 
-static uint32_t VPStreamCount(io_service_t service) {
-    CFTypeRef value = IORegistryEntryCreateCFProperty(
-        service, CFSTR(kVPVirtIOSoundStreamCountKey), kCFAllocatorDefault, 0);
-    uint32_t count = 0;
-    if (value && CFGetTypeID(value) == CFNumberGetTypeID()) {
-        CFNumberGetValue(value, kCFNumberSInt32Type, &count);
-    }
-    if (value) {
-        CFRelease(value);
-    }
-    return count;
-}
-
-- (instancetype)initWithService:(io_service_t)service index:(unsigned)index plugin:(ASDPlugin *)plugin {
-    io_connect_t connection = IO_OBJECT_NULL;
-    kern_return_t result = IOServiceOpen(service, mach_task_self(), 0, &connection);
-    if (result != KERN_SUCCESS) {
-        os_log_error(VPLog(), "cannot open AppleVirtIOSound: 0x%x", result);
-        return nil;
-    }
-    // The connection is this method's to close until the ivars hold it; from
-    // there `dealloc` releases both, including for the nil return below.
-    self = [super initWithDeviceUID:VPDeviceUID(index) withPlugin:plugin];
+- (instancetype)initWithConnection:(VPVirtIOSoundConnection *)connection
+                         direction:(ASDStreamDirection)direction
+                             index:(unsigned)index
+                            plugin:(ASDPlugin *)plugin {
+    self = [super initWithDeviceUID:VPDeviceUID(direction, index) withPlugin:plugin];
     if (!self) {
-        IOServiceClose(connection);
         return nil;
     }
-    IOObjectRetain(service);
-    _service = service;
     _connection = connection;
+    _direction = direction;
+    BOOL input = direction == ASDStreamDirectionInput;
 
     double sampleRate = 0;
     UInt32 latencyFrames = 0;
-    uint32_t count = VPStreamCount(service);
-    for (uint32_t streamID = 0; streamID < count; streamID++) {
-        VPVirtIOSoundPCMInfo info = {0};
-        uint64_t scalar = streamID;
-        size_t size = sizeof(info);
-        result = IOConnectCallMethod(connection, kVPVirtIOSoundSelectorPCMInfo,
-            &scalar, 1, NULL, 0, NULL, NULL, &info, &size);
-        if (result != KERN_SUCCESS || size != sizeof(info)) {
-            os_log_error(VPLog(), "stream %u: PCM_INFO failed: 0x%x", streamID, result);
+    for (uint32_t streamID = 0; streamID < connection.streamCount; streamID++) {
+        VPVirtIOSoundPCMInfo info;
+        if (![connection getInfo:&info forStream:streamID]) {
             continue;
         }
-        if (info.direction != kVPVirtIOSoundDirectionOutput) {
+        if (info.direction != (input ? kVPVirtIOSoundDirectionInput : kVPVirtIOSoundDirectionOutput)) {
             continue;
         }
         VPVirtIOSoundStreamFormat format;
@@ -1055,24 +1500,38 @@ static uint32_t VPStreamCount(io_service_t service) {
         if (sampleRate != 0 && format.sampleRate != sampleRate) {
             continue;
         }
-        VPVirtIOSoundStream *stream = [[VPVirtIOSoundStream alloc] initWithConnection:connection
-                                                                             streamID:streamID
-                                                                               format:format
-                                                                               plugin:plugin];
+        VPVirtIOSoundStream *stream;
+        if (input) {
+            stream = [[VPVirtIOSoundInputStream alloc] initWithConnection:connection.port
+                                                                 streamID:streamID
+                                                                   format:format
+                                                                   plugin:plugin];
+        } else {
+            stream = [[VPVirtIOSoundOutputStream alloc] initWithConnection:connection.port
+                                                                  streamID:streamID
+                                                                    format:format
+                                                                    plugin:plugin];
+        }
         if (!stream) {
             continue;
         }
+        stream.device = self;
         sampleRate = format.sampleRate;
         latencyFrames = stream.queuedLatencyFrames;
-        [self addOutputStream:stream];
+        if (input) {
+            [self addInputStream:stream];
+        } else {
+            [self addOutputStream:stream];
+        }
     }
     if (sampleRate == 0) {
-        os_log_error(VPLog(), "AppleVirtIOSound has no usable output stream among %u", count);
         return nil;
     }
 
     _wireRate = sampleRate;
-    _alternateRate = sampleRate == 48000.0 ? kVPAlternateRate : 0;
+    // Only the mix converts between rates; captured frames reach CoreAudio
+    // at the wire rate.
+    _alternateRate = !input && sampleRate == 48000.0 ? kVPAlternateRate : 0;
     // The nominal rate the device answers at boot: the wire rate unless the
     // override names the alternate (testing VirtualAudio's aggregate-member
     // selection, which may compare the current nominal rate, not the list).
@@ -1086,42 +1545,40 @@ static uint32_t VPStreamCount(io_service_t service) {
     VPVirtIOSoundClockConfigure(&_clock, (uint32_t)(nominalRate * kTimestampPeriodSeconds), nominalRate,
         mach_absolute_time());
     _clockRate = nominalRate;
-    self.deviceName = @"vphone Speaker";
+    self.deviceName = input ? @"vphone Microphone" : @"vphone Speaker";
     self.modelName = @"Virtual Sound Device";
     self.manufacturerName = @"vphone";
-    self.canBeDefaultOutputDevice = YES;
-    self.canBeDefaultSystemDevice = YES;
-    self.canBeDefaultInputDevice = NO;
+    self.canBeDefaultOutputDevice = !input;
+    self.canBeDefaultSystemDevice = !input;
+    self.canBeDefaultInputDevice = input;
     self.canChangeDeviceName = NO;
     self.samplingRates = _alternateRate ? @[@(_alternateRate), @(sampleRate)] : @[@(sampleRate)];
     self.samplingRate = nominalRate;
-    self.outputSafetyOffset = kSafetyOffsetFrames;
-    // What the stream queues ahead of the host, so the HAL presents video
-    // against when the sound is heard, not when it is written. Set once, in
-    // frames of the rate the device starts at, so after a rate change it is
-    // off by the ratio of the rates.
-    self.outputLatency = (UInt32)(latencyFrames * nominalRate / sampleRate);
+    // What the stream keeps between the guest's I/O and the host's, so the
+    // HAL presents video against when the sound is heard, not when it is
+    // written, and stamps a recording with when it was captured. Set once,
+    // in frames of the rate the device starts at, so after a rate change it
+    // is off by the ratio of the rates.
+    UInt32 latency = (UInt32)(latencyFrames * nominalRate / sampleRate);
+    if (input) {
+        self.inputSafetyOffset = kSafetyOffsetFrames;
+        self.inputLatency = latency;
+    } else {
+        self.outputSafetyOffset = kSafetyOffsetFrames;
+        self.outputLatency = latency;
+    }
     self.transportType = VPTransportType();
     self.timestampPeriod = _clock.periodFrames;
 
     [self installIOBlocks];
     UInt32 transport = self.transportType;
     os_log(VPLog(), "device %{public}@: %.0f Hz nominal (%.0f wire, %.0f advertised too), transport '%c%c%c%c'",
-        VPDeviceUID(index), nominalRate, sampleRate, _alternateRate,
+        VPDeviceUID(direction, index), nominalRate, sampleRate, _alternateRate,
         (char)(transport >> 24), (char)(transport >> 16), (char)(transport >> 8), (char)transport);
     VPLogToFile("device %s: %.0f Hz nominal (%.0f wire, %.0f advertised too), transport '%c%c%c%c'",
-        VPDeviceUID(index).UTF8String, nominalRate, sampleRate, _alternateRate,
+        VPDeviceUID(direction, index).UTF8String, nominalRate, sampleRate, _alternateRate,
         (char)(transport >> 24), (char)(transport >> 16), (char)(transport >> 8), (char)transport);
     return self;
-}
-
-- (void)dealloc {
-    if (_connection) {
-        IOServiceClose(_connection);
-    }
-    if (_service) {
-        IOObjectRelease(_service);
-    }
 }
 
 /// ASDAudioDevice's `performStopIO` releases every I/O block the device holds
@@ -1133,6 +1590,7 @@ static uint32_t VPStreamCount(io_service_t service) {
 /// start after the first. They go back in before every start.
 - (void)installIOBlocks {
     VPVirtIOSoundClock *clock = &_clock;
+    Boolean input = _direction == ASDStreamDirectionInput;
     self.getZeroTimestampBlock = ^int(Float64 *sampleTime, UInt64 *hostTime, UInt64 *seed, UInt32 clientID) {
         (void)clientID;
         // False only when anchors kept landing through every read attempt;
@@ -1142,13 +1600,13 @@ static uint32_t VPStreamCount(io_service_t service) {
     };
     self.willDoReadInputBlock = ^int(UInt32 operationID, Boolean *willDo, Boolean *willDoInPlace) {
         (void)operationID;
-        *willDo = false;
+        *willDo = input;
         *willDoInPlace = true;
         return kAudioHardwareNoError;
     };
     self.willDoWriteMixBlock = ^int(UInt32 operationID, Boolean *willDo, Boolean *willDoInPlace) {
         (void)operationID;
-        *willDo = true;
+        *willDo = !input;
         *willDoInPlace = true;
         return kAudioHardwareNoError;
     };
@@ -1202,10 +1660,11 @@ static uint32_t VPStreamCount(io_service_t service) {
 /// 'mute'. The route's throw that follows is quieted host-side, in the
 /// VirtualAudio binary patch; this dispatch stays as macOS's ASD carries it,
 /// with the mute control this device registered as the backing store, for
-/// the build that does forward.
-static BOOL VPIsDeviceMuteAddress(const AudioObjectPropertyAddress *address) {
+/// the build that does forward. The microphone device answers the same way
+/// in its own scope.
+static BOOL VPIsDeviceMuteAddress(const AudioObjectPropertyAddress *address, ASDStreamDirection scope) {
     return address->mSelector == kVPDevicePropertyMute
-        && (address->mScope == kAudioObjectPropertyScopeOutput
+        && (address->mScope == scope
             || address->mScope == kAudioObjectPropertyScopeGlobal)
         && (address->mElement == kAudioObjectPropertyElementMain
             || address->mElement == 0);
@@ -1213,7 +1672,7 @@ static BOOL VPIsDeviceMuteAddress(const AudioObjectPropertyAddress *address) {
 
 /// `kAudioDevicePropertyNominalSampleRate` is a global-scope, main-element
 /// property ('nsrt'/glob/0). A device-level mute address check accepts the
-/// output scope as well; the rate has no per-scope form, so global only.
+/// device's own scope as well; the rate has no per-scope form, so global only.
 static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
     return address->mSelector == kVPDevicePropertyNominalSampleRate
         && address->mScope == kAudioObjectPropertyScopeGlobal
@@ -1223,7 +1682,7 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
 
 - (BOOL)hasProperty:(AudioObjectPropertyAddress *)address {
     VPLogSelectorQuery("has", address);
-    if (VPIsDeviceMuteAddress(address)) {
+    if (VPIsDeviceMuteAddress(address, _direction)) {
         return YES;
     }
     return [super hasProperty:address];
@@ -1231,7 +1690,7 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
 
 - (BOOL)isPropertySettable:(AudioObjectPropertyAddress *)address {
     VPLogSelectorQuery("settable", address);
-    if (VPIsDeviceMuteAddress(address) || VPIsDeviceRateAddress(address)) {
+    if (VPIsDeviceMuteAddress(address, _direction) || VPIsDeviceRateAddress(address)) {
         return YES;
     }
     return [super isPropertySettable:address];
@@ -1241,7 +1700,7 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
            withQualifierSize:(UInt32)qualifierSize
            andQualifierData:(const void *)qualifierData {
     VPLogSelectorQuery("size", address);
-    if (VPIsDeviceMuteAddress(address)) {
+    if (VPIsDeviceMuteAddress(address, _direction)) {
         return sizeof(UInt32);
     }
     return [super dataSizeForProperty:address withQualifierSize:qualifierSize
@@ -1255,7 +1714,7 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
                  andData:(void *)data
               forClient:(UInt32)clientID {
     VPLogSelectorQuery("get", address);
-    if (VPIsDeviceMuteAddress(address)) {
+    if (VPIsDeviceMuteAddress(address, _direction)) {
         if (dataSize == NULL || *dataSize < sizeof(UInt32)) {
             return NO;
         }
@@ -1295,7 +1754,7 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
                  andData:(const void *)data
               forClient:(UInt32)clientID {
     VPLogSelectorQuery("set", address);
-    if (VPIsDeviceMuteAddress(address)) {
+    if (VPIsDeviceMuteAddress(address, _direction)) {
         if (dataSize < sizeof(UInt32) || data == NULL) {
             return NO;
         }
@@ -1321,29 +1780,32 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
 
 // MARK: Controls
 
-- (void)addSpeakerControls {
+- (void)addControls {
     // The control set a real speaker answers with: one selected data-source
     // value ('ispk', "Speakers"), then mute and volume, all on the master
-    // element of the output scope. Mirrored argument for argument from the
+    // element of the output scope; a microphone has the same three in the
+    // input scope, its data source 'imic', "Microphone". Mirrored argument
+    // for argument from the
     // macOS plugin, which adds these from its own
     // `halInitializeWithPluginHost:` — after the device is built, before it
     // is registered — and never from inside the device's init: calling
-    // `addControl:` during `initWithService:` fails the whole device
+    // `addControl:` during the device's init fails the whole device
     // activation (HALS_PlugIn.cpp:162). The pspk route runs in HardwareOnly
     // volume mode and reads this control set; without it every volume query
     // on the route fails and the endpoint is retyped "Unspecified" after
     // the first playback, silencing every later one.
-    ASDSelectorValue *speakers = [[ASDSelectorValue alloc] init];
-    [speakers setValue:kVPDataSourceInternalSpeaker];
-    [speakers setName:@"Speakers"];
+    BOOL input = _direction == ASDStreamDirectionInput;
+    ASDSelectorValue *source = [[ASDSelectorValue alloc] init];
+    [source setValue:input ? kVPDataSourceInternalMicrophone : kVPDataSourceInternalSpeaker];
+    [source setName:input ? @"Microphone" : @"Speakers"];
     ASDSelectorControl *dataSource = [[ASDSelectorControl alloc]
         initWithIsSettable:YES
                 forElement:0
-                  inScope:ASDStreamDirectionOutput
+                  inScope:_direction
                 withPlugin:self.plugin
          andObjectClassID:kAudioDataSourceControlClassID];
-    [dataSource addValue:speakers];
-    [dataSource setSelectedValues:@[speakers]];
+    [dataSource addValue:source];
+    [dataSource setSelectedValues:@[source]];
     [self addControl:dataSource];
 
     // The macOS plugin's `-[AVIODevice _addMuteAndVolumeControlsInScope:]`
@@ -1361,11 +1823,11 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
     // class IDs the way the data-source control above pins 'dsrc'.
     ASDPlugin *plugin = self.plugin;
     ASDBooleanControl *mute = [[ASDBooleanControl alloc] initWithValue:NO
-        isSettable:YES forElement:0 inScope:ASDStreamDirectionOutput
+        isSettable:YES forElement:0 inScope:_direction
         withPlugin:plugin andObjectClassID:kAudioMuteControlClassID];
     ASDLevelControl *volume = [[ASDLevelControl alloc] initWithDecibelValue:-30.0
         minimumValue:-60.0 maximumValue:0.0 isSettable:YES
-        forElement:0 inScope:ASDStreamDirectionOutput
+        forElement:0 inScope:_direction
         withPlugin:plugin andObjectClassID:kAudioVolumeControlClassID];
     [self addControl:mute];
     [self addControl:volume];
@@ -1373,8 +1835,9 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
     [volume setDecibelValue:volume.maximumDecibelValue];
     _muteControl = mute;
     _muteState = 0;
-    os_log(VPLog(), "speaker controls added: dsrc 'ispk', mute, volume");
-    VPLogToFile("speaker controls added: dsrc 'ispk', mute, volume");
+    os_log(VPLog(), "%{public}s controls added: dsrc, mute, volume", input ? "microphone" : "speaker");
+    VPLogToFile("%s controls added: dsrc '%s', mute, volume",
+        input ? "microphone" : "speaker", input ? "imic" : "ispk");
 }
 
 @end
@@ -1445,20 +1908,32 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
         os_log_error(VPLog(), "no AppleVirtIOSound service: 0x%x", result);
         return;
     }
+    static const ASDStreamDirection directions[] = {ASDStreamDirectionOutput, ASDStreamDirectionInput};
     unsigned index = 0;
+    unsigned published = 0;
     io_service_t service;
     while ((service = IOIteratorNext(services))) {
-        VPVirtIOSoundDevice *device = [[VPVirtIOSoundDevice alloc] initWithService:service index:index plugin:self];
+        VPVirtIOSoundConnection *connection = [[VPVirtIOSoundConnection alloc] initWithService:service];
         IOObjectRelease(service);
-        if (device) {
-            [device addSpeakerControls];
-            [self addAudioDevice:device];
-            index++;
+        if (!connection) {
+            continue;
         }
+        for (unsigned i = 0; i < sizeof(directions) / sizeof(directions[0]); i++) {
+            VPVirtIOSoundDevice *device = [[VPVirtIOSoundDevice alloc] initWithConnection:connection
+                                                                                direction:directions[i]
+                                                                                    index:index
+                                                                                   plugin:self];
+            if (device) {
+                [device addControls];
+                [self addAudioDevice:device];
+                published++;
+            }
+        }
+        index++;
     }
     IOObjectRelease(services);
-    os_log(VPLog(), "published %u virtio sound device(s)", index);
-    VPLogToFile("published %u virtio sound device(s)", index);
+    os_log(VPLog(), "published %u virtio sound device(s)", published);
+    VPLogToFile("published %u virtio sound device(s)", published);
 }
 
 @end

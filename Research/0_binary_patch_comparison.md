@@ -2509,3 +2509,38 @@ comparison 0x1464e0 → head 0x1475d0, fall-through 0x1464e4), byte-
 identical re-runs, and all four VirtualAudio verbs composing on one
 staged copy with a clean second pass. Research detail:
 `Research/Guest/virtualaudio_speaker_route_throws.md`.
+
+## VirtualAudio's speaker-protection gate, second site — the play-and-record handler (2026-10-04)
+
+`system-virtualaudio-cfw-speaker_protection_gate` (changed: one more site,
+record `system-virtualaudio-cfw-speaker_protection_gate.playback_and_record`),
+same binary, same verb `cfw patch-virtualaudio-sp-gate`, which now runs the
+patch once per handler in `CustomFirmwareVirtualAudio.SPGateHandler`.
+
+**Fault.** The guest's virtio sound plugin now publishes a microphone
+(`Digital Mic`, port `pmbi`; `Research/Guest/virtio_sound_microphone.md`).
+A recording app asks for a route that plays and records (`cpar`), which
+`RoutingHandler_PlaybackAndRecord_GenericConfig1` builds in full —
+aggregate of `Digital Mic` and `PuffinOutput`, a virtual stream on each
+port — and then declines at `:368` with the same "HAL Speaker Protection is
+missing. Failing route %s" the playback handler declined the ringtone route
+with. Before the microphone existed the route never got that far.
+
+**The site.** The decline's format is shared by three handlers; this one
+is the handler whose function also references
+`RoutingHandler_PlaybackAndRecord_GenericConfig1.cpp`
+(`locatePlaybackHandler(in:file:)`, the same resolution with the other file
+name; neither file name contains the other). The gate and its block have
+the playback handler's shape on both builds: a `tbz w9, #0x0` into a log
+block that opens `mov w0, #0x14; bl`, with an unconditional branch above
+the block's head, and a fall-through that reloads what it reads from the
+stack and is also the join of the handler's raw-mode log path.
+
+**The write.** As for the first site: the log block's head becomes a `b`
+to the gate's fall-through; the gate's own branch stays. Verified on the
+real iPadOS 26.6.2 and iOS 27 binaries: gate 0xea274 → head 0xea588,
+fall-through 0xea278; gate 0x10e468 → head 0x10e6f0, fall-through 0x10e46c;
+both sites written in one run, a second run reporting both already patched.
+The handler's volume-mode test (`and x28, x0, #0x1ffffffff` at 0xea3fc) is
+a branch between two builds of the route, not a precondition, and is not
+touched.

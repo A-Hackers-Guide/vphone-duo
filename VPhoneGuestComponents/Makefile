@@ -114,7 +114,8 @@ test-injection-environment:
 		-o $(OUT)/InjectionEnvironmentTests Tests/InjectionEnvironmentTests.c
 	@$(OUT)/InjectionEnvironmentTests
 
-# Host proof harness for the virtio-snd format choice, output ring and clock.
+# Host proof harness for the virtio-snd format choice, the rings, the input
+# reader and the clock.
 test-virtiosound:
 	@mkdir -p $(OUT)
 	xcrun --sdk macosx clang -O1 -Wall -Wextra -Werror -IVirtIOSound \

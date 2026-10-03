@@ -43,5 +43,7 @@ validation and the hook installation prerequisites.
 
 The virtio sound plugin is the CoreAudio half of the VM's virtio-snd device,
 which iOS ships no driver for. audiomxd loads it when the kernel publishes
-`AppleVirtIOSound`. `make test-virtiosound` checks its format choice and output
-ring on the host. See `Research/Guest/virtio_sound.md`.
+`AppleVirtIOSound`, and it publishes a speaker and a microphone device.
+`make test-virtiosound` checks its format choice, its rings and how captured
+frames are served, on the host. See `Research/Guest/virtio_sound.md` and
+`Research/Guest/virtio_sound_microphone.md`.

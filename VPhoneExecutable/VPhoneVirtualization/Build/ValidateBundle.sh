@@ -57,6 +57,19 @@ for language in en zh-Hans ja ko vi; do
         exit 1
     }
 done
+# The host microphone is opened by vphone-vm itself, so macOS prompts for this
+# bundle and refuses the microphone to one with no usage description.
+/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$bundle/Contents/Info.plist" >/dev/null 2>&1 || {
+    print -u2 "VPhone.bundle has no microphone usage description"
+    exit 1
+}
+for language in en zh-Hans ja ko vi; do
+    strings="$resources/$language.lproj/InfoPlist.strings"
+    /usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$strings" >/dev/null 2>&1 || {
+        print -u2 "Missing microphone prompt text in VPhone.bundle: $language"
+        exit 1
+    }
+done
 # The patch API ships its interface so an out-of-tree patch set can build against
 # the same framework the bundle loads.
 [[ -d "$frameworks/VPhonePatchKit.framework/Versions/A/Modules/VPhonePatchKit.swiftmodule" ]] || {

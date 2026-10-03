@@ -222,7 +222,8 @@ public enum FirmwareGuestSystemPatchSet {
                 of HAL Speaker Protection — a capability only a physical codec reports, whose \
                 query never leaves VirtualAudio. The decline leaves the vdef playing into \
                 Null_Device, silent with the volume dead; with the gate opened, the route keeps \
-                the virtio device it already built.
+                the virtio device it already built. The handler for routes that play and record \
+                has the same gate, and declines every recording app's route; it is opened too.
                 """,
                 target: .guestExecutable(path: "/Library/Audio/Plug-Ins/HAL/VirtualAudio.plugin/VirtualAudio"),
             ),
@@ -304,7 +305,8 @@ public enum FirmwareGuestSystemPatchSet {
 
     /// The branch that declines a finished route for lack of HAL Speaker
     /// Protection, opened so the ringtone route keeps the virtio device it
-    /// already built instead of falling back to Null_Device.
+    /// already built instead of falling back to Null_Device, and so a route
+    /// that also records is not refused.
     public static let virtualAudioSpeakerProtectionGate = "system-virtualaudio-cfw-speaker_protection_gate"
 
     /// The precondition that declines a finished route whose software-volume

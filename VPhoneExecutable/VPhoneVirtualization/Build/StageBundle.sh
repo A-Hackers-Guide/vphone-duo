@@ -104,6 +104,10 @@ fi
 /usr/bin/xcrun xcstringstool compile \
     "$root/VPhoneExecutable/VPhoneVirtualization/Resources/Localizable.xcstrings" \
     --output-directory "$resources"
+# The microphone prompt names this bundle, and reads its text from here.
+/usr/bin/xcrun xcstringstool compile \
+    "$root/VPhoneExecutable/VPhoneVirtualization/Resources/InfoPlist.xcstrings" \
+    --output-directory "$resources"
 
 # locationd ignores a client inside a generic bundle, so vphone-vm reads the
 # host location through this app. Its InfoPlist.strings translate the

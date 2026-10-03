@@ -378,6 +378,11 @@ struct VPhoneCustomFirmwarePatchVirtualAudioSPGateCommand: ParsableCommand {
         serves three routing handlers, ours among them by that file string
         alone. No address is literal.
 
+        The handler for routes that play and record ('cpar', what a
+        recording app asks for) holds the same gate in the same shape and
+        declines the same way once the guest has a microphone port, so it
+        is opened too, as a second site of the same patch.
+
         Idempotent: a site already holding the branch is reported and left
         alone, byte for byte.
         """,
@@ -392,12 +397,15 @@ struct VPhoneCustomFirmwarePatchVirtualAudioSPGateCommand: ParsableCommand {
     func run() throws {
         try requireUntruncatedMachO(at: binary)
         // reattest: false — the caller re-signs.
-        try CustomFirmwareVirtualAudio.patchSpeakerProtectionGate(
-            fileAt: binary,
-            reattest: false,
-            dryRun: dryRun,
-            log: machOVerbLog,
-        )
+        for handler in CustomFirmwareVirtualAudio.SPGateHandler.allCases {
+            try CustomFirmwareVirtualAudio.patchSpeakerProtectionGate(
+                fileAt: binary,
+                handler: handler,
+                reattest: false,
+                dryRun: dryRun,
+                log: machOVerbLog,
+            )
+        }
     }
 }
 
