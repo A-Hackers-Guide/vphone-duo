@@ -12,14 +12,40 @@
 
 #import <Foundation/Foundation.h>
 
-// The iPhoneOS SDK ships <CoreAudio/AudioServerPlugIn.h> from 27.0 on. Built
-// with an older one, the four names this plugin takes from it are declared
-// here as that header declares them; the rest of the HAL vocabulary is in
-// <CoreAudio/AudioHardwareBase.h>, which every iPhoneOS SDK has.
+// The iPhoneOS SDK ships <CoreAudio/AudioServerPlugIn.h> and
+// <CoreAudio/AudioHardwareBase.h> from 27.0 on. Built with an older one (26.5
+// has neither), the HAL names this plugin uses are declared here with the
+// values and layouts those headers give them.
 #if __has_include(<CoreAudio/AudioServerPlugIn.h>)
 #import <CoreAudio/AudioServerPlugIn.h>
 #else
+#import <CoreAudioTypes/CoreAudioTypes.h>
+
+#if __has_include(<CoreAudio/AudioHardwareBase.h>)
 #import <CoreAudio/AudioHardwareBase.h>
+#else
+typedef UInt32 AudioObjectPropertySelector;
+typedef UInt32 AudioObjectPropertyScope;
+typedef UInt32 AudioObjectPropertyElement;
+
+typedef struct AudioObjectPropertyAddress {
+    AudioObjectPropertySelector mSelector;
+    AudioObjectPropertyScope mScope;
+    AudioObjectPropertyElement mElement;
+} AudioObjectPropertyAddress;
+
+enum {
+    kAudioHardwareNoError = 0,
+    kAudioHardwareUnspecifiedError = 'what',
+    kAudioObjectPropertyScopeGlobal = 'glob',
+    kAudioObjectPropertyScopeOutput = 'outp',
+    kAudioObjectPropertyElementMain = 0,
+    kAudioDeviceTransportTypeUSB = 'usb ',
+    kAudioVolumeControlClassID = 'vlme',
+    kAudioMuteControlClassID = 'mute',
+    kAudioDataSourceControlClassID = 'dsrc',
+};
+#endif
 
 typedef struct AudioServerPlugInHostInterface AudioServerPlugInHostInterface;
 typedef const AudioServerPlugInHostInterface *AudioServerPlugInHostRef;

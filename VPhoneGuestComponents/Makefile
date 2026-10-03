@@ -200,7 +200,7 @@ $(VIRTIOSOUND): $(VIRTIOSOUND_SOURCES) $(VIRTIOSOUND_INCLUDES) VirtIOSound | $(S
 	@mkdir -p $@
 	$(CLANG) $(COMMON_FLAGS) -Wall -Wextra -Werror -fvisibility=hidden -bundle \
 		-o $@/VPhoneVirtIOSound $(VIRTIOSOUND_SOURCES) \
-		-framework Foundation -framework CoreAudio -framework IOKit \
+		-framework Foundation -framework IOKit \
 		VirtIOSound/AudioServerDriver.tbd -Wl,-not_for_dyld_shared_cache
 	@cp VirtIOSound/Info.plist $@/Info.plist
 	@codesign --force --sign - $@
