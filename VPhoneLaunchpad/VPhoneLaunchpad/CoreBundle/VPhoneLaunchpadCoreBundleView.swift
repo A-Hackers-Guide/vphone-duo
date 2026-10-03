@@ -85,28 +85,40 @@ struct VPhoneLaunchpadCoreBundleView: View {
         } header: {
             Text("Installed")
         } footer: {
-            Text("Stored in \(VPhoneLaunchpadBundleStore.root.path) and managed by the helper.")
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("New machines use the default version. Each machine keeps its own Core Bundle, which you change from the machine list.")
+                Text("Stored in \(VPhoneLaunchpadBundleStore.root.path) and managed by the helper.")
+            }
+            .foregroundStyle(.secondary)
         }
     }
 
     private func installedRow(_ bundle: VPhoneLaunchpadCoreBundle.Installed) -> some View {
-        let isActive = bundle.version == bundles.activeVersion
+        let isDefault = bundle.version == bundles.defaultVersion
+        let users = model.machines.machineNames(boundTo: bundle.version)
         return HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                // The version in use is the one with the green title.
-                Text(verbatim: "VPhone.bundle \(bundle.version)")
-                    .foregroundStyle(isActive ? AnyShapeStyle(.green) : AnyShapeStyle(.primary))
-                    .accessibilityValue(isActive ? "In use" : "")
-                    .help(isActive ? "In use" : "")
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(verbatim: "VPhone.bundle \(bundle.version)")
+                    if isDefault {
+                        Text("Default")
+                            .foregroundStyle(.green)
+                            .help("Used for new machines.")
+                    }
+                }
                 Group {
                     if VPhoneLaunchpadLocalBundle.isLocal(version: bundle.version) {
-                        Text("Local build · Installed \(bundle.receipt.installedAt.formatted(date: .abbreviated, time: .shortened)) · SHA-256 \(Self.shortDigest(bundle.receipt.sha256))")
+                        if let build = Self.localBuild(bundle.version) {
+                            Text("Local build \(build) · Installed \(bundle.receipt.installedAt.formatted(date: .abbreviated, time: .shortened)) · SHA-256 \(Self.shortDigest(bundle.receipt.sha256))")
+                        } else {
+                            Text("Local build · Installed \(bundle.receipt.installedAt.formatted(date: .abbreviated, time: .shortened)) · SHA-256 \(Self.shortDigest(bundle.receipt.sha256))")
+                        }
                     } else if bundle.version != VPhoneLaunchpadNames.bundleVersion(of: bundle.version) {
                         Text("GitHub Actions build · Installed \(bundle.receipt.installedAt.formatted(date: .abbreviated, time: .shortened)) · SHA-256 \(Self.shortDigest(bundle.receipt.sha256))")
                     } else {
                         Text("Installed \(bundle.receipt.installedAt.formatted(date: .abbreviated, time: .omitted)) · SHA-256 \(Self.shortDigest(bundle.receipt.sha256))")
                     }
+                    usersLabel(users)
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -122,8 +134,8 @@ struct VPhoneLaunchpadCoreBundleView: View {
             .font(.callout)
             .help(checkHelp(bundle))
             Menu {
-                Button("Use This Version") { Task { await bundles.use(bundle.version) } }
-                    .disabled(isActive || !VPhoneLaunchpadNames.isCompatibleBundleVersion(bundle.version))
+                Button("Set as Default") { Task { await bundles.setDefault(bundle.version) } }
+                    .disabled(isDefault || !VPhoneLaunchpadNames.isCompatibleBundleVersion(bundle.version))
                 Button("Run Preflight Again") { Task { await bundles.verify(bundle.version) } }
                     .disabled(!VPhoneLaunchpadNames.isCompatibleBundleVersion(bundle.version))
                 if bundles.isAccepted(bundle.version) {
@@ -135,8 +147,10 @@ struct VPhoneLaunchpadCoreBundleView: View {
                     NSWorkspace.shared.activateFileViewerSelecting([VPhoneLaunchpadBundleStore.bundle(version: bundle.version)])
                 }
                 Divider()
+                // The store refuses too; saying so here spares a failed attempt.
                 Button("Remove…", role: .destructive) { removal = bundle.version }
-                    .disabled(bundles.isInstalling)
+                    .disabled(bundles.isInstalling || !users.isEmpty)
+                    .help(users.isEmpty ? "" : "Choose another Core Bundle for its machines first.")
             } label: {
                 Image(systemName: "ellipsis")
             }
@@ -144,6 +158,28 @@ struct VPhoneLaunchpadCoreBundleView: View {
             .menuIndicator(.hidden)
             .fixedSize()
         }
+    }
+
+    /// Names a few machines; past that, a count with the names in the help.
+    @ViewBuilder
+    private func usersLabel(_ users: [String]) -> some View {
+        if users.isEmpty {
+            Text("Not used by any machine")
+        } else if users.count <= 3 {
+            Text("Used by \(users.formatted(.list(type: .and)))")
+        } else {
+            Text("Used by \(users.count) machines")
+                .help(users.formatted(.list(type: .and)))
+        }
+    }
+
+    /// The build identifier of a `-local.<build>` version; nil for the bare
+    /// `-local` an older Launchpad used.
+    static func localBuild(_ version: String) -> String? {
+        guard VPhoneLaunchpadLocalBundle.isLocal(version: version),
+              let marker = version.range(of: "\(VPhoneLaunchpadLocalBundle.versionSuffix).", options: .backwards)
+        else { return nil }
+        return String(version[marker.upperBound...])
     }
 
     /// Policy exception and preflight folded into one status: the worst of

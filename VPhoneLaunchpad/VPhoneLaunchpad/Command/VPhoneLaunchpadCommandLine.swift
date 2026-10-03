@@ -92,7 +92,7 @@ final class VPhoneLaunchpadCommandHistory {
 
 // MARK: - vphone-cli
 
-/// Runs the active bundle's `vphone-cli` by absolute path. Nothing here goes
+/// Runs one installed bundle's `vphone-cli` by absolute path. Nothing here goes
 /// through a shell or `$PATH`.
 @MainActor
 struct VPhoneLaunchpadCommandLine {

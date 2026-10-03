@@ -26,7 +26,9 @@ against these guests.
    - `canInstallBundles: false` or `helper` not `ready`: the user must finish
      Host Setup in the app (administrator password, Developer Tools access).
      You cannot do this for them; say exactly what is missing.
-   - `activeBundle: null` or `bundleReady: false`: install or verify a bundle.
+   - `defaultBundle: null` or `bundleReady: false`: install or verify a bundle.
+     Each machine runs with its own bundle (`vm list` → `bundle`); the default
+     only decides what new machines get.
    - `machines: 0`: create one ([machines](references/machines.md)).
    - Otherwise: list machines, start the one the user named, then control it.
 2. **Pick the reference for the task, and read it before acting.**
@@ -35,7 +37,7 @@ against these guests.
    | --- | --- |
    | Install Launchpad or a bundle, host requirements, series matching | [references/install.md](references/install.md) |
    | An install step failed: "damaged", Developer Tools access turns off, several macOS installations, `zsh: killed`, not Apple silicon | [references/install-faq.md](references/install-faq.md) |
-   | Create, start, stop, retry, update a machine | [references/machines.md](references/machines.md) |
+   | Create, start, stop, retry, update a machine, change its Core Bundle | [references/machines.md](references/machines.md) |
    | Tap, swipe, key, screenshot, anything on `vphone.sock` | [references/guest-socket.md](references/guest-socket.md) |
    | Call a vphoned method: apps, files, logs, UI tree, processes | [references/rpc-methods.md](references/rpc-methods.md) |
    | Installing an IPA | [references/rpc-methods.md](references/rpc-methods.md#installing-an-app) |

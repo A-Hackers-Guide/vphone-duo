@@ -5,8 +5,8 @@ import Foundation
 /// Mirrors the payload `vphone-cli fw patches --json` prints.
 ///
 /// The app declares no patch of its own. Everything the editor lists comes from
-/// the active bundle, so a patch set this build of Launchpad has never heard of
-/// still appears, with its own patches and version gates.
+/// the Core Bundle it is read from, so a patch set this build of Launchpad has
+/// never heard of still appears, with its own patches and version gates.
 nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
     struct Preset: Decodable, Hashable, Identifiable, Sendable {
         let identifier: String
@@ -131,7 +131,7 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
 // MARK: - Reading
 
 extension VPhoneLaunchpadPatchCatalog {
-    /// Reads the catalogue from the active bundle's `vphone-cli`.
+    /// Reads the catalogue with one Core Bundle version's `vphone-cli`.
     ///
     /// `preset` reports against that preset instead of the machine's own record,
     /// which is how the picker re-bases what `inPreset` means. Passing neither a

@@ -18,6 +18,9 @@ final class VPhoneLaunchpadCreationPipeline {
         var name: String
         /// The canonical library the machine is created in.
         var libraryRoot: String
+        /// The installed Core Bundle every step runs with. The machine is
+        /// bound to it once `vm new` has made its folder.
+        var bundleVersion: String
         var iphoneSource: String
         var cloudOSSource: String
         var cpuCount: Int
@@ -176,6 +179,12 @@ final class VPhoneLaunchpadCreationPipeline {
             statuses[step] = .running
             let began = Date()
             do {
+                // `vm launch --dfu` needs the bundle's policy exception and
+                // AMFI admission, so the version is checked before any step
+                // runs. A failure shows on the step that was about to run.
+                if step == first {
+                    try await prepareBundle()
+                }
                 try await perform(step)
                 try Task.checkCancellation()
                 statuses[step] = .passed
@@ -234,9 +243,20 @@ final class VPhoneLaunchpadCreationPipeline {
 
     // MARK: - Steps
 
+    /// Checks the machine's Core Bundle once per Launchpad session; later
+    /// runs return at once.
+    private func prepareBundle() async throws {
+        let version = options.bundleVersion
+        if !bundles.isChecked(version) {
+            append("checking Core Bundle \(version)")
+        }
+        try await bundles.prepare(version)
+    }
+
     private func perform(_ step: Step) async throws {
-        guard let commandLine = bundles.commandLine() else {
-            throw VPhoneLaunchpadError(String(localized: "No Core Bundle version is in use. Choose a version in Core Bundle."))
+        let version = options.bundleVersion
+        guard let commandLine = bundles.commandLine(version: version) else {
+            throw VPhoneLaunchpadError(String(localized: "VPhone.bundle \(version) is not installed."))
         }
         let name = options.name
         let library = machine.libraryArguments
@@ -253,6 +273,16 @@ final class VPhoneLaunchpadCreationPipeline {
         case .create:
             try await run(["vm", "new", name, "--cpu", String(options.cpuCount),
                            "--memory", String(options.memoryMB), "--disk-size", String(options.diskSizeGB)] + library)
+            // The folder exists now. Every later command, here and after
+            // creation, runs with the version recorded in it.
+            do {
+                try self.library?.bind(machine, VPhoneLaunchpadMachineBinding(bundle: version, bootChain: version))
+            } catch {
+                throw VPhoneLaunchpadError(
+                    String(localized: "Unable to record the Core Bundle of \(name)."),
+                    detail: error.localizedDescription,
+                )
+            }
             if options.network != "nat" {
                 try await run(["vm", "config", name, "--network", options.network] + library)
             }
@@ -269,7 +299,7 @@ final class VPhoneLaunchpadCreationPipeline {
             // the patch output is also kept in a log of its own for later
             // diagnosis.
             let patchLog = VPhoneLaunchpadLogWriter(url: VPhoneLaunchpadMachineLibrary.consoleLog(machine, suffix: "-patch"))
-            patchLog.write("# \(options.name), \(Date().formatted(.iso8601)), Core Bundle \(bundles.activeVersion ?? "?")")
+            patchLog.write("# \(options.name), \(Date().formatted(.iso8601)), Core Bundle \(version)")
             let tee: @Sendable (String) -> Void = { line in
                 log.write(line)
                 patchLog.write(line)
@@ -339,9 +369,6 @@ final class VPhoneLaunchpadCreationPipeline {
             try await Task.sleep(for: .seconds(5))
 
         case .installCFW:
-            guard let version = bundles.activeVersion else {
-                throw VPhoneLaunchpadError(String(localized: "No Core Bundle version is in use. Choose a version in Core Bundle."))
-            }
             let status = try await helper.installCustomFirmware(
                 bundleVersion: version,
                 machineName: name,
@@ -355,6 +382,7 @@ final class VPhoneLaunchpadCreationPipeline {
             guard status == 0 else {
                 throw VPhoneLaunchpadError(String(localized: "Unable to install custom firmware. Check the log for details."), detail: log.tail)
             }
+            self.library?.recordGuestEnvironment(machine, version)
 
         case .firstBoot:
             try await firstBoot()
@@ -369,7 +397,7 @@ final class VPhoneLaunchpadCreationPipeline {
         }
         let name = options.name
         append("$ vphone-cli vm launch \(name)")
-        library.start(machine)
+        await library.start(machine)
         guard let child = library.launchedProcess(machine) else {
             throw VPhoneLaunchpadError(String(localized: "\(name) could not be started."))
         }

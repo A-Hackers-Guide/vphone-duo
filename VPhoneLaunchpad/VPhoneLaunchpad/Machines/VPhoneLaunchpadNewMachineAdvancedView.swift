@@ -10,6 +10,9 @@ struct VPhoneLaunchpadNewMachineAdvancedView: View {
     let patchCatalogError: String?
     /// New Machine owns the catalog, which is read again for each preset.
     let reloadPatches: () -> Void
+    /// The Core Bundle chosen in New Machine, whose patches the editor lists.
+    /// Nil reads the default version's.
+    var bundleVersion: String?
 
     @Environment(VPhoneLaunchpadModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -54,7 +57,7 @@ struct VPhoneLaunchpadNewMachineAdvancedView: View {
         .frame(width: 520)
         .fixedSize(horizontal: false, vertical: true)
         .sheet(isPresented: $showsPatchSettings) {
-            VPhoneLaunchpadPatchSettingsView(initial: patches) { selection in
+            VPhoneLaunchpadPatchSettingsView(initial: patches, bundleVersion: bundleVersion) { selection in
                 patches = selection
                 reloadPatches()
             }

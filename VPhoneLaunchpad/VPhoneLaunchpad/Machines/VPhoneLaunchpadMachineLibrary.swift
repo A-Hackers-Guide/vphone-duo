@@ -28,6 +28,8 @@ final class VPhoneLaunchpadMachineLibrary {
     /// them. The console text itself stays in the log file.
     private(set) var panicked: Set<Path> = []
     private(set) var creations: [Path: VPhoneLaunchpadCreationPipeline] = [:]
+    /// Each listed machine's Core Bundle, read from its `launchpad.json`.
+    private(set) var bindings: [Path: VPhoneLaunchpadMachineBinding] = [:]
     private(set) var globalActivity: String?
     /// Folders chosen in New Machine, in the order they were added. The
     /// default library is not among them.
@@ -204,6 +206,7 @@ final class VPhoneLaunchpadMachineLibrary {
         }
         let paths = machines.map(\.path)
         externallyRunning = await Task.detached { Self.machinesHoldingDisks(paths) }.value
+        await loadBindings(paths)
     }
 
     /// The same test `vm stop` uses: a machine runs while some process holds
@@ -249,6 +252,102 @@ final class VPhoneLaunchpadMachineLibrary {
         return name
     }
 
+    // MARK: - Core Bundle
+
+    /// Reads every machine's binding. A machine without one, created before
+    /// bindings existed or outside Launchpad, is bound to the default
+    /// version, so a bundle installed later does not change what it runs. A
+    /// machine still being created is skipped: its pipeline binds it.
+    private func loadBindings(_ paths: [Path]) async {
+        let pending = Set(creations.keys)
+        let fallback = bundles.defaultVersion
+        let before = bindings
+        var loaded = await Task.detached {
+            var bindings: [Path: VPhoneLaunchpadMachineBinding] = [:]
+            for path in paths {
+                if let binding = VPhoneLaunchpadMachineBinding.load(path) {
+                    bindings[path] = binding
+                } else if !pending.contains(path), let fallback {
+                    let binding = VPhoneLaunchpadMachineBinding(bundle: fallback)
+                    // An unwritable folder still runs with the default.
+                    if (try? binding.save(to: path)) != nil {
+                        bindings[path] = binding
+                    }
+                }
+            }
+            return bindings
+        }.value
+        // A binding written while the files were read is newer than its file
+        // was then.
+        for (path, binding) in bindings where before[path] != binding {
+            loaded[path] = binding
+        }
+        bindings = loaded
+    }
+
+    /// The version a machine runs with: its binding, else the default.
+    func bundleVersion(for machine: Path) -> String? {
+        bindings[machine]?.bundle ?? bundles.defaultVersion
+    }
+
+    /// `vphone-cli` of the machine's own bundle. Nil when that version is
+    /// not installed, for example on a machine imported from another Mac.
+    func commandLine(for machine: Path) -> VPhoneLaunchpadCommandLine? {
+        bundleVersion(for: machine).flatMap(bundles.commandLine(version:))
+    }
+
+    /// Names of the listed machines bound to `version`.
+    func machineNames(boundTo version: String) -> [String] {
+        machines.filter { bundleVersion(for: $0.path) == version }.map(\.name)
+    }
+
+    /// Writes a machine's binding and keeps the listed copy in step.
+    func bind(_ machine: Path, _ binding: VPhoneLaunchpadMachineBinding) throws {
+        try binding.save(to: machine)
+        bindings[machine] = binding
+    }
+
+    /// Binds machines to another installed version. The host programs change
+    /// on the next start. With `updateEnvironment`, each stopped machine also
+    /// gets that version's guest environment; a running one keeps its own
+    /// until it is updated later. Boot chain and patches stay as created.
+    func setBundle(_ version: String, for machines: [Path], updateEnvironment: Bool) async {
+        guard bundles.commandLine(version: version) != nil else {
+            actionError = VPhoneLaunchpadError(String(localized: "VPhone.bundle \(version) is not installed."))
+            return
+        }
+        for machine in machines {
+            var binding = VPhoneLaunchpadMachineBinding.load(machine)
+                ?? bindings[machine]
+                ?? VPhoneLaunchpadMachineBinding(bundle: version)
+            binding.bundle = version
+            do {
+                try bind(machine, binding)
+            } catch {
+                actionError = VPhoneLaunchpadError(
+                    String(localized: "Unable to Change the Core Bundle of \(machine.name)"),
+                    detail: error.localizedDescription,
+                )
+                continue
+            }
+            // A machine not restored yet, or whose custom firmware install
+            // did not finish, has no guest environment to update.
+            let listed = self.machines.first { $0.path == machine }
+            if updateEnvironment, state(of: machine) == .stopped,
+               listed?.restoreInfo != nil, listed?.customFirmwareInstalled != false
+            {
+                await updateGuestEnvironment(machine)
+            }
+        }
+    }
+
+    /// Records the bundle whose guest environment a machine now has.
+    func recordGuestEnvironment(_ machine: Path, _ version: String) {
+        var binding = VPhoneLaunchpadMachineBinding.load(machine) ?? VPhoneLaunchpadMachineBinding(bundle: version)
+        binding.guestEnvironment = version
+        try? bind(machine, binding)
+    }
+
     // MARK: - Console
 
     /// Machines in the default library keep their log names. Elsewhere the
@@ -291,8 +390,33 @@ final class VPhoneLaunchpadMachineLibrary {
 
     // MARK: - Start and stop
 
-    func start(_ machine: Path, headless: Bool = false) {
-        guard let commandLine = bundles.commandLine() else {
+    /// Starts a machine with its own bundle, after checking that bundle in
+    /// this session (policy exception, host preflight and AMFI admission).
+    func start(_ machine: Path, headless: Bool = false) async {
+        guard let version = bundleVersion(for: machine) else {
+            actionError = VPhoneLaunchpadError(String(localized: "No Core Bundle version is installed. Install one in Core Bundle."))
+            return
+        }
+        let isChecking = !bundles.isChecked(version)
+        if isChecking {
+            activities[machine] = String(localized: "Checking Core Bundle…")
+        }
+        do {
+            try await bundles.prepare(version)
+            if isChecking {
+                activities[machine] = nil
+            }
+        } catch {
+            if isChecking {
+                activities[machine] = nil
+            }
+            actionError = VPhoneLaunchpadError(
+                String(localized: "Unable to Start \(machine.name)"),
+                detail: VPhoneLaunchpadError.message(for: error),
+            )
+            return
+        }
+        guard let commandLine = bundles.commandLine(version: version) else {
             return
         }
         // `vm launch` refuses these too, but only into the console log.
@@ -333,8 +457,8 @@ final class VPhoneLaunchpadMachineLibrary {
     /// Runs `cfw install` again through the helper, for a machine whose last
     /// install did not finish. Output goes to the machine's console log.
     func installCustomFirmware(_ machine: Path) async {
-        guard let version = bundles.activeVersion else {
-            actionError = VPhoneLaunchpadError(String(localized: "No Core Bundle version is in use. Choose a version in Core Bundle."))
+        guard let version = bundleVersion(for: machine) else {
+            actionError = VPhoneLaunchpadError(String(localized: "No Core Bundle version is installed. Install one in Core Bundle."))
             return
         }
         activities[machine] = String(localized: "Installing custom firmware…")
@@ -354,6 +478,8 @@ final class VPhoneLaunchpadMachineLibrary {
                     String(localized: "Unable to install custom firmware. Check the log for details."),
                     detail: String(localized: "Choose Show Console Log for the full output."),
                 )
+            } else {
+                recordGuestEnvironment(machine, version)
             }
         } catch {
             if !(error is CancellationError) {
@@ -364,13 +490,13 @@ final class VPhoneLaunchpadMachineLibrary {
         await refresh()
     }
 
-    /// Redeploys the active bundle's guest resources (vphoned and the hook
-    /// dylibs) into a stopped machine through the helper, and nothing else.
-    /// This is how a machine created by an older bundle gets newer hooks,
-    /// since its restore tree is gone after the first boot.
+    /// Redeploys the guest resources (vphoned and the hook dylibs) of the
+    /// machine's own bundle into it while it is stopped, through the helper,
+    /// and nothing else. This is how a machine created by an older bundle
+    /// gets newer hooks, since its restore tree is gone after the first boot.
     func updateGuestEnvironment(_ machine: Path) async {
-        guard let version = bundles.activeVersion else {
-            actionError = VPhoneLaunchpadError(String(localized: "No Core Bundle version is in use. Choose a version in Core Bundle."))
+        guard let version = bundleVersion(for: machine) else {
+            actionError = VPhoneLaunchpadError(String(localized: "No Core Bundle version is installed. Install one in Core Bundle."))
             return
         }
         activities[machine] = String(localized: "Updating guest environment…")
@@ -389,6 +515,8 @@ final class VPhoneLaunchpadMachineLibrary {
                     String(localized: "Unable to update the guest environment."),
                     detail: String(localized: "Choose Show Console Log for the full output."),
                 )
+            } else {
+                recordGuestEnvironment(machine, version)
             }
         } catch {
             if !(error is CancellationError) {
@@ -531,7 +659,13 @@ final class VPhoneLaunchpadMachineLibrary {
         _ arguments: [String],
         onProgress: (@Sendable (Double) -> Void)? = nil,
     ) async -> Bool {
-        guard let commandLine = bundles.commandLine() else {
+        guard let commandLine = machine.map(commandLine(for:)) ?? bundles.commandLine() else {
+            if let machine {
+                actionError = VPhoneLaunchpadError(
+                    String(localized: "Unable to Complete Action"),
+                    detail: String(localized: "The Core Bundle of \(machine.name) is not installed. Choose another Core Bundle for it."),
+                )
+            }
             return false
         }
         if let machine {
@@ -594,6 +728,16 @@ final class VPhoneLaunchpadMachineLibrary {
             startedAt = [VPhoneLaunchpadPreview.path("research-01"): Date().addingTimeInterval(-6130)]
             creations = [creation.machine: creation]
             selection = [VPhoneLaunchpadPreview.path("research-01")]
+            // One machine on an older bundle whose guest environment was not
+            // updated with it, so the inspector shows mixed versions.
+            let current = VPhoneLaunchpadPreview.releases[1].version
+            let older = VPhoneLaunchpadPreview.releases[2].version
+            bindings = Dictionary(uniqueKeysWithValues: machines.map { machine in
+                let binding = machine.name == "research-01"
+                    ? VPhoneLaunchpadMachineBinding(bundle: current, bootChain: older, guestEnvironment: older)
+                    : VPhoneLaunchpadMachineBinding(bundle: current, bootChain: current, guestEnvironment: current)
+                return (machine.path, binding)
+            })
         }
     }
 #endif

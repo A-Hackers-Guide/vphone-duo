@@ -71,25 +71,27 @@ newer series; do not install those, update Launchpad first.
 ```sh
 vphone-launchpad-cli bundle install-release 2.2.3           # an explicit X.Y.z of Launchpad's series
 vphone-launchpad-cli bundle list
-vphone-launchpad-cli bundle use 2.2.3                    # switch the active one
+vphone-launchpad-cli bundle set-default 2.2.3            # what new machines get
 vphone-launchpad-cli bundle verify 2.2.3                 # re-check
 ```
 
 `install-release` downloads the release from GitHub, verifies it, installs it
-into the root-owned store through the helper, makes it active, and runs host
-preflight. `bundle list` shows per version: `active`, `accepted`, `policy`,
-`preflight`, `preflightDetail`, `cdhashes`, `path`.
+into the root-owned store through the helper, makes it the default (unless
+`--keep-default`), and runs host preflight. Existing machines keep the bundle
+they are bound to; see [machines](machines.md#core-bundle-of-a-machine).
+`bundle list` shows per version: `default`, `machines` (bound to it),
+`accepted`, `policy`, `preflight`, `preflightDetail`, `cdhashes`, `path`.
 
 Always pass an explicit version. `latest` means the newest release by publish
-date, prereleases included, and it is installed and made active at once, so it
-can land in a newer series than Launchpad. Read Launchpad's version with
+date, prereleases included, and it is installed and made the default at once,
+so it can land in a newer series than Launchpad. Read Launchpad's version with
 `/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' /Applications/vphone-launchpad.app/Contents/Info.plist`
 (`status` does not report it), then pick the newest non-prerelease `X.Y.z` of the
 same `X.Y` from `gh release list -R Lakr233/vphone-cli` or the releases page.
 
 `bundle accept <version>` uses a version although its checks failed and
-`--off` takes that back. `bundle remove <version>` deletes one. Neither is for
-routine use; ask first.
+`--off` takes that back. `bundle remove <version>` deletes one, and refuses
+while a machine is bound to it. Neither is for routine use; ask first.
 
 The first step that needs the helper after its five-minute authorization
 expires asks the user for an administrator password on the Mac. Warn them
@@ -107,12 +109,15 @@ xcodebuild -workspace VPhone.xcworkspace -scheme VPhone \
 vphone-launchpad-cli bundle install-local .build/XcodeBundle/Build/Products/Debug/VPhone.bundle
 ```
 
-`install-local` takes a folder or a `.zip`, installs it as `<version>-local`,
-makes it active, adds the execution policy exception, allows the new
-`vphone-vm` cdhash and runs preflight. Relative paths are resolved by the CLI.
-Every rebuild changes the cdhash, so run `install-local` again (or
-`bundle verify <version>-local`) after each build. Compare against the release
-it replaces with `bundle use <version>`.
+`install-local` takes a folder or a `.zip`, installs it as
+`<version>-local.<hash>` (from the code-signature seal, so each build is its own
+version), makes it the default unless `--keep-default`, adds the execution
+policy exception, allows the new `vphone-vm` cdhash and runs preflight. Relative
+paths are resolved by the CLI. Installing does not move existing machines: bind
+one with `vm set-bundle <name> <version> --update-environment`, or create one
+with `vm create <name> --bundle <version>`. Each rebuild installs as a new
+version; remove old ones no machine uses. To compare two builds, see
+`Documents/Guides/launchpad-cli.md` (Comparing two builds).
 
 ## When an install step fails
 
@@ -124,5 +129,5 @@ installations, `zsh: killed`, and the rest.
 ## Checking the result
 
 `vphone-launchpad-cli status` should show `hostReady: true`, `helper` as
-`ready (…)`, `bundleReady: true` and an `activeBundle`. Then continue with
+`ready (…)`, `bundleReady: true` and a `defaultBundle`. Then continue with
 [machines](machines.md).
