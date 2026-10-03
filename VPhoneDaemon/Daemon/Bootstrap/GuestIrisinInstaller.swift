@@ -11,6 +11,8 @@ import IcliSystem
 /// and the firmware record, release download and payload copy beside this file.
 enum GuestIrisinInstaller {
     static let serviceLabel = "wiki.qaq.irisind"
+    /// Error code of `bootstrap.install` when a completed install exists.
+    static let alreadyInstalledCode = "bootstrap_already_installed"
     static let installLock = NSLock()
     private static let progressLock = NSLock()
     private nonisolated(unsafe) static var progress: [String: Any] = ["phase": "idle"]
@@ -22,8 +24,14 @@ enum GuestIrisinInstaller {
     static func install(jailbreak: [String: Any], layout: String, packagePath: String? = nil) throws -> [String: Any] {
         installLock.lock()
         defer { installLock.unlock() }
-        guard try completedBootstrap() == nil else {
-            throw GuestAPIError.operationFailed("Irisin bootstrap already completed")
+        // Installation runs once. A second request is not a failure: answer
+        // with a code the host recognizes, and leave reinstalling to
+        // uninstall followed by install.
+        if let installation = try completedBootstrap() {
+            throw GuestAPIError.alreadyDone(
+                code: alreadyInstalledCode,
+                message: "Irisin bootstrap already completed in \(installation.root) (\(installation.layout))",
+            )
         }
         setProgress(["phase": "preparing", "layout": layout])
         do {

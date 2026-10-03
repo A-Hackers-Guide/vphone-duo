@@ -2999,6 +2999,40 @@
         }
       }
     },
+    "Bootstrap Already Installed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bootstrap Already Installed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ブートストラップはインストール済みです"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부트스트랩이 이미 설치됨"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bootstrap đã được cài đặt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "引导环境已安装"
+          }
+        }
+      }
+    },
     "Bootstrap Tools" : {
       "localizations" : {
         "ja" : {
@@ -3023,6 +3057,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bootstrap 工具"
+          }
+        }
+      }
+    },
+    "Bootstrap already installed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bootstrap already installed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ブートストラップはインストール済みです"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부트스트랩이 이미 설치됨"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bootstrap đã được cài đặt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "引导环境已安装"
           }
         }
       }
@@ -23924,6 +23992,74 @@
         }
       }
     },
+    "The bootstrap is already installed in %@. To reinstall it, uninstall the bootstrap first." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The bootstrap is already installed in %@. To reinstall it, uninstall the bootstrap first."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ブートストラップは %@ にインストール済みです。再インストールするには、先にブートストラップを削除してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부트스트랩이 이미 %@에 설치되어 있습니다. 다시 설치하려면 먼저 부트스트랩을 제거하세요."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bootstrap đã được cài đặt tại %@. Để cài lại, hãy gỡ bootstrap trước."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "引导环境已安装在 %@。如需重新安装，请先卸载引导环境。"
+          }
+        }
+      }
+    },
+    "The bootstrap is already installed. To reinstall it, uninstall the bootstrap first." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The bootstrap is already installed. To reinstall it, uninstall the bootstrap first."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ブートストラップはインストール済みです。再インストールするには、先にブートストラップを削除してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부트스트랩이 이미 설치되어 있습니다. 다시 설치하려면 먼저 부트스트랩을 제거하세요."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bootstrap đã được cài đặt. Để cài lại, hãy gỡ bootstrap trước."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "引导环境已安装。如需重新安装，请先卸载引导环境。"
+          }
+        }
+      }
+    },
     "The guest agent is not connected. Wait for it to connect, then try again." : {
       "localizations" : {
         "en" : {
@@ -26137,6 +26273,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法安装应用包。请检查文件和客体连接后重试。"
+          }
+        }
+      }
+    },
+    "Unable to install the bootstrap.\n\n%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to install the bootstrap.\n\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ブートストラップをインストールできません。\n\n%@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부트스트랩을 설치할 수 없습니다.\n\n%@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể cài đặt bootstrap.\n\n%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法安装引导环境。\n\n%@"
           }
         }
       }

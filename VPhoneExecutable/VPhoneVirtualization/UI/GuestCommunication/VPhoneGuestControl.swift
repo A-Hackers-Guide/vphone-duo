@@ -14,6 +14,8 @@ final class VPhoneGuestControl {
         case unsupportedCapability(String)
         case protocolError(String)
         case guestError(String)
+        /// `bootstrap.install` found a completed installation in the guest.
+        case bootstrapAlreadyInstalled(String)
 
         var description: String {
             switch self {
@@ -21,7 +23,7 @@ final class VPhoneGuestControl {
                 VPhoneLocalization.text("The guest agent is not connected. Wait for it to connect, then try again.")
             case let .unsupportedCapability(value): "guest does not support capability: \(value)"
             case let .protocolError(value): "API protocol error: \(value)"
-            case let .guestError(value): value
+            case let .guestError(value), let .bootstrapAlreadyInstalled(value): value
             }
         }
     }
@@ -371,7 +373,11 @@ final class VPhoneGuestControl {
         guard let envelope = try JSONSerialization.jsonObject(with: response.body) as? [String: Any]
         else { throw ControlError.protocolError("invalid JSON response") }
         if let error = envelope["error"] as? [String: Any] {
-            throw ControlError.guestError(error["message"] as? String ?? "Guest operation failed")
+            let message = error["message"] as? String ?? "Guest operation failed"
+            if error["code"] as? String == "bootstrap_already_installed" {
+                throw ControlError.bootstrapAlreadyInstalled(message)
+            }
+            throw ControlError.guestError(message)
         }
         guard response.status == 200, let result = envelope["result"] as? [String: Any]
         else { throw ControlError.protocolError("missing result (HTTP \(response.status))") }
@@ -465,9 +471,32 @@ final class VPhoneGuestControl {
             try await createDirectory(path: "/var/root/Library/Caches")
             try await uploadFile(path: path, data: data)
             defer { Task { try? await deleteFile(path: path) } }
-            return try await call("bootstrap.install", params: ["layout": layout, "package_path": path])
+            return try await callBootstrapInstall(["layout": layout, "package_path": path])
         }
-        return try await call("bootstrap.install", params: ["layout": layout])
+        return try await callBootstrapInstall(["layout": layout])
+    }
+
+    /// vphoned refuses a second install. A current guest says so with an error
+    /// code; an older one only with this message.
+    private func callBootstrapInstall(_ params: [String: Any]) async throws -> [String: Any] {
+        do {
+            return try await call("bootstrap.install", params: params)
+        } catch let ControlError.guestError(message)
+            where message.hasPrefix("Irisin bootstrap already completed")
+        {
+            throw ControlError.bootstrapAlreadyInstalled(message)
+        }
+    }
+
+    /// The completed installation vphoned would refuse to install over, or nil
+    /// when there is none or the guest cannot be asked. Only `jbroot` marks a
+    /// completed install; `roots` also lists foreign roots install may reuse.
+    func completedBootstrap() async -> (root: String, layout: String)? {
+        guard guestCapabilities.contains("bootstrap_uninstall"),
+              let installation = try? await call("bootstrap.inspect"),
+              let root = installation["jbroot"] as? String, !root.isEmpty
+        else { return nil }
+        return (root, installation["layout"] as? String ?? "")
     }
 
     func bootstrapStatus() async throws -> [String: Any] {
