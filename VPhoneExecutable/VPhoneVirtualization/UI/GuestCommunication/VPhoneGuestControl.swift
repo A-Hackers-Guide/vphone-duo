@@ -47,6 +47,10 @@ final class VPhoneGuestControl {
     @ObservationIgnored var guestBinaryURL: URL?
     @ObservationIgnored var onConnect: (([String]) -> Void)?
     @ObservationIgnored var onDisconnect: (() -> Void)?
+    /// Names the guest resolves locally (this Mac's `.local` name), worked
+    /// out on each connect, since the Mac's name or a bridged address can
+    /// change while the VM runs. Nil sends nothing.
+    @ObservationIgnored var guestStaticNames: (() -> [VPhoneNetworking.StaticName])?
 
     /// The guest interface orientation: the one the window last read, or the
     /// one a menu rotation is turning to. Nil until one is known, and again
@@ -188,6 +192,9 @@ final class VPhoneGuestControl {
                 onConnect?(guestCapabilities)
                 if capabilities.contains("environment_update") {
                     Task { await syncEnvironment() }
+                }
+                if capabilities.contains("network_static_names"), let names = guestStaticNames?() {
+                    Task { await applyGuestStaticNames(names) }
                 }
             }
         } catch {
@@ -811,5 +818,23 @@ private final class VPhoneHTTPTransaction: @unchecked Sendable {
         // A zero timeval means "wait forever", so round up to at least 1 µs.
         let microseconds = max(Int32(attoseconds / 1_000_000_000_000), seconds == 0 ? 1 : 0)
         return timeval(tv_sec: Int(seconds), tv_usec: microseconds)
+    }
+}
+
+// MARK: - The Mac's name
+
+extension VPhoneGuestControl {
+    /// Replace the names vphoned has the guest resolve locally; an empty list
+    /// withdraws them.
+    func applyGuestStaticNames(_ names: [VPhoneNetworking.StaticName]) async {
+        do {
+            let result = try await call("network.static_names.set", params: ["entries": names.map(\.parameters)])
+            if result["changed"] as? Bool == true {
+                let lines = names.map { "\($0.names.joined(separator: " ")) -> \($0.address)" }
+                print("[network] guest resolves \(lines.isEmpty ? "no names locally" : lines.joined(separator: ", "))")
+            }
+        } catch {
+            print("[network] could not set the guest's local names: \(error)")
+        }
     }
 }

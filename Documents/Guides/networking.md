@@ -53,6 +53,7 @@ and the app's rules apply to it as they would to any other app.
 | Gateway and DNS | `192.168.127.1` |
 | MTU | 1500 |
 | DNS | Queries to `192.168.127.1` go to the Mac's resolver |
+| Other connections to the gateway | The Mac's loopback, `127.0.0.1` (TCP and UDP) |
 
 ## Limits
 
@@ -87,3 +88,43 @@ and the app's rules apply to it as they would to any other app.
    ```sh
    lsof -nP -a -i -p "$(pgrep -f 'vphone-vm.*<name>')"
    ```
+
+## This Mac's name in the guest
+
+On by default. The guest resolves this Mac's mDNS name (`scutil --get
+LocalHostName`, plus `.local`) at once, to the address it reaches the Mac at:
+
+| Mode | `<Mac>.local` in the guest |
+| --- | --- |
+| `nat` | The Mac on the shared network, usually `192.168.64.1` |
+| `tunnel` | The gateway, `192.168.127.1`. Connections to it reach the Mac's loopback (`127.0.0.1`), the way `10.0.2.2` does in QEMU and VirtualBox |
+| `bridged` | The Mac's address on the bridged interface |
+
+Over mDNS alone, an IPv4 lookup of the Mac's name in the guest could fail. The
+guest also hears the Mac on the network link a USB-connected iPhone gives the
+Mac, where the Mac has no IPv4 address and answers "no such record". Whichever
+link answers first decides the lookup, so an app that wants an IPv4 address
+got an error until a real answer had been cached from another link.
+
+vphoned registers the name with the guest's own mDNSResponder the way it
+holds an `/etc/hosts` line: as a local record that answers an IPv4 lookup at
+once, with that one address, without asking the network and without the
+answers it has cached. It does so each time `vphone-vm` connects, and again
+when vphoned starts, so the name is in place before apps run after a reboot.
+The guest's system volume is read-only, so `/etc/hosts` itself is not edited,
+and nothing is announced on any network. IPv6 lookups still go to mDNS.
+
+Without it, a lookup also listed the Mac's `169.254` address on the USB link,
+first. iOS routes `169.254.0.0/16` through its primary interface, so a plain
+socket connecting to that address could leave through `en0`, where nothing
+answers, and wait out its timeout.
+
+```sh
+vphone-cli vm config <name> --mac-name off   # withdraw it
+```
+
+To see what the guest's resolver returns, and whether each address connects:
+
+```sh
+vphone-launchpad-cli guest rpc <name> network.resolve '{"host":"<Mac>.local","family":"ipv4","port":8000}'
+```

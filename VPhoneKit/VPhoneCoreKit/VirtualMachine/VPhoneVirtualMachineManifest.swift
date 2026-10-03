@@ -169,6 +169,11 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         public let macAddress: String
         /// Host interface identifier to bridge (bridged mode only); nil otherwise.
         public let bridgeInterface: String?
+        /// Whether the guest resolves this Mac's `.local` name to the address it
+        /// reaches the Mac at, through a record vphoned registers with the
+        /// guest's mDNSResponder. Nil means yes; see
+        /// `VPhoneNetworking.macStaticNames`.
+        public let resolvesMacName: Bool?
 
         public enum NetworkMode: String, Codable, Sendable {
             case nat
@@ -186,10 +191,11 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
 
         public static let `default` = NetworkConfig(mode: .nat, macAddress: "")
 
-        public init(mode: NetworkMode, macAddress: String, bridgeInterface: String? = nil) {
+        public init(mode: NetworkMode, macAddress: String, bridgeInterface: String? = nil, resolvesMacName: Bool? = nil) {
             self.mode = mode
             self.macAddress = macAddress
             self.bridgeInterface = bridgeInterface
+            self.resolvesMacName = resolvesMacName
         }
     }
 

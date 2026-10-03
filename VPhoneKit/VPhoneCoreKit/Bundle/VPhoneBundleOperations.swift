@@ -107,14 +107,16 @@ public enum VPhoneBundleOperations {
         memoryMB: UInt64?,
         networkMode: VPhoneVirtualMachineManifest.NetworkConfig.NetworkMode? = nil,
         bridgeInterface: String? = nil,
+        resolvesMacName: Bool? = nil,
     ) throws -> VPhoneBundle {
         let bundle = try library.bundle(named: name)
-        let editsNetwork = networkMode != nil || bridgeInterface != nil
+        let editsNetwork = networkMode != nil || bridgeInterface != nil || resolvesMacName != nil
         let network = editsNetwork
             ? try VPhoneNetworking.merge(
                 into: bundle.manifest.networkConfig,
                 mode: networkMode,
                 bridgeInterface: bridgeInterface,
+                resolvesMacName: resolvesMacName,
             )
             : nil
         let updated = bundle.manifest.updating(
