@@ -77,6 +77,20 @@ fi
 /bin/cp "$guest_products/gpu/libAppleParavirtCompilerPluginIOGPUFamily.dylib" \
     "$guest/libAppleParavirtCompilerPluginIOGPUFamily.dylib"
 
+# The commit this bundle was built from, shown in vphone-vm's app menu next to
+# CFBundleShortVersionString and CFBundleVersion. A tree with uncommitted
+# tracked changes is marked dirty. Outside a git checkout the key is removed,
+# so an incremental build never keeps a stale hash.
+info_plist="$bundle/Contents/Info.plist"
+if build_hash="$(/usr/bin/git -C "$root" rev-parse --verify --short HEAD 2>/dev/null)"; then
+    if [[ -n "$(/usr/bin/git -C "$root" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+        build_hash+="-dirty"
+    fi
+    /usr/bin/plutil -replace VPhoneBuildHash -string "$build_hash" "$info_plist"
+else
+    /usr/bin/plutil -remove VPhoneBuildHash "$info_plist" 2>/dev/null || true
+fi
+
 # Patch presets. Prewritten plists, read by vphone-cli at patch time to decide
 # which declared patches apply. Nothing generates or edits these.
 /bin/mkdir -p "$resources/patches_presets"

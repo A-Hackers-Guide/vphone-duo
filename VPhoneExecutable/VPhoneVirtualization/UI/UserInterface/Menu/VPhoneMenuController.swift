@@ -83,10 +83,8 @@ class VPhoneMenuController {
         // App menu
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu(title: "vphone")
-        let buildHash = Bundle.main.object(forInfoDictionaryKey: "VPhoneBuildHash") as? String
-        let buildTitle = buildHash.flatMap { $0.isEmpty ? nil : $0 } ?? VPhoneLocalization.text("unknown")
         let buildItem = NSMenuItem(
-            title: VPhoneLocalization.format("Build: %@", buildTitle),
+            title: VPhoneLocalization.format("Build: %@", Self.buildDescription()),
             action: nil,
             keyEquivalent: "",
         )
@@ -152,6 +150,23 @@ class VPhoneMenuController {
 
         VPhoneLocalization.menu(mainMenu)
         NSApp.mainMenu = mainMenu
+    }
+
+    /// "2.3.2 (26, 735927f)": the bundle version, its build number and the
+    /// commit `StageBundle.sh` stamped into the Info.plist. vphone-vm runs from
+    /// `VPhone.bundle/Contents/MacOS`, so `Bundle.main` is that bundle.
+    static func buildDescription() -> String {
+        func value(_ key: String) -> String? {
+            (Bundle.main.object(forInfoDictionaryKey: key) as? String).flatMap { $0.isEmpty ? nil : $0 }
+        }
+        let details = [value("CFBundleVersion"), value("VPhoneBuildHash")].compactMap(\.self)
+        let detail = details.isEmpty ? nil : details.joined(separator: ", ")
+        switch (value("CFBundleShortVersionString"), detail) {
+        case let (version?, detail?): return "\(version) (\(detail))"
+        case let (version?, nil): return version
+        case let (nil, detail?): return detail
+        case (nil, nil): return VPhoneLocalization.text("unknown")
+        }
     }
 
     func makeItem(
