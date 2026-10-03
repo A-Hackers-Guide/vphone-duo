@@ -16,6 +16,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
     private var hostAutomationServer: VPhoneHostAutomationServer?
     private var cameraServer: VPhoneCameraServer?
     private var apiProxy: VPhoneAPIProxy?
+    private var portForwarder: VPhonePortForwarder?
     private var sigintSource: DispatchSourceSignal?
     private var didAttemptAutoInstall = false
 
@@ -87,7 +88,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         let control = VPhoneGuestControl()
         self.control = control
         if !command.dfu {
-            configureGuestNames(control: control, configURL: options.configURL)
+            startNetworkServices(vm: vm, control: control)
             let vphonedURL = URL(fileURLWithPath: command.vphonedBin)
             if FileManager.default.fileExists(atPath: vphonedURL.path) {
                 control.guestBinaryURL = vphonedURL
@@ -273,27 +274,51 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
             screenWidth: options.screenWidth,
             screenHeight: options.screenHeight,
         )
+        server.virtualMachine = vm
         hostAutomationServer = server
     }
 
-    /// Have the guest resolve this Mac's `.local` name to the address it
-    /// reaches the Mac at.
+    /// Hold the guest to its configured address and open its forwarded ports.
     @MainActor
-    private func configureGuestNames(control: VPhoneGuestControl, configURL: URL) {
-        // Sent in every mode: without a NIC the list is empty, which withdraws
-        // names a previous launch left in the guest.
-        guard let network = try? VPhoneVirtualMachineManifest.load(from: configURL).networkConfig else { return }
+    private func startNetworkServices(vm: VPhoneVirtualMachine, control: VPhoneGuestControl) {
+        guard let plan = vm.networkPlan else { return }
+        control.guestIPv4Setting = plan.guestIPv4
+        control.guestLocalHostName = plan.localHostName
         control.guestStaticNames = {
-            let bridged = network.mode == .bridged
-                ? network.bridgeInterface.flatMap(VPhoneNetworking.ipv4Address(ofInterface:))
-                : nil
+            let bridged: VPhoneIPv4Address? = if case let .bridged(interface) = plan.attachment {
+                VPhoneNetworking.ipv4Address(ofInterface: interface)
+            } else {
+                nil
+            }
             return VPhoneNetworking.macStaticNames(
-                network,
+                plan: plan,
                 macName: VPhoneNetworking.macLocalHostName(),
-                sharedNATHost: VPhoneNetworking.sharedNATHostAddress(),
                 bridgedAddress: bridged,
             )
         }
+        guard !plan.portForwards.isEmpty else { return }
+
+        let destination: VPhonePortForwarder.Destination
+        if case .tunnel = plan.attachment, let network = vm.tunnelNetwork {
+            destination = .tunnel(network)
+        } else {
+            destination = .direct(plan.forwardingAddress)
+        }
+        let forwarder = VPhonePortForwarder(forwards: plan.portForwards, destination: destination)
+        for failure in forwarder.start() {
+            print("[network] port forward not opened: \(failure)")
+        }
+        print("[network] forwarding \(plan.portForwards.map(\.description).joined(separator: ", "))")
+        // A DHCP guest's address is learned from vphoned, and can change. A
+        // dropped connection to vphoned says nothing about the guest's address,
+        // so the last one known is kept.
+        if case .direct(nil) = destination {
+            control.onGuestIPAddressChange = { [weak forwarder] ip in
+                guard let address = ip.flatMap(VPhoneIPv4Address.init(dotted:)) else { return }
+                forwarder?.updateGuestAddress(address)
+            }
+        }
+        portForwarder = forwarder
     }
 
     @MainActor
@@ -334,6 +359,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_: Notification) {
         hostAutomationServer?.stop()
+        portForwarder?.stop()
         apiProxy?.stop()
         control?.stop()
     }

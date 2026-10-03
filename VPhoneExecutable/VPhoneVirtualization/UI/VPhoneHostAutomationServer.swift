@@ -34,6 +34,8 @@ import ImageIO
 ///   {"t":"ping"}                                → vphoned request/response
 ///   {"t":"rpc","method":"input.type","params":{"text":"ls\n"}}
 ///                                               → any vphoned method; its result is in `"result"`
+///   {"t":"network"}                             → the NIC's state, in `"result"`
+///   {"t":"network","link":"down"}               → unplug (`up` replugs); not saved
 ///
 /// All commands except "screenshot" and "rpc" wait briefly then capture a
 /// compact screen image returned as `"image":"<base64>"` in the response.
@@ -64,6 +66,8 @@ class VPhoneHostAutomationServer {
     private weak var captureView: VPhoneVirtualMachineView?
     private var screenRecorder = VPhoneScreenRecorder()
     private weak var control: VPhoneGuestControl?
+    /// For the `network` command; nil until the VM exists.
+    weak var virtualMachine: VPhoneVirtualMachine?
 
     /// Matches vphoned's JSON body limit, so an `rpc` line is never refused
     /// here that the guest would accept.
@@ -236,6 +240,18 @@ class VPhoneHostAutomationServer {
                 let wantRPCScreen = json["screen"] as? Bool ?? false
                 let image = wantRPCScreen ? await settledCompactScreenshot(delayMs: screenDelay) : nil
                 return Self.reply(ok: true, image: image, result: result)
+
+            case "network":
+                guard let virtualMachine else {
+                    return Self.reply(ok: false, error: "the VM is not running")
+                }
+                if let link = json["link"] as? String {
+                    guard link == "up" || link == "down" else {
+                        return Self.reply(ok: false, error: "link must be up or down")
+                    }
+                    try virtualMachine.setNetworkLink(up: link == "up")
+                }
+                return Self.reply(ok: true, result: virtualMachine.networkStatus)
 
             default:
                 return Self.reply(ok: false, error: "unknown command: \(type)")

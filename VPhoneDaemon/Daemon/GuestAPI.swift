@@ -41,14 +41,20 @@ enum GuestAPI {
     }
 
     /// The address the host shows for the guest, from icli's
-    /// `"<interface> <address>"` strings: a 192.x IPv4 address (the NAT
-    /// network), then any other routable IPv4, then a routable IPv6. Loopback
-    /// and link-local addresses, which sort first, never qualify.
+    /// `"<interface> <address>"` strings: the NIC's (`en0`) IPv4 address,
+    /// which is where the host forwards ports to, then a 192.x IPv4 address
+    /// (the NAT network), then any other routable IPv4, then a routable IPv6.
+    /// Loopback and link-local addresses, which sort first, never qualify.
     static func preferredAddress(_ addresses: [String]) -> String? {
-        let hosts = addresses.compactMap { $0.split(separator: " ", maxSplits: 1).last.map(String.init) }
-        let ipv4 = hosts.filter { !$0.contains(":") && !$0.hasPrefix("127.") && !$0.hasPrefix("169.254.") }
+        func routableIPv4(_ host: String) -> Bool {
+            !host.contains(":") && !host.hasPrefix("127.") && !host.hasPrefix("169.254.")
+        }
+        let entries = addresses.map { $0.split(separator: " ", maxSplits: 1).map(String.init) }
+        let nic = entries.first { $0.count == 2 && $0[0] == "en0" && routableIPv4($0[1]) }?[1]
+        let hosts = entries.compactMap(\.last)
+        let ipv4 = hosts.filter(routableIPv4)
         let ipv6 = hosts.filter { $0.contains(":") && $0 != "::1" && !$0.contains("%") && !$0.hasPrefix("fe80:") }
-        return ipv4.first { $0.hasPrefix("192.") } ?? ipv4.first ?? ipv6.first
+        return nic ?? ipv4.first { $0.hasPrefix("192.") } ?? ipv4.first ?? ipv6.first
     }
 
     static func health() -> [String: Any] {
@@ -82,6 +88,7 @@ enum GuestAPI {
                 "device_info",
                 "display",
                 "display_orientation",
+                "display_auto_lock",
                 "audio",
                 "input_gestures",
                 "ui_inspection",
@@ -97,6 +104,8 @@ enum GuestAPI {
                 "environment_update",
                 "udid_override",
                 "setup_skip",
+                "network_ipv4",
+                "network_hostname",
                 "network_static_names",
                 "network_resolve",
             ],

@@ -24,9 +24,40 @@ nonisolated struct VPhoneLaunchpadMachinePath: Hashable, Sendable {
 /// `vm info --json` print.
 nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Sendable {
     struct Network: Decodable, Hashable, Sendable {
+        struct IPv4: Decodable, Hashable, Sendable {
+            let address: String
+            let prefixLength: Int
+            let router: String?
+            let dns: [String]?
+        }
+
+        struct PortForward: Decodable, Hashable, Sendable {
+            let transport: String
+            let hostAddress: String?
+            let hostPort: Int
+            let guestPort: Int
+
+            private enum CodingKeys: String, CodingKey {
+                case transport = "protocol"
+                case hostAddress, hostPort, guestPort
+            }
+
+            /// The spelling `vm config --forward` takes.
+            var argument: String {
+                "\(transport):\(hostAddress ?? "127.0.0.1"):\(hostPort):\(guestPort)"
+            }
+        }
+
         let mode: String
         let macAddress: String
         let bridgeInterface: String?
+        /// Nil from a bundle older than fixed addresses, and when DHCP decides.
+        let ipv4: IPv4?
+        let portForwards: [PortForward]?
+        /// The guest's mDNS name without `.local`; nil when not managed.
+        let localHostName: String?
+        /// False when the guest is not given this Mac's name locally.
+        let resolvesMacName: Bool?
     }
 
     struct OSVersion: Decodable, Hashable, Sendable {
@@ -111,6 +142,11 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
         case "hostOnly": String(localized: "Host only")
         default: String(localized: "None")
         }
+    }
+
+    /// The fixed address, or nil when DHCP decides.
+    var addressDescription: String? {
+        network.ipv4.map { "\($0.address)/\($0.prefixLength)" }
     }
 }
 

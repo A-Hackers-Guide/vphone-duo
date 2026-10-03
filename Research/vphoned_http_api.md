@@ -270,14 +270,14 @@ request carries `"force": true`.
 | Area | Methods |
 | --- | --- |
 | Device | `device.snapshot`, `device.info` (snapshot plus network, screen, rotation, brightness, volume, low power, Developer Mode, agent), `device.screen`, `device.network`, `device.ioreg {plane}`, `device.environment`, `device.basebin {archive?}` |
-| Display, audio | `display.brightness {value?}`, `display.rotation {orientation?}`, `display.orientation` (`{degrees, source}`: SpringBoard's interface orientation without a screen capture, for polling; capability `display_orientation`), `display.rotation_lock {locked}`, `audio.volume {value?, category?}`, `audio.state` |
+| Display, audio | `display.brightness {value?}`, `display.rotation {orientation?}`, `display.orientation` (`{degrees, source}`: SpringBoard's interface orientation without a screen capture, for polling; capability `display_orientation`), `display.rotation_lock {locked}`, `display.auto_lock` (`{auto_lock_seconds, never, lock_screen_minimum_seconds}`: Auto-Lock and the Lock Screen timeout vphoned keeps in step with it, see below; capability `display_auto_lock`), `audio.volume {value?, category?}`, `audio.state` |
 | Input | `input.touch`, `input.hid`, `input.button {name}`, `input.key {name}`, `input.type {text, delay_ms?}`, `input.paste {text}`, `input.tap`, `input.double_tap`, `input.long_press`, `input.swipe`, `input.drag {points}`, `input.touch_sequence {events}` — gesture coordinates are screen points |
 | UI | `ui.tree` (alias `accessibility.tree`), `ui.element_at`, `ui.tap_element`, `ui.wait`, `ui.wait_gone`, `ui.ocr {languages?, min_confidence?}`, `ui.describe`, `screen.screenshot` |
 | Processes | `processes.list {filter?}`, `processes.kill {pid, signal?}` **force**, `memory.jetsam`, `memory.pressure` (only the three kernel memory sysctls, for polling) |
 | launchd | `services.list`, `status`, `print`, `dump`, `disabled`, `start`, `enable`, `load`; `services.stop`, `disable`, `remove`, `signal`, `unload` **force**; `launchd.getenv`, `setenv`, `unsetenv` |
 | Logs | `logs.syslog {seconds, process?, level?, max_lines?}` (a bounded capture of at most 60 s), `logs.crashes {bundle_id?}`, `logs.crash {path}` |
 | Darwin notifications | `notify.post {name, state?}` (`postDarwinNotification`; `state` is a UInt64, as a number or a decimal string, stored before the post), `notify.state {name}` (`darwinNotificationState`) |
-| Network, security | `network.capture {seconds, interface?, filter?}` (writes a pcap in the guest scratch directory and returns its path), `network.static_names.get`, `network.static_names.set {entries}`, `network.resolve {host, family?, port?, first_only?, timeout_ms?}` (see below), `security.ssl_killswitch` |
+| Network, security | `network.capture {seconds, interface?, filter?}` (writes a pcap in the guest scratch directory and returns its path), `network.ipv4.get {interface?}`, `network.ipv4.set {interface?, method, address?, subnet_mask?, router?, dns?}`, `network.hostname.get`, `network.hostname.set {local_host_name?}`, `network.static_names.get`, `network.static_names.set {entries}`, `network.resolve {host, family?, port?, first_only?, timeout_ms?}` (see below), `security.ssl_killswitch` |
 | Apps | `apps.list`, `search`, `refresh`, `launch`, `terminate`, `foreground`, `open_url`, `install`, `info`, `binary`, `data_dir`, `url_schemes`, `handlers`, `registration`, `register`, `network_policy {repair?}`; `apps.uninstall`, `unregister`, `unregister_dir` **force** |
 | System | `system.uicache`, `system.system_apps {visible?}`, `system.respring` **force**, `system.reboot {userspace?}` **force**, `developer_mode.status`, `developer_mode.enable`, `power.low_power_mode`, `diagnostics.self_test` |
 | Files | `files.list`, `mkdir`, `remove`, `rename`, `read {binary?, limit?}`, `write`, `find`, `copy`, `symlink`, `chmod`, `chown`, `plist`, `plist_set {value \| remove}` |
@@ -288,6 +288,39 @@ request carries `"force": true`.
 | Environment | `environment.status` (SHA-256 of each vphone library in `/usr/lib`, or null when absent, plus the staging directory), `environment.install {libraries: [{name, sha256}]}` (see below) |
 | Profile UDID | `udid.get`, `udid.set {udid}`, `udid.clear` — each returns `{udid, path}`, the UDID the guest gives its profile checks and the host (null: the guest's own) and the settings file it came from; `set` and `clear` also return `restarted_pids`, `usb_serial` and `usb_reenumerated` (see below) |
 | Setup Assistant | `setup.status` (`{pending, running, pid, setup_done, setup_version, current_version}`), `setup.skip` **force** (sets `SetupDone`, `SetupFinishedAllSteps` and `SetupVersion` in `com.apple.purplebuddy`, restarts SpringBoard, returns the status plus `respring`); `/v1/health` carries `setup_pending` — see `Research/Guest/setup_assistant_skip.md` |
+
+`display.auto_lock` reads Settings' Auto-Lock (`maxInactivity` in profiled's
+`EffectiveUserSettings.plist`) and SpringBoard's `SBMinimumLockscreenIdleTime`.
+SpringBoard honors Auto-Lock only while unlocked; on the Lock Screen it turns
+the screen off after six seconds unless that key says otherwise. vphoned keeps
+the key at "never" while Auto-Lock is Never and removes it when Auto-Lock is
+anything else (`VPhoneDaemon/Daemon/GuestLockScreenIdle.swift`), at startup
+and whenever the settings change. SpringBoard reads the key when it starts, so
+a newly written one holds from the next boot or respring. Measurements:
+`Research/Guest/lock_screen_idle_timer.md`.
+
+`network.ipv4.get` and `network.ipv4.set` read and write the IPv4 settings of
+one interface (default `en0`) in configd's network preferences,
+`/var/preferences/SystemConfiguration/preferences.plist`, through SCPreferences
+resolved with `dlsym` (`VPhoneDaemon/Native/vphoned_network.m`). Both return
+`{interface, service, method, managed, address?, subnet_mask?, router?, dns}`;
+`set` adds `changed`. `set` with `method: "manual"` needs `address`,
+`subnet_mask` and `router`, and takes `dns` as an array; it commits and applies
+the preferences, so the address changes at once and survives a reboot. A
+manual configuration vphoned writes is marked `VPhoneManaged` in the service's
+`IPv4` and `DNS` dictionaries. `method: "dhcp"` undoes only a marked one; an
+address the user set in the guest's own Settings is left alone and reported
+with `changed: false`. `vphone-vm` calls `set` after every connect with the
+setting its network plan derived from the VM's `config.plist`
+(`VPhoneNetworking.plan`), so the guest is held to that address.
+
+`network.hostname.get` and `network.hostname.set` read and write the guest's
+mDNS name, `System/Network/HostNames/LocalHostName` in the same preferences;
+both return `{local_host_name, managed}`, and `set` adds `changed`. `set` with a
+`local_host_name` (one DNS label) replaces the name and records the one it
+replaced; `set` with none or null puts that one back. A name vphoned did not set
+is never changed by a null. `vphone-vm` calls `set` after every connect with the
+VM's `localHostName`, or null when it has none.
 
 `network.static_names.set` replaces the names the guest resolves locally, given
 as `entries: [{address, names}]` (IPv4 only; an empty list withdraws them).
@@ -312,7 +345,7 @@ Account passwords, boot logo rendering and package installation, removal and
 repository changes are deliberately not exposed. `/v1/health` lists the new
 areas in `capabilities` (`device_info`, `display`, `audio`, `input_gestures`,
 `ui_inspection`, `processes`, `services`, `logs`, `network_capture`,
-`app_details`, `system_control`, `file_tools`, `packages`, `environment_update`, `udid_override`, `setup_skip`, `network_static_names`, `network_resolve`) so a host can hide
+`app_details`, `system_control`, `file_tools`, `packages`, `environment_update`, `udid_override`, `setup_skip`, `network_ipv4`, `network_hostname`, `network_static_names`, `network_resolve`, `display_auto_lock`) so a host can hide
 panels an older agent cannot serve. icli failures reach the caller with
 icli's own error `code` (`failed`, `unavailable`, `device_locked`, …) and
 message.

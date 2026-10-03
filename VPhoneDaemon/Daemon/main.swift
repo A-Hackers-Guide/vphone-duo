@@ -13,6 +13,8 @@ if mode != 1 {
 }
 
 guard vp_native_watch_proxy() == 0 else { exit(1) }
+// First, so the Lock Screen timeout is in place before SpringBoard reads it.
+GuestLockScreenIdle.startOnStartup()
 vp_vcam_start()
 // Multi-finger injection is resolved here so the first pinch is not the call
 // that pays for `dlopen`; a base without the symbols logs and stays a no-op.

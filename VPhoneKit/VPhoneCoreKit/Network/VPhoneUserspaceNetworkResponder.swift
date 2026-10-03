@@ -124,6 +124,7 @@ struct VPhoneDHCPMessage {
         assigned: VPhoneIPv4Address,
         server: VPhoneIPv4Address,
         netmask: VPhoneIPv4Address,
+        dnsServers: [VPhoneIPv4Address] = [],
         mtu: Int,
         leaseSeconds: UInt32 = 86400,
     ) -> [UInt8] {
@@ -152,7 +153,7 @@ struct VPhoneDHCPMessage {
         append(51, withUnsafeBytes(of: leaseSeconds.bigEndian, Array.init)) // lease time
         append(1, netmask.bytes) // subnet mask
         append(3, server.bytes) // router
-        append(6, server.bytes) // DNS
+        append(6, (dnsServers.isEmpty ? [server] : dnsServers).flatMap(\.bytes)) // DNS
         append(26, [UInt8(mtu >> 8), UInt8(mtu & 0xFF)]) // interface MTU
         options.append(255)
         // Pad to the minimum BOOTP payload so short replies stay well-formed.
@@ -213,14 +214,14 @@ enum VPhoneUserspaceNetworkOutcome {
 /// behind a serial queue rather than treating it as a free function.
 final class VPhoneUserspaceNetworkResponder {
     private let configuration: VPhoneUserspaceNetworkConfiguration
-    private var guestMAC: VPhoneMACAddress?
+    private(set) var guestMAC: VPhoneMACAddress?
 
     init(configuration: VPhoneUserspaceNetworkConfiguration) {
         self.configuration = configuration
     }
 
     var netmask: VPhoneIPv4Address {
-        VPhoneIPv4Address(255, 255, 255, 0)
+        configuration.subnet.mask
     }
 
     func handle(_ frame: [UInt8]) -> VPhoneUserspaceNetworkOutcome {
@@ -352,6 +353,7 @@ final class VPhoneUserspaceNetworkResponder {
             assigned: configuration.guestAddress,
             server: configuration.hostAddress,
             netmask: netmask,
+            dnsServers: configuration.advertisedDNSServers,
             mtu: configuration.mtu,
         )
         let replyDatagram = VPhoneUDPDatagram(

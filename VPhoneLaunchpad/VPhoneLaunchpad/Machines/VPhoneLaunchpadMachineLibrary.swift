@@ -406,7 +406,16 @@ final class VPhoneLaunchpadMachineLibrary {
 
     // MARK: - Edits
 
-    func configure(_ machine: Path, cpu: Int?, memoryMB: Int?, network: String?, bridgeInterface: String?) async {
+    /// `networkArguments` are further `vm config` options (address, MAC, forwards),
+    /// passed as the Settings sheet built them.
+    func configure(
+        _ machine: Path,
+        cpu: Int?,
+        memoryMB: Int?,
+        network: String?,
+        bridgeInterface: String?,
+        networkArguments: [String] = [],
+    ) async {
         var arguments = ["vm", "config", machine.name] + machine.libraryArguments
         if let cpu {
             arguments += ["--cpu", String(cpu)]
@@ -420,6 +429,7 @@ final class VPhoneLaunchpadMachineLibrary {
         if let bridgeInterface, !bridgeInterface.isEmpty {
             arguments += ["--bridge-interface", bridgeInterface]
         }
+        arguments += networkArguments
         await perform(String(localized: "Saving settings…"), on: machine, arguments)
     }
 

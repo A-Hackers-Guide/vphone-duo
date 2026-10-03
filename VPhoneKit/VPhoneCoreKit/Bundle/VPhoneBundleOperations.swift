@@ -107,18 +107,15 @@ public enum VPhoneBundleOperations {
         memoryMB: UInt64?,
         networkMode: VPhoneVirtualMachineManifest.NetworkConfig.NetworkMode? = nil,
         bridgeInterface: String? = nil,
-        resolvesMacName: Bool? = nil,
+        networkEdit: VPhoneNetworkEdit = VPhoneNetworkEdit(),
     ) throws -> VPhoneBundle {
         let bundle = try library.bundle(named: name)
-        let editsNetwork = networkMode != nil || bridgeInterface != nil || resolvesMacName != nil
-        let network = editsNetwork
-            ? try VPhoneNetworking.merge(
-                into: bundle.manifest.networkConfig,
-                mode: networkMode,
-                bridgeInterface: bridgeInterface,
-                resolvesMacName: resolvesMacName,
-            )
-            : nil
+        var edit = networkEdit
+        edit.mode = networkMode ?? edit.mode
+        edit.bridgeInterface = bridgeInterface ?? edit.bridgeInterface
+        let network = edit.isEmpty
+            ? nil
+            : try VPhoneNetworking.merge(into: bundle.manifest.networkConfig, edit: edit)
         let updated = bundle.manifest.updating(
             cpuCount: cpuCount,
             memorySize: memoryMB.map { $0 * 1024 * 1024 },
@@ -143,7 +140,17 @@ public enum VPhoneBundleOperations {
             throw VPhoneLibraryError.alreadyExists(name: newName)
         }
         try FileManager.default.moveItem(at: src, to: dst)
-        return try VPhoneBundle.load(at: dst)
+        let renamed = try VPhoneBundle.load(at: dst)
+        // An mDNS name that `--mdns on` derived from the old name follows it;
+        // one chosen by hand stays.
+        let network = renamed.manifest.networkConfig
+        guard network.localHostName == VPhoneNetworking.localHostName(forVMName: name) else { return renamed }
+        let updated = renamed.manifest.updating(
+            networkConfig: network.with(localHostName: .some(VPhoneNetworking.localHostName(forVMName: newName))),
+        )
+        try updated.write(to: renamed.configURL)
+        try VPhoneHostFilePermissions.makeAccessible(at: renamed.configURL)
+        return VPhoneBundle(url: renamed.url, manifest: updated)
     }
 
     public static func delete(bundleNamed name: String, in library: VPhoneLibrary) throws {

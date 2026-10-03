@@ -184,6 +184,42 @@ struct VPhoneUserspaceNetworkIntegrationTests {
         #expect(ackMessage.messageType == .ack)
     }
 
+    /// A VM's fixed address replaces the default: the lease, the mask and the
+    /// resolvers all come from its configuration.
+    @Test func `a configured address is what DHCP hands out`() throws {
+        let custom = VPhoneUserspaceNetworkConfiguration(
+            hostAddress: VPhoneIPv4Address(10, 20, 0, 1),
+            guestAddress: VPhoneIPv4Address(10, 20, 0, 5),
+            prefixLength: 16,
+            dnsServers: [VPhoneIPv4Address(1, 1, 1, 1), VPhoneIPv4Address(9, 9, 9, 9)],
+        )
+        let link = try GuestLink(configuration: custom)
+        link.start()
+        defer { link.stop() }
+
+        link.write(dhcpFrame(type: .discover))
+        let offer = try #require(link.read(), "no offer came back through the loop")
+        let ethernet = try #require(VPhoneEthernetFrame(bytes: offer))
+        let packet = try #require(VPhoneIPv4Packet(bytes: ethernet.payload))
+        let datagram = try #require(VPhoneUDPDatagram(bytes: packet.payload))
+        #expect(Array(datagram.payload[16 ..< 20]) == [10, 20, 0, 5])
+        let options = Array(datagram.payload[240...])
+        func option(_ code: UInt8) -> [UInt8]? {
+            var index = 0
+            while index + 1 < options.count, options[index] != 255 {
+                let length = Int(options[index + 1])
+                if options[index] == code {
+                    return Array(options[(index + 2) ..< (index + 2 + length)])
+                }
+                index += 2 + length
+            }
+            return nil
+        }
+        #expect(option(1) == [255, 255, 0, 0])
+        #expect(option(3) == [10, 20, 0, 1])
+        #expect(option(6) == [1, 1, 1, 1, 9, 9, 9, 9])
+    }
+
     /// ARP and ICMP come back too -- they are the guest's other two ways of
     /// finding out whether the link is alive at all.
     @Test func `ARP and ping are answered through the real frame loop`() throws {

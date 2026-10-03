@@ -1,6 +1,7 @@
 import Foundation
 import IcliKit
 import IcliSystem
+import VphonedNative
 
 // MARK: - Device, Display, Audio, Network
 
@@ -21,6 +22,10 @@ extension GuestAPI {
             return info
         case "device.network":
             return networkInfo()
+        case "network.ipv4.get":
+            return try networkIPv4(interface: optionalString(params, "interface") ?? "en0", set: nil)
+        case "network.ipv4.set":
+            return try networkIPv4(interface: optionalString(params, "interface") ?? "en0", set: params)
         case "network.resolve":
             let port = (params["port"] as? NSNumber).map { $0.intValue }
             let family: Int32 = switch optionalString(params, "family") {
@@ -37,6 +42,11 @@ extension GuestAPI {
             return GuestStaticNames.shared.describe()
         case "network.static_names.set":
             return try GuestStaticNames.shared.set(params["entries"] as? [[String: Any]] ?? [])
+        case "network.hostname.get":
+            return try networkHostName(set: nil)
+        case "network.hostname.set":
+            // An absent or null name puts back the one vphoned replaced.
+            return try networkHostName(set: .some(params["local_host_name"] as? String))
         case "device.ioreg":
             return try ioregistry(plane: optionalString(params, "plane") ?? "IOService")
         case "device.environment":
@@ -60,6 +70,8 @@ extension GuestAPI {
                 throw GuestAPIError.invalidRequest("locked must be true or false")
             }
             return try setRotationLock(locked)
+        case "display.auto_lock":
+            return GuestLockScreenIdle.describe()
         case "audio.volume":
             let category = optionalString(params, "category") ?? "Audio/Video"
             if params["value"] != nil {
@@ -115,6 +127,41 @@ extension GuestAPI {
             throw GuestAPIError.invalidRequest("state must be an unsigned 64-bit integer")
         }
         return state
+    }
+}
+
+// MARK: - Network configuration
+
+extension GuestAPI {
+    /// Read, or with `set` write, the interface's IPv4 settings in configd's
+    /// network preferences. The host calls `set` after every connect to hold
+    /// the guest to the address in its manifest.
+    static func networkIPv4(interface: String, set params: [String: Any]?) throws -> [String: Any] {
+        var error: NSString?
+        let result = if let params {
+            vp_network_ipv4_set(interface, params, &error)
+        } else {
+            vp_network_ipv4_get(interface, &error)
+        }
+        guard let result = result as? [String: Any] else {
+            throw GuestAPIError.operationFailed(error.map(String.init) ?? "network configuration failed")
+        }
+        return result
+    }
+
+    /// Read the guest's mDNS name, or with `set` change it (`.some(nil)` puts
+    /// back the one vphoned replaced).
+    static func networkHostName(set name: String??) throws -> [String: Any] {
+        var error: NSString?
+        let result = if let name {
+            vp_network_hostname_set(name, &error)
+        } else {
+            vp_network_hostname_get(&error)
+        }
+        guard let result = result as? [String: Any] else {
+            throw GuestAPIError.operationFailed(error.map(String.init) ?? "host name change failed")
+        }
+        return result
     }
 }
 
