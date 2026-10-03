@@ -144,9 +144,7 @@ struct VPhoneLaunchpadMachinesView: View {
     /// list's trailing edge. What acts on the selection is in the inspector.
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .automatic) {
-            Spacer()
-        }
+        flexibleSpace
         ToolbarItem(placement: .automatic) {
             Menu {
                 Button("New Machine…") { sheet = .newMachine }
@@ -170,6 +168,21 @@ struct VPhoneLaunchpadMachinesView: View {
         }
     }
 
+    /// Space that pushes what follows to the trailing edge. On macOS 26 a
+    /// `Spacer` in a `ToolbarItem` is an item like any other: it joins the
+    /// next item's glass capsule and stretches it, leaving the icon at the
+    /// capsule's far end. `ToolbarSpacer` is space between capsules.
+    @ToolbarContentBuilder
+    private var flexibleSpace: some ToolbarContent {
+        if #available(macOS 26, *) {
+            ToolbarSpacer(.flexible)
+        } else {
+            ToolbarItem(placement: .automatic) {
+                Spacer()
+            }
+        }
+    }
+
     /// The inspector toggle, then Start or Stop for the selection beside the
     /// actions menu at the window's trailing edge. Those two go away with the
     /// inspector; the context menu and a double-click still reach them.
@@ -182,9 +195,7 @@ struct VPhoneLaunchpadMachinesView: View {
             inspectorToggle
         }
         if model.showsInspector {
-            ToolbarItem(placement: .automatic) {
-                Spacer()
-            }
+            flexibleSpace
             ToolbarItemGroup(placement: .automatic) {
                 if stopped.isEmpty, !running.isEmpty {
                     Button {

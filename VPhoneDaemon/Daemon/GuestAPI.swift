@@ -10,12 +10,23 @@ enum GuestAPIError: Error, CustomStringConvertible {
     case invalidRequest(String)
     case unsupportedMethod(String)
     case operationFailed(String)
+    /// The request would repeat work the guest has already done. The code is
+    /// sent as the error code so a client can tell it apart from a failure.
+    case alreadyDone(code: String, message: String)
 
     var description: String {
         switch self {
         case let .invalidRequest(message), let .operationFailed(message): message
         case let .unsupportedMethod(method): "Unknown method: \(method)"
+        case let .alreadyDone(_, message): message
         }
+    }
+
+    var code: String {
+        if case let .alreadyDone(code, _) = self {
+            return code
+        }
+        return "invalid_operation"
     }
 }
 

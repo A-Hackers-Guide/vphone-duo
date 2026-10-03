@@ -27,7 +27,11 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(command.noGraphics ? .prohibited : .regular)
-        VPhoneDockName.set(VPhoneDockName.name(forConfig: command.config))
+        let name = VPhoneDockName.name(forConfig: command.config)
+        VPhoneDockName.set(name)
+        if !command.noGraphics {
+            VPhoneDockName.label(name)
+        }
 
         if !command.noGraphics {
             VPhoneHostHotKeys.shared.recoverAfterCrash()
