@@ -13,9 +13,10 @@
 // with the async write selector; the virtio device paces playback on the host.
 //
 // Optional settings in the `com.apple.coreaudio` preference domain, read
-// once when audiomxd loads the plugin, exist for diagnosing routing:
+// once when audiomxd loads the plugin:
 //   VPhoneVirtIOSoundTransportType  four-character transport ("usb ", "bltn")
 //   VPhoneVirtIOSoundDeviceUID      HAL device UID (default "PuffinOutput")
+//   VPhoneVirtIOSoundNominalRate    44100 to start at the alternate rate
 //   VPhoneVirtIOSoundLeadPeriods    periods of silence queued ahead of the
 //                                   mix at each start, 0 to 8
 
@@ -221,22 +222,19 @@ static void VPEnsureVirtualAudioProduct(void) {
 }
 
 /// How many periods of silence go to the device before the mix at each start.
-static const uint32_t kDefaultLeadPeriods = 2;
-static const uint32_t kMaximumLeadPeriods = 8;
+static const int kDefaultLeadPeriods = 2;
+static const int kMaximumLeadPeriods = 8;
 
 static uint32_t VPLeadPeriods(void) {
     CFPropertyListRef value = CFPreferencesCopyAppValue(CFSTR("VPhoneVirtIOSoundLeadPeriods"), kSettingsDomain);
-    int periods = (int)kDefaultLeadPeriods;
+    int periods = kDefaultLeadPeriods;
     if (value && CFGetTypeID(value) == CFNumberGetTypeID()) {
         CFNumberGetValue(value, kCFNumberIntType, &periods);
     }
     if (value) {
         CFRelease(value);
     }
-    if (periods < 0) {
-        return 0;
-    }
-    return (uint32_t)periods > kMaximumLeadPeriods ? kMaximumLeadPeriods : (uint32_t)periods;
+    return (uint32_t)MAX(0, MIN(periods, kMaximumLeadPeriods));
 }
 
 /// The nominal rate the device boots with, for testing how VirtualAudio picks
@@ -273,40 +271,9 @@ typedef struct {
     _Atomic uint64_t periodCount;
     _Atomic uint64_t seed;
     _Atomic uint64_t hostTicksPerPeriod;
-    _Atomic uint32_t periodFrames;
+    /// Set once, by `VPClockConfigure`.
+    uint32_t periodFrames;
 } VPClock;
-
-static void VPClockConfigure(VPClock *clock, double sampleRate) {
-    uint32_t periodFrames = (UInt32)(sampleRate * kTimestampPeriodSeconds);
-    mach_timebase_info_data_t timebase;
-    mach_timebase_info(&timebase);
-    double hostTicksPerSecond = 1e9 * timebase.denom / timebase.numer;
-    double hostTicksPerPeriod = hostTicksPerSecond * periodFrames / sampleRate;
-    uint64_t bits;
-    memcpy(&bits, &hostTicksPerPeriod, sizeof(bits));
-    atomic_init(&clock->anchorHostTime, mach_absolute_time());
-    atomic_init(&clock->periodCount, 0);
-    atomic_init(&clock->seed, 1);
-    atomic_init(&clock->hostTicksPerPeriod, bits);
-    atomic_init(&clock->periodFrames, periodFrames);
-}
-
-/// Re-derives how long a period lasts at a new nominal rate and re-anchors.
-/// The period keeps its frame count. Rate changes arrive while I/O is
-/// stopped.
-static void VPClockSetRate(VPClock *clock, double sampleRate) {
-    uint32_t periodFrames = atomic_load(&clock->periodFrames);
-    mach_timebase_info_data_t timebase;
-    mach_timebase_info(&timebase);
-    double hostTicksPerSecond = 1e9 * timebase.denom / timebase.numer;
-    double hostTicksPerPeriod = hostTicksPerSecond * periodFrames / sampleRate;
-    uint64_t bits;
-    memcpy(&bits, &hostTicksPerPeriod, sizeof(bits));
-    atomic_store(&clock->hostTicksPerPeriod, bits);
-    atomic_store(&clock->periodCount, 0);
-    atomic_store(&clock->anchorHostTime, mach_absolute_time());
-    atomic_fetch_add(&clock->seed, 1);
-}
 
 static void VPClockAnchor(VPClock *clock) {
     atomic_store(&clock->periodCount, 0);
@@ -314,11 +281,32 @@ static void VPClockAnchor(VPClock *clock) {
     atomic_fetch_add(&clock->seed, 1);
 }
 
+/// Re-derives how long a period lasts at a new nominal rate and re-anchors.
+/// The period keeps its frame count. Rate changes arrive while I/O is
+/// stopped.
+static void VPClockSetRate(VPClock *clock, double sampleRate) {
+    mach_timebase_info_data_t timebase;
+    mach_timebase_info(&timebase);
+    double hostTicksPerSecond = 1e9 * timebase.denom / timebase.numer;
+    double hostTicksPerPeriod = hostTicksPerSecond * clock->periodFrames / sampleRate;
+    uint64_t bits;
+    memcpy(&bits, &hostTicksPerPeriod, sizeof(bits));
+    atomic_store(&clock->hostTicksPerPeriod, bits);
+    VPClockAnchor(clock);
+}
+
+/// Fixes the period at `kTimestampPeriodSeconds` of the rate the device
+/// starts at; the device publishes `periodFrames` as its timestamp period.
+static void VPClockConfigure(VPClock *clock, double sampleRate) {
+    memset(clock, 0, sizeof(*clock));
+    clock->periodFrames = (uint32_t)(sampleRate * kTimestampPeriodSeconds);
+    VPClockSetRate(clock, sampleRate);
+}
+
 static void VPClockZeroTimestamp(VPClock *clock, Float64 *sampleTime, UInt64 *hostTime, UInt64 *seed) {
     uint64_t anchor = atomic_load(&clock->anchorHostTime);
     uint64_t count = atomic_load(&clock->periodCount);
     uint64_t ticksBits = atomic_load(&clock->hostTicksPerPeriod);
-    uint32_t periodFrames = atomic_load(&clock->periodFrames);
     double hostTicksPerPeriod;
     memcpy(&hostTicksPerPeriod, &ticksBits, sizeof(hostTicksPerPeriod));
     uint64_t now = mach_absolute_time();
@@ -326,12 +314,11 @@ static void VPClockZeroTimestamp(VPClock *clock, Float64 *sampleTime, UInt64 *ho
         count = (uint64_t)((now - anchor) / hostTicksPerPeriod);
         atomic_store(&clock->periodCount, count);
     }
-    *sampleTime = (Float64)count * periodFrames;
+    *sampleTime = (Float64)count * clock->periodFrames;
     *hostTime = anchor + (UInt64)(count * hostTicksPerPeriod);
     // The seed names the timeline, not the timestamp: it moves only when the
-    // clock is re-anchored. The HAL reads a changed seed as a discontinuity
-    // and re-anchors its own IO timeline, audibly, so a seed that moved with
-    // every period made every period a glitch.
+    // clock is re-anchored, which is the one time the HAL should re-anchor
+    // its own.
     *seed = atomic_load(&clock->seed);
 }
 
@@ -396,23 +383,24 @@ typedef struct {
     float *scratch;
     uint32_t bytesPerFrame;
     uint32_t wireRate;
-    /// Bytes the ring refused because the device had not returned the space.
-    _Atomic uint64_t *dropped;
-    /// Frames the HAL handed over, and bytes that went into the ring.
-    _Atomic uint64_t *framesIn;
-    _Atomic uint64_t *bytesOut;
+    /// Since the last device start: frames the HAL handed over, bytes that
+    /// went into the ring, and bytes the ring refused because the device had
+    /// not returned the space.
+    _Atomic uint64_t framesIn;
+    _Atomic uint64_t bytesOut;
+    _Atomic uint64_t dropped;
 } VPMixState;
 
 static void VPMixRingWrite(VPMixState *mix, const void *bytes, uint32_t length) {
     if (VPVirtIOSoundRingWrite(mix->ring, bytes, length)) {
-        atomic_fetch_add_explicit(mix->bytesOut, length, memory_order_relaxed);
+        atomic_fetch_add_explicit(&mix->bytesOut, length, memory_order_relaxed);
     } else {
-        atomic_fetch_add_explicit(mix->dropped, length, memory_order_relaxed);
+        atomic_fetch_add_explicit(&mix->dropped, length, memory_order_relaxed);
     }
 }
 
 static int VPMixWrite(VPMixState *mix, void *buffer, UInt32 frameCount) {
-    atomic_fetch_add_explicit(mix->framesIn, frameCount, memory_order_relaxed);
+    atomic_fetch_add_explicit(&mix->framesIn, frameCount, memory_order_relaxed);
     uint32_t halRate = atomic_load(mix->halRate);
     if (halRate == mix->wireRate) {
         VPMixRingWrite(mix, buffer, frameCount * mix->bytesPerFrame);
@@ -486,14 +474,11 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     /// Periods of silence queued ahead of the mix at each device start.
     uint32_t _leadPeriods;
     void *_silence;
-    /// Since the last device start: writes handed to the device, how many of
-    /// them found it with nothing left to play, and bytes the ring refused.
+    /// Since the last device start: when it was, writes handed to the device,
+    /// and how many of them found it with nothing left to play.
+    uint64_t _startedAt;
     uint64_t _submissions;
     uint64_t _starved;
-    _Atomic uint64_t _dropped;
-    _Atomic uint64_t _framesIn;
-    _Atomic uint64_t _bytesOut;
-    uint64_t _startedAt;
     /// The rate CoreAudio runs the stream at, which is the wire rate until a
     /// 44100 aggregate switches the device. The mix block reads it, the rate
     /// change writes it, both lock-free.
@@ -546,7 +531,7 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     _leadPeriods = VPLeadPeriods();
     _silence = calloc(1, _periodBytes);
     _resampleScratch = malloc(kResampleScratchFrames * format.bytesPerFrame);
-    if (!_resampleScratch) {
+    if (!_silence || !_resampleScratch) {
         IONotificationPortDestroy(_port);
         VPVirtIOSoundRingDestroy(&_ring);
         return nil;
@@ -599,17 +584,14 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
         .scratch = _resampleScratch,
         .bytesPerFrame = format.bytesPerFrame,
         .wireRate = (uint32_t)format.sampleRate,
-        .dropped = &_dropped,
-        .framesIn = &_framesIn,
-        .bytesOut = &_bytesOut,
     };
     [self installMixBlock];
     os_log(VPLog(), "stream %u: %.0f Hz, %u channels, %u-bit %{public}s, period %u bytes",
         streamID, format.sampleRate, format.channels, format.bitsPerChannel,
         format.isFloat ? "float" : "integer", _periodBytes);
-    VPLogToFile("stream %u: %.0f Hz, %u channels, %u-bit %s, period %u bytes",
+    VPLogToFile("stream %u: %.0f Hz, %u channels, %u-bit %s, period %u bytes, lead %u period(s)",
         streamID, format.sampleRate, format.channels, format.bitsPerChannel,
-        format.isFloat ? "float" : "integer", _periodBytes);
+        format.isFloat ? "float" : "integer", _periodBytes, _leadPeriods);
     return self;
 }
 
@@ -723,11 +705,10 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     _reportedTransferError = NO;
     _submissions = 0;
     _starved = 0;
-    atomic_store(&_dropped, 0);
-    atomic_store(&_framesIn, 0);
-    atomic_store(&_bytesOut, 0);
+    atomic_store(&_mix.framesIn, 0);
+    atomic_store(&_mix.bytesOut, 0);
+    atomic_store(&_mix.dropped, 0);
     _startedAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
-    [self queueLead];
     return YES;
 }
 
@@ -739,21 +720,30 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
 /// the device still draining tops up what the drain consumed.
 - (void)queueLead {
     dispatch_assert_queue(_queue);
-    if (!_silence) {
-        return;
-    }
     uint32_t queued = (uint32_t)(VPVirtIOSoundRingInFlight(&_ring) / _periodBytes);
-    BOOL wrote = NO;
     for (uint32_t period = queued; period < _leadPeriods; period++) {
-        wrote = VPVirtIOSoundRingWrite(&_ring, _silence, _periodBytes) || wrote;
+        VPVirtIOSoundRingWrite(&_ring, _silence, _periodBytes);
     }
-    if (wrote) {
-        [self submitPending:YES];
-    }
+    [self submitPending:YES];
 }
 
 - (UInt32)queuedLatencyFrames {
     return (_leadPeriods + 1) * (_periodBytes / _format.bytesPerFrame);
+}
+
+/// One line per run of the device, for telling a gap on the host (`starved`)
+/// from an unhappy HAL clock (`in` far from the nominal rate) from a full
+/// ring (`dropped`).
+- (void)logCounters {
+    double seconds = (double)(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - _startedAt) / 1e9;
+    uint64_t framesIn = atomic_load(&_mix.framesIn);
+    uint64_t framesOut = atomic_load(&_mix.bytesOut) / _format.bytesPerFrame;
+    VPLogToFile("stream %u: %.2f s, %llu writes, %llu starved, %llu bytes dropped, "
+        "in %llu frames (%.0f/s, hal %u), out %llu frames (%.0f/s)",
+        _streamID, seconds, (unsigned long long)_submissions, (unsigned long long)_starved,
+        (unsigned long long)atomic_load(&_mix.dropped),
+        (unsigned long long)framesIn, seconds > 0 ? framesIn / seconds : 0, atomic_load(&_halRate),
+        (unsigned long long)framesOut, seconds > 0 ? framesOut / seconds : 0);
 }
 
 - (void)stopDevice {
@@ -814,13 +804,10 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
 
 - (void)startStream {
     dispatch_sync(_queue, ^{
-        VPLogToFile("stream %u: startStream in state %d, %llu bytes in flight", self->_streamID,
-            (int)self->_state, (unsigned long long)VPVirtIOSoundRingInFlight(&self->_ring));
-        if (self->_state == VPStreamStateIdle) {
-            if (![self startDevice]) {
-                return;
-            }
-        } else if (self->_state == VPStreamStateDraining) {
+        if (self->_state == VPStreamStateIdle && ![self startDevice]) {
+            return;
+        }
+        if (self->_state != VPStreamStateRunning) {
             [self queueLead];
         }
         self->_state = VPStreamStateRunning;
@@ -843,20 +830,10 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
 
 - (void)stopStream {
     dispatch_sync(_queue, ^{
-        VPLogToFile("stream %u: stopStream in state %d, %llu bytes in flight", self->_streamID,
-            (int)self->_state, (unsigned long long)VPVirtIOSoundRingInFlight(&self->_ring));
-        VPLogToFile("stream %u: %llu writes, %llu starved, %llu bytes dropped, lead %u period(s)", self->_streamID,
-            (unsigned long long)self->_submissions, (unsigned long long)self->_starved,
-            (unsigned long long)atomic_load(&self->_dropped), self->_leadPeriods);
-        double seconds = (double)(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - self->_startedAt) / 1e9;
-        uint64_t framesIn = atomic_load(&self->_framesIn);
-        uint64_t framesOut = atomic_load(&self->_bytesOut) / self->_format.bytesPerFrame;
-        VPLogToFile("stream %u: %.2f s, in %llu frames (%.0f/s, hal %u), out %llu frames (%.0f/s)", self->_streamID,
-            seconds, (unsigned long long)framesIn, seconds > 0 ? framesIn / seconds : 0, atomic_load(&self->_halRate),
-            (unsigned long long)framesOut, seconds > 0 ? framesOut / seconds : 0);
         if (self->_state != VPStreamStateRunning) {
             return;
         }
+        [self logCounters];
         [self submitPending:YES];
         self->_state = VPStreamStateDraining;
         if (VPVirtIOSoundRingInFlight(&self->_ring) == 0) {
@@ -977,7 +954,6 @@ static uint32_t VPStreamCount(io_service_t service) {
     if (_alternateRate > 0 && override == _alternateRate) {
         nominalRate = _alternateRate;
     }
-    UInt32 periodFrames = (UInt32)(nominalRate * kTimestampPeriodSeconds);
     VPClockConfigure(&_clock, nominalRate);
     _clockRate = nominalRate;
     self.deviceName = @"vphone Speaker";
@@ -991,10 +967,12 @@ static uint32_t VPStreamCount(io_service_t service) {
     self.samplingRate = nominalRate;
     self.outputSafetyOffset = kSafetyOffsetFrames;
     // What the stream queues ahead of the host, so the HAL presents video
-    // against when the sound is heard, not when it is written.
-    self.outputLatency = latencyFrames;
+    // against when the sound is heard, not when it is written. Set once, in
+    // frames of the rate the device starts at, so after a rate change it is
+    // off by the ratio of the rates.
+    self.outputLatency = (UInt32)(latencyFrames * nominalRate / sampleRate);
     self.transportType = VPTransportType();
-    self.timestampPeriod = periodFrames;
+    self.timestampPeriod = _clock.periodFrames;
 
     [self installIOBlocks];
     UInt32 transport = self.transportType;
@@ -1050,13 +1028,6 @@ static uint32_t VPStreamCount(io_service_t service) {
     if (result == kAudioHardwareNoError) {
         VPClockAnchor(&_clock);
     }
-    VPLogToFile("performStartIO -> %d (clock %.0f)", result, _clockRate);
-    return result;
-}
-
-- (int)performStopIO {
-    int result = [super performStopIO];
-    VPLogToFile("performStopIO -> %d", result);
     return result;
 }
 

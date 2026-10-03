@@ -355,11 +355,10 @@ callbacks is the completion of that path. The iOS 27 binary
 
 Three faults in the plugin itself survived everything above. Each was found on
 a new iPad16,1 / 26.6.2 guest (`audiotest-ipad`) with counters the plugin now
-writes to `/var/mobile/vpquery.log` at every stream stop:
+writes to `/var/mobile/vpquery.log` each time the stream stops:
 
 ```
-stream 1: 237 writes, 0 starved, 0 bytes dropped, lead 2 period(s)
-stream 1: 20.16 s, in 888832 frames (44094/s, hal 44100), out 967436 frames (47993/s)
+stream 1: 20.16 s, 237 writes, 0 starved, 0 bytes dropped, in 888832 frames (44094/s, hal 44100), out 967436 frames (47993/s)
 ```
 
 `writes` are periods handed to the kernel, `starved` the ones that found the
@@ -544,9 +543,9 @@ tone does there with no haptic server has not been measured.
    guest (§6); `vpquery.log` says so when it had to.
 4. Sound on the host: audible, and still audible after a stop. Beyond the
    plugin's own defaults (§6) the speaker route needs the VirtualAudio patches
-   (`virtualaudio_speaker_route_throws.md`). In `vpquery.log`, every
-   `performStartIO` is followed by a `stopStream` whose counters show `writes`
-   in proportion to the seconds played, `0 starved`, and `in` at the nominal
+   (`virtualaudio_speaker_route_throws.md`). In `vpquery.log`, every stop —
+   the second and later ones included — leaves a counter line with `writes` in
+   proportion to the seconds played, `0 starved`, and `in` at the nominal
    rate; `logs.syslog` for audiomxd shows no `Re-anchoring IO timeline` and no
    `could not establish a timeline`.
 5. Hardware volume: the plugin answers the pspk route's volume queries with a

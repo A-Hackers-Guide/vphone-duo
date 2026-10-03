@@ -11,79 +11,40 @@ import Testing
 
 @Suite("iPad audio node from the board tree")
 struct CustomFirmwareBoardAudioTests {
-    // MARK: - A flat device tree
-
-    private struct Node {
-        var properties: [(name: String, flags: UInt16, value: Data)]
-        var children: [Node] = []
-    }
-
-    private static func node(
-        _ name: String,
-        _ properties: [(String, Data)] = [],
-        flags: [String: UInt16] = [:],
-        children: [Node] = [],
-    ) -> Node {
-        Node(
-            properties: [("name", 0, Data((name + "\0").utf8))]
-                + properties.map { ($0.0, flags[$0.0] ?? 0, $0.1) },
-            children: children,
-        )
-    }
-
-    private static func uint32(_ value: UInt32) -> Data {
-        withUnsafeBytes(of: value.littleEndian) { Data($0) }
-    }
-
-    private static func serialize(_ node: Node) -> Data {
-        var out = uint32(UInt32(node.properties.count)) + uint32(UInt32(node.children.count))
-        for (name, flags, value) in node.properties {
-            var field = Data(name.utf8)
-            field.append(contentsOf: [UInt8](repeating: 0, count: 32 - field.count))
-            out.append(field)
-            out.append(contentsOf: withUnsafeBytes(of: UInt16(value.count).littleEndian) { Array($0) })
-            out.append(contentsOf: withUnsafeBytes(of: flags.littleEndian) { Array($0) })
-            out.append(value)
-            out.append(contentsOf: [UInt8](repeating: 0, count: (4 - value.count % 4) % 4))
-        }
-        for child in node.children {
-            out.append(serialize(child))
-        }
-        return out
-    }
+    private typealias Node = FlatDeviceTreeNode
 
     private static func tree(audio: Node?) -> Data {
-        let product = node(
+        let product = Node(
             "product",
             [("product-name", Data("iPad\0".utf8))],
             children: audio.map { [$0] } ?? [],
         )
-        return serialize(node("device-tree", [("model", Data("iPad17,3\0\0".utf8))], children: [
-            node("chosen"),
+        return Node("device-tree", [("model", Data("iPad17,3\0\0".utf8))], children: [
+            Node("chosen"),
             product,
-        ]))
+        ]).serialized
     }
 
     /// The D47 node `devicetree-cfw-product_audio_node` adds.
-    private static let iPhoneAudio = node("audio", [
-        ("acoustic-id", uint32(8018)),
-        ("stereo-sound-recording", uint32(1)),
-        ("supports-spatial-audio-capture", uint32(1)),
+    private static let iPhoneAudio = Node("audio", [
+        ("acoustic-id", Node.uint32(8018)),
+        ("stereo-sound-recording", Node.uint32(1)),
+        ("supports-spatial-audio-capture", Node.uint32(1)),
     ])
 
     /// J820's, trimmed: its own acoustic ID, a placeholder, and the board's phandle.
-    private static let boardAudio = node("audio", [
-        ("AAPL,phandle", uint32(395)),
-        ("acoustic-id", uint32(2029)),
+    private static let boardAudio = Node("audio", [
+        ("AAPL,phandle", Node.uint32(395)),
+        ("acoustic-id", Node.uint32(2029)),
         ("speaker-thiele-small", Data("syscfg/SpTS\0".utf8)),
-        ("stereo-sound-recording", uint32(1)),
+        ("stereo-sound-recording", Node.uint32(1)),
     ], flags: ["speaker-thiele-small": 0x8000])
 
     /// What the guest's node should become: the board's, without its phandle.
-    private static let presentedAudio = node("audio", [
-        ("acoustic-id", uint32(2029)),
+    private static let presentedAudio = Node("audio", [
+        ("acoustic-id", Node.uint32(2029)),
         ("speaker-thiele-small", Data("syscfg/SpTS\0".utf8)),
-        ("stereo-sound-recording", uint32(1)),
+        ("stereo-sound-recording", Node.uint32(1)),
     ], flags: ["speaker-thiele-small": 0x8000])
 
     // MARK: - Tests
@@ -101,13 +62,13 @@ struct CustomFirmwareBoardAudioTests {
 
     @Test func `keeps the guest's own phandle`() throws {
         var iPhone = Self.iPhoneAudio
-        iPhone.properties.append(("AAPL,phandle", 0, Self.uint32(77)))
+        iPhone.properties.append(("AAPL,phandle", 0, Node.uint32(77)))
         let (patched, _, _) = try CustomFirmwarePostRestoreDeviceTree.withBoardAudio(
             Self.tree(audio: iPhone),
             board: Self.tree(audio: Self.boardAudio),
         )
         var expected = Self.presentedAudio
-        expected.properties.append(("AAPL,phandle", 0, Self.uint32(77)))
+        expected.properties.append(("AAPL,phandle", 0, Node.uint32(77)))
         #expect(patched == Self.tree(audio: expected))
     }
 

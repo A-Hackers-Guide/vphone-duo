@@ -90,17 +90,7 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         dryRun: Bool = false,
         verbose: Bool = true,
     ) throws -> Outcome {
-        let boardData: Data
-        do {
-            boardData = try Data(contentsOf: boardURL)
-        } catch {
-            throw PatcherError.fileNotFound(boardURL.path)
-        }
-        let board = try openDeviceTree(boardData, path: boardURL.path).blob
-        return try rewrite(at: url, dryRun: dryRun, verbose: verbose) { blob in
-            let (newBlob, changes, delta) = try withBoardAudio(blob, board: board)
-            return (newBlob, changes, blob.count + delta)
-        }
+        try rewrite(at: url, board: boardURL, dryRun: dryRun, verbose: verbose, edit: withBoardAudio)
     }
 
     /// Make an iPad guest's `devicetree.img4` (or bare `.im4p`) carry the
@@ -113,6 +103,18 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         dryRun: Bool = false,
         verbose: Bool = true,
     ) throws -> Outcome {
+        try rewrite(at: url, board: boardURL, dryRun: dryRun, verbose: verbose, edit: withBoardHaptics)
+    }
+
+    /// `rewrite(at:)` with an edit that also takes the flat tree of the board's
+    /// device tree file and returns the size change it made.
+    private static func rewrite(
+        at url: URL,
+        board boardURL: URL,
+        dryRun: Bool,
+        verbose: Bool,
+        edit: (Data, Data) throws -> (Data, [Change], Int),
+    ) throws -> Outcome {
         let boardData: Data
         do {
             boardData = try Data(contentsOf: boardURL)
@@ -121,7 +123,7 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         }
         let board = try openDeviceTree(boardData, path: boardURL.path).blob
         return try rewrite(at: url, dryRun: dryRun, verbose: verbose) { blob in
-            let (newBlob, changes, delta) = try withBoardHaptics(blob, board: board)
+            let (newBlob, changes, delta) = try edit(blob, board)
             return (newBlob, changes, blob.count + delta)
         }
     }
@@ -231,12 +233,7 @@ public enum CustomFirmwarePostRestoreDeviceTree {
     /// Returns the blob unchanged and no changes when it is already in the
     /// target state.
     public static func patchedDeviceTree(_ blob: Data) throws -> (Data, [Change]) {
-        let (root, end) = try parseNode(blob, at: 0)
-        guard end == blob.count else {
-            throw PatcherError.invalidFormat(
-                "DT parse length mismatch: ended at \(end), blob is \(blob.count)",
-            )
-        }
+        let root = try parseTree(blob, label: "DT")
         guard nodeName(root) == "device-tree" else {
             throw PatcherError.invalidFormat(
                 "expected root node 'device-tree', got '\(nodeName(root))'",
@@ -297,18 +294,6 @@ public enum CustomFirmwarePostRestoreDeviceTree {
     /// A tree that already matches, or a board with no audio node, comes back
     /// unchanged.
     public static func withBoardAudio(_ blob: Data, board: Data) throws -> (Data, [Change], Int) {
-        let (root, end) = try parseNode(blob, at: 0)
-        guard end == blob.count else {
-            throw PatcherError.invalidFormat(
-                "DT parse length mismatch: ended at \(end), blob is \(blob.count)",
-            )
-        }
-        let (source, sourceEnd) = try parseNode(board, at: 0)
-        guard sourceEnd == board.count else {
-            throw PatcherError.invalidFormat(
-                "board DT parse length mismatch: ended at \(sourceEnd), blob is \(board.count)",
-            )
-        }
         func acousticID(_ node: Data) -> String {
             guard let (audio, _) = try? parseNode(node, at: 0),
                   let id = audio.properties.first(where: { $0.name == "acoustic-id" }),
@@ -316,15 +301,9 @@ public enum CustomFirmwarePostRestoreDeviceTree {
             else { return "none" }
             return String(id.value.loadLE(UInt32.self, at: 0))
         }
-        guard let change = DeviceTreePatcher.presentBoardAudio(in: root, from: source) else {
-            return (blob, [], 0)
+        return try withBoardNode(blob, board: board, property: "product/audio", DeviceTreePatcher.presentBoardAudio) {
+            ("acoustic-id \(acousticID($0.before))", "acoustic-id \(acousticID($0.after)), \($0.after.count)B")
         }
-        let record = Change(
-            property: "product/audio",
-            before: "acoustic-id \(acousticID(change.before))",
-            after: "acoustic-id \(acousticID(change.after)), \(change.after.count)B",
-        )
-        return (serializeNode(root), [record], change.after.count - change.before.count)
     }
 
     /// `blob` with `/product/haptics` as the board's flat tree `board` has it,
@@ -332,30 +311,43 @@ public enum CustomFirmwarePostRestoreDeviceTree {
     /// has none. Returns the size change with the changes, as `withBoardAudio`
     /// does. A tree that already matches comes back unchanged.
     public static func withBoardHaptics(_ blob: Data, board: Data) throws -> (Data, [Change], Int) {
-        let (root, end) = try parseNode(blob, at: 0)
-        guard end == blob.count else {
-            throw PatcherError.invalidFormat(
-                "DT parse length mismatch: ended at \(end), blob is \(blob.count)",
-            )
-        }
-        let (source, sourceEnd) = try parseNode(board, at: 0)
-        guard sourceEnd == board.count else {
-            throw PatcherError.invalidFormat(
-                "board DT parse length mismatch: ended at \(sourceEnd), blob is \(board.count)",
-            )
-        }
-        guard let change = DeviceTreePatcher.presentBoardHaptics(in: root, from: source) else {
-            return (blob, [], 0)
-        }
         func describe(_ node: Data) -> String {
             node.isEmpty ? "absent" : "present, \(node.count)B"
         }
-        let record = Change(
-            property: "product/haptics",
-            before: describe(change.before),
-            after: describe(change.after),
-        )
+        return try withBoardNode(blob, board: board, property: "product/haptics", DeviceTreePatcher.presentBoardHaptics) {
+            (describe($0.before), describe($0.after))
+        }
+    }
+
+    /// Parses both flat trees, applies `present` to them, and returns the
+    /// serialized result with one change, described by `describe`, and the
+    /// size it added.
+    private static func withBoardNode(
+        _ blob: Data,
+        board: Data,
+        property: String,
+        _ present: (DeviceTreePatcher.DTNode, DeviceTreePatcher.DTNode) -> DeviceTreePatcher.BoardNodeChange?,
+        describe: (DeviceTreePatcher.BoardNodeChange) -> (before: String, after: String),
+    ) throws -> (Data, [Change], Int) {
+        let root = try parseTree(blob, label: "DT")
+        let source = try parseTree(board, label: "board DT")
+        guard let change = present(root, source) else {
+            return (blob, [], 0)
+        }
+        let described = describe(change)
+        let record = Change(property: property, before: described.before, after: described.after)
         return (serializeNode(root), [record], change.after.count - change.before.count)
+    }
+
+    /// The root of a flat tree that must fill `blob` exactly.
+    private static func parseTree(_ blob: Data, label: String) throws -> DeviceTreePatcher.DTNode {
+        let (root, end) = try parseNode(blob, at: 0)
+        guard end == blob.count else {
+            throw PatcherError.invalidFormat(
+                "\(label) parse length mismatch: ended at \(end), blob is \(blob.count)",
+            )
+        }
+        return root
     }
 
     // MARK: - Flat device tree format

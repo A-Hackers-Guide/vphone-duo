@@ -1151,9 +1151,9 @@ struct VPhoneCustomFirmwareInstaller {
     }
 
     /// `includeIdentity` is false for an environment update, which carries
-    /// only the board audio and haptics repairs. `boardDeviceTree` is the iPad's own device
-    /// tree, staged from the VM's `FirmwareOriginals`, or nil for an iPhone
-    /// guest or a VM patched before `fw patch` kept it.
+    /// only the board audio and haptics repairs. `boardDeviceTree` is the
+    /// iPad's own device tree, staged from the VM's `FirmwareOriginals`, or nil
+    /// for an iPhone guest or a VM patched before `fw patch` kept it.
     private func patchPreboot(
         volumes: [[String: Any]],
         work: WorkDirectory,
@@ -1183,9 +1183,11 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
         let spoofBuild = includeIdentity ? self.spoofBuild : nil
-        let boardAudio = boardDeviceTree != nil && on(FirmwareGuestSystemPatchSet.prebootBoardAudio)
-        let boardHaptics = boardDeviceTree != nil && on(FirmwareGuestSystemPatchSet.prebootBoardHaptics)
-        guard rewriteIdentity || boardAudio || boardHaptics || !(spoofBuild ?? "").isEmpty else { return }
+        let boardVerbs = boardDeviceTree == nil ? [] : [
+            (FirmwareGuestSystemPatchSet.prebootBoardAudio, "patch-dt-board-audio"),
+            (FirmwareGuestSystemPatchSet.prebootBoardHaptics, "patch-dt-board-haptics"),
+        ].filter { on($0.0) }.map(\.1)
+        guard rewriteIdentity || !boardVerbs.isEmpty || !(spoofBuild ?? "").isEmpty else { return }
         guard
             let preboot = volumes.first(where: { ($0["Roles"] as? [String])?.contains("Preboot") == true }),
             let device = preboot["DeviceIdentifier"] as? String
@@ -1213,23 +1215,10 @@ struct VPhoneCustomFirmwareInstaller {
             if rewriteIdentity {
                 try patchCopy(of: deviceTree, in: root, work: work, verb: "patch-post-restore-dt")
             }
-            if boardAudio, let boardDeviceTree {
-                try patchCopy(
-                    of: deviceTree,
-                    in: root,
-                    work: work,
-                    verb: "patch-dt-board-audio",
-                    arguments: [boardDeviceTree.path],
-                )
-            }
-            if boardHaptics, let boardDeviceTree {
-                try patchCopy(
-                    of: deviceTree,
-                    in: root,
-                    work: work,
-                    verb: "patch-dt-board-haptics",
-                    arguments: [boardDeviceTree.path],
-                )
+            if let boardDeviceTree {
+                for verb in boardVerbs {
+                    try patchCopy(of: deviceTree, in: root, work: work, verb: verb, arguments: [boardDeviceTree.path])
+                }
             }
             if let build = spoofBuild {
                 let version = "Cryptexes/OS/System/Library/CoreServices/SystemVersion.plist"
