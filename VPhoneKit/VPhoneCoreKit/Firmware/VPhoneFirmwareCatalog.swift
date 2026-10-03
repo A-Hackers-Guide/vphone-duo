@@ -48,6 +48,9 @@ public enum VPhoneFirmwareCatalog {
     public static let device = "iPhone17,3"
 
     // cloudOS images (one per major); referenced by multiple iPhone builds.
+    // cloud264 is the 26.4 beta (23E5207q), the last cloudOS with vphone600ap:
+    // every release from 26.4 (23E244) to 26.7 (23H20) has only vresearch101ap,
+    // so newer builds keep pairing with it.
     static let cloud261 = "https://updates.cdn-apple.com/private-cloud-compute/399b664dd623358c3de118ffc114e42dcd51c9309e751d43bc949b98f4e31349"
     static let cloud262 = "https://updates.cdn-apple.com/private-cloud-compute/0cb00f22e0f7a8b33995b49b2bdca77f781ed6093a09c570ac21b0f012bab908"
     static let cloud263 = "https://updates.cdn-apple.com/private-cloud-compute/edc92b58ab7e2f207a6407fd0a0e1a60f7d43bf9d93325bf6d3db3e154ee5525"
