@@ -114,13 +114,17 @@ test-injection-environment:
 		-o $(OUT)/InjectionEnvironmentTests Tests/InjectionEnvironmentTests.c
 	@$(OUT)/InjectionEnvironmentTests
 
-# Host proof harness for the virtio-snd format choice and output ring.
+# Host proof harness for the virtio-snd format choice, output ring and clock.
 test-virtiosound:
 	@mkdir -p $(OUT)
 	xcrun --sdk macosx clang -O1 -Wall -Wextra -Werror -IVirtIOSound \
 		-o $(OUT)/VirtIOSoundTests \
 		Tests/VirtIOSoundTests.c VirtIOSound/VPVirtIOSoundProtocol.c VirtIOSound/VPVirtIOSoundRing.c
 	@$(OUT)/VirtIOSoundTests
+	xcrun --sdk macosx clang -O1 -Wall -Wextra -Werror -IVirtIOSound \
+		-o $(OUT)/VirtIOSoundClockTests \
+		Tests/VirtIOSoundClockTests.c VirtIOSound/VPVirtIOSoundClock.c
+	@$(OUT)/VirtIOSoundClockTests
 
 # Host proof harness for the camera data plane the guest hooks share.
 test-vcam-dataplane:

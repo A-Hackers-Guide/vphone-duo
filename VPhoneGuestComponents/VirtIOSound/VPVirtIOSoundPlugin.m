@@ -7,15 +7,18 @@
 // in the guest needs the host microphone yet, and leaving them out keeps
 // the host from opening it.
 //
-// The device clock is free running, anchored to mach_absolute_time when I/O
-// starts, as the macOS plugin's is. The mixed output goes into a ring (see
-// VPVirtIOSoundRing.h) and a timer hands it to the kernel a period at a time
-// with the async write selector; the virtio device paces playback on the host.
+// The device clock (VPVirtIOSoundClock.h) is free running, anchored to
+// mach_absolute_time when I/O starts, as the macOS plugin's is. The mixed
+// output goes into a ring (see VPVirtIOSoundRing.h) and a timer hands it to
+// the kernel a period at a time with the async write selector; the virtio
+// device paces playback on the host.
 //
 // Optional settings in the `com.apple.coreaudio` preference domain, read
 // once when audiomxd loads the plugin:
 //   VPhoneVirtIOSoundTransportType  four-character transport ("usb ", "bltn")
-//   VPhoneVirtIOSoundDeviceUID      HAL device UID (default "PuffinOutput")
+//   VPhoneVirtIOSoundDeviceUID      HAL device UID (default "PuffinOutput" on
+//                                   an iPad or iPhone guest,
+//                                   "VPhoneVirtIOSound:0" elsewhere)
 //   VPhoneVirtIOSoundNominalRate    44100 to start at the alternate rate
 //   VPhoneVirtIOSoundLeadPeriods    periods of silence queued ahead of the
 //                                   mix at each start, 0 to 8
@@ -23,6 +26,7 @@
 #import "VPVirtIOSoundAudioServerDriver.h"
 
 #include <IOKit/IOKitLib.h>
+#include <mach-o/dyld.h>
 #include <mach/mach_time.h>
 #include <os/log.h>
 #include <stdatomic.h>
@@ -36,6 +40,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "VPVirtIOSoundClock.h"
 #include "VPVirtIOSoundProtocol.h"
 #include "VPVirtIOSoundRing.h"
 
@@ -127,6 +132,18 @@ static void VPLogToFile(const char *format, ...) {
     fclose(file);
 }
 
+/// Whether an image whose path contains `fragment` is mapped into audiomxd.
+static BOOL VPImageLoaded(const char *fragment) {
+    uint32_t count = _dyld_image_count();
+    for (uint32_t i = 0; i < count; i++) {
+        const char *name = _dyld_get_image_name(i);
+        if (name && strstr(name, fragment)) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
 static NSString *VPFourCC(UInt32 code) {
     char text[5] = {
         (char)(code >> 24), (char)(code >> 16), (char)(code >> 8), (char)code, 0,
@@ -172,6 +189,42 @@ static UInt32 VPTransportType(void) {
     return transport;
 }
 
+/// The guest's `hw.machine` ("iPad16,1"), read once; empty if unreadable.
+static const char *VPMachine(void) {
+    static char machine[64];
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        size_t size = sizeof(machine) - 1;
+        if (sysctlbyname("hw.machine", machine, &size, NULL, 0) != 0) {
+            machine[0] = 0;
+        }
+    });
+    return machine;
+}
+
+/// The ProductID VirtualAudio should route this guest with, or 0 for a guest
+/// the speaker route has not been set up and verified on.
+///
+/// VirtualAudio derives its ProductID from a MobileGestalt class answer, and
+/// vphone600 lands on a simulator class — 196 presenting an iPad, 195 an
+/// iPhone — whose routing constructor skips the sub-port configurations the
+/// real routes need: it throws (`RoutingSettings_J98.cpp:805`,
+/// `RoutingSettings_N71.cpp:1167`), never initializes, and every session
+/// gets "VirtualAudio PlugIn is not initialized yet" — no sound anywhere.
+/// 8010 is the one accepted ID whose category map covers an iPad's ringtone
+/// previews; 8018 is the acoustic ID of the D47 audio node an iPhone guest's
+/// tree carries, whose tunings its image ships. Both defaults below key on
+/// this one answer, so a guest gets either the whole route or none of it.
+static int VPGuestProductID(void) {
+    if (strncmp(VPMachine(), "iPad", 4) == 0) {
+        return 8010;
+    }
+    if (strncmp(VPMachine(), "iPhone", 6) == 0) {
+        return 8018;
+    }
+    return 0;
+}
+
 static NSString *VPDeviceUID(unsigned index) {
     NSString *uid = CFBridgingRelease(
         CFPreferencesCopyAppValue(CFSTR("VPhoneVirtIOSoundDeviceUID"), kSettingsDomain));
@@ -182,43 +235,48 @@ static NSString *VPDeviceUID(unsigned index) {
     // UIDs its device factory knows. "PuffinOutput" is the built-in output of
     // Apple-silicon host audio, and the one such UID that publishes a routable
     // speaker; under any name of our own the device is claimed by nothing.
-    return index == 0 ? @"PuffinOutput" : [NSString stringWithFormat:@"VPhoneVirtIOSound:%u", index];
+    // Only where the route is set up: a speaker route on a VirtualAudio that
+    // was not deadlocked audiomxd and crash-looped it across launches.
+    if (index == 0 && VPGuestProductID() != 0) {
+        return @"PuffinOutput";
+    }
+    return [NSString stringWithFormat:@"VPhoneVirtIOSound:%u", index];
 }
 
-/// The ProductID VirtualAudio routes an iPad guest with.
+/// Gives VirtualAudio `VPGuestProductID()` through its own defaults key,
+/// `ProductIDOverride` in `com.apple.audio.virtualaudio`, which it reads
+/// before deriving one. This runs in audiomxd before VirtualAudio reads its
+/// defaults, so the key is set here, in the process, on every launch that
+/// finds none: audiomxd's sandbox keeps the write from reaching disk, and it
+/// does not need to. A value someone stored (`settings.set`) is their choice
+/// and stays.
 ///
-/// VirtualAudio derives its ProductID from a MobileGestalt class answer, and
-/// vphone600 lands on 196, a simulator class whose routing constructor skips
-/// the sub-port configurations an iPad's routes need: it throws, never
-/// initializes, and every session gets "VirtualAudio PlugIn is not
-/// initialized yet" — no sound anywhere. Its own defaults key,
-/// `ProductIDOverride` in `com.apple.audio.virtualaudio`, comes first, and
-/// 8010 is the one accepted ID whose category map also covers ringtone
-/// previews. This runs in audiomxd before VirtualAudio reads its defaults, so
-/// the key is set here, in the process, on every launch that finds none:
-/// audiomxd's sandbox keeps the write from reaching disk, and it does not need
-/// to. A value someone stored (`settings.set`) is their choice and stays.
-/// iPhone guests are left alone: none of the IDs tried so far initializes
-/// there.
+/// Nothing guarantees that ordering, so the one line logged says what was
+/// done and whether VirtualAudio was already mapped into audiomxd: one that
+/// was not cannot have read its defaults yet; one that was may have.
 static void VPEnsureVirtualAudioProduct(void) {
-    char machine[64] = {0};
-    size_t size = sizeof(machine) - 1;
-    if (sysctlbyname("hw.machine", machine, &size, NULL, 0) != 0 || strncmp(machine, "iPad", 4) != 0) {
-        return;
+    BOOL virtualAudioLoaded = VPImageLoaded("/VirtualAudio.plugin/");
+    NSString *outcome;
+    int product = VPGuestProductID();
+    if (product == 0) {
+        outcome = @"no ProductID for this guest, left unset";
+    } else {
+        CFStringRef domain = CFSTR("com.apple.audio.virtualaudio");
+        CFStringRef key = CFSTR("ProductIDOverride");
+        id existing = CFBridgingRelease(CFPreferencesCopyAppValue(key, domain));
+        if (existing) {
+            outcome = [NSString stringWithFormat:@"stored %@, left as is", existing];
+        } else {
+            CFNumberRef value = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &product);
+            CFPreferencesSetAppValue(key, value, domain);
+            CFRelease(value);
+            outcome = [NSString stringWithFormat:@"unset, set to %d for this launch", product];
+        }
     }
-    CFStringRef domain = CFSTR("com.apple.audio.virtualaudio");
-    CFStringRef key = CFSTR("ProductIDOverride");
-    CFPropertyListRef existing = CFPreferencesCopyAppValue(key, domain);
-    if (existing) {
-        CFRelease(existing);
-        return;
-    }
-    int product = 8010;
-    CFNumberRef value = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &product);
-    CFPreferencesSetAppValue(key, value, domain);
-    CFRelease(value);
-    os_log(VPLog(), "ProductIDOverride was unset on %{public}s: %d for this launch", machine, product);
-    VPLogToFile("ProductIDOverride was unset on %s: %d for this launch", machine, product);
+    const char *loaded = virtualAudioLoaded ? "already loaded" : "not loaded yet";
+    os_log(VPLog(), "ProductIDOverride on '%{public}s': %{public}@; VirtualAudio %{public}s",
+        VPMachine(), outcome, loaded);
+    VPLogToFile("ProductIDOverride on '%s': %s; VirtualAudio %s", VPMachine(), outcome.UTF8String, loaded);
 }
 
 /// How many periods of silence go to the device before the mix at each start.
@@ -254,72 +312,6 @@ static double VPNominalRateOverride(void) {
         CFRelease(value);
     }
     return rate;
-}
-
-// MARK: - Clock
-
-/// The free-running device clock. `performStartIO` anchors it; the I/O
-/// thread reads it through `getZeroTimestampBlock`. The nominal rate can move
-/// under it — the HAL runs the device at 44100 for ringtone previews and web
-/// audio and at 48000 otherwise — but the period stays the frame count the
-/// device published when the HAL first read it: the HAL keeps that number
-/// (it logs it as "Ring buffer size") and re-anchors its timeline on every
-/// timestamp that does not advance by exactly it. A rate change therefore
-/// moves only how long a period lasts (`VPClockSetRate`).
-typedef struct {
-    _Atomic uint64_t anchorHostTime;
-    _Atomic uint64_t periodCount;
-    _Atomic uint64_t seed;
-    _Atomic uint64_t hostTicksPerPeriod;
-    /// Set once, by `VPClockConfigure`.
-    uint32_t periodFrames;
-} VPClock;
-
-static void VPClockAnchor(VPClock *clock) {
-    atomic_store(&clock->periodCount, 0);
-    atomic_store(&clock->anchorHostTime, mach_absolute_time());
-    atomic_fetch_add(&clock->seed, 1);
-}
-
-/// Re-derives how long a period lasts at a new nominal rate and re-anchors.
-/// The period keeps its frame count. Rate changes arrive while I/O is
-/// stopped.
-static void VPClockSetRate(VPClock *clock, double sampleRate) {
-    mach_timebase_info_data_t timebase;
-    mach_timebase_info(&timebase);
-    double hostTicksPerSecond = 1e9 * timebase.denom / timebase.numer;
-    double hostTicksPerPeriod = hostTicksPerSecond * clock->periodFrames / sampleRate;
-    uint64_t bits;
-    memcpy(&bits, &hostTicksPerPeriod, sizeof(bits));
-    atomic_store(&clock->hostTicksPerPeriod, bits);
-    VPClockAnchor(clock);
-}
-
-/// Fixes the period at `kTimestampPeriodSeconds` of the rate the device
-/// starts at; the device publishes `periodFrames` as its timestamp period.
-static void VPClockConfigure(VPClock *clock, double sampleRate) {
-    memset(clock, 0, sizeof(*clock));
-    clock->periodFrames = (uint32_t)(sampleRate * kTimestampPeriodSeconds);
-    VPClockSetRate(clock, sampleRate);
-}
-
-static void VPClockZeroTimestamp(VPClock *clock, Float64 *sampleTime, UInt64 *hostTime, UInt64 *seed) {
-    uint64_t anchor = atomic_load(&clock->anchorHostTime);
-    uint64_t count = atomic_load(&clock->periodCount);
-    uint64_t ticksBits = atomic_load(&clock->hostTicksPerPeriod);
-    double hostTicksPerPeriod;
-    memcpy(&hostTicksPerPeriod, &ticksBits, sizeof(hostTicksPerPeriod));
-    uint64_t now = mach_absolute_time();
-    if (now > anchor && (double)(now - anchor) >= (count + 1) * hostTicksPerPeriod) {
-        count = (uint64_t)((now - anchor) / hostTicksPerPeriod);
-        atomic_store(&clock->periodCount, count);
-    }
-    *sampleTime = (Float64)count * clock->periodFrames;
-    *hostTime = anchor + (UInt64)(count * hostTicksPerPeriod);
-    // The seed names the timeline, not the timestamp: it moves only when the
-    // clock is re-anchored, which is the one time the HAL should re-anchor
-    // its own.
-    *seed = atomic_load(&clock->seed);
 }
 
 // MARK: - Resampler
@@ -516,6 +508,9 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     _connection = connection;
     _streamID = streamID;
     _format = format;
+    // Returning nil from here releases self, so `dealloc` runs on whatever
+    // was set up so far: it owns every release, and these branches only
+    // return.
     VPVirtIOSoundBufferSizes(&format, (uint32_t)getpagesize(), &_periodBytes, &_bufferBytes);
     if (!VPVirtIOSoundRingInit(&_ring, _bufferBytes, _periodBytes)) {
         os_log_error(VPLog(), "stream %u: cannot allocate a %u-byte ring", streamID, _bufferBytes);
@@ -524,7 +519,6 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     _queue = dispatch_queue_create("com.vphone.audio.virtiosound.stream", DISPATCH_QUEUE_SERIAL);
     _port = IONotificationPortCreate(kIOMainPortDefault);
     if (!_port) {
-        VPVirtIOSoundRingDestroy(&_ring);
         return nil;
     }
     IONotificationPortSetDispatchQueue(_port, _queue);
@@ -532,8 +526,6 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     _silence = calloc(1, _periodBytes);
     _resampleScratch = malloc(kResampleScratchFrames * format.bytesPerFrame);
     if (!_silence || !_resampleScratch) {
-        IONotificationPortDestroy(_port);
-        VPVirtIOSoundRingDestroy(&_ring);
         return nil;
     }
 
@@ -595,6 +587,9 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     return self;
 }
 
+/// Also the cleanup of a failed init, so it takes any prefix of it: ivars
+/// start zeroed, `free(NULL)` is a no-op, and a ring that `RingInit` refused
+/// or never saw is zeroed, which `RingDestroy` frees as NULL.
 - (void)dealloc {
     if (_timer) {
         dispatch_source_cancel(_timer);
@@ -855,7 +850,7 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
 @implementation VPVirtIOSoundDevice {
     io_service_t _service;
     io_connect_t _connection;
-    VPClock _clock;
+    VPVirtIOSoundClock _clock;
     /// The virtio wire rate, the only rate the device actually runs at.
     double _wireRate;
     /// The second advertised rate, or 0 when the wire rate leaves nothing to
@@ -893,6 +888,8 @@ static uint32_t VPStreamCount(io_service_t service) {
         os_log_error(VPLog(), "cannot open AppleVirtIOSound: 0x%x", result);
         return nil;
     }
+    // The connection is this method's to close until the ivars hold it; from
+    // there `dealloc` releases both, including for the nil return below.
     self = [super initWithDeviceUID:VPDeviceUID(index) withPlugin:plugin];
     if (!self) {
         IOServiceClose(connection);
@@ -954,7 +951,10 @@ static uint32_t VPStreamCount(io_service_t service) {
     if (_alternateRate > 0 && override == _alternateRate) {
         nominalRate = _alternateRate;
     }
-    VPClockConfigure(&_clock, nominalRate);
+    // The period is fixed at `kTimestampPeriodSeconds` of the rate the device
+    // starts at, and published below as its timestamp period.
+    VPVirtIOSoundClockConfigure(&_clock, (uint32_t)(nominalRate * kTimestampPeriodSeconds), nominalRate,
+        mach_absolute_time());
     _clockRate = nominalRate;
     self.deviceName = @"vphone Speaker";
     self.modelName = @"Virtual Sound Device";
@@ -1002,11 +1002,13 @@ static uint32_t VPStreamCount(io_service_t service) {
 /// running", waits five seconds for a timeline and fails the start — every
 /// start after the first. They go back in before every start.
 - (void)installIOBlocks {
-    VPClock *clock = &_clock;
+    VPVirtIOSoundClock *clock = &_clock;
     self.getZeroTimestampBlock = ^int(Float64 *sampleTime, UInt64 *hostTime, UInt64 *seed, UInt32 clientID) {
         (void)clientID;
-        VPClockZeroTimestamp(clock, sampleTime, hostTime, seed);
-        return kAudioHardwareNoError;
+        // False only when anchors kept landing through every read attempt;
+        // no timestamp beats one built from two timelines.
+        return VPVirtIOSoundClockZeroTimestamp(clock, mach_absolute_time(), sampleTime, hostTime, seed)
+            ? kAudioHardwareNoError : kAudioHardwareUnspecifiedError;
     };
     self.willDoReadInputBlock = ^int(UInt32 operationID, Boolean *willDo, Boolean *willDoInPlace) {
         (void)operationID;
@@ -1026,7 +1028,7 @@ static uint32_t VPStreamCount(io_service_t service) {
     [self installIOBlocks];
     int result = [super performStartIO];
     if (result == kAudioHardwareNoError) {
-        VPClockAnchor(&_clock);
+        VPVirtIOSoundClockAnchor(&_clock, mach_absolute_time());
     }
     return result;
 }
@@ -1051,7 +1053,7 @@ static uint32_t VPStreamCount(io_service_t service) {
     [super setSamplingRate:rate];
     if (rate > 0 && [self supportsSamplingRate:rate] && rate != _clockRate) {
         _clockRate = rate;
-        VPClockSetRate(&_clock, rate);
+        VPVirtIOSoundClockSetRate(&_clock, rate, mach_absolute_time());
         os_log(VPLog(), "nominal rate -> %.0f Hz", rate);
     }
 }
@@ -1302,6 +1304,9 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
 
 - (void)halInitializeWithPluginHost:(AudioServerPlugInHostRef)host {
     [super halInitializeWithPluginHost:host];
+    // First, so this launch's ProductIDOverride, device and stream lines
+    // follow it in the file rather than precede it.
+    VPLogToFile("=== plugin load ===");
     VPEnsureVirtualAudioProduct();
     io_iterator_t services = IO_OBJECT_NULL;
     kern_return_t result = IOServiceGetMatchingServices(
@@ -1322,7 +1327,6 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
         }
     }
     IOObjectRelease(services);
-    VPLogToFile("=== plugin load ===");
     os_log(VPLog(), "published %u virtio sound device(s)", index);
     VPLogToFile("published %u virtio sound device(s)", index);
 }
