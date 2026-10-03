@@ -7,10 +7,13 @@ import VPhoneCoreKit
 @MainActor
 class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
     let virtualMachine: VZVirtualMachine
+    /// The configuration actually used by this VM, rather than a pending preference.
+    let usesHardwareKeyboard: Bool
     /// ECID hex string resolved from machineIdentifier (e.g. "0x0012345678ABCDEF").
     let ecidHex: String?
     /// Read handle for VM serial output.
     private var serialOutputReadHandle: FileHandle?
+    private var serialInputSource: DispatchSourceRead?
     /// Synthetic battery source for runtime charge/connectivity updates.
     private var batterySource: AnyObject?
     /// The in-process network backing `.tunnel` mode; nil for every other mode.
@@ -70,19 +73,7 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
             let newID = VZMacMachineIdentifier()
             machineIdentifier = newID
 
-            manifest = VPhoneVirtualMachineManifest(
-                platformType: manifest.platformType,
-                platformFusing: manifest.platformFusing,
-                machineIdentifier: newID.dataRepresentation,
-                cpuCount: manifest.cpuCount,
-                memorySize: manifest.memorySize,
-                screenConfig: manifest.screenConfig,
-                networkConfig: manifest.networkConfig,
-                diskImage: manifest.diskImage,
-                nvramStorage: manifest.nvramStorage,
-                romImages: manifest.romImages,
-                sepStorage: manifest.sepStorage,
-            )
+            manifest = manifest.updating(machineIdentifier: newID.dataRepresentation)
             try manifest.write(to: options.configURL)
             try VPhoneHostFilePermissions.makeAccessible(at: options.configURL)
 
@@ -214,16 +205,21 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
             // Forward host stdin -> VM serial input
             let writeHandle = inputPipe.fileHandleForWriting
             let stdinFD = FileHandle.standardInput.fileDescriptor
-            DispatchQueue.global(qos: .userInteractive).async {
+            let inputSource = DispatchSource.makeReadSource(
+                fileDescriptor: stdinFD, queue: .global(qos: .userInteractive),
+            )
+            inputSource.setEventHandler { @Sendable [weak inputSource] in
                 var buf = [UInt8](repeating: 0, count: 4096)
-                while true {
-                    let n = read(stdinFD, &buf, buf.count)
-                    if n <= 0 {
-                        break
-                    }
-                    writeHandle.write(Data(buf[..<n]))
+                let n = read(stdinFD, &buf, buf.count)
+                if n > 0 {
+                    try? writeHandle.write(contentsOf: Data(buf[..<n]))
+                } else if n == 0 || errno != EINTR {
+                    inputSource?.cancel()
                 }
             }
+            inputSource.setCancelHandler { @Sendable in try? writeHandle.close() }
+            inputSource.activate()
+            serialInputSource = inputSource
 
             serialOutputReadHandle = outputPipe.fileHandleForReading
 
@@ -249,7 +245,9 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         config.entropyDevices = [obj]
         print("[vphone] Entropy device configured")
 
-        config.keyboards = [VZUSBKeyboardConfiguration()]
+        usesHardwareKeyboard = manifest.usesHardwareKeyboard
+        config.keyboards = usesHardwareKeyboard ? [VZUSBKeyboardConfiguration()] : []
+        print("[vphone] Hardware keyboard: \(usesHardwareKeyboard ? "enabled" : "disabled")")
 
         // Vsock (host <-> guest control channel, no IP/TCP involved)
         config.socketDevices = [VZVirtioSocketDeviceConfiguration()]
@@ -318,6 +316,14 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
     }
 
     // MARK: - Bundle Files
+
+    /// Cancel serial forwarding before another VM takes the same host stdin.
+    func stopHostDevices() {
+        serialInputSource?.cancel()
+        serialInputSource = nil
+        serialOutputReadHandle?.readabilityHandler = nil
+        serialOutputReadHandle = nil
+    }
 
     /// Every file below is opened, created or overwritten by this process or
     /// by Virtualization, and neither refuses a symbolic link. A bundle can

@@ -34,6 +34,32 @@ struct ManifestTests {
         #expect(updated.networkConfig.mode == .nat)
     }
 
+    @Test func `old manifests keep the hardware keyboard enabled`() throws {
+        let encoder = PropertyListEncoder()
+        let data = try encoder.encode(sampleManifest())
+        let plist = try #require(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        #expect(plist["hardwareKeyboardEnabled"] == nil)
+        let loaded = try PropertyListDecoder().decode(VPhoneVirtualMachineManifest.self, from: data)
+        #expect(loaded.usesHardwareKeyboard)
+    }
+
+    @Test(arguments: [true, false])
+    func `keyboard setting survives plist and unrelated edits`(enabled: Bool) throws {
+        let original = sampleManifest().updating(hardwareKeyboardEnabled: enabled)
+        let data = try PropertyListEncoder().encode(original)
+        let loaded = try PropertyListDecoder().decode(VPhoneVirtualMachineManifest.self, from: data)
+        #expect(loaded.usesHardwareKeyboard == enabled)
+        #expect(loaded.hardwareKeyboardEnabled == enabled)
+        let edited = loaded.updating(cpuCount: 4, machineIdentifier: Data([1, 2, 3]))
+        #expect(edited.usesHardwareKeyboard == enabled)
+        #expect(edited.cpuCount == 4)
+        #expect(edited.machineIdentifier == Data([1, 2, 3]))
+        #expect(edited.diskImage == original.diskImage)
+        #expect(edited.networkConfig == original.networkConfig)
+        #expect(edited.updating(guestDevice: .default).usesHardwareKeyboard == enabled)
+        #expect(edited.updating(hardwareKeyboardEnabled: !enabled).usesHardwareKeyboard == !enabled)
+    }
+
     @Test func `network config round trips through plist`() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)

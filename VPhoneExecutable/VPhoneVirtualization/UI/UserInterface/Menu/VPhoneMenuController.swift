@@ -1,4 +1,5 @@
 import AppKit
+import Dynamic
 import Foundation
 
 // MARK: - Menu Controller
@@ -9,7 +10,18 @@ class VPhoneMenuController {
     let control: VPhoneGuestControl
     let guestToolsWindowController: VPhoneGuestToolsWindowController
     let guestPanelsWindowController: VPhoneGuestPanelsWindowController
-    weak var vm: VPhoneVirtualMachine?
+    weak var vm: VPhoneVirtualMachine? {
+        didSet {
+            hardwareKeyboardItem?.state = vm?.usesHardwareKeyboard == true ? .on : .off
+            hardwareKeyboardItem?.isEnabled = vm != nil
+            if let vm, let item = hardwareKeyboardItem {
+                let count = (Dynamic(vm.virtualMachine)._keyboards.asObject as? NSArray)?.count
+                print("[keyboard] Menu checked: \(item.state == .on), active keyboards: \(count.map(String.init) ?? "unknown")")
+            }
+        }
+    }
+    var hardwareKeyboardItem: NSMenuItem?
+    var onHardwareKeyboardChange: ((Bool) async throws -> Void)?
 
     var onFilesPressed: (() -> Void)?
     var onKeychainPressed: (() -> Void)?

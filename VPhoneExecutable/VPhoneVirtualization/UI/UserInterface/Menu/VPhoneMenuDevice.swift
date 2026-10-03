@@ -63,6 +63,17 @@ extension VPhoneMenuController {
         menu.addItem(NSMenuItem.separator())
         menu.addItem(makeItem("Open Guest Spotlight", action: #selector(sendSpotlight), symbol: "magnifyingglass"))
         menu.addItem(makeItem("Switch Guest Input Source", action: #selector(sendGlobe), symbol: "globe"))
+        let keyboardItem = makeItem(
+            "Use Hardware Keyboard",
+            action: #selector(toggleHardwareKeyboard),
+            keyEquivalent: "k",
+            modifiers: [.command, .shift],
+            symbol: "keyboard",
+        )
+        keyboardItem.isEnabled = false
+        keyboardItem.toolTip = VPhoneLocalization.text("Changing the hardware keyboard requires restarting the virtual machine.")
+        hardwareKeyboardItem = keyboardItem
+        menu.addItem(keyboardItem)
         // Trackpad scroll and pinch arrive as ordinary NSEvents; the view turns
         // them into guest touches. Off hands both back to AppKit untouched.
         let trackpadItem = makeItem(
@@ -124,6 +135,45 @@ extension VPhoneMenuController {
 
     @objc func sendGlobe() {
         keySender.sendGlobe()
+    }
+
+    @objc func toggleHardwareKeyboard() {
+        guard let vm, let change = onHardwareKeyboardChange,
+              hardwareKeyboardItem?.isEnabled == true else { return }
+        guard screenRecorder?.isRecording != true else {
+            VPhoneAlert.present(
+                title: "Recording in Progress",
+                message: "Stop the screen recording before changing the hardware keyboard.",
+                style: .warning,
+            )
+            return
+        }
+        let enabled = !vm.usesHardwareKeyboard
+        hardwareKeyboardItem?.isEnabled = false
+        VPhoneAlert.present(
+            title: enabled ? "Enable Hardware Keyboard?" : "Disable Hardware Keyboard?",
+            message: "Changing the hardware keyboard requires restarting the virtual machine. Save your work in the guest first. The setting is saved for this machine. With the hardware keyboard disabled, tap a text field to use the guest's software keyboard.",
+            style: .warning,
+            buttons: ["Restart and Apply", "Cancel"],
+        ) { [weak self] response in
+            guard let self else { return }
+            guard response == .alertFirstButtonReturn else {
+                hardwareKeyboardItem?.isEnabled = true
+                return
+            }
+            Task { [weak self] in
+                do {
+                    try await change(enabled)
+                } catch {
+                    self?.hardwareKeyboardItem?.isEnabled = true
+                    VPhoneAlert.present(
+                        title: "Unable to Change Hardware Keyboard",
+                        message: error.localizedDescription,
+                        style: .warning,
+                    )
+                }
+            }
+        }
     }
 
     // MARK: - Rotate

@@ -51,6 +51,16 @@ final class VPhoneApplication: NSApplication {
     /// it goes on to the virtual keyboard, which `VPhoneHostKeyEvents` then
     /// delivers to the view itself.
     func takeKeyEvent(_ event: NSEvent, view: VPhoneVirtualMachineView) -> Bool {
+        if !view.hardwareKeyboardEnabled {
+            // Keep host menu shortcuts available, including the keyboard toggle.
+            // Do not synthesize dropped keys through vphoned while disconnected.
+            if event.type == .keyDown, mainMenu?.performKeyEquivalent(with: event) == true {
+                menuKeyCodes.insert(event.keyCode)
+            } else if event.type == .keyUp {
+                menuKeyCodes.remove(event.keyCode)
+            }
+            return true
+        }
         if event.type == .flagsChanged {
             forwardGlobe(event, view: view)
             return false
@@ -80,6 +90,13 @@ final class VPhoneApplication: NSApplication {
     }
 
     // MARK: - Keys the Virtual Keyboard Drops
+
+    /// A rebuilt VM must not inherit keys or a guest connection from the old one.
+    func resetGuestKeyState() {
+        releaseGlobe(leavingWindow: true)
+        forwardedKeys.removeAll()
+        menuKeyCodes.removeAll()
+    }
 
     /// fn / 🌐 reaches AppKit only as a flags change, and the virtual USB
     /// keyboard has no field for it. vphoned presses the guest's 🌐 for it, held
