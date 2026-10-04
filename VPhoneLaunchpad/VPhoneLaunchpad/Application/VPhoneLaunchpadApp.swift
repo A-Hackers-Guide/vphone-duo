@@ -7,6 +7,14 @@ struct VPhoneLaunchpadApp: App {
     @State private var model = VPhoneLaunchpadModel()
     @AppStorage(VPhoneLaunchpadMenuBar.key) private var showsInMenuBar = false
 
+    init() {
+        // AppKit must not restore saved window state. Everything starts from
+        // the window's task, so a launch that restores a state with no window
+        // in it never opens the control socket, and after a crash AppKit
+        // holds the launch at an alert about reopening windows.
+        UserDefaults.standard.register(defaults: ["ApplePersistenceIgnoreState": true])
+    }
+
     var body: some Scene {
         Window(Text(verbatim: "vphone-launchpad"), id: "main") {
             VPhoneLaunchpadRootView()
@@ -14,6 +22,8 @@ struct VPhoneLaunchpadApp: App {
                 .onAppear { delegate.model = model }
         }
         .windowToolbarStyle(.unified(showsTitle: false))
+        // Nor is any saved: the window's frame is kept under its own name.
+        .restorationBehavior(.disabled)
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .appSettings) {
