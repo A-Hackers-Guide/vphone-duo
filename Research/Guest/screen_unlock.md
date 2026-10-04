@@ -105,6 +105,29 @@ device, not a failed unlock. The very first reading after a boot can say
 "unlocked, lit" before SpringBoard has started (see step 1 above), so a check
 has to watch for a while, not trust one sample.
 
+On a second guest (`unlockpr-iphone`, same build, 2026-10-05) one start with
+the setting on stayed locked: the log read `[unlock] the guest was already
+unlocked`. `com.apple.springboard.finishedstartup` was already set, yet the
+two notify states still read unlocked, and the Lock Screen came up a few
+seconds after `screen.unlock` had returned. So the host does not take
+"already unlocked" at startup as final: it polls `device.screen` once a
+second and calls `screen.unlock` again when the Lock Screen appears, for up to
+90 s after the connect (`VPhoneGuestControl.unlockAtStartup`). With that:
+
+| Guest | Setting | Lock state every 3 s after `vm start --wait` (L locked, u unlocked) |
+| --- | --- | --- |
+| `unlockpr-iphone`, iOS 27.0, three starts in a row | on | `Luuuuuuuuuuuuuuuuuuu` then L (Auto-Lock) each time |
+| `unlockpr-ipad`, iPad16,1, iPadOS 26.6.2 23G90 | off | `LLLLLLLLLLLLLLLLLLLLLLLLL` |
+| `unlockpr-ipad` | on | `Luuuuuuuuuuuuuuuuuuuuuuuu` |
+
+Device › Unlock at Startup in the VM window checked itself, wrote
+`unlocksAtStartup = true` to config.plist at once, left the running guest
+locked, and the next start unlocked it.
+
+Setting a passcode on these guests through Settings did not work: every
+entry, by taps on the pad, by coordinates or as keyboard input, ended in
+"Passcodes Did Not Match". The passcode path therefore stays unmeasured.
+
 ## Not yet measured
 
 - **Passcode guests.** Setting a passcode on a research guest is not
