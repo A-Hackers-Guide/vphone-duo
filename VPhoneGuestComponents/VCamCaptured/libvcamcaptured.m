@@ -89,6 +89,10 @@ __attribute__((constructor)) static void vcc_init(void) {
     vcc_log(@"loaded (argv0=%@)",
             NSProcessInfo.processInfo.arguments.firstObject ?: @"?");
 
+    // Not delayed with the camera hooks below: the daemon asks for its
+    // capture sources as soon as a client connects.
+    vcc_install_microphone_source();
+
     // Schedule install after the daemon has run its own init. The delay
     // gives FigCaptureSourceServerStart's `dispatch_once` block time to
     // allocate _sSourceList before we try to mutate it.
