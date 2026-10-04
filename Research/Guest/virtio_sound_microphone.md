@@ -512,6 +512,12 @@ coming out of the Mac's speakers into its microphone, the capture's power at
 440 Hz was 44–45 dB at both rates, against 9–18 dB at 404 Hz and 479 Hz,
 where a rate taken the wrong way round would have put it.
 
+Listened to (2026-10-04): 25 s recorded at 44100 on `avtest-ipad` through
+the Mac's AirPods Pro microphone, with a build from before the 120 Hz low
+cut, sounds normal: no clicks, no metallic edge, no change of speed. Its
+level is -22 dB mean, -4 dB peak, and above 17 kHz it is at -74 dB, so the
+unfiltered straight-line conversion left no fold-back worth hearing.
+
 ## 6. Reveal and validation
 
 Measured on `mictest-ipad` (iPad16,1, iPadOS 26.6.2), recording in Voice
@@ -738,9 +744,6 @@ returns 512 KB unless given a `limit`.
 * Whether the kernel returns reads still out at RELEASE is not known. The
   plugin does not depend on it in the normal stop; the one-second fallback
   does, and was not reached.
-* The capture conversion to 44100 is a straight line between wire frames,
-  with nothing filtered first (§5, "Reading at 44100"). What that costs a
-  recording has not been listened to or measured beyond the tone's pitch.
 * `ssrc` on the input device (§4) is refused. Nothing depended on it.
 * The 1.9 s pause at the first capture (§6) is the host's. If it matters,
   the lead queued on the speaker side is what would cover it.
