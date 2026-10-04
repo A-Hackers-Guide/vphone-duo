@@ -58,13 +58,13 @@ public enum FirmwarePatchSetCatalog {
     /// `kernel-exp-display_refresh_120hz` is off because it is a preference with a
     /// cost: see ``displayRefreshPatch``.
     ///
-    /// `kernel-exp-paravirt_user_clients` is off because it lifts a sandbox denial
-    /// that nothing in the guest needs to boot: see ``paravirtUserClientsPatch``.
+    /// `kernel-cfw-paravirt_user_clients` is not in this list: `standard` turns it
+    /// on. See ``paravirtUserClientsPatch``.
     public static let manualOnlyPatches: Set<String> =
         Set(FirmwareKernelFridaPatchSet.manifest.patches.map(\.identifier))
             .union(hypervisorConcealmentPatches)
             .union(experimentalIdentityPatches)
-            .union([misTrustAuthPatch, displayRefreshPatch, paravirtUserClientsPatch])
+            .union([misTrustAuthPatch, displayRefreshPatch])
 
     /// The 120 Hz timing for the paravirtual display.
     ///
@@ -80,11 +80,20 @@ public enum FirmwarePatchSetCatalog {
     /// so only an app's container profile lets a process open them. A daemon or a
     /// command-line tool gets no Metal device, WebKit no hardware video decoder,
     /// and Core ML no Neural Engine. The edit allows only the four paravirt device
-    /// classes, by name, and leaves every other denial in place. Off in `standard`:
-    /// apps already get these devices, so it is a per-VM choice.
+    /// classes, by name, and leaves every other denial in place.
+    ///
+    /// On in `standard`. `cameracaptured` prewarms its capture shaders on the GPU at
+    /// every boot; refused the device, it crashes inside the paravirtual Metal
+    /// driver and crash-loops, and the first process to touch AVCapture blocks on a
+    /// synchronous XPC to it — SpringBoard's main thread when a guest app starts
+    /// recording. What it widens is four class-name prefixes of devices apps already
+    /// open, to processes outside an app sandbox, on a research VM.
+    ///
+    /// Introduced opt-in as `kernel-exp-paravirt_user_clients`; renamed `cfw` when
+    /// `standard` turned it on, as the naming rule requires.
     /// On 27 the broad `kernel-boot-iouc_sandbox_gate` is boot-essential instead. See
     /// `Research/Guest/gpu_acceleration.md`.
-    public static let paravirtUserClientsPatch = "kernel-exp-paravirt_user_clients"
+    public static let paravirtUserClientsPatch = "kernel-cfw-paravirt_user_clients"
 
     /// The shared-cache short-circuit of `libmis`'s `checkTrustAndAuthorization`.
     ///
