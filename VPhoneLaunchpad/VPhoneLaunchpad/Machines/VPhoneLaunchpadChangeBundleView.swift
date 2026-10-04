@@ -52,7 +52,7 @@ struct VPhoneLaunchpadChangeBundleView: View {
                     }
                     Toggle("Update guest environment", isOn: $updatesEnvironment)
                 } footer: {
-                    Text("Host programs change at the next start. The guest environment is updated now on stopped machines; running machines keep theirs until it is updated later. The boot chain and patches stay as they were when the machine was created.")
+                    Text("Host programs change at the next start. The guest environment is updated now on stopped machines; running machines keep theirs until it is updated later. Guest patches follow each machine’s patch choice when its guest environment is updated. The boot chain stays as it was built.")
                         .foregroundStyle(.secondary)
                 }
             }

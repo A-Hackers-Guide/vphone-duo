@@ -1,6 +1,8 @@
 import ArgumentParser
+import FirmwarePatcher
 import Foundation
 import VPhoneCoreKit
+import VPhonePatchKit
 import VPhoneRestore
 
 // MARK: - Verbosity → restore logging
@@ -111,6 +113,7 @@ struct VPhoneRestoreCommand: ParsableCommand {
             onEvent: onEvent,
         )
         recordRestoreVersions(bundle: bundle)
+        recordRestoredPatches(bundle: bundle)
     }
 
     /// Snapshot the just-restored iOS + cloudOS versions to `restore-info.json`,
@@ -129,6 +132,48 @@ struct VPhoneRestoreCommand: ParsableCommand {
                 + "cloudOS \(info.cloudOS.version) (\(info.cloudOS.build))")
         } catch {
             FileHandle.standardError.write(Data("warning: could not write restore-info.json: \(error)\n".utf8))
+        }
+    }
+
+    /// Record in the VM's patch receipt what the restore just flashed: the
+    /// boot-chain parts `fw patch` built into the restore tree, as its
+    /// `PatchPlan.plist` lists them. Every restored part is recorded, empty
+    /// ones included, so a part with everything off reads as empty rather
+    /// than unknown. With no plan there is nothing to say what the restore
+    /// tree carried, and the receipt is left alone.
+    ///
+    /// Best-effort like the versions above: the restore already succeeded.
+    ///
+    /// The `Guest` part is recorded empty whatever the plan says: erase and
+    /// `--no-erase` both re-image the system volume, so nothing `cfw install`
+    /// wrote survives a restore until the next install records it again.
+    private func recordRestoredPatches(bundle: VPhoneBundle) {
+        let plan = VPhonePatchPresetStore.plan(forVM: bundle.url)
+        let parts = plan.map { FirmwarePatchDrift.restoredParts(enabledPatches: Set($0.enabledPatches)) } ?? [:]
+        do {
+            try VPhonePatchPresetStore.updateReceipt(forVM: bundle.url) { receipt in
+                receipt.record(
+                    VPhoneVirtualMachinePatchReceipt.guestPart,
+                    patches: [String](),
+                    writer: "restore",
+                    bundleVersion: nil,
+                )
+                for (component, patches) in parts {
+                    receipt.record(
+                        VPhoneVirtualMachinePatchReceipt.part(for: .firmware(component)),
+                        patches: patches,
+                        writer: "restore",
+                        // No helper reads the running VPhone.bundle's version yet.
+                        bundleVersion: nil,
+                    )
+                }
+            }
+            print("[restore] recorded \(parts.values.map(\.count).reduce(0, +)) boot-chain patches"
+                + " in \(VPhonePatchPresetStore.receiptFileName)")
+        } catch {
+            FileHandle.standardError.write(Data(
+                "warning: could not write \(VPhonePatchPresetStore.receiptFileName): \(error)\n".utf8,
+            ))
         }
     }
 }
@@ -234,6 +279,16 @@ struct VPhoneCustomFirmwareInstallCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "install",
         abstract: "Install CFW into a VM bundle via host mount",
+        discussion: """
+        The boot chain follows the plan `fw patch` resolved; the guest half —
+        the dyld cache, the guest Mach-Os and files, the entitlements and the
+        Preboot device tree — follows the VM's current patch selection, both
+        ways, so a `fw set-patches` since the last `fw patch` takes effect here
+        and a patch turned off is reverted from its backup. Records the guest
+        half of the patch receipt (PatchReceipt.plist) on success.
+
+        Needs a prepared restore tree and root; the VM must be powered off.
+        """,
     )
 
     @OptionGroup var lib: VPhoneLibraryOption
@@ -294,24 +349,33 @@ struct VPhoneCustomFirmwareInstallCommand: ParsableCommand {
 /// replacing a library in a running guest over the API cannot help either,
 /// because a daemon keeps the copy it mapped at launch.
 ///
-/// Deliberately narrow. It writes only the files a full install writes into the
-/// guest, runs no patch, injects nothing, and leaves the recorded variant
-/// alone, so it cannot turn a half-built VM into something that looks
-/// installed. A VM that was never installed is refused rather than half-filled.
+/// It applies the whole guest half of an install against an installed VM,
+/// without the restore tree: the dyld cache verbs, every guest Mach-O and file
+/// patch, the entitlement patches and the Preboot device-tree repairs, matched
+/// to the VM's current selection both ways. A patch the owner has turned off is
+/// reverted — a Mach-O or file from its backup, the device tree to its backup,
+/// a dyld patch from the undo log the install recorded. The two steps that need
+/// the restore tree, the cryptex copy and the GPU bundle, are skipped (an
+/// installed guest already carries both); the recorded `jb` variant is left
+/// alone. A VM that was never installed is refused rather than half-filled.
 struct VPhoneCustomFirmwareUpdateEnvironmentCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "update-environment",
-        abstract: "Redeploy vphoned and the guest dylibs into an installed VM (VM must be off)",
+        abstract: "Match an installed VM's guest patches to its current selection (VM must be off)",
         discussion: """
-        Puts back only what this bundle ships into the guest: vphoned and its
-        launch daemon, the guest dylibs in /usr/lib, and the libmisfix defaults
-        if the VM has none. No firmware patch runs, no load command is injected,
-        no cryptex or GPU work happens, and the VM's recorded variant does not
-        change.
+        Re-applies the guest half of an install from the VM's current patch
+        selection, without the restore tree. vphoned, its launch daemon, the
+        guest dylibs and the libmisfix defaults are redeployed as before; on top
+        of that, every guest Mach-O, file, entitlement, dyld-cache and Preboot
+        device-tree patch is brought to match the selection — turned on if the
+        owner has selected it since the last install, and reverted from its
+        backup or the dyld undo log if the owner has turned it off. Records the
+        guest half of the patch receipt (PatchReceipt.plist) on success.
 
-        Use it to move an existing VM onto a newer bundle without rebuilding it.
-        A library the VM does not already have is left out, because its absence
-        means the VM's patch plan never selected it.
+        A dyld-cache patch on a VM installed before the undo log existed cannot
+        be reverted and is reported and left in place. The cryptex copy and the
+        GPU bundle are skipped (they need the restore tree; an installed guest
+        has them already), and the VM's recorded variant does not change.
 
         An iPad VM's audio repair needs the iPad's own DeviceTree.<board>.im4p
         in the VM's FirmwareOriginals. When a VM patched by an older build has
@@ -319,7 +383,9 @@ struct VPhoneCustomFirmwareUpdateEnvironmentCommand: ParsableCommand {
         its BuildManifest) and kept there; without that IPSW the repair is
         skipped with a [!] line naming the fix.
 
-        Needs root, and the VM must be powered off.
+        Use it to move an existing VM onto a newer bundle, or to apply a
+        `fw set-patches` change, without rebuilding it. Needs root, and the VM
+        must be powered off.
         """,
     )
 

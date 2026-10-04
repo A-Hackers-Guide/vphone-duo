@@ -21,10 +21,58 @@ import ArgumentParser
 import FirmwarePatcher
 import Foundation
 
+/// The optional undo-log flags every cache patch verb carries.
+///
+/// When `cfw install` runs a cache verb it passes `--undo-log <path>` and
+/// `--undo-id <patch identifier>`: the verb captures the original bytes of
+/// every write and appends them, tagged with the identifier, to the log at that
+/// path. A later `cfw update-environment` reads the same log and, for a patch
+/// the VM has since turned off, puts those bytes back. Nothing a researcher runs
+/// by hand passes these, so capture stays off by default and the verbs write
+/// exactly what they wrote before.
+struct DyldSharedCacheUndoOptions: ParsableArguments {
+    @Option(name: .customLong("undo-log"), help: "Record original bytes to this log for later revert")
+    var undoLog: String?
+
+    @Option(name: .customLong("undo-id"), help: "Patch identifier to tag the recorded bytes with")
+    var undoID: String?
+
+    var captures: Bool { undoLog != nil }
+
+    /// Fold this verb's captured runs into the log file beside the cache.
+    ///
+    /// A run that captured nothing — an idempotent re-patch over already-written
+    /// sites, a self-gated no-op, or a dry run — leaves the log exactly as it is,
+    /// so the originals an earlier run recorded for this patch are kept (see
+    /// ``DyldSharedCacheUndoLog/updated(existing:captured:patchID:)``). A dry run
+    /// never writes. The log is given the owner and mode of the cache's own main
+    /// chunk, not 0777: it lives inside the guest System volume, whose modes
+    /// stay unchanged (AGENTS.md).
+    func persist(_ captured: DyldSharedCacheUndoLog, dryRun: Bool) throws {
+        guard let undoLog, captures, !dryRun else { return }
+        let url = URL(fileURLWithPath: undoLog)
+        let existing = (try? Data(contentsOf: url)).flatMap { try? DyldSharedCacheUndoLog.decode($0) }
+        guard let merged = DyldSharedCacheUndoLog.updated(
+            existing: existing, captured: captured, patchID: undoID ?? "",
+        ) else { return }
+        try merged.encoded().write(to: url, options: .atomic)
+        // Match the cache chunk's owner and mode rather than widening it: the
+        // directory name is the cache directory, so its main chunk is the
+        // reference for what a file here should be owned and permissioned as.
+        let mainChunk = url.deletingLastPathComponent().appendingPathComponent("dyld_shared_cache_arm64e")
+        var metadata = stat()
+        if lstat(mainChunk.path, &metadata) == 0 {
+            chmod(url.path, metadata.st_mode & 0o7777)
+            chown(url.path, metadata.st_uid, metadata.st_gid)
+        }
+    }
+}
+
 enum VPhoneCustomFirmwareDyldSharedCacheVerbs {
     /// Registered into `vphone-cli cfw` by `VPhoneCustomFirmwareCommand`.
     static var all: [ParsableCommand.Type] {
         [
+            VPhoneCustomFirmwareDyldSharedCacheRevertCommand.self,
             VPhoneCustomFirmwarePatchHypervisorVirtualMachineDyldSharedCacheCommand.self,
             VPhoneCustomFirmwarePatchIOMFBSwapEndCommand.self,
             VPhoneCustomFirmwarePatchIOMFBForceKernCommand.self,
@@ -103,12 +151,18 @@ struct VPhoneCustomFirmwarePatchHypervisorVirtualMachineDyldSharedCacheCommand: 
     @Flag(name: .customLong("dry-run"), help: "Report every site and write nothing")
     var dryRun = false
 
+    @OptionGroup var undo: DyldSharedCacheUndoOptions
+
     func run() throws {
+        var captured = DyldSharedCacheUndoLog()
         try DyldSharedCacheHypervisorVirtualMachinePatcher.patch(
             chunksDirectory: chunksDirectory,
             dryRun: dryRun,
+            captureUndo: undo.captures,
+            onUndo: { captured.merge($0) },
             log: VPhoneCustomFirmwareDyldSharedCacheVerbs.stdout,
         )
+        try undo.persist(captured, dryRun: dryRun)
     }
 }
 
@@ -155,13 +209,19 @@ struct VPhoneCustomFirmwarePatchIOMFBSwapEndCommand: ParsableCommand {
     @Flag(name: .customLong("dry-run"), help: "Report the site and the rewrite, and write nothing")
     var dryRun = false
 
+    @OptionGroup var undo: DyldSharedCacheUndoOptions
+
     func run() throws {
+        var captured = DyldSharedCacheUndoLog()
         try DyldSharedCacheIOMFBSwapEndPatcher.patch(
             chunksDirectory: chunksDirectory,
             targetSize: targetSize,
             dryRun: dryRun,
+            captureUndo: undo.captures,
+            onUndo: { captured.merge($0) },
             log: VPhoneCustomFirmwareDyldSharedCacheVerbs.stdout,
         )
+        try undo.persist(captured, dryRun: dryRun)
     }
 }
 
@@ -203,12 +263,18 @@ struct VPhoneCustomFirmwarePatchIOMFBForceKernCommand: ParsableCommand {
     @Flag(name: .customLong("dry-run"), help: "Report every entry point and write nothing")
     var dryRun = false
 
+    @OptionGroup var undo: DyldSharedCacheUndoOptions
+
     func run() throws {
+        var captured = DyldSharedCacheUndoLog()
         try DyldSharedCacheIOMFBForceKernPatcher.patch(
             chunksDirectory: chunksDirectory,
             dryRun: dryRun,
+            captureUndo: undo.captures,
+            onUndo: { captured.merge($0) },
             log: VPhoneCustomFirmwareDyldSharedCacheVerbs.stdout,
         )
+        try undo.persist(captured, dryRun: dryRun)
     }
 }
 
@@ -250,12 +316,18 @@ struct VPhoneCustomFirmwarePatchDyldSharedCacheMaxSlideCommand: ParsableCommand 
     @Flag(name: .customLong("force"), help: "Zero maxSlide even when the cache already fits")
     var force = false
 
+    @OptionGroup var undo: DyldSharedCacheUndoOptions
+
     func run() throws {
+        var captured = DyldSharedCacheUndoLog()
         try DyldSharedCacheMaxSlidePatcher.patch(
             chunksDirectory: chunksDirectory,
             dryRun: dryRun,
             force: force,
+            captureUndo: undo.captures,
+            onUndo: { captured.merge($0) },
         )
+        try undo.persist(captured, dryRun: dryRun)
     }
 }
 
@@ -294,12 +366,18 @@ struct VPhoneCustomFirmwarePatchLSDEmbeddedRegCommand: ParsableCommand {
     @Flag(name: .customLong("dry-run"), help: "Report the gate and write nothing")
     var dryRun = false
 
+    @OptionGroup var undo: DyldSharedCacheUndoOptions
+
     func run() throws {
+        var captured = DyldSharedCacheUndoLog()
         try DyldSharedCacheLSDEmbeddedRegPatcher.patch(
             chunksDirectory: chunksDirectory,
             dryRun: dryRun,
+            captureUndo: undo.captures,
+            onUndo: { captured.merge($0) },
             log: VPhoneCustomFirmwareDyldSharedCacheVerbs.stdout,
         )
+        try undo.persist(captured, dryRun: dryRun)
     }
 }
 
@@ -341,12 +419,18 @@ struct VPhoneCustomFirmwarePatchMISTrustAuthCommand: ParsableCommand {
     @Flag(name: .customLong("dry-run"), help: "Report the site and write nothing")
     var dryRun = false
 
+    @OptionGroup var undo: DyldSharedCacheUndoOptions
+
     func run() throws {
+        var captured = DyldSharedCacheUndoLog()
         try DyldSharedCacheMISTrustAuthPatcher.patch(
             chunksDirectory: chunksDirectory,
             dryRun: dryRun,
+            captureUndo: undo.captures,
+            onUndo: { captured.merge($0) },
             log: VPhoneCustomFirmwareDyldSharedCacheVerbs.stdout,
         )
+        try undo.persist(captured, dryRun: dryRun)
     }
 }
 
@@ -383,12 +467,18 @@ struct VPhoneCustomFirmwarePatchXPCLWCRCommand: ParsableCommand {
     @Flag(name: .customLong("dry-run"), help: "Report the three sites and write nothing")
     var dryRun = false
 
+    @OptionGroup var undo: DyldSharedCacheUndoOptions
+
     func run() throws {
+        var captured = DyldSharedCacheUndoLog()
         try DyldSharedCacheXPCLWCRPatcher.apply(
             directory: chunksDirectory,
             dryRun: dryRun,
+            captureUndo: undo.captures,
+            onUndo: { captured.merge($0) },
             log: VPhoneCustomFirmwareDyldSharedCacheVerbs.stdout,
         )
+        try undo.persist(captured, dryRun: dryRun)
     }
 }
 
@@ -423,12 +513,18 @@ struct VPhoneCustomFirmwarePatchLockdownModeCommand: ParsableCommand {
     @Flag(name: .customLong("dry-run"), help: "Report the gate and write nothing")
     var dryRun = false
 
+    @OptionGroup var undo: DyldSharedCacheUndoOptions
+
     func run() throws {
+        var captured = DyldSharedCacheUndoLog()
         try DyldSharedCacheLockdownModePatcher.patch(
             chunksDirectory: chunksDirectory,
             dryRun: dryRun,
+            captureUndo: undo.captures,
+            onUndo: { captured.merge($0) },
             log: VPhoneCustomFirmwareDyldSharedCacheVerbs.stdout,
         )
+        try undo.persist(captured, dryRun: dryRun)
     }
 }
 
@@ -476,13 +572,97 @@ struct VPhoneCustomFirmwarePatchCameraDyldSharedCacheCommand: ParsableCommand {
     @Flag(name: .customLong("force"), help: "Patch an entry point whose prologue is not the expected one")
     var force = false
 
+    @OptionGroup var undo: DyldSharedCacheUndoOptions
+
     func run() throws {
+        var captured = DyldSharedCacheUndoLog()
         try DyldSharedCacheCameraPatcher.applyAll(
             chunksDirectory: chunksDirectory,
             symbolCacheURL: dscHeader,
             dryRun: dryRun,
             force: force,
+            captureUndo: undo.captures,
+            onUndo: { captured.merge($0) },
             log: VPhoneCustomFirmwareDyldSharedCacheVerbs.stdout,
         )
+        try undo.persist(captured, dryRun: dryRun)
+    }
+}
+
+// MARK: - dsc-revert
+
+/// Put the pristine bytes back for cache patches a VM has turned off.
+///
+/// The inverse of the `--undo-log` the patch verbs write. Given the undo log
+/// and the identifiers no longer selected, it restores each recorded run and
+/// re-attests the pages they land in — which reproduces the original slot
+/// hashes exactly when the page is now pristine and the correct ones when
+/// another still-enabled patch shares the page. The log is rewritten without
+/// the reverted identifiers, so a cache patch cannot be reverted twice and a
+/// re-enable records its originals afresh.
+///
+/// `cfw install` and `cfw update-environment` invoke this; it is not a verb a
+/// researcher reaches for by hand. A patch named here with no records in the
+/// log is a cache patch that wrote nothing (an idempotent no-op), and reverting
+/// it is correctly nothing.
+struct VPhoneCustomFirmwareDyldSharedCacheRevertCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-dsc-revert",
+        abstract: "Restore pristine bytes for dyld-shared-cache patches that are now off",
+        shouldDisplay: false,
+    )
+
+    @Argument(
+        help: "The guest's /System/Library/Caches/com.apple.dyld directory",
+        transform: URL.init(fileURLWithPath:),
+    )
+    var chunksDirectory: URL
+
+    @Option(name: .customLong("undo-log"), help: "The undo log the patch verbs wrote")
+    var undoLog: String
+
+    @Option(name: .customLong("patch"), help: "A patch identifier to revert (repeatable)")
+    var patches: [String] = []
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would be reverted and write nothing")
+    var dryRun = false
+
+    func run() throws {
+        let url = URL(fileURLWithPath: undoLog)
+        guard let data = try? Data(contentsOf: url) else {
+            print("  [=] no dyld undo log at \(undoLog); nothing to revert")
+            return
+        }
+        let log = try DyldSharedCacheUndoLog.decode(data)
+        let wanted = Set(patches)
+        let present = wanted.intersection(log.patchIDs)
+        guard !present.isEmpty else {
+            print("  [=] dyld undo log has no records for the patches to revert; nothing to do")
+            return
+        }
+        if dryRun {
+            for record in log.records(forPatchIDs: present) {
+                print("  [.] dry-run: would restore \(record.original.count) byte(s) at 0x"
+                    + String(record.vma, radix: 16, uppercase: true) + " (\(record.patchID))")
+            }
+            return
+        }
+        let spans = try log.restore(
+            patchIDs: present,
+            in: chunksDirectory,
+            log: VPhoneCustomFirmwareDyldSharedCacheVerbs.stdout,
+        )
+        if !spans.isEmpty {
+            let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory)
+            try DyldSharedCacheCodeSignature.reattest(
+                in: chunks,
+                modifiedSpans: spans,
+                log: VPhoneCustomFirmwareDyldSharedCacheVerbs.stdout,
+            )
+        }
+        let remaining = log.removing(patchIDs: present)
+        try remaining.encoded().write(to: url, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: url.path)
+        print("  [+] reverted \(present.count) dyld patch(es): \(present.sorted().joined(separator: ", "))")
     }
 }
