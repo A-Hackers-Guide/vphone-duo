@@ -244,6 +244,7 @@ final class GuestHyperTextHandler: ChannelInboundHandler, RemovableChannelHandle
         case (.GET, "/v1/developer-mode"): "developer_mode.status"
         case (.POST, "/v1/developer-mode/enable"): "developer_mode.enable"
         case (.GET, "/v1/low-power-mode"), (.PUT, "/v1/low-power-mode"): "power.low_power_mode"
+        case (.GET, "/v1/timezone"), (.PUT, "/v1/timezone"): "time.timezone"
         case (.GET, "/v1/clipboard"), (.PUT, "/v1/clipboard"): verb == .GET ? "clipboard.get" : "clipboard.set"
         case (.DELETE, "/v1/clipboard"): "clipboard.clear"
         case (.GET, "/v1/files"): "files.list"
