@@ -56,11 +56,11 @@ refused, on the same guest:
 | `IOSurfaceAcceleratorParavirtClient` (scaler) | `vphoned` |
 
 On a 27 base this gate is already off: `kernel-boot-iouc_sandbox_gate` is
-boot-essential there, because 27 refuses backboardd its framebuffer. The opt-in
-patch `kernel-exp-paravirt_user_clients` makes the same edit on a 26.x or 18.x
-base. With it, on `gpuaccel-ipad`, the tool prints
-`device: Apple Paravirtual device GPU` and the console holds no
-`failed sandbox` line at all.
+boot-essential there, because 27 refuses backboardd its framebuffer. The patch
+`kernel-cfw-paravirt_user_clients` makes a narrower edit on a 26.x or 18.x base,
+and `standard` turns it on (see "On in `standard`" below). With it, on
+`gpuaccel-ipad`, the tool prints `device: Apple Paravirtual device GPU` and the
+console holds no `failed sandbox` line at all.
 
 ### Narrow by class name
 
@@ -76,8 +76,8 @@ displaced `ldr` and falls through to the real deny, so every other sandbox denia
 stays. The cave's fixed words are verified by clang/as assembly and a capstone
 round-trip; the two position-dependent branches come from `ARM64Encoder`. The
 anchor is the fail-string xref, the NotPermitted allow target and the deny-entry
-`cbnz`, the same three the broad gate uses; the record is still
-`kernel-exp-paravirt_user_clients` (sites `.redirect` and `.cave`).
+`cbnz`, the same three the broad gate uses; the declaration is
+`kernel-cfw-paravirt_user_clients` (sites `.redirect` and `.cave`).
 
 Verified on a fresh iPad Pro guest (`narrowtest-ipad`, 26.6.2, both opt-in
 patches on): it boots, and a plain command-line tool prints
@@ -88,14 +88,76 @@ Metal device -> ALLOWED
 ```
 
 — the paravirtual GPU opens from a daemon context while a non-allowlisted client
-is still refused. It stays off in `standard`: Metal in daemons/CLI is a niche
-need (apps already have it), so turning it on is a per-VM or preset choice; it is
-a candidate to default on once it has had wider testing.
+is still refused. It first shipped off in `standard`, as a per-VM choice; it is
+now on, for the reason below.
 
 What it does not change: HLS video in Safari already played at the stream's
 60 frames per second without it, with `mediaplaybackd` at 9% of a core and
 `videocodecd` at 4%, so WebKit being refused the decoder is not a visible cost
 there.
+
+### On in `standard`
+
+`standard` stopped blocking the patch on 2026-10-04. The case that decided it is
+`cameracaptured`, measured on an iPadOS 26.6.2 guest with the old `standard`:
+
+- At every boot it prewarms its capture shaders
+  (`FigCapturePreloadShadersInternal` → CMCapture `PrewarmThreadSafeSBPs` →
+  NRFV3 `-[NRFProcessorV3 prewarm]`). It is a daemon, so the gate refuses it the
+  GPU, and it dies with SIGSEGV at `0xc` inside
+  `AppleParavirtGPUMetalIOGPUFamily`. launchd restarts it, and it crash-loops.
+- While it does, the first process to touch the AVCapture defaults blocks on a
+  synchronous XPC to it (`AVCaptureProprietaryDefaultsSingleton` →
+  `csr_ensureClientEstablished`). When a guest app starts recording, that process
+  is SpringBoard: Control Center's sensor indicator builds an
+  `AVCaptureDeviceDiscoverySession` on the main thread, and the guest UI freezes.
+  `audiomxd`'s recording `StartIO` waits 18 s on the same path, and the first
+  recording after boot fails.
+
+So a daemon reaching the GPU is not a niche need: a stock system daemon expects
+it. A separate change makes `libvcamcaptured` skip the prewarm defensively; this
+one gives `cameracaptured` the device it expects, so it runs normally.
+
+**What this widens.** The edit is at the IOUserClient sandbox gate only. A
+process whose own sandbox profile refuses `iokit-open-user-client` for a class
+whose name begins with `ApplePar`, `AppleVid`, `AppleVir` or `IOSurfac` is now
+let through that gate; every other class is still refused there. The checks a
+driver makes itself (entitlements in `newUserClient`, its argument validation)
+are untouched; the MACF check before this gate was already opened by
+`patch_iouc_failed_macf` (JB-10). The match is on the first eight bytes of the
+class name, so it admits every class with one of those prefixes, not only the
+four named in the table above: on this research board that means the
+paravirtual GPU and device clients (`AppleParavirt*`), the paravirtual
+VideoToolbox decoder (`AppleVideo*`), the VirtIO drivers (`AppleVirtIO*`, among
+them the Neural Engine) and IOSurface's clients (`IOSurface*`, the root
+client as well as the paravirtual accelerator). Who gains: daemons, command-line
+tools and system XPC services that run under the platform profile or a profile
+of their own — `cameracaptured`, `com.apple.WebKit` processes,
+`spotlightknowledged`, `callservicesd`, `vphoned`, and anything a researcher
+runs from a shell or a launchd job. Apps gain nothing: their container profile
+already opens these devices. On which bases: 26.x and 18.x. On 27 the patch
+skips by version, because the boot-essential `kernel-boot-iouc_sandbox_gate`
+already opens every user client there, so a 27 guest is unchanged.
+
+**Why that is acceptable for `standard`.** These are research VMs, already
+running with the sandbox hooks stubbed and the trust cache admitting anything;
+this gate is what still stopped a daemon from opening a device an app opens
+freely. The devices are the guest's own paravirtual hardware, their host side
+is a per-VM ParavirtualizedGraphics task or the VM process, and every app on the
+guest already reaches them, so the attack surface they expose is already
+exposed. The narrow patch is still the right shape on 26.x: the broad
+gate-off would open `RootDomainUserClient` and every other client too, which
+nothing here needs.
+
+A VM that wants the old behaviour unticks the patch
+(`vphone-cli fw set-patches <vm> --block kernel-cfw-paravirt_user_clients`) and
+re-patches.
+
+The patch was introduced opt-in as `kernel-exp-paravirt_user_clients` and renamed
+`kernel-cfw-paravirt_user_clients` when `standard` turned it on, as the naming
+rule in `Skills/authoring-patch-sets/SKILL.md` requires. A VM whose
+`PatchSelection.plist` still names the old identifier gets `unknownPatch` from
+`fw patch` until that entry is removed.
 
 ## Lag After Every Boot
 

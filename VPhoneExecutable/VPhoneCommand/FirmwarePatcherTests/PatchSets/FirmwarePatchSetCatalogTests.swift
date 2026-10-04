@@ -174,6 +174,32 @@ struct FirmwarePatchSetCatalogTests {
     }
 
     @Test
+    func `Standard opens the paravirtual user clients on every base`() throws {
+        // A daemon has to reach the paravirtual GPU: cameracaptured prewarms its
+        // shaders at boot and crash-loops without it. Before 27 that is the narrow
+        // allowlist; on 27 the broad gate is boot-essential and opens everything, so
+        // the narrow patch skips by version there rather than being blocked.
+        let narrow = FirmwarePatchSetCatalog.paravirtUserClientsPatch
+        let broad = "kernel-boot-iouc_sandbox_gate"
+        #expect(!FirmwarePatchSetCatalog.manualOnlyPatches.contains(narrow))
+        #expect(FirmwarePatchSetCatalog.standardPreset.selection.includes(narrow))
+        for base in ["18.6.2", "26.0", "26.4", "26.6.2", "27.0"] {
+            for cloud in ["26.1", "26.4"] {
+                let plan = try VPhonePatchPlan.resolve(
+                    preset: FirmwarePatchSetCatalog.standardPreset,
+                    patchSets: FirmwarePatchSetCatalog.bundled,
+                    iOSBase: VPhoneVersion(base),
+                    cloudOS: VPhoneVersion(cloud),
+                )
+                let is27 = base.hasPrefix("27.")
+                #expect(plan.isEnabled(narrow) == !is27, "\(narrow) on \(base)/\(cloud)")
+                #expect(plan.skippedByVersion.contains(narrow) == is27, "\(narrow) on \(base)/\(cloud)")
+                #expect(plan.isEnabled(broad) == is27, "\(broad) on \(base)/\(cloud)")
+            }
+        }
+    }
+
+    @Test
     func `The Frida relaxations need cloudOS 26.4`() throws {
         for cloud in ["26.1", "26.4"] {
             let plan = try VPhonePatchPlan.resolve(

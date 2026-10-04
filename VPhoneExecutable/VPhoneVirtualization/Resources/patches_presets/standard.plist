@@ -4,7 +4,7 @@
   The preset every VM gets unless another is named.
 
   It is the CFW baseline plus the virtual camera. It draws on every patch set the
-  bundle ships and turns on all of their patches bar six groups. The Frida
+  bundle ships and turns on all of their patches bar five groups. The Frida
   Stalker pair widens what any process in the guest may do and nothing needs it in
   order to boot. The hv_vmm_present concealment — the kernel OID rename, the
   shared-cache mangle and the watchdogd patch — leaves a freshly restored 26.4
@@ -21,9 +21,9 @@
   even be applied. See FirmwarePatchSetCatalog.misTrustAuthPatch.
   The fifth is the 120 Hz display timing, a preference that doubles how often the
   guest renders. See FirmwarePatchSetCatalog.displayRefreshPatch.
-  The sixth lets processes outside an app sandbox reach the paravirtual GPU, video
-  decoder, Neural Engine and IOSurface scaler through a narrow sandbox allowlist of
-  those classes. See
+  The narrow paravirtual user-client allowlist (kernel-cfw-paravirt_user_clients) is
+  on: without it a daemon on a 26.x or 18.x base cannot open the paravirtual GPU,
+  and cameracaptured crash-loops on it. See
   FirmwarePatchSetCatalog.paravirtUserClientsPatch.
 
   Each patch's own version gate still decides whether it lands on this pairing of
@@ -122,7 +122,6 @@
 			<string>preboot-exp-devicetree_identity</string>
 			<string>dyld-exp-mis_trust_auth</string>
 			<string>kernel-exp-display_refresh_120hz</string>
-			<string>kernel-exp-paravirt_user_clients</string>
 		</array>
 	</dict>
 </dict>

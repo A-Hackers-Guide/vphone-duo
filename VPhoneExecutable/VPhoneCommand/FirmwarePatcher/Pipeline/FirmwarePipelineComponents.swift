@@ -92,7 +92,12 @@ extension FirmwarePipeline {
 
         // The 120 Hz display timing, off unless the VM asked for it.
         let applyDisplayRefresh = isEnabled(FirmwarePatchSetCatalog.displayRefreshPatch, fallback: false)
-        let applyParavirtUserClients = isEnabled(FirmwarePatchSetCatalog.paravirtUserClientsPatch, fallback: false)
+        // The paravirtual user-client allowlist, on in `standard` and pinned to the
+        // 26.x and 18.x bases (27 opens the whole gate instead).
+        let applyParavirtUserClients = isEnabled(
+            FirmwarePatchSetCatalog.paravirtUserClientsPatch,
+            fallback: baseIs18 || iOSBase?.major == 26,
+        )
 
         // iOS 18 bases: disable the skywalk flowswitch netagents via boot-arg so
         // Network.framework uses the BSD path (the 26.1-kernel skywalk
