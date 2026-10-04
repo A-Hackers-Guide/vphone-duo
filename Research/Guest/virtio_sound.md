@@ -773,12 +773,24 @@ SpringBoard: [MRAVVolumeClientEndpoint] VolumeController unavailable; will retry
 
 audiomxd registers the service and SpringBoard holds
 `com.apple.private.mediaexperience.controlcentervolumeclient.allow`; the
-lookup is refused by the kernel's sandbox. The likely reason, not traced
-further: the sandbox profile for SpringBoard comes with the cloudOS 26.4
-kernel and predates a service iOS 27's SpringBoard asks for, the kind of
-mismatch `kernel-boot-sandbox_ext` opens `proc_check_syscall_unix` for. It
-needs its own kernel-side change. The volume keys do not go through that
-service.
+lookup is refused by the kernel's sandbox. Traced — see
+`Research/Guest/ios27_cc_volume_sandbox.md`. The profile evaluated for
+SpringBoard is the one baked into the cloudOS 26.4 Sandbox kext (iOS 27 ships
+no userland platform profile collection), and it predates the iOS 27 service:
+the 26.4 collection names the old `com.apple.coremedia.volumecontroller.xpc`
+and the sibling mediaexperience services but not `avvolumeclient` nor the
+`controlcentervolume` entitlement. mach-lookup is evaluated by the in-kernel
+Protobox engine (reached from launchd/libxpc's `sandbox_check_by_audit_token`),
+not a `mac_policy_ops` hook, so `kernel-boot-sandbox_ext` cannot reach it.
+The obvious guest-side fix — add the global-name to SpringBoard's own
+`com.apple.security.exception.mach-lookup.global-name` array and re-sign, the
+escape hatch Campo uses — was tried and **does not work for SpringBoard**: the
+name is confirmed in SpringBoard's DER entitlements yet the denial is
+unchanged, because SpringBoard's platform profile does not honour the
+exception entitlement the way Campo's `temporary-sandbox` profile does. The
+remaining options (a scoped `sandbox_check` short-circuit in the launchd hook,
+or a kernel Protobox patch) and their blast radius are in the note. The volume
+keys do not go through that service.
 
 ## 9. Playback sounded like wind: the speaker chain was the board's (2026-10-04)
 
