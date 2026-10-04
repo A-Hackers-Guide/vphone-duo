@@ -287,8 +287,36 @@ bundle has no `NSMicrophoneUsageDescription`. `VPhone.bundle` had none.
   Launchpad starts is responsible for itself (`responsibility_spawnattrs_setdisclaim`),
   but when that call is unavailable the VM is attributed to Launchpad, the
   same arrangement as the location descriptions there.
-* `vphone-vm` is signed ad hoc, so the permission macOS records is tied to
-  that build's code hash: a new bundle version asks again.
+* The bundle's programs are signed ad hoc, so the permission macOS records
+  is tied to a code hash: a new bundle version asks again.
+
+Which hash, and what would make macOS ask once, measured on the host
+(2026-10-04) with a small tool that reads
+`AVCaptureDevice.authorizationStatus(for: .audio)`, started responsible for
+itself as Launchpad starts a VM:
+
+| Tool | Status |
+| --- | --- |
+| build 1, before asking | `notDetermined` |
+| build 1, after the prompt was allowed | `authorized` |
+| build 1 copied to another folder | `authorized` |
+| build 2 in build 1's place | `notDetermined` |
+| build 2, both signed with `designated => identifier "…"` | `notDetermined` |
+| another program started by an allowed one, without the disclaim | `authorized` |
+| the same, after the program that started it exited | `authorized` |
+
+So the permission follows the code hash of the responsible process, not its
+path, and for ad hoc code a designated requirement that names only an
+identifier changes nothing. The responsible process of a VM that Launchpad
+starts is that bundle's `vphone-cli` (`responsibility_get_pid_responsible_for_pid`
+on a running `vphone-vm` and on its Virtualization XPC service both give it),
+which is why every bundle build is asked again. A program started by one that
+holds the permission is not asked, and stays so after its parent exits.
+Asking once therefore needs a process with a stable signature to be
+responsible for the VM: Launchpad itself, which is signed with a Developer ID
+and already carries the description, or a small signed launcher inside it
+that starts `vphone-cli` and stays. Launchpad disclaims the VM on purpose, so
+that is its decision to change and is not done here.
 
 The host captures at its own rate and Virtualization.framework hands the
 guest the 48 kHz float frames the stream was set up for.
