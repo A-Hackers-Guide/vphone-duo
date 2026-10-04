@@ -274,8 +274,8 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
     }
 
     private func networkEdit(vmName: String) throws -> VPhoneNetworkEdit {
-        var edit = VPhoneNetworkEdit(
-            mode: try network.map(Self.parseMode),
+        var edit = try VPhoneNetworkEdit(
+            mode: network.map(Self.parseMode),
             bridgeInterface: bridgeInterface,
             removeForwards: removeForward,
             clearForwards: clearForwards,

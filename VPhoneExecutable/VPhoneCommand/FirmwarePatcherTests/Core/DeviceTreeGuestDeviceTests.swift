@@ -290,7 +290,7 @@ struct DeviceTreeGuestDeviceTests {
 }
 
 private extension Data {
-    mutating func append<T: FixedWidthInteger>(littleEndian value: T) {
+    mutating func append(littleEndian value: some FixedWidthInteger) {
         var little = value.littleEndian
         Swift.withUnsafeBytes(of: &little) { append(contentsOf: $0) }
     }

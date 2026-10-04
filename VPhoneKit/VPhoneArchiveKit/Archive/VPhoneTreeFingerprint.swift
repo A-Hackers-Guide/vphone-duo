@@ -62,9 +62,9 @@ public struct VPhoneTreeFingerprint: Codable, Equatable, Sendable {
 
         var paths: [String] = []
 
-        /// An explicit walk rather than FileManager's enumerator, which follows
-        /// its own rules about symlinks and packages. This has to see exactly
-        /// what is on disk, in a stable order.
+        // An explicit walk rather than FileManager's enumerator, which follows
+        // its own rules about symlinks and packages. This has to see exactly
+        // what is on disk, in a stable order.
         func walk(_ directory: String) throws {
             let names = try FileManager.default.contentsOfDirectory(atPath: directory)
             for name in names.sorted() {

@@ -318,11 +318,10 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         }
         guard !plan.portForwards.isEmpty else { return }
 
-        let destination: VPhonePortForwarder.Destination
-        if case .tunnel = plan.attachment, let network = vm.tunnelNetwork {
-            destination = .tunnel(network)
+        let destination: VPhonePortForwarder.Destination = if case .tunnel = plan.attachment, let network = vm.tunnelNetwork {
+            .tunnel(network)
         } else {
-            destination = .direct(plan.forwardingAddress)
+            .direct(plan.forwardingAddress)
         }
         let forwarder = VPhonePortForwarder(forwards: plan.portForwards, destination: destination)
         for failure in forwarder.start() {
@@ -405,7 +404,9 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         menuController?.stopBatteryMonitoring()
         windowController?.closeForRestart()
         // Tool windows belong to the old guest connection too.
-        for window in NSApp.windows { window.close() }
+        for window in NSApp.windows {
+            window.close()
+        }
         NSApp.mainMenu = nil
         windowController = nil
         menuController = nil

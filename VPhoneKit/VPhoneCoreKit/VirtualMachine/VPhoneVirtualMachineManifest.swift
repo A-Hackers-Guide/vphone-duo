@@ -95,7 +95,9 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
     /// Missing in older manifests, which keep the original USB keyboard.
     public let hardwareKeyboardEnabled: Bool?
 
-    public var usesHardwareKeyboard: Bool { hardwareKeyboardEnabled ?? true }
+    public var usesHardwareKeyboard: Bool {
+        hardwareKeyboardEnabled ?? true
+    }
 
     // MARK: - Display
 

@@ -435,9 +435,8 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         print("[vphone] Network link \(up ? "up" : "down")")
     }
 
-
     static func describe(_ plan: VPhoneNetworkPlan) -> String {
-        var parts: [String] = switch plan.attachment {
+        var parts = switch plan.attachment {
         case .none: ["none"]
         case .sharedNAT: ["nat"]
         case let .bridged(interface): ["bridged(\(interface))"]

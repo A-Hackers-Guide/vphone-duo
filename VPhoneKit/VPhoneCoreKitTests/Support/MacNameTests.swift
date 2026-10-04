@@ -15,7 +15,7 @@ struct MacNameTests {
     @Test func `the Mac's name can be turned off and stays off`() throws {
         let off = try VPhoneNetworking.merge(into: .default, mode: nil, bridgeInterface: nil, resolvesMacName: false)
         #expect(off.resolvesMacName == false)
-        #expect(VPhoneNetworking.macStaticNames(plan: try VPhoneNetworking.plan(off, host: host), macName: "Lab-Mac").isEmpty)
+        #expect(try VPhoneNetworking.macStaticNames(plan: VPhoneNetworking.plan(off, host: host), macName: "Lab-Mac").isEmpty)
         let tunnel = try VPhoneNetworking.merge(into: off, mode: .tunnel, bridgeInterface: nil)
         #expect(tunnel.resolvesMacName == false)
         let on = try VPhoneNetworking.merge(into: tunnel, mode: nil, bridgeInterface: nil, resolvesMacName: true)
@@ -31,6 +31,6 @@ struct MacNameTests {
         #expect(decoded.resolvesMacName == nil)
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .xml
-        #expect(!String(decoding: try encoder.encode(decoded), as: UTF8.self).contains("resolvesMacName"))
+        #expect(try !String(decoding: encoder.encode(decoded), as: UTF8.self).contains("resolvesMacName"))
     }
 }

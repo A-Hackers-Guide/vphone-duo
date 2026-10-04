@@ -27,10 +27,10 @@ enum VPhoneHostResolver {
     }
 }
 
-extension VPhoneIPv4Address {
+public extension VPhoneIPv4Address {
     /// Parse `a.b.c.d`, or nil for anything else (including IPv6, which this
     /// stack deliberately does not carry).
-    public init?(dotted: String) {
+    init?(dotted: String) {
         let parts = dotted.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 4 else { return nil }
         var octets: [UInt8] = []

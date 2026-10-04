@@ -167,6 +167,7 @@ public enum FirmwareDeviceTreePatchSet {
             ),
 
             // MARK: iPad Guest
+
             //
             // Written only to an iPad guest's installed tree (an iPhone guest
             // never produces these records). See DeviceTreeGuestDevicePatches.swift.

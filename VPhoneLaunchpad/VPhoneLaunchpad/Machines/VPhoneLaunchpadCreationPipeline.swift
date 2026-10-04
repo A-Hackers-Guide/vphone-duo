@@ -25,7 +25,7 @@ final class VPhoneLaunchpadCreationPipeline {
         var cloudOSSource: String
         /// The model `fw prepare --device` picks from an IPSW that covers
         /// several, such as the 13-inch iPad; nil takes the first.
-        var device: String? = nil
+        var device: String?
         var cpuCount: Int
         var memoryMB: Int
         var diskSizeGB: Int
