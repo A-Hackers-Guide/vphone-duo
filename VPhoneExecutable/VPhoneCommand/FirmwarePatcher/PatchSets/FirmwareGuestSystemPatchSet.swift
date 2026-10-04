@@ -254,6 +254,17 @@ public enum FirmwareGuestSystemPatchSet {
                 target: .guestFile(path: "/Library/Audio/Tunings"),
             ),
             VPhonePatchDeclaration(
+                identifier: virtualAudioSpeakerRawChains,
+                title: "VirtualAudio raw speaker chain",
+                summary: """
+                Gives every speaker_* entry in the tuning set's graph_configurations.plist the chain \
+                of speaker_raw: the volume and a limiter. The general chain's loudness normalizer, \
+                virtual bass, equalizers and compressor are tuned to the board's own speaker; \
+                through the Mac's they turn the quiet low end of what plays into noise.
+                """,
+                target: .guestFile(path: "/Library/Audio/Tunings"),
+            ),
+            VPhonePatchDeclaration(
                 identifier: virtualAudioMicrophoneChains,
                 title: "VirtualAudio microphone chains",
                 summary: """
@@ -341,6 +352,10 @@ public enum FirmwareGuestSystemPatchSet {
     /// generic graph path so the DSP chain factory never needs the physical
     /// Speaker device a VM does not have.
     public static let virtualAudioGraphConfigurations = "system-virtualaudio-cfw-speaker_graph_chains"
+
+    /// Every speaker chain in graph_configurations.plist, pointed at the raw
+    /// one so playback is not shaped for a speaker the VM does not have.
+    public static let virtualAudioSpeakerRawChains = "system-virtualaudio-cfw-speaker_raw_chains"
 
     /// The general microphone chains in graph_configurations.plist, pointed at
     /// their measurement siblings so a recording is not pushed through

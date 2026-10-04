@@ -2546,19 +2546,21 @@ The handler's volume-mode test (`and x28, x0, #0x1ffffffff` at 0xea3fc) is
 a branch between two builds of the route, not a precondition, and is not
 touched.
 
-## Guest audio through a Mac's microphone (2026-10-04)
+## Guest audio through a Mac's microphone and speakers (2026-10-04)
 
-An iPhone guest's audio node and tuning set are the D47's. Three changes take
-out what they assume about its microphones; the measurements are in
-`Research/Guest/virtio_sound_microphone.md` §7.
+An iPhone guest's audio node and tuning set are the D47's. Four changes take
+out what they assume about its hardware; the measurements are in
+`Research/Guest/virtio_sound_microphone.md` §7 and
+`Research/Guest/virtio_sound.md` §9.
 
 | Patch | Component | Effect |
 | --- | --- | --- |
 | `devicetree-cfw-product_audio_microphone_array` (new) | Every guest's DeviceTree, `fw patch` | Removes `supports-spatial-audio-capture` and `supports-audio-mix` from `/product/audio` (`DeviceTreePatcher.removeMicrophoneArrayClaims(from:)`). With them iOS 27's Voice Memos records through the four-microphone spatial route and the recording is silent. |
 | `preboot-cfw-devicetree_microphone_array` (new) | Restored Preboot `devicetree.img4`, `cfw install` and `cfw update-environment`, every guest | The same removal for a VM patched before it (`vphone-cli cfw patch-dt-microphone-array`). |
 | `system-virtualaudio-cfw-microphone_graph_chains` (new) | `/Library/Audio/Tunings/<AID>/VAD/graph_configurations.plist` and each `*_mic*_measurement.austrip` beside it | Every `<mic>_general` configuration with a `<mic>_measurement` sibling takes the sibling's `graph`, `austrip` and `propstrip` (`patch-virtualaudio-microphone-chains`), and every AUNBandEQ in those strips has its global gain set to 0 dB (`patch-virtualaudio-microphone-gain`; +18 dB on `bottom_mic_measurement`). A set with no such pair is left alone. |
+| `system-virtualaudio-cfw-speaker_raw_chains` (new) | `/Library/Audio/Tunings/<AID>/VAD/graph_configurations.plist` | Every `speaker_*` configuration other than `speaker_raw` and `speaker_measurement` takes `speaker_raw`'s `graph`, `austrip`, `propstrip` and `volumeCommands` (`patch-virtualaudio-speaker-raw`). A set with no `speaker_raw` is left alone. |
 
-All three are on in `standard`, need no firmware change, and are in the
+All four are on in `standard`, need no firmware change, and are in the
 installer's late list, so `cfw update-environment` brings them to a VM whose
 plan predates them. The tuning files themselves are untouched except for the
 one parameter word in each measurement strip; a strip whose saved state is
@@ -2570,6 +2572,8 @@ plist reported `back_mic_general`, `beamformed_mic_general`,
 `bottom_mic2_general`, `bottom_mic_general` and `front_mic_general`, and a
 second run none; `patch-virtualaudio-microphone-gain` on its
 `bottom_mic_measurement.austrip` reported `AUNBEQ_2 global gain 18.0 dB -> 0
-dB`, changing one word of the saved state. After `cfw update-environment` and a
+dB`, changing one word of the saved state; `patch-virtualaudio-speaker-raw`
+reported eight speaker configurations. After `cfw update-environment` and a
 boot, audiomxd built the recording route with `DSP chain
-'bottom_mic_measurement'`.
+'bottom_mic_measurement'` and the guest's plist read back `speaker_general:
+graph=speaker_raw austrip=speaker_measurement vol=["vugd"]`.

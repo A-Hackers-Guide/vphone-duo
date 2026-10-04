@@ -780,6 +780,42 @@ mismatch `kernel-boot-sandbox_ext` opens `proc_check_syscall_unix` for. It
 needs its own kernel-side change. The volume keys do not go through that
 service.
 
+## 9. Playback sounded like wind: the speaker chain was the board's (2026-10-04)
+
+With recordings on an iPhone guest matching the Mac's own (see
+`virtio_sound_microphone.md` §7), playing one back in the guest still
+sounded noisy. Every `speaker_*` configuration of the D47 tuning set
+(AID8018) but two runs `speaker_general.dspg`: a loudness normalizer
+(`AULDNM`), a DC blocker, a virtual bass (`AUVirtualBass`), rotation shading,
+crosstalk cancellation, an equalizer, a volume taper, a multiband compressor,
+a second equalizer, two `AUBuzzKill`s and a limiter — a small speaker's
+correction. audiomxd's own level report across it, for a system sound:
+`PreDSP … rms:[-52.6], peaks:[-35.4]`, `PostDSP … rms:[-26.5], peaks:[-7.8]`,
+26 dB up. Through a Mac's speakers the quiet low end of a recording comes
+out as noise.
+
+`speaker_raw` is the same route with rotation shading, a volume
+(`AUVolume`, driven by the `vugd` graph parameter rather than
+`speaker_general`'s `vtvs`) and a limiter. `system-virtualaudio-cfw-speaker_raw_chains`
+gives every `speaker_*` entry in `graph_configurations.plist` other than
+`speaker_raw` and `speaker_measurement` the raw one's `graph`, `austrip`,
+`propstrip` and `volumeCommands` (`vphone-cli cfw
+patch-virtualaudio-speaker-raw`). It runs after `speaker_graph_chains`, which
+is still what keeps the chain factory off the physical speaker.
+
+Without the normalizer the middle of the volume slider was quiet: the route
+sets the plugin's control in a straight line of decibels over its -36 dB
+range, -20.2 dB at 7/16. The plugin now takes the control's position in its
+range, squared, as the gain (`applyGain`): -14.4 dB at 7/16, -12 dB at half,
+unity at the top. The control's decibels are what VirtualAudio reads back and
+are unchanged.
+
+Heard on `mictest-iphone` by the person testing: "much better" with the raw
+chain, then "a little quiet", which the taper answers. Not measured: the
+level across the raw chain, the volume keys after the change (the plugin's
+log shows the value still arrives), and an iPad guest, whose tuning set this
+patch also rewrites if it has a `speaker_raw`.
+
 ## Reveal and validation
 
 1. Kernel side present: `strings` on the decompressed kernelcache shows the

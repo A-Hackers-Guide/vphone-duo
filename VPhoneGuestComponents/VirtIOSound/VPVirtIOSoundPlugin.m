@@ -91,9 +91,9 @@ static const uint64_t kInputDumpMaximumBytes = 16 * 1024 * 1024;
 static const double kInputHighPassHertz = 120;
 
 /// The speaker volume control's range. VirtualAudio maps the guest's volume
-/// onto it in a straight line, so the bottom decides how loud half volume
-/// is: -18 dB here. The macOS plugin's -60 dB would put it at -30 dB, which
-/// through a Mac's speakers is close to nothing.
+/// onto it in a straight line and reads the decibels back, so the range is
+/// only how the guest's volume reaches the plugin: `applyGain` takes the
+/// position in it, not the decibels, as the gain.
 static const float kSpeakerMinimumDecibels = -36.0f;
 static const float kMicrophoneMinimumDecibels = -60.0f;
 
@@ -2124,17 +2124,26 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
 
 // MARK: Controls
 
-/// The gain the streams apply: silence when muted, else the volume control's
-/// decibels as a factor. At the bottom of its range the control means off.
+/// The gain the streams apply: silence when muted or at the bottom of the
+/// volume control's range, else the square of the control's position in it.
+///
+/// The guest's speaker chain is the raw one (`speaker_raw_chains`), with none
+/// of the loudness the board's own chain adds at low volumes, so the control's
+/// decibels taken as they are leave the middle of the slider quiet: -18 dB at
+/// half. The square is the usual taper for a volume with nothing after it:
+/// -12 dB at half, -24 dB at a quarter, and unity at the top.
 - (void)applyGain {
     float decibels = _volumeControl.decibelValue;
-    float gain = _muteState || decibels <= _volumeControl.minimumDecibelValue ? 0 : powf(10, decibels / 20);
+    float minimum = _volumeControl.minimumDecibelValue;
+    float position = minimum < 0 ? 1 - decibels / minimum : 1;
+    position = fminf(fmaxf(position, 0), 1);
+    float gain = _muteState ? 0 : position * position;
     for (VPVirtIOSoundStream *stream in _streams) {
         [stream setGain:gain];
     }
-    VPLogToFile("device %s: %s, %.1f dB, gain %.3f",
+    VPLogToFile("device %s: %s, %.1f dB of %.0f, gain %.3f",
         _direction == ASDStreamDirectionInput ? "microphone" : "speaker",
-        _muteState ? "muted" : "unmuted", decibels, gain);
+        _muteState ? "muted" : "unmuted", decibels, minimum, gain);
 }
 
 - (void)volumeChanged {

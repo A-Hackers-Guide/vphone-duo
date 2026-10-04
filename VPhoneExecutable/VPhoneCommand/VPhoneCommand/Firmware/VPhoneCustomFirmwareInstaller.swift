@@ -428,6 +428,11 @@ struct VPhoneCustomFirmwareInstaller {
         if plan?.isEnabled(FirmwareGuestSystemPatchSet.virtualAudioGraphConfigurations) ?? true {
             try patchVirtualAudioGraphConfigurations(system: system, work: work)
         }
+        if plan?.isEnabled(FirmwareGuestSystemPatchSet.virtualAudioSpeakerRawChains) ?? true {
+            try patchVirtualAudioGraphConfigurations(
+                system: system, work: work, verb: "patch-virtualaudio-speaker-raw",
+            )
+        }
         if plan?.isEnabled(FirmwareGuestSystemPatchSet.virtualAudioMicrophoneChains) ?? true {
             try patchVirtualAudioGraphConfigurations(
                 system: system, work: work, verb: "patch-virtualaudio-microphone-chains",
@@ -757,6 +762,11 @@ struct VPhoneCustomFirmwareInstaller {
         if on(FirmwareGuestSystemPatchSet.virtualAudioGraphConfigurations) {
             try patchVirtualAudioGraphConfigurations(system: system, work: work)
         }
+        if on(FirmwareGuestSystemPatchSet.virtualAudioSpeakerRawChains) {
+            try patchVirtualAudioGraphConfigurations(
+                system: system, work: work, verb: "patch-virtualaudio-speaker-raw",
+            )
+        }
         if on(FirmwareGuestSystemPatchSet.virtualAudioMicrophoneChains) {
             try patchVirtualAudioGraphConfigurations(
                 system: system, work: work, verb: "patch-virtualaudio-microphone-chains",
@@ -795,6 +805,7 @@ struct VPhoneCustomFirmwareInstaller {
         FirmwareGuestSystemPatchSet.virtualAudioSpeakerProtectionGate,
         FirmwareGuestSystemPatchSet.virtualAudioVolumeModePrecondition,
         FirmwareGuestSystemPatchSet.virtualAudioGraphConfigurations,
+        FirmwareGuestSystemPatchSet.virtualAudioSpeakerRawChains,
         FirmwareGuestSystemPatchSet.virtualAudioMicrophoneChains,
     ]
 

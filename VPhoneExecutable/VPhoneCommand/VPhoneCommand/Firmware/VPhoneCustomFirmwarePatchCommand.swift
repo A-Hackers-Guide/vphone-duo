@@ -252,6 +252,37 @@ struct VPhoneCustomFirmwarePatchVirtualAudioGraphConfigurationsCommand: Parsable
     }
 }
 
+// MARK: - patch-virtualaudio-speaker-raw
+
+struct VPhoneCustomFirmwarePatchVirtualAudioSpeakerRawCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-virtualaudio-speaker-raw",
+        abstract: "Play through VirtualAudio's raw speaker chain",
+        discussion: """
+        Every speaker_* entry in graph_configurations.plist other than
+        speaker_raw and speaker_measurement takes speaker_raw's graph, austrip,
+        propstrip and volumeCommands. The general speaker chain is a loudness
+        normalizer, a virtual bass, equalizers, a multiband compressor and a
+        limiter tuned to the board's own speaker; through the Mac's speakers
+        it turns the quiet low end of what plays into noise. The raw chain is
+        the volume and a limiter.
+
+        Idempotent — a re-run, or a set with no speaker_raw, reports and exits
+        without rewriting.
+        """,
+    )
+
+    @Argument(help: "Path to graph_configurations.plist", transform: URL.init(fileURLWithPath:))
+    var plist: URL
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
+    var dryRun = false
+
+    func run() throws {
+        try CustomFirmwareVirtualAudioGraphConfigurations.useRawSpeakerChain(at: plist, dryRun: dryRun, verbose: true)
+    }
+}
+
 // MARK: - patch-virtualaudio-microphone-chains
 
 struct VPhoneCustomFirmwarePatchVirtualAudioMicrophoneChainsCommand: ParsableCommand {
