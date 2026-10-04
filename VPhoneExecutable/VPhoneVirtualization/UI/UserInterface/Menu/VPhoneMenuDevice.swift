@@ -84,6 +84,12 @@ extension VPhoneMenuController {
         trackpadItem.state = VPhoneTrackpadGestures.isEnabled ? .on : .off
         trackpadGesturesItem = trackpadItem
         menu.addItem(trackpadItem)
+        // Off unless asked for: the window subtitle then carries the frames the
+        // guest presented in the last second.
+        let frameRateItem = makeItem("Show Frame Rate", action: #selector(toggleFrameRateDisplay))
+        frameRateItem.state = VPhoneFrameRateDisplay.isEnabled ? .on : .off
+        frameRateItem.isEnabled = VPhoneFrameRateMeter.isSupported
+        menu.addItem(frameRateItem)
         let tidItem = makeItem("Touch ID Home Forwarding", action: #selector(toggleTouchIDForwarding))
         if hasTouchID {
             let tidEnabled = !UserDefaults.standard.bool(forKey: "touchIDForwardingDisabled")
@@ -254,6 +260,14 @@ extension VPhoneMenuController {
         VPhoneTrackpadGestures.isEnabled = enabled
         trackpadGesturesItem?.state = enabled ? .on : .off
         captureView?.trackpadGesturesEnabled = enabled
+    }
+
+    /// Shows the guest's frame rate in the window subtitle. Persisted.
+    @objc func toggleFrameRateDisplay(_ sender: NSMenuItem) {
+        let enabled = !VPhoneFrameRateDisplay.isEnabled
+        VPhoneFrameRateDisplay.isEnabled = enabled
+        sender.state = enabled ? .on : .off
+        onFrameRateDisplayChange?(enabled)
     }
 
     // MARK: - Restart
