@@ -7,6 +7,13 @@ it, records that the first fix attempt (a mach-lookup exception entitlement on
 SpringBoard) was **deployed and did not work**, explains why, and lays out the
 remaining options with their blast radius.
 
+**Fixed (2026-10-04).** Option 1 — a launchd interpose of
+`sandbox_check_by_audit_token` that allows SpringBoard's one lookup of the
+volume service — is implemented and boot-tested on `mictest-iphone`: the guest
+boots (launchd survives the pid-1 interpose), the interpose logs the allow, and
+the Control Center slider tracks a drag (volume 0.59 → 0 → 0.62, where before it
+was stuck at 0.44 and inert). See "The fix" below.
+
 ## Symptom (verified)
 
 Opening Control Center, slider confirmed full and inert by screenshot:
@@ -291,8 +298,9 @@ the write.
   interposes in the same file rely on). It logs each allow to
   `/var/mobile/Library/Caches/vphone-launchdhook-sandbox.log`. Built and the
   `__interpose` section and the `sandbox_check_by_audit_token` import were
-  verified; **not yet boot-tested** — it is pid-1 code and a fault crash-loops
-  launchd.
+  verified. **Boot-tested on `mictest-iphone`:** the guest boots, the allow is
+  logged, and the slider tracks a drag (0.59 → 0 → 0.62). The code and its
+  commit message are the record of how it works.
 - **Not done:** any working fix — options 1/2 need live validation on a VM the
   owner controls, on surfaces (pid-1 interpose / kernel sandbox) that brick boot
   if wrong.
