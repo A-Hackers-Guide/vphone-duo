@@ -587,7 +587,9 @@ Not done:
 
   That is the capture stack's device discovery on a VM, not the sound
   plugin. No sound has been recorded on an iPhone guest: nothing run there
-  records without `AVCaptureSession`.
+  records without `AVCaptureSession`. The cause and the cameracaptured hook
+  that publishes the microphone anyway are in
+  `ios27_capture_microphone_source.md`.
 
 ## 7. Open
 
