@@ -268,8 +268,31 @@ the write.
   Campo re-signed the identical way with its exceptions honoured.
 - **Inferred:** that SpringBoard's platform profile does not apply
   exception-derived mach-lookup rules (behavioural, not bytecode-proven).
-- **Confirmed (2026-10-04):** the `sandbox_check_by_audit_token` ABI for
-  option 1 (above), so the interpose can be written against a known signature.
+- **Confirmed (2026-10-04):** the enforcement point for option 1 is launchd
+  itself. The guest's `/sbin/launchd` (iOS 27) imports
+  `_sandbox_check_by_audit_token` and carries the `mach-lookup` string, so the
+  service-lookup check is made in launchd's own binary — not in libxpc (which
+  imports neither) and not only in the kernel. (`strings` on a shared-cache
+  dylib extracted with `ipsw dyld extract` does not see the sandbox
+  operation-name table — control names like `file-read-data` are absent too —
+  so the earlier libxpc check was inconclusive, not negative.) The
+  `sandbox_check_by_audit_token` ABI is recorded above.
+- **Implemented (2026-10-04), pending boot test:** option 1 is written in
+  `VPhoneGuestComponents/LaunchHook/launchdhook-vphone.c` as a C interpose of
+  `sandbox_check_by_audit_token`. The call site was read first: all 21 calls in
+  the guest's `/sbin/launchd` pass zero or one variadic argument (the name, at
+  the incoming sp), so a C variadic interpose that reads one argument and
+  forwards it reconstructs every call faithfully — the hand-written tail-call
+  trampoline is not needed. The interpose returns allow (0) only for
+  `operation == "mach-lookup"`, filter `GLOBAL_NAME`/`LOCAL_NAME` (2/3, which
+  guarantee a valid name string), and name `== avvolumeclient.xpc`; every other
+  check forwards to the real function (dyld does not interpose the defining
+  image's own call, as the existing `posix_spawn`/`memorystatus_control`
+  interposes in the same file rely on). It logs each allow to
+  `/var/mobile/Library/Caches/vphone-launchdhook-sandbox.log`. Built and the
+  `__interpose` section and the `sandbox_check_by_audit_token` import were
+  verified; **not yet boot-tested** — it is pid-1 code and a fault crash-loops
+  launchd.
 - **Not done:** any working fix — options 1/2 need live validation on a VM the
   owner controls, on surfaces (pid-1 interpose / kernel sandbox) that brick boot
   if wrong.
