@@ -807,6 +807,7 @@ struct VPhoneCustomFirmwareInstaller {
     private static let lateGuestPatches = [
         FirmwareGuestSystemPatchSet.virtioSoundDriver,
         FirmwareGuestSystemPatchSet.prebootBoardAudio,
+        FirmwareGuestSystemPatchSet.prebootIPhoneProduct,
         FirmwareGuestSystemPatchSet.prebootHaptics,
         FirmwareGuestSystemPatchSet.prebootMicrophoneArray,
         FirmwareGuestSystemPatchSet.virtualAudioSpeakerRouteThrows,
@@ -1190,11 +1191,11 @@ struct VPhoneCustomFirmwareInstaller {
     }
 
     /// `includeIdentity` is false for an environment update, which carries
-    /// only the device tree repairs: the board audio repair, which needs
-    /// `boardDeviceTree`, and the haptics removal, which every guest gets.
-    /// `boardDeviceTree` is the iPad's own device tree, staged from the VM's
-    /// `FirmwareOriginals`, or nil for an iPhone guest or a VM patched before
-    /// `fw patch` kept it.
+    /// only the device tree repairs: the board repairs, which need
+    /// `boardDeviceTree` (an iPad's audio node, an iPhone's product
+    /// description), and the haptics removal, which every guest gets.
+    /// `boardDeviceTree` is the guest's own board tree (`DeviceTree.<board>.im4p`),
+    /// staged from the VM's `FirmwareOriginals`, or nil when none is kept there.
     private func patchPreboot(
         volumes: [[String: Any]],
         work: WorkDirectory,
@@ -1225,8 +1226,14 @@ struct VPhoneCustomFirmwareInstaller {
         }
         let spoofBuild = includeIdentity ? spoofBuild : nil
         var repairs: [(verb: String, arguments: [String])] = []
-        if let boardDeviceTree, on(FirmwareGuestSystemPatchSet.prebootBoardAudio) {
-            repairs.append(("patch-dt-board-audio", [boardDeviceTree.path]))
+        if let boardDeviceTree {
+            if guestDevice.isPad {
+                if on(FirmwareGuestSystemPatchSet.prebootBoardAudio) {
+                    repairs.append(("patch-dt-board-audio", [boardDeviceTree.path]))
+                }
+            } else if on(FirmwareGuestSystemPatchSet.prebootIPhoneProduct) {
+                repairs.append(("patch-dt-iphone-product", [boardDeviceTree.path]))
+            }
         }
         if on(FirmwareGuestSystemPatchSet.prebootHaptics) {
             repairs.append(("patch-dt-haptics", []))
@@ -1299,11 +1306,14 @@ struct VPhoneCustomFirmwareInstaller {
         return work.file(board.name)
     }
 
-    /// Make sure an iPad VM's `FirmwareOriginals` holds the board tree that
+    /// Make sure a VM's `FirmwareOriginals` holds the board tree that
     /// `stageBoardDeviceTree` stages, recovering it from the IPSW the VM was
-    /// made from when a VM patched before `fw patch` kept it has none. Without
-    /// it the board audio repair cannot run, VirtualAudio looks for the
-    /// iPhone's tunings, and the guest has no sound.
+    /// made from when it has none. An iPad VM patched before `fw patch` kept it
+    /// needs it for the board audio repair, without which VirtualAudio looks
+    /// for the iPhone's tunings and the guest has no sound. An iPhone VM needs
+    /// it for the product description repair, without which MobileGestalt
+    /// reads Siri, Camera Control, the Action Button and the model name as
+    /// absent; `fw patch` does not keep an iPhone's, so it always comes from here.
     ///
     /// The IPSW cache and the VM folder are the caller's, so the search and
     /// the write run with the caller's credentials, as `cfw install` records
@@ -1320,11 +1330,14 @@ struct VPhoneCustomFirmwareInstaller {
         plan: VPhoneVirtualMachinePatchPlan?,
         invokingUser: VPhoneInvokingUser?,
     ) {
-        guard plan?.isEnabled(FirmwareGuestSystemPatchSet.prebootBoardAudio) ?? true else { return }
         let device = configuredGuestDevice(in: bundleDirectory) ?? guestDevice(of: restore)
+        let repair = device.isPad ? FirmwareGuestSystemPatchSet.prebootBoardAudio : FirmwareGuestSystemPatchSet.prebootIPhoneProduct
+        guard plan?.isEnabled(repair) ?? true else { return }
         let tree = (device.boardDeviceTreePath as NSString).lastPathComponent
         let originals = VPhoneBundleOperations.firmwareOriginalsDirectoryName
-        let skipped = "[!] Board audio repair skipped, so this \(device.productType) guest will have no sound:"
+        let skipped = device.isPad
+            ? "[!] Board audio repair skipped, so this \(device.productType) guest will have no sound:"
+            : "[!] iPhone product repair skipped, so this \(device.productType) guest will have no Siri, Camera Control, Action Button or Model Name:"
         do {
             let need = try VPhoneBoardDeviceTree.need(
                 device: device,

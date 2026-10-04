@@ -93,11 +93,15 @@ struct BoardDeviceTreeTests {
 
     // MARK: - Need
 
-    @Test func `an iPhone guest needs no board tree`() throws {
+    @Test func `an iPhone VM recovers D47AP's tree for its product description`() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
+        // makeVM leaves only the vphone600 trees, which are not a board tree.
         let vm = try VPhoneConfinedDirectory(root: makeVM(in: root, trees: ["iPhone17,3_26.6.2_23G90_Restore"]).path)
-        #expect(try VPhoneBoardDeviceTree.need(device: .iPhone17_3, in: vm, recorded: nil) == .none)
+        #expect(try VPhoneBoardDeviceTree.need(device: .iPhone17_3, in: vm, recorded: nil)
+            == .recover(.init(device: .iPhone17_3, version: "26.6.2", build: "23G90")))
+        #expect(VPhoneBoardDeviceTree.Firmware(device: .iPhone17_3, version: "26.6.2", build: "23G90").keptPath
+            == "FirmwareOriginals/iPhone17,3_26.6.2_23G90_Restore/Firmware/all_flash/DeviceTree.d47ap.im4p")
     }
 
     @Test func `an iPad VM that kept its board tree needs nothing more`() throws {

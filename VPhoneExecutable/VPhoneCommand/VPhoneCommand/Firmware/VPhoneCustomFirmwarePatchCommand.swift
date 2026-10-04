@@ -449,6 +449,46 @@ struct VPhoneCustomFirmwarePatchBoardAudioCommand: ParsableCommand {
     }
 }
 
+// MARK: - patch-dt-iphone-product
+
+struct VPhoneCustomFirmwarePatchIPhoneProductCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-dt-iphone-product",
+        abstract: "Give an iPhone guest's device tree the iPhone's own product description",
+        discussion: """
+        Fills the /product placeholders vphone600 carries (model name, Siri and
+        dictation, button and display geometry), adds Camera Control and the
+        Action Button's geometry, and fills /buttons/function-button_ringeren,
+        all from the iPhone's own tree (DeviceTree.<board>.im4p from its IPSW),
+        in place, preserving the container's compression, manifest and restore
+        info. MobileGestalt reads a placeholder as absent, so without this
+        Settings has no Siri, Camera Control or Action Button. A tree that
+        already has them is left as it is.
+
+        Takes a devicetree.img4 (preferred) or a bare .im4p, and the board's
+        DeviceTree .im4p.
+        """,
+    )
+
+    @Argument(help: "Path to devicetree.img4 or devicetree.im4p", transform: URL.init(fileURLWithPath:))
+    var deviceTree: URL
+
+    @Argument(help: "Path to the iPhone's DeviceTree.<board>.im4p", transform: URL.init(fileURLWithPath:))
+    var board: URL
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
+    var dryRun = false
+
+    func run() throws {
+        try CustomFirmwarePostRestoreDeviceTree.presentPhoneProduct(
+            at: deviceTree,
+            board: board,
+            dryRun: dryRun,
+            verbose: true,
+        )
+    }
+}
+
 // MARK: - patch-dt-haptics
 
 struct VPhoneCustomFirmwarePatchHapticsCommand: ParsableCommand {

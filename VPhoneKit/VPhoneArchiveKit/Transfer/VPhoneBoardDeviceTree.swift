@@ -2,8 +2,9 @@ import Darwin
 import Foundation
 import VPhoneCoreKit
 
-/// An iPad guest's own device tree, `DeviceTree.<board>.im4p`, as a VM folder
-/// keeps it and as the IPSW the VM was made from carries it.
+/// A guest's own device tree, `DeviceTree.<board>.im4p`, as a VM folder
+/// keeps it and as the IPSW the VM was made from carries it: an iPad's for its
+/// audio node, an iPhone's (`DeviceTree.d47ap.im4p`) for its product description.
 ///
 /// `fw patch` keeps the tree in the VM's `FirmwareOriginals`, mirrored under
 /// the restore tree's name, and the board audio repair that `cfw install` and
@@ -98,7 +99,9 @@ public enum VPhoneBoardDeviceTree {
 
     /// What a run has to do about a VM's board tree.
     public enum Need: Equatable {
-        /// An iPhone guest, which has no board tree.
+        /// Nothing to do. Every guest has a board tree now — an iPad's carries
+        /// its audio node, an iPhone's its product description — so `need`
+        /// does not answer this; it stays for callers that switch over `Need`.
         case none
         /// `FirmwareOriginals` already holds one, or several, which staging
         /// refuses to choose between.
@@ -118,7 +121,6 @@ public enum VPhoneBoardDeviceTree {
         in vm: VPhoneConfinedDirectory,
         recorded: VPhoneRestoreInfo.OSVersion?,
     ) throws -> Need {
-        guard device.isPad else { return .none }
         guard try kept(in: vm).isEmpty else { return .kept }
         var trees: [String] = []
         if try vm.isDirectory(originalsName) {
