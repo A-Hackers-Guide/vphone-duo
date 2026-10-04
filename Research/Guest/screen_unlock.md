@@ -130,9 +130,45 @@ entered"); a first try with six digits spilled two into the verify step and
 ended in "Passcodes Did Not Match". With four digits, entered a digit every
 1.5–2 s and checked after each, both entries matched, and Settings then
 answered "Passcode Change Failed" (two different codes, same result). The
-guest log in that window showed coreauthd reporting the keybag state as
-"Disabled" but no reason for the failure. The passcode path therefore stays
-unmeasured.
+passcode path therefore stays unmeasured.
+
+### Why a passcode cannot be set (2026-10-05)
+
+The same failure is upstream issue #467 ("无法设置锁屏密码"), closed without
+a cause. Logs captured per process with `logs.syslog {process}` during one
+attempt show where the change stops:
+
+1. Preferences → ManagedConfiguration: `Change passcode with context error …
+   The passcode cannot be set (-1)`, `MCPasscodeErrorDomain` 5014.
+2. profiled: `com.apple.Preferences is attempting to change the passcode`,
+   then calls `com.apple.mobile.keybagd.xpc` and logs `Failed to set new
+   passcode. Result: -1`.
+3. keybagd: `KBChangeSystemSecret: handle: -3, se-support: 0, primary-user: 1
+   …`, `KBisxARTBasedKeyBag: Result = 1`, `KBChangeSystemNonSeSecret:
+   change-secret failed e00002ce`.
+4. kernel: `"AppleSEPKeyStore":pid:56 … operation failed (sel: 15 ret:
+   e00002ce)` (pid 56 is keybagd). `e00002ce` is `kIOReturnNotReadable`, and
+   the kext returns it as the SEP's answer, so the SEP refuses the change.
+
+What differs from a real iPhone, from the same boot's console log:
+
+- `MKB_INIT: No system keybag found on filesystem` and `No system keybag
+  loaded`. `/private/var/keybags` holds `usersession.kb` and `persona.kb`,
+  no `systembag.kb`. Boot continues only because the vphone600 device tree
+  sets MKB `dt = 1` (see `Research/Firmware/firmware_manifest_and_origins.md`).
+- `no-effaceable-storage is ON`, and AppleSEPKeyStore logs `disabling use of
+  effaceable storage, using fake key, 0xffffffff`. The switch is
+  `/defaults/no-effaceable-storage` in `DeviceTree.vphone600ap`, which a
+  phone's device tree does not have; the VM has no effaceable storage.
+- The SEP firmware is `sep-firmware.vphone600.RELEASE` from the cloudOS
+  (PCC) IPSW. PCC nodes have no user passcode.
+
+So the refusal comes from the SEP keystore on a platform built without
+effaceable storage or a system keybag, not from vphoned, the input, or the
+UI. Nothing on the host or in the guest's userland changes that. Making it
+work would mean changing how the guest's keystore is provisioned at restore
+and boot, which this note does not attempt. Until then a passcode guest
+cannot be made, and `screen.unlock`'s passcode path cannot be run.
 
 ## Not yet measured
 
