@@ -95,6 +95,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         let control = VPhoneGuestControl()
         self.control = control
         if !command.dfu {
+            control.unlocksAtStartup = vm.unlocksAtStartup
             startNetworkServices(vm: vm, control: control)
             let vphonedURL = URL(fileURLWithPath: command.vphonedBin)
             if FileManager.default.fileExists(atPath: vphonedURL.path) {
@@ -168,6 +169,11 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
             }
             mc.onFrameRateDisplayChange = { [weak wc] enabled in
                 wc?.setFrameRateDisplay(enabled)
+            }
+            mc.onUnlockAtStartupChange = { [config = command.config] enabled in
+                let manifest = try VPhoneVirtualMachineManifest.load(from: config)
+                try manifest.updating(unlocksAtStartup: enabled).write(to: config)
+                try VPhoneHostFilePermissions.makeAccessible(at: config)
             }
             mc.captureView = wc.captureView
             mc.touchIDMonitor = wc.touchIDMonitor

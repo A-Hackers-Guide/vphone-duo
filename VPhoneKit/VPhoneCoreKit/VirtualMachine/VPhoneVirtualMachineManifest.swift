@@ -99,6 +99,17 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         hardwareKeyboardEnabled ?? true
     }
 
+    // MARK: - Startup
+
+    /// Whether vphone-vm wakes the guest and dismisses its Lock Screen each
+    /// time it connects to a freshly started vphoned. Missing in older
+    /// manifests, which leave the guest at the Lock Screen.
+    public let unlocksAtStartup: Bool?
+
+    public var unlocksScreenAtStartup: Bool {
+        unlocksAtStartup ?? false
+    }
+
     // MARK: - Display
 
     /// Screen configuration
@@ -339,6 +350,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         sepStorage: String = "SEPStorage",
         guestProductType: String? = nil,
         hardwareKeyboardEnabled: Bool? = nil,
+        unlocksAtStartup: Bool? = nil,
     ) {
         schemaVersion = Self.currentSchemaVersion
         self.platformType = platformType
@@ -354,6 +366,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         self.sepStorage = sepStorage
         self.guestProductType = guestProductType
         self.hardwareKeyboardEnabled = hardwareKeyboardEnabled
+        self.unlocksAtStartup = unlocksAtStartup
     }
 
     // MARK: - Creation
@@ -521,6 +534,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         machineIdentifier: Data? = nil,
         networkConfig: NetworkConfig? = nil,
         hardwareKeyboardEnabled: Bool? = nil,
+        unlocksAtStartup: Bool? = nil,
     ) -> VPhoneVirtualMachineManifest {
         VPhoneVirtualMachineManifest(
             platformType: platformType,
@@ -536,6 +550,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
             sepStorage: sepStorage,
             guestProductType: guestProductType,
             hardwareKeyboardEnabled: hardwareKeyboardEnabled ?? self.hardwareKeyboardEnabled,
+            unlocksAtStartup: unlocksAtStartup ?? self.unlocksAtStartup,
         )
     }
 
@@ -557,6 +572,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
             sepStorage: sepStorage,
             guestProductType: device == .default ? nil : device.productType,
             hardwareKeyboardEnabled: hardwareKeyboardEnabled,
+            unlocksAtStartup: unlocksAtStartup,
         )
     }
 }

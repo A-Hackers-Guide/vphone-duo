@@ -79,6 +79,32 @@ All on `unlocktest-iphone`, each followed by `device.screen` and
 
 So the device is actually usable afterwards, not merely reporting unlocked.
 
+## Unlock at startup
+
+A machine whose `config.plist` has `unlocksAtStartup` (`vm config <name>
+--unlock-at-startup on`, Device > Unlock at Startup, or Launchpad's machine
+Settings) has `vphone-vm` call `screen.unlock` with a 60 s timeout when a
+vphoned that has just started connects. vphoned's `/v1/health` carries
+`instance`, a UUID made when it starts; the host keeps the last one it saw
+across disconnects, so a probe that drops and reconnects to the same vphoned
+is not unlocked again. A guest still in Setup Assistant is skipped, and a
+passcode guest stays locked (the call refuses without a passcode, and none is
+stored).
+
+Measured on 2026-10-04 on `autounlock-iphone` (iPhone17,3, iOS 27.0 24A435,
+no passcode, Auto-Lock 1 minute), bundle 2.6.0-local:
+
+| Run | Setting | `device.screen` after boot |
+| --- | --- | --- |
+| VM start | off | locked at 5 s, dark from then on |
+| VM start | on | locked at 4 s, unlocked and lit by 16 s; log `[unlock] dismissed the Lock Screen at startup` |
+| `system.reboot {userspace: true}` in the running VM | on | new vphoned, unlocked and lit, then locked again by Auto-Lock after a minute |
+
+The re-lock after a minute is the guest's own Auto-Lock acting on an unlocked
+device, not a failed unlock. The very first reading after a boot can say
+"unlocked, lit" before SpringBoard has started (see step 1 above), so a check
+has to watch for a while, not trust one sample.
+
 ## Not yet measured
 
 - **Passcode guests.** Setting a passcode on a research guest is not

@@ -57,4 +57,24 @@ extension VPhoneGuestControl {
         let result = try await call("audio.host_latency", params: ["seconds": seconds])
         return result["changed"] as? Bool ?? false
     }
+
+    // MARK: - Unlock at Startup
+
+    /// Wakes a guest whose vphoned has just started and dismisses its Lock
+    /// Screen through `screen.unlock`. vphoned can come up well before
+    /// SpringBoard on a cold boot; the method waits for SpringBoard itself, so
+    /// it is given the longest timeout it takes. A guest with a passcode
+    /// refuses without one and stays locked: the passcode is never stored.
+    func unlockAtStartup() async {
+        do {
+            let result = try await call("screen.unlock", params: ["timeout": 60])
+            if result["was_locked"] as? Bool == true {
+                print("[unlock] dismissed the Lock Screen at startup")
+            } else {
+                print("[unlock] the guest was already unlocked")
+            }
+        } catch {
+            print("[unlock] could not unlock the guest at startup: \(error)")
+        }
+    }
 }

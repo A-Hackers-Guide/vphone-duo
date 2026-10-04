@@ -60,6 +60,26 @@ struct ManifestTests {
         #expect(edited.updating(hardwareKeyboardEnabled: !enabled).usesHardwareKeyboard == !enabled)
     }
 
+    @Test func `old manifests do not unlock at startup`() throws {
+        let data = try PropertyListEncoder().encode(sampleManifest())
+        let plist = try #require(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        #expect(plist["unlocksAtStartup"] == nil)
+        let loaded = try PropertyListDecoder().decode(VPhoneVirtualMachineManifest.self, from: data)
+        #expect(!loaded.unlocksScreenAtStartup)
+    }
+
+    @Test(arguments: [true, false])
+    func `unlock setting survives plist and unrelated edits`(enabled: Bool) throws {
+        let original = sampleManifest().updating(unlocksAtStartup: enabled)
+        let data = try PropertyListEncoder().encode(original)
+        let loaded = try PropertyListDecoder().decode(VPhoneVirtualMachineManifest.self, from: data)
+        #expect(loaded.unlocksAtStartup == enabled)
+        let edited = loaded.updating(cpuCount: 4, hardwareKeyboardEnabled: !enabled)
+        #expect(edited.unlocksScreenAtStartup == enabled)
+        #expect(edited.updating(guestDevice: .default).unlocksScreenAtStartup == enabled)
+        #expect(edited.updating(unlocksAtStartup: !enabled).unlocksScreenAtStartup == !enabled)
+    }
+
     @Test func `network config round trips through plist`() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)

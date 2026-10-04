@@ -137,6 +137,111 @@
         }
       }
     },
+    "Unable to Change Unlock at Startup" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to Change Unlock at Startup"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "起動時のロック解除を変更できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시작 시 잠금 해제를 변경할 수 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể thay đổi Mở khóa khi khởi động"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法更改启动时解锁"
+          }
+        }
+      }
+    },
+    "Unlock at Startup" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlock at Startup"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "起動時にロックを解除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시작 시 잠금 해제"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mở khóa khi khởi động"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动时解锁"
+          }
+        }
+      }
+    },
+    "Wake the guest and dismiss its Lock Screen each time it starts. A guest with a passcode stays locked." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wake the guest and dismiss its Lock Screen each time it starts. A guest with a passcode stays locked."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストが起動するたびに画面をスリープ解除し、ロック画面を閉じます。パスコードを設定したゲストはロックされたままです。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트가 시작될 때마다 화면을 깨우고 잠금 화면을 닫습니다. 암호가 설정된 게스트는 잠긴 상태로 유지됩니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đánh thức máy khách và đóng Màn hình khóa mỗi khi khởi động. Máy khách có mật mã vẫn bị khóa."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机每次启动时唤醒屏幕并关闭锁定屏幕。设有密码的客户机仍保持锁定。"
+          }
+        }
+      }
+    },
     "The virtual machine stopped and the keyboard setting was saved. Launch this machine again. Unable to restart: %@" : {
       "extractionState" : "manual",
       "localizations" : {
