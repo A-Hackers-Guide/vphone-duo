@@ -113,20 +113,31 @@ struct VPhoneVirtualMachineStopCommand: ParsableCommand {
             return VPhoneLsof.parsePIDs(r.stdout)
         }
 
-        let pids = runningPIDs()
-        guard !pids.isEmpty else { print("\(name): not running"); return }
+        // The disk is held by Virtualization's service, not by vphone-vm. A
+        // SIGINT to the service ends the VM under vphone-vm, which then exits
+        // with "the virtual machine stopped unexpectedly". vphone-vm quits on
+        // SIGINT and the service follows it, so vphone-vm is the one asked.
+        let virtualMachines = VPhoneGuestProcesses.virtualMachinePIDs(config: bundle.configURL)
+        let holders = runningPIDs()
+        guard !virtualMachines.isEmpty || !holders.isEmpty else { print("\(name): not running"); return }
 
-        print("\(name): sending SIGINT to \(pids.map(String.init).joined(separator: ", "))")
-        for pid in pids {
+        // Without a vphone-vm (one started some other way), only the
+        // processes holding the disk are left to ask.
+        let asked = virtualMachines.isEmpty ? holders : virtualMachines
+        print("\(name): sending SIGINT to \(asked.map(String.init).joined(separator: ", "))")
+        for pid in asked {
             kill(pid, SIGINT)
         }
 
+        func remaining() -> [Int32] {
+            Array(Set(virtualMachines.filter { kill($0, 0) == 0 } + runningPIDs())).sorted()
+        }
         var waited = 0
-        while waited < timeout, !runningPIDs().isEmpty {
+        while waited < timeout, !remaining().isEmpty {
             Thread.sleep(forTimeInterval: 1)
             waited += 1
         }
-        let survivors = runningPIDs()
+        let survivors = remaining()
         if !survivors.isEmpty {
             print("\(name): force-killing \(survivors.map(String.init).joined(separator: ", "))")
             for pid in survivors {
