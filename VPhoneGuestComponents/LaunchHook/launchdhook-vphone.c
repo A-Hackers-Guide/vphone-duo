@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <spawn.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -135,6 +136,64 @@ static int vpMemoryStatus(uint32_t command, int32_t pid, uint32_t flags, void *b
     return memorystatus_control(command, pid, flags, buffer, size);
 }
 
+// Control Center's volume slider on an iOS 27 guest looks up
+// `com.apple.mediaexperience.avvolumeclient.xpc`. launchd (the bootstrap
+// server) asks the sandbox whether the requesting client — SpringBoard — may
+// look the name up, through sandbox_check_by_audit_token(client_token,
+// "mach-lookup", SANDBOX_FILTER_GLOBAL_NAME, name). The service is new in
+// iOS 27; SpringBoard's platform profile, baked into the cloudOS 26.4 kernel
+// the guest boots, predates it and has no rule for it, so the check is denied
+// (`Protobox: SpringBoard deny(1) mach-lookup …avvolumeclient.xpc`) and the
+// slider stays inert. The profile cannot be recompiled and the exception
+// entitlement does not reach a platform profile; see
+// Research/Guest/ios27_cc_volume_sandbox.md.
+//
+// This allows that one lookup of that one name and forwards every other check
+// untouched. launchd's calls to this function all pass zero or one variadic
+// argument (audited across all 21 call sites in the guest's /sbin/launchd), so
+// reading one and forwarding it reconstructs each call faithfully; the name
+// filters (2, 3) always carry a valid name string, which is the only case the
+// string compare runs in.
+#define VP_AVVOLUME_SERVICE "com.apple.mediaexperience.avvolumeclient.xpc"
+
+enum {
+    VPSandboxFilterGlobalName = 2,
+    VPSandboxFilterLocalName = 3,
+};
+
+typedef struct {
+    unsigned int val[8];
+} vp_audit_token_t;
+
+extern int sandbox_check_by_audit_token(vp_audit_token_t token, const char *operation,
+                                        unsigned int filter, ...);
+
+static void vpLogVolumeAllow(const char *name) {
+    int fd = open("/var/mobile/Library/Caches/vphone-launchdhook-sandbox.log",
+                  O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+    if (fd < 0)
+        return;
+    dprintf(fd, "allow mach-lookup %s\n", name ? name : "<null>");
+    close(fd);
+}
+
+static int vpSandboxCheckByAuditToken(vp_audit_token_t token, const char *operation,
+                                      unsigned int filter, ...) {
+    va_list arguments;
+    va_start(arguments, filter);
+    const void *first = va_arg(arguments, const void *);
+    va_end(arguments);
+    // Only the name filters are read as a string; everything else forwards the
+    // bits untouched without dereferencing them.
+    if (operation && (filter == VPSandboxFilterGlobalName || filter == VPSandboxFilterLocalName) &&
+        first && strcmp(operation, "mach-lookup") == 0 &&
+        strcmp((const char *)first, VP_AVVOLUME_SERVICE) == 0) {
+        vpLogVolumeAllow((const char *)first);
+        return 0;
+    }
+    return sandbox_check_by_audit_token(token, operation, filter, first);
+}
+
 __attribute__((constructor)) static void vpLaunchHookInit(void) {
     if (getpid() != 1)
         return;
@@ -153,4 +212,5 @@ __attribute__((used, section("__DATA,__interpose"))) static const struct {
     {(const void *)vpSpawn, (const void *)posix_spawn},
     {(const void *)vpSpawnP, (const void *)posix_spawnp},
     {(const void *)vpMemoryStatus, (const void *)memorystatus_control},
+    {(const void *)vpSandboxCheckByAuditToken, (const void *)sandbox_check_by_audit_token},
 };

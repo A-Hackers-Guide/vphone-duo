@@ -287,7 +287,10 @@ extension FirmwarePipeline {
                         includeIdentityPatches: dtIncludeIdentity,
                         device: guestDevice,
                         role: .installed,
-                        sourceTree: self.loader.load(from: boardTreeURL),
+                        // Read through the originals stash, which keeps a copy: the
+                        // restore tree goes once the VM boots, and `cfw install` and
+                        // the environment update take the board's audio node from it.
+                        sourceTree: self.loader.load(from: self.pristineInput(for: boardTreeURL).url),
                     )
                     p.gate = gate
                     return p

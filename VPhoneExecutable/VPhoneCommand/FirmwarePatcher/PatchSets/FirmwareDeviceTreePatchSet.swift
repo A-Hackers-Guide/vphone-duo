@@ -6,7 +6,8 @@
 // Two kinds of entry. The first four properties make the research board present
 // as a phone the guest's own UI can lay out. The rest give it the iPhone17,3
 // identity and the camera, audio and SMC nodes that identity implies, which is
-// what lets a stock app see a plausible device.
+// what lets a stock app see a plausible device. One node goes instead of
+// coming: the haptics node, whose hardware no VM has.
 //
 // None is boot-essential: a VM with a stock device tree boots, it just looks like
 // a research board and has no camera.
@@ -166,6 +167,21 @@ public enum FirmwareDeviceTreePatchSet {
                 "Sets the ISP round-trip buffer flags for the camera pipeline.",
             ),
 
+            // MARK: Removed Nodes
+            //
+            // Written to every guest's tree, iPhone and iPad, whatever the variant.
+
+            property(
+                "devicetree-cfw-product_haptics_node",
+                "Haptics node",
+                "Removes the Taptic Engine no VM has, so tones play without the haptic track it cannot drive.",
+            ),
+            property(
+                "devicetree-cfw-product_audio_microphone_array",
+                "Microphone array claims",
+                "Removes spatial audio capture and Audio Mix, which need a microphone array no VM has, so apps record plain audio.",
+            ),
+
             // MARK: iPad Guest
 
             //
@@ -191,6 +207,11 @@ public enum FirmwareDeviceTreePatchSet {
                 "devicetree-cfw-ipad_identity",
                 "iPad identity",
                 "Reports the iPad's product type and board, so the guest runs as an iPad.",
+            ),
+            property(
+                "devicetree-cfw-ipad_audio",
+                "iPad audio configuration",
+                "Takes the audio node from the iPad's tree, so its acoustic ID names tunings the iPad image ships.",
             ),
         ],
         provides: ["vphone.devicetree"],

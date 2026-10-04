@@ -38,6 +38,21 @@ void vcc_swizzle_method(Class cls, SEL sel, IMP newImp, IMP *outOrig);
 
 // MARK: - install entry points (called once from the constructor)
 
+// Serves the microphone's capture source when the daemon could not build
+// its built-in sources (no camera device on a VM). Installed synchronously
+// in the constructor, before the daemon's first source query.
+void vcc_install_microphone_source(void);
+
+// YES once the daemon has been served the microphone-only provider, which
+// happens only when it has no capture device of its own.
+BOOL vcc_microphone_only_source_active(void);
+
+// While that provider is in use, -[AudioRemixSessionManager
+// startNewSessionBlocking] reports success without creating the Audio Mix
+// session whose neural net faults on a guest, and the remix node's audio
+// input level is logged.
+void vcc_install_remix_session_skip(void);
+
 void vcc_install_synthetic(void);
 void vcc_start_frame_receiver(void);
 void vcc_install_endpoint_hook(void);

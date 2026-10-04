@@ -216,6 +216,137 @@ struct VPhoneCustomFirmwarePatchBuildVersionCommand: ParsableCommand {
     }
 }
 
+// MARK: - patch-virtualaudio-graph-configurations
+
+struct VPhoneCustomFirmwarePatchVirtualAudioGraphConfigurationsCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-virtualaudio-graph-configurations",
+        abstract: "Move VirtualAudio's speaker chains onto the generic graph path",
+        discussion: """
+        graph_configurations.plist gives every route configuration a
+        chainType, and the DSP chain factory switches on it: `clhs` builds the
+        HAL SpeakerProtection chain, which looks the physical "Speaker" device
+        up in the device registry and throws when a VM has none — the throw
+        RoutingManager answers by abandoning every speaker route. `dflt`
+        builds the generic graph chain the mic configurations already use,
+        which needs no device.
+
+        Every speaker_* entry's chainType is flipped `clhs` -> `dflt`; the
+        entries' graph and austrip tunings are left alone. The plist sits on
+        the sealed system volume, so the install stages a copy and this
+        patches the copy.
+
+        Idempotent — a re-run on an already-patched plist reports and exits
+        without rewriting.
+        """,
+    )
+
+    @Argument(help: "Path to graph_configurations.plist", transform: URL.init(fileURLWithPath:))
+    var plist: URL
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
+    var dryRun = false
+
+    func run() throws {
+        try CustomFirmwareVirtualAudioGraphConfigurations.patch(at: plist, dryRun: dryRun, verbose: true)
+    }
+}
+
+// MARK: - patch-virtualaudio-speaker-raw
+
+struct VPhoneCustomFirmwarePatchVirtualAudioSpeakerRawCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-virtualaudio-speaker-raw",
+        abstract: "Play through VirtualAudio's raw speaker chain",
+        discussion: """
+        Every speaker_* entry in graph_configurations.plist other than
+        speaker_raw and speaker_measurement takes speaker_raw's graph, austrip,
+        propstrip and volumeCommands. The general speaker chain is a loudness
+        normalizer, a virtual bass, equalizers, a multiband compressor and a
+        limiter tuned to the board's own speaker; through the Mac's speakers
+        it turns the quiet low end of what plays into noise. The raw chain is
+        the volume and a limiter.
+
+        Idempotent — a re-run, or a set with no speaker_raw, reports and exits
+        without rewriting.
+        """,
+    )
+
+    @Argument(help: "Path to graph_configurations.plist", transform: URL.init(fileURLWithPath:))
+    var plist: URL
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
+    var dryRun = false
+
+    func run() throws {
+        try CustomFirmwareVirtualAudioGraphConfigurations.useRawSpeakerChain(at: plist, dryRun: dryRun, verbose: true)
+    }
+}
+
+// MARK: - patch-virtualaudio-microphone-chains
+
+struct VPhoneCustomFirmwarePatchVirtualAudioMicrophoneChainsCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-virtualaudio-microphone-chains",
+        abstract: "Record through VirtualAudio's measurement microphone chains",
+        discussion: """
+        graph_configurations.plist gives each built-in microphone a
+        <mic>_general configuration for ordinary recording and a
+        <mic>_measurement one. The general chain adds a loudness normalizer, a
+        multiband compressor and a limiter tuned to the board's own
+        microphone; on the Mac's microphone they raise everything by about
+        8 dB, the noise floor with it, and a recording sounds like wind.
+
+        Every <mic>_general entry with a <mic>_measurement sibling takes the
+        sibling's graph, austrip and propstrip; the rest of the entry and the
+        tuning files are left alone. The plist sits on the sealed system
+        volume, so the install stages a copy and this patches the copy.
+
+        Idempotent — a re-run on an already-patched plist, or on a set with no
+        such pairs, reports and exits without rewriting.
+        """,
+    )
+
+    @Argument(help: "Path to graph_configurations.plist", transform: URL.init(fileURLWithPath:))
+    var plist: URL
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
+    var dryRun = false
+
+    func run() throws {
+        try CustomFirmwareVirtualAudioMicrophoneChains.patch(at: plist, dryRun: dryRun, verbose: true)
+    }
+}
+
+// MARK: - patch-virtualaudio-microphone-gain
+
+struct VPhoneCustomFirmwarePatchVirtualAudioMicrophoneGainCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-virtualaudio-microphone-gain",
+        abstract: "Remove the board microphone's gain from a measurement tuning strip",
+        discussion: """
+        A <mic>_measurement.austrip carries the digital gain of the board's own
+        microphone as the global gain of an AUNBandEQ: +18 dB on an
+        iPhone17,3. The Mac's microphone arrives at the level macOS set, so
+        with that gain a recording clips. Every AUNBandEQ's global gain in the
+        strip is set to 0 dB; nothing else in it changes.
+
+        Idempotent — a strip with no gain left reports and exits without
+        rewriting.
+        """,
+    )
+
+    @Argument(help: "Path to a <mic>_measurement.austrip", transform: URL.init(fileURLWithPath:))
+    var strip: URL
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
+    var dryRun = false
+
+    func run() throws {
+        try CustomFirmwareVirtualAudioMicrophoneChains.neutralizeGain(at: strip, dryRun: dryRun, verbose: true)
+    }
+}
+
 // MARK: - patch-campo-entitlements
 
 struct VPhoneCustomFirmwarePatchCampoEntitlementsCommand: ParsableCommand {
@@ -276,5 +407,104 @@ struct VPhoneCustomFirmwarePatchPostRestoreDeviceTreeCommand: ParsableCommand {
 
     func run() throws {
         try CustomFirmwarePostRestoreDeviceTree.patch(at: deviceTree, dryRun: dryRun, verbose: true)
+    }
+}
+
+// MARK: - patch-dt-board-audio
+
+struct VPhoneCustomFirmwarePatchBoardAudioCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-dt-board-audio",
+        abstract: "Give an iPad guest's device tree the iPad's own audio node",
+        discussion: """
+        Replaces /product/audio in a restored device tree with the audio node of
+        the iPad's own tree (DeviceTree.<board>.im4p from its IPSW), in place,
+        preserving the container's compression, manifest and restore info. The
+        node earlier device tree patches added is the D47 iPhone's, whose
+        acoustic ID names tunings an iPad image does not ship; iOS's VirtualAudio
+        then fails to initialize and the guest has no audio device. A tree that
+        already matches is left as it is.
+
+        Takes a devicetree.img4 (preferred) or a bare .im4p, and the board's
+        DeviceTree .im4p.
+        """,
+    )
+
+    @Argument(help: "Path to devicetree.img4 or devicetree.im4p", transform: URL.init(fileURLWithPath:))
+    var deviceTree: URL
+
+    @Argument(help: "Path to the iPad's DeviceTree.<board>.im4p", transform: URL.init(fileURLWithPath:))
+    var board: URL
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
+    var dryRun = false
+
+    func run() throws {
+        try CustomFirmwarePostRestoreDeviceTree.presentBoardAudio(
+            at: deviceTree,
+            board: board,
+            dryRun: dryRun,
+            verbose: true,
+        )
+    }
+}
+
+// MARK: - patch-dt-haptics
+
+struct VPhoneCustomFirmwarePatchHapticsCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-dt-haptics",
+        abstract: "Remove the haptics node from a guest's device tree",
+        discussion: """
+        Removes /product/haptics from a restored device tree, in place,
+        preserving the container's compression, manifest and restore info. No
+        VM has a haptic actuator or the haptic server behind it: with the node,
+        iOS believes the guest has a Taptic Engine, plays every tone with its
+        haptic track, and drops the tone when the haptic engine fails to start.
+        That holds for an iPhone guest and an iPad guest alike. A tree without
+        the node is left as it is.
+
+        Takes a devicetree.img4 (preferred) or a bare .im4p.
+        """,
+    )
+
+    @Argument(help: "Path to devicetree.img4 or devicetree.im4p", transform: URL.init(fileURLWithPath:))
+    var deviceTree: URL
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
+    var dryRun = false
+
+    func run() throws {
+        try CustomFirmwarePostRestoreDeviceTree.removeHaptics(at: deviceTree, dryRun: dryRun, verbose: true)
+    }
+}
+
+// MARK: - patch-dt-microphone-array
+
+struct VPhoneCustomFirmwarePatchMicrophoneArrayCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-dt-microphone-array",
+        abstract: "Remove the microphone array claims from a guest's device tree",
+        discussion: """
+        Removes supports-spatial-audio-capture and supports-audio-mix from
+        /product/audio in a restored device tree, in place, preserving the
+        container's compression, manifest and restore info. Both stand for a
+        four-microphone array; a VM's microphone is the Mac's, one or two
+        channels. With them iOS 27's Voice Memos records through the spatial
+        capture route and its Audio Mix analysis, and the recording is silent.
+        A tree with neither property is left as it is.
+
+        Takes a devicetree.img4 (preferred) or a bare .im4p.
+        """,
+    )
+
+    @Argument(help: "Path to devicetree.img4 or devicetree.im4p", transform: URL.init(fileURLWithPath:))
+    var deviceTree: URL
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
+    var dryRun = false
+
+    func run() throws {
+        try CustomFirmwarePostRestoreDeviceTree.removeMicrophoneArrayClaims(at: deviceTree, dryRun: dryRun, verbose: true)
     }
 }
