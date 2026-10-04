@@ -227,3 +227,12 @@ $(GPU_PROVENANCE): GraphicLoader/README.md | $(STAGE)/gpu
 
 clean:
 	@rm -rf $(OUT)
+
+# Host proof harness for the scan that finds cameracaptured's GPU prewarm call.
+.PHONY: test-vcam-prewarm
+test-vcam-prewarm:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -O1 -Wall -Wextra -Werror -IVCamCaptured/Prewarm \
+		-o $(OUT)/VCamPrewarmScanTests \
+		Tests/VCamPrewarmScanTests.c VCamCaptured/Prewarm/VCamPrewarmScan.c
+	@$(OUT)/VCamPrewarmScanTests

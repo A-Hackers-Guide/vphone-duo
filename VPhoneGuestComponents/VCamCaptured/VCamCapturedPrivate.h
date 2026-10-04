@@ -74,6 +74,11 @@ void vcc_install_device_vendor_hook(void);
 void vcc_install_copy_streams_hook(void);
 void vcc_install_copy_streams_from_hook(void);
 
+// On the paravirtual GPU, removes the daemon's call to PrewarmThreadSafeSBPs,
+// whose NRF prewarm faults in the guest's Metal driver. Installed
+// synchronously in the constructor, before the daemon starts its preload.
+void vcc_install_gpu_prewarm_skip(void);
+
 #pragma GCC visibility pop
 
 #endif
