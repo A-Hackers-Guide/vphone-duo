@@ -54,11 +54,21 @@ public enum FirmwarePatchSetCatalog {
     ///
     /// `dyld-exp-mis_trust_auth` is off because a userspace hook now does its
     /// job: see ``misTrustAuthPatch``.
+    ///
+    /// `kernel-exp-display_refresh_120hz` is off because it is a preference with a
+    /// cost: see ``displayRefreshPatch``.
     public static let manualOnlyPatches: Set<String> =
         Set(FirmwareKernelFridaPatchSet.manifest.patches.map(\.identifier))
             .union(hypervisorConcealmentPatches)
             .union(experimentalIdentityPatches)
-            .union([misTrustAuthPatch])
+            .union([misTrustAuthPatch, displayRefreshPatch])
+
+    /// The 120 Hz timing for the paravirtual display.
+    ///
+    /// Off in `standard`: the host's mode is 60 Hz, a guest rendering twice as
+    /// often costs twice the host CPU and GPU, and only a 120 Hz host display
+    /// shows the difference. See `Research/Guest/display_refresh_rate.md`.
+    public static let displayRefreshPatch = "kernel-exp-display_refresh_120hz"
 
     /// The shared-cache short-circuit of `libmis`'s `checkTrustAndAuthorization`.
     ///

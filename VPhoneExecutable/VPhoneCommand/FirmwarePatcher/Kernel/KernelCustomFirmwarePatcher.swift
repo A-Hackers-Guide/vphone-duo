@@ -31,6 +31,10 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
     /// byte-identical when false.
     public var applyFrida = false
 
+    /// Opt-in 120 Hz display timing. Set from the plan: `standard` blocks it, so
+    /// a guest keeps the host's 60 Hz mode unless the VM asked otherwise.
+    public var applyDisplayRefresh = false
+
     public func findAll() throws -> [PatchRecord] {
         parseMachO()
         buildADRPIndex()
@@ -83,6 +87,12 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
         if applyFrida {
             patchThreadSetStateEntitlementFlag()
             patchVmMapDeleteImmutableCode()
+        }
+
+        // Opt-in: the paravirtual display advertises 120 Hz instead of the
+        // host's fixed 60 Hz mode.
+        if applyDisplayRefresh {
+            patchParavirtDisplayRefreshRate()
         }
 
         // Group C

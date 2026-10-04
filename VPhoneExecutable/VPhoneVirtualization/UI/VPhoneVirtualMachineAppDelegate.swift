@@ -164,6 +164,9 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 try await restartWithHardwareKeyboard(enabled)
             }
+            mc.onFrameRateDisplayChange = { [weak wc] enabled in
+                wc?.setFrameRateDisplay(enabled)
+            }
             mc.captureView = wc.captureView
             mc.touchIDMonitor = wc.touchIDMonitor
             mc.onFilesPressed = { [weak fileWC, weak control] in

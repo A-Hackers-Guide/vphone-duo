@@ -263,6 +263,19 @@ public enum FirmwareKernelCustomFirmwarePatchSet {
                 applicability: ios27,
                 bootEssential: true,
             ),
+
+            // MARK: Display
+
+            VPhonePatchDeclaration(
+                identifier: FirmwarePatchSetCatalog.displayRefreshPatch,
+                title: "120 Hz display timing",
+                summary: """
+                Makes the paravirtual display advertise 120 Hz instead of the host's fixed \
+                60 Hz mode. Off by default: the guest renders twice as often, and only a \
+                120 Hz host display shows it.
+                """,
+                target: .firmware(.kernelcache),
+            ),
         ],
         requires: ["vphone.kernel.base"],
         provides: ["vphone.kernel.cfw"],
