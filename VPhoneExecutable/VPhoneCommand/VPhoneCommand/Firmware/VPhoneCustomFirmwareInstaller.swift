@@ -1413,9 +1413,15 @@ struct VPhoneCustomFirmwareInstaller {
         if let injectedDylibPath {
             try patch("inject-dylib", [staged.path, injectedDylibPath])
         }
+        // The ad-hoc shape, not ldid's: TXM 187.100.3 routes a CodeDirectory
+        // without the CS_ADHOC flag into a selector-24 branch that demands a
+        // CMS wrapper no ad-hoc re-sign carries, and iOS 27.0.1's launchd is
+        // the first binary to fall through to it (Research/Firmware/
+        // txm_selector24_cms_gate.md). Apple's own platform binaries and the
+        // bundle-shipped guest dylibs all carry the flag; match them.
         try VPhoneSigner.sign(
             fileAt: staged,
-            options: .init(identifier: identifier, entitlements: entitlements, mergesExisting: true),
+            options: .init(identifier: identifier, entitlements: entitlements, mergesExisting: true, style: .appleAdHoc),
         )
         try system.replaceFile(path, fromFileAt: staged, mode: 0o755, owner: Self.guestOwner)
     }
@@ -1479,7 +1485,7 @@ struct VPhoneCustomFirmwareInstaller {
         // cannot delete one.
         try VPhoneSigner.sign(
             fileAt: staged,
-            options: .init(entitlements: data),
+            options: .init(entitlements: data, style: .appleAdHoc),
         )
         try system.replaceFile(target, fromFileAt: staged, mode: 0o755, owner: Self.guestOwner)
     }
@@ -1502,6 +1508,7 @@ struct VPhoneCustomFirmwareInstaller {
             options: .init(
                 entitlements: Data(contentsOf: ent, options: .mappedIfSafe),
                 mergesExisting: true,
+                style: .appleAdHoc,
             ),
         )
         try system.replaceFile(target, fromFileAt: staged, mode: 0o755, owner: Self.guestOwner)

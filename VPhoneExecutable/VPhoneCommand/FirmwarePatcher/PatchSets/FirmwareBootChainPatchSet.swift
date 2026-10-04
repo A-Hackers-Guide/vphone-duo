@@ -161,6 +161,14 @@ public enum FirmwareBootChainPatchSet {
                 bootEssential: true,
             ),
             VPhonePatchDeclaration(
+                identifier: "txm-boot-precheck_admission",
+                title: "TXM pre-check admission",
+                summary: "Forces the selector-24 pre-check policy walk to admit. Without it an iOS 27.0.1 iPhone guest is rejected at first boot — every binary, Apple's own launchd included, because the trust state the walk consults never loads from a 27.0.1 restore.",
+                target: .firmware(.txm),
+                applicability: VPhonePatchApplicability(iOSBase: .major(27)),
+                bootEssential: true,
+            ),
+            VPhonePatchDeclaration(
                 identifier: "txm-boot-sel42_29",
                 title: "TXM selector 42/29 shellcode",
                 summary: "Installs the selector-42/29 stub that admits guest signatures.",

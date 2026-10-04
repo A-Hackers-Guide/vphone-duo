@@ -46,6 +46,12 @@ public enum ARM64 {
     /// MOV W0, #0xA1  (MOVZ W0, #0xA1)
     public static let movW0_0xA1 = encodeU32(0x5280_1420)
 
+    /// MOV W0, #0x90  (MOVZ W0, #0x90) — the pre-check walk's PASS status
+    public static let movW0_0x90 = encodeU32(0x5280_1200)
+
+    /// MOV W8, #0xA  (MOVZ W8, #0xA) — the tolerated validation-type byte
+    public static let movW8_0xA = encodeU32(0x5280_0148)
+
     // MARK: Compare
 
     /// CMP W0, W0  (SUBS WZR, W0, W0)
@@ -58,6 +64,9 @@ public enum ARM64 {
 
     /// STRB W0, [X20, #0x30]
     public static let strbW0X20_30 = encodeU32(0x3900_C280)
+
+    /// STRB W8, [X19]
+    public static let strbW8X19 = encodeU32(0x3900_0268)
 
     // MARK: CFW Constants
 
