@@ -48,4 +48,13 @@ extension VPhoneGuestControl {
         let result = try await call("time.timezone", params: ["identifier": identifier])
         return result["changed"] as? Bool ?? false
     }
+
+    // MARK: - Audio
+
+    /// Tells the guest's sound plugin what the Mac's output device adds after
+    /// its mixer, in seconds. Returns false when the guest already had it.
+    func setHostAudioLatency(_ seconds: Double) async throws -> Bool {
+        let result = try await call("audio.host_latency", params: ["seconds": seconds])
+        return result["changed"] as? Bool ?? false
+    }
 }

@@ -122,6 +122,7 @@ enum GuestAPI {
                 "network_static_names",
                 "network_resolve",
                 "timezone",
+                "audio_host_latency",
             ],
         ]
     }

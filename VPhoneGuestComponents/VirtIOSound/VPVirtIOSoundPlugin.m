@@ -32,12 +32,21 @@
 //                                    guest); 0 leaves VirtualAudio's own
 //   VPhoneVirtIOSoundLeadPeriods     periods of silence queued ahead of the
 //                                    mix at each start, 0 to 8
+//
+// and one that vphoned keeps, read at load, again when vphoned posts
+// `com.vphone.audio.host-latency`, and at each speaker start:
+//   VPhoneVirtIOSoundHostLatency     seconds the Mac's output device adds after
+//                                    its mixer (vphone-vm sends it with
+//                                    `audio.host_latency`), added to the
+//                                    speaker's output latency; 0 to 1
 
 #import "VPVirtIOSoundAudioServerDriver.h"
 
 #include <IOKit/IOKitLib.h>
 #include <mach-o/dyld.h>
 #include <mach/mach_time.h>
+#include <math.h>
+#include <notify.h>
 #include <os/log.h>
 #include <stdatomic.h>
 #include <stdarg.h>
@@ -53,6 +62,7 @@
 #include "VPVirtIOSoundClock.h"
 #include "VPVirtIOSoundConverter.h"
 #include "VPVirtIOSoundFilter.h"
+#include "VPVirtIOSoundLatency.h"
 #include "VPVirtIOSoundProtocol.h"
 #include "VPVirtIOSoundRing.h"
 
@@ -89,6 +99,18 @@ static const char *const kInputDumpPath = "/var/mobile/vpinput.raw";
 static const uint64_t kInputDumpMaximumBytes = 16 * 1024 * 1024;
 /// Where the capture's low cut sits. See VPVirtIOSoundFilter.h.
 static const double kInputHighPassHertz = 120;
+
+/// How the speaker's queued latency is followed (VPVirtIOSoundLatency.h): a
+/// window of in-flight counts every five seconds, once a run has settled as
+/// long; up after two windows that ask for more, down after twelve, a minute,
+/// that ask for less.
+static const uint64_t kLatencyWindowNanoseconds = 5 * NSEC_PER_SEC;
+static const uint64_t kLatencySettleNanoseconds = 5 * NSEC_PER_SEC;
+static const uint32_t kLatencyRisingWindows = 2;
+static const uint32_t kLatencyFallingWindows = 12;
+
+/// What vphoned posts after it stores `VPhoneVirtIOSoundHostLatency`.
+static const char *const kHostLatencyNotification = "com.vphone.audio.host-latency";
 
 /// The speaker volume control's range. VirtualAudio maps the guest's volume
 /// onto it in a straight line and reads the decibels back, so the range is
@@ -357,6 +379,23 @@ static uint32_t VPLeadPeriods(void) {
     return (uint32_t)MAX(0, MIN(periods, kMaximumLeadPeriods));
 }
 
+/// What the Mac's output device adds after its mixer, in seconds, as vphoned
+/// last stored it; 0 when it never did. Synchronized first: vphoned writes
+/// the domain from another process, and this one's cache would otherwise
+/// keep the value it read at load.
+static double VPStoredHostLatency(void) {
+    CFPreferencesAppSynchronize(kSettingsDomain);
+    CFPropertyListRef value = CFPreferencesCopyAppValue(CFSTR("VPhoneVirtIOSoundHostLatency"), kSettingsDomain);
+    double seconds = 0;
+    if (value && CFGetTypeID(value) == CFNumberGetTypeID()) {
+        CFNumberGetValue(value, kCFNumberDoubleType, &seconds);
+    }
+    if (value) {
+        CFRelease(value);
+    }
+    return isfinite(seconds) && seconds > 0 ? MIN(seconds, kVPVirtIOSoundMaximumHostLatency) : 0;
+}
+
 /// The nominal rate the device boots with, for testing how VirtualAudio picks
 /// aggregate members: a ringtone-preview vdef runs at 44100 and may require a
 /// candidate's *current* nominal rate to match, not just advertised support.
@@ -589,6 +628,9 @@ typedef struct {
                             plugin:(ASDPlugin *)plugin;
 /// Frames, at the wire rate, between the guest's I/O and the host's.
 @property (nonatomic, readonly) UInt32 queuedLatencyFrames;
+/// Called on the stream's queue when `queuedLatencyFrames` changed. Set once,
+/// by the device, before the stream runs.
+@property (copy, nonatomic) void (^queuedLatencyChanged)(UInt32 frames);
 /// The device the stream belongs to, which is where its rate is changed.
 @property (weak, nonatomic) ASDAudioDevice *device;
 /// Whether the stream answers `kVPAlternateRate` beside the wire rate,
@@ -835,6 +877,13 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     uint64_t _lastCompletedAt;
     uint64_t _completedAfterFirst;
     uint64_t _maxCompletionGap;
+    /// The periods queued ahead of the host as reported, and the window it
+    /// is fed from: when the window began, the most bytes in flight a write
+    /// in it found, and how many writes it saw.
+    VPVirtIOSoundLatencyTracker _latency;
+    uint64_t _latencyWindowStartedAt;
+    uint64_t _latencyWindowMaxInFlight;
+    uint64_t _latencyWindowWrites;
     /// The rate CoreAudio runs the stream at, which is the wire rate until a
     /// 44100 aggregate switches the device. The mix block reads it, the rate
     /// change writes it, both lock-free.
@@ -875,6 +924,7 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
         return nil;
     }
     _leadPeriods = VPLeadPeriods();
+    VPVirtIOSoundLatencyTrackerInit(&_latency, _leadPeriods + 1, kLatencyRisingWindows, kLatencyFallingWindows);
     _resampleScratch = malloc(kResampleScratchFrames * format.bytesPerFrame);
     if (!_resampleScratch) {
         return nil;
@@ -976,8 +1026,10 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     atomic_store_explicit(&_mix.leadRequest, _leadPeriods * _periodBytes, memory_order_release);
 }
 
+/// The lead plus one period until the host is seen keeping more in flight
+/// (`trackLatency`).
 - (UInt32)queuedLatencyFrames {
-    return (_leadPeriods + 1) * (_periodBytes / _format.bytesPerFrame);
+    return _latency.periods * (_periodBytes / _format.bytesPerFrame);
 }
 
 // MARK: Counters
@@ -1001,6 +1053,9 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     }
     _completedAfterFirst = 0;
     _maxCompletionGap = 0;
+    _latencyWindowStartedAt = _startedAt;
+    _latencyWindowMaxInFlight = 0;
+    _latencyWindowWrites = 0;
     atomic_store(&_mix.framesIn, 0);
     atomic_store(&_mix.bytesOut, 0);
     atomic_store(&_mix.dropped, 0);
@@ -1068,6 +1123,35 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     _windowMaxInFlight = 0;
 }
 
+/// Feeds the latency tracker one window at a time (VPVirtIOSoundLatency.h)
+/// and tells the device when the queued figure moves. Windows that began
+/// before the run settled do not count: they hold the lead going out at
+/// once and a draining run's tail, not what the host keeps.
+- (void)trackLatency {
+    dispatch_assert_queue(_queue);
+    uint64_t now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+    if (now - _latencyWindowStartedAt < kLatencyWindowNanoseconds) {
+        return;
+    }
+    BOOL settled = _latencyWindowStartedAt >= _startedAt + kLatencySettleNanoseconds;
+    if (settled && _latencyWindowWrites > 0) {
+        uint32_t previous = _latency.periods;
+        uint32_t inFlight = VPVirtIOSoundLatencyPeriods(_latencyWindowMaxInFlight, _periodBytes);
+        if (VPVirtIOSoundLatencyTrackerAddWindow(&_latency, inFlight)) {
+            VPLogToFile("stream %u: queued ahead of the host %u -> %u periods "
+                "(in flight up to %u periods in the last %.0f s, floor %u)",
+                _streamID, previous, _latency.periods, inFlight, kLatencyWindowNanoseconds / 1e9,
+                _latency.floorPeriods);
+            if (self.queuedLatencyChanged) {
+                self.queuedLatencyChanged(self.queuedLatencyFrames);
+            }
+        }
+    }
+    _latencyWindowStartedAt = now;
+    _latencyWindowMaxInFlight = 0;
+    _latencyWindowWrites = 0;
+}
+
 - (void)stopDevice {
     [self releaseDevice];
     _state = VPStreamStateIdle;
@@ -1103,6 +1187,8 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
             _maxInFlight = MAX(_maxInFlight, inFlight);
             _windowMinInFlight = MIN(_windowMinInFlight, inFlight);
             _windowMaxInFlight = MAX(_windowMaxInFlight, inFlight);
+            _latencyWindowMaxInFlight = MAX(_latencyWindowMaxInFlight, inFlight);
+            _latencyWindowWrites++;
         }
         _submissions++;
         VPVirtIOSoundRingDidSubmit(&_ring, length);
@@ -1162,6 +1248,7 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
             if (unretained->_state == VPStreamStateRunning) {
                 [unretained submitPending:NO];
                 [unretained logProgress];
+                [unretained trackLatency];
             }
         });
         dispatch_resume(_timer);
@@ -1753,6 +1840,10 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
 - (void)addControls;
 - (void)volumeChanged;
 - (void)muteChangedTo:(BOOL)muted;
+/// The speaker's part of the host's output latency changed; see
+/// `updateOutputLatency:`.
+- (void)hostLatencyChangedTo:(double)seconds;
+@property (nonatomic, readonly) BOOL isSpeaker;
 @end
 
 @implementation VPVirtIOSoundLevelControl
@@ -1804,6 +1895,16 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
     /// control because the control's own value is only reachable through its
     /// 'bcvl' property, whose getter shape the guest ASD does not publish.
     UInt32 _muteState;
+    /// The speaker's output latency and its parts, on `_latencyQueue`: what
+    /// the stream keeps queued ahead of the host (wire frames), what the
+    /// Mac's output device adds (seconds), and the figure last handed to the
+    /// HAL. `_latencyRate` is the nominal rate it is counted in, which a
+    /// rate change moves from another thread.
+    dispatch_queue_t _latencyQueue;
+    UInt32 _queuedLatencyFrames;
+    double _hostLatency;
+    UInt32 _requestedLatency;
+    _Atomic uint32_t _latencyRate;
 }
 
 - (instancetype)initWithConnection:(VPVirtIOSoundConnection *)connection
@@ -1855,6 +1956,12 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
             continue;
         }
         stream.device = self;
+        if (!input) {
+            __weak VPVirtIOSoundDevice *weakSelf = self;
+            stream.queuedLatencyChanged = ^(UInt32 frames) {
+                [weakSelf queuedLatencyChangedTo:frames];
+            };
+        }
         if (!_streams) {
             _streams = [NSMutableArray array];
         }
@@ -1900,16 +2007,24 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
     self.samplingRate = nominalRate;
     // What the stream keeps between the guest's I/O and the host's, so the
     // HAL presents video against when the sound is heard, not when it is
-    // written, and stamps a recording with when it was captured. Set once,
-    // in frames of the rate the device starts at, so after a rate change it
-    // is off by the ratio of the rates.
-    UInt32 latency = (UInt32)(latencyFrames * nominalRate / sampleRate);
+    // written, and stamps a recording with when it was captured. In frames
+    // of the rate the device starts at. The speaker's adds what the Mac's
+    // output device does after its mixer, and follows both parts as they
+    // change (`updateOutputLatency:`); the microphone's is set once.
+    _latencyRate = (uint32_t)nominalRate;
     if (input) {
         self.inputSafetyOffset = kSafetyOffsetFrames;
-        self.inputLatency = latency;
+        self.inputLatency = VPVirtIOSoundLatencyFrames(latencyFrames, sampleRate, nominalRate, 0);
     } else {
+        _latencyQueue = dispatch_queue_create("com.vphone.audio.virtiosound.latency", DISPATCH_QUEUE_SERIAL);
+        _queuedLatencyFrames = latencyFrames;
+        _hostLatency = VPStoredHostLatency();
+        _requestedLatency = VPVirtIOSoundLatencyFrames(latencyFrames, sampleRate, nominalRate, _hostLatency);
         self.outputSafetyOffset = kSafetyOffsetFrames;
-        self.outputLatency = latency;
+        self.outputLatency = _requestedLatency;
+        VPLogToFile("speaker latency %u frames at %.0f Hz (%.1f ms): queued %u frames + host %.1f ms",
+            _requestedLatency, nominalRate, _requestedLatency * 1000.0 / nominalRate, latencyFrames,
+            _hostLatency * 1000);
     }
     self.transportType = VPTransportType();
     self.timestampPeriod = _clock.periodFrames;
@@ -1962,7 +2077,74 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
     if (result == kAudioHardwareNoError) {
         VPVirtIOSoundClockAnchor(&_clock, mach_absolute_time());
     }
+    // Looks at the stored host latency again, in case its notification did
+    // not reach audiomxd: then the next playback after a change still has it.
+    if (_latencyQueue) {
+        dispatch_async(_latencyQueue, ^{
+            [self updateHostLatency:VPStoredHostLatency() reason:"start"];
+        });
+    }
     return result;
+}
+
+// MARK: Output latency
+
+- (BOOL)isSpeaker {
+    return _direction == ASDStreamDirectionOutput;
+}
+
+- (void)queuedLatencyChangedTo:(UInt32)frames {
+    dispatch_async(_latencyQueue, ^{
+        self->_queuedLatencyFrames = frames;
+        [self updateOutputLatency:"queue"];
+    });
+}
+
+- (void)hostLatencyChangedTo:(double)seconds {
+    dispatch_async(_latencyQueue, ^{
+        [self updateHostLatency:seconds reason:"host"];
+    });
+}
+
+- (void)updateHostLatency:(double)seconds reason:(const char *)reason {
+    dispatch_assert_queue(_latencyQueue);
+    if (seconds == _hostLatency) {
+        return;
+    }
+    _hostLatency = seconds;
+    [self updateOutputLatency:reason];
+}
+
+/// Hands the HAL the speaker's latency when its parts add up to a new
+/// figure. AudioServerPlugIn.h requires a configuration change for that,
+/// and the host takes it from PerformDeviceConfigurationChange with I/O
+/// stopped, then restarts I/O: the streams stop and start as at any other
+/// stop, and a player hears a short break. The tracker keeps those rare.
+///
+/// The request runs here, not on a stream's queue: a host that performs the
+/// change before the request returns stops I/O from inside it, and a
+/// stream's `stopStream` waits on its own queue.
+///
+/// A rate change alone does not ask for one. The figure is counted in the
+/// current nominal rate whenever one of its parts moves; until then a 44100
+/// run (a ringtone preview or web audio, no picture to keep in step) reads
+/// the 48000 count, about 9% long.
+- (void)updateOutputLatency:(const char *)reason {
+    dispatch_assert_queue(_latencyQueue);
+    double rate = atomic_load(&_latencyRate);
+    UInt32 frames = VPVirtIOSoundLatencyFrames(_queuedLatencyFrames, _wireRate, rate, _hostLatency);
+    if (frames == _requestedLatency) {
+        return;
+    }
+    VPLogToFile("speaker latency %u -> %u frames at %.0f Hz (%.1f ms): queued %u frames (%.1f ms) "
+        "+ host %.1f ms; %s changed, requesting a configuration change",
+        _requestedLatency, frames, rate, frames * 1000.0 / rate, _queuedLatencyFrames,
+        _queuedLatencyFrames * 1000.0 / _wireRate, _hostLatency * 1000, reason);
+    _requestedLatency = frames;
+    [self requestConfigurationChange:^{
+        self.outputLatency = frames;
+        VPLogToFile("speaker latency %u frames applied", frames);
+    }];
 }
 
 // MARK: Rate changes
@@ -1985,6 +2167,7 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
     [super setSamplingRate:rate];
     if (rate > 0 && [self supportsSamplingRate:rate] && rate != _clockRate) {
         _clockRate = rate;
+        atomic_store(&_latencyRate, (uint32_t)rate);
         VPVirtIOSoundClockSetRate(&_clock, rate, mach_absolute_time());
         os_log(VPLog(), "nominal rate -> %.0f Hz", rate);
     }
@@ -2290,6 +2473,7 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
     static const ASDStreamDirection directions[] = {ASDStreamDirectionOutput, ASDStreamDirectionInput};
     unsigned index = 0;
     unsigned published = 0;
+    NSMutableArray<VPVirtIOSoundDevice *> *speakers = [NSMutableArray array];
     io_service_t service;
     while ((service = IOIteratorNext(services))) {
         VPVirtIOSoundConnection *connection = [[VPVirtIOSoundConnection alloc] initWithService:service];
@@ -2306,6 +2490,9 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
                 [device addControls];
                 [self addAudioDevice:device];
                 published++;
+                if (device.isSpeaker) {
+                    [speakers addObject:device];
+                }
             }
         }
         index++;
@@ -2313,6 +2500,29 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
     IOObjectRelease(services);
     os_log(VPLog(), "published %u virtio sound device(s)", published);
     VPLogToFile("published %u virtio sound device(s)", published);
+    if (speakers.count > 0) {
+        [self observeHostLatencyFor:speakers];
+    }
+}
+
+/// vphoned stores what the Mac's output device adds after its mixer and
+/// posts `kHostLatencyNotification`; each speaker takes the stored value
+/// again. Each speaker read it at load, and reads it again at each start, so
+/// a launch that misses a post still catches up. The registration's status
+/// is logged: a sandbox that refused it would show here.
+- (void)observeHostLatencyFor:(NSArray<VPVirtIOSoundDevice *> *)speakers {
+    static int token;
+    dispatch_queue_t queue = dispatch_queue_create("com.vphone.audio.virtiosound.host-latency", DISPATCH_QUEUE_SERIAL);
+    uint32_t status = notify_register_dispatch(kHostLatencyNotification, &token, queue, ^(int received) {
+        (void)received;
+        double seconds = VPStoredHostLatency();
+        VPLogToFile("host latency notification: %.1f ms stored", seconds * 1000);
+        for (VPVirtIOSoundDevice *speaker in speakers) {
+            [speaker hostLatencyChangedTo:seconds];
+        }
+    });
+    VPLogToFile("host latency: listening for %s: %s (status %u)", kHostLatencyNotification,
+        status == NOTIFY_STATUS_OK ? "registered" : "refused", status);
 }
 
 @end

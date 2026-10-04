@@ -146,6 +146,9 @@ typedef int (^ASDIOBlock)(
 @property (nonatomic) UInt32 inputSafetyOffset;
 @property (nonatomic) UInt32 outputSafetyOffset;
 @property (nonatomic) UInt32 inputLatency;
+/// The setter also tells the HAL ('ltnc' in the output scope, through the
+/// plugin's `changedProperty:forObject:` and the host's PropertiesChanged).
+/// A running device changes it only inside `requestConfigurationChange:`.
 @property (nonatomic) UInt32 outputLatency;
 @property (nonatomic) UInt32 transportType;
 @property (readonly, nonatomic) BOOL hasOutput;
@@ -161,6 +164,13 @@ typedef int (^ASDIOBlock)(
 - (NSArray *)outputStreams;
 - (int)performStartIO;
 - (int)performStopIO;
+/// The host's RequestDeviceConfigurationChange, which AudioServerPlugIn.h
+/// requires before a change to anything I/O depends on, presentation latency
+/// among it. The plugin passes the block to the host, the host stops I/O and
+/// runs it from PerformDeviceConfigurationChange, then restarts I/O with
+/// what changed. Nothing runs before the device is added to its plugin.
+/// (`v24@0:8@?16` on the Mac; the guest's ASD carries the same selector.)
+- (void)requestConfigurationChange:(void (^)(void))block;
 @end
 
 /// A hardware volume control, as the macOS `AppleVirtIOSound.driver` creates

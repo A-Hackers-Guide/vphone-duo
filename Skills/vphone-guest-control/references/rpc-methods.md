@@ -51,6 +51,7 @@ invalid-request error, read the source named there instead of guessing keys.
 | `device.snapshot`, `device.screen`, `device.network` | none | Smaller views of the same |
 | `screen.screenshot` | none | Base64 JPEG with `mime_type`, `width`, `height` (1290×2796) |
 | `display.brightness`, `audio.volume` | `value?` | Omit `value` to read |
+| `audio.host_latency` | `seconds?` (0-1) | The Mac output latency the guest speaker adds; omit to read. The VM sends it on every connect and output change |
 | `display.rotation`, `display.orientation` | `orientation?` | |
 | `display.auto_lock` | none | Auto-Lock in seconds (`never` when it is Never) and the Lock Screen timeout vphoned sets to match |
 | `screen.unlock` | `passcode?`, `timeout?` (10) | Display on and Lock Screen passed, from any state; `guest unlock <machine>` calls it. `passcode` only for a guest that has one, entered once |

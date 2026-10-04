@@ -455,7 +455,8 @@ the one before it finished is a gap. Measured with the clock already fixed:
 The stream now queues `VPhoneVirtIOSoundLeadPeriods` periods of silence
 (default 2, 171 ms) ahead of each run, and the device reports the lead plus
 one period as `outputLatency` so video is presented against when the sound is
-heard. Measured: 0 of 499 and 0 of 237 writes starved.
+heard (at least that much; it now follows what the host keeps, see "Picture
+against sound" below). Measured: 0 of 499 and 0 of 237 writes starved.
 
 **Restarts lost the lead.** A tone switch restarts the stream while the device
 is still draining the last one. Queued at `startStream`, the lead was rounded
@@ -500,8 +501,73 @@ frames a second). The time from each flash to its beep:
 The guest is within a frame of a player native to the Mac, so the reported
 latency is what the queue adds. The capture is taken at the Mac's compositor
 and mixer; the display and the output device after them are the same for
-both players and are not in the numbers. Only the built-in output was
-measured: no USB or Bluetooth output was attached.
+both players and are not in the numbers.
+
+**Bluetooth output.** The same measurement with the Mac playing through
+AirPods Pro (48 kHz output), 2026-10-04:
+
+| Player | Beep after flash | Notes |
+| --- | --- | --- |
+| AVPlayer in a window on the Mac itself | -140 ms | AVFoundation sends the sound early by the output's latency |
+| Safari in the guest | +365 to +372 ms (sd 6) | `in flight` 3-5 periods, up to 8; 0 starved; host +18 ppm |
+
+At the mixer the guest's sound was 370 ms late where the native player's was
+140 ms early, so at the ear about half a second late. Two things the
+reported latency left out: Virtualization's host sink keeps more in flight
+for a Bluetooth output (3-5 periods against 1-2 on the built-in speakers,
+each 85 ms more than the lead assumed), and the output's own latency after
+the mixer, which a native player compensates and the guest never heard of.
+
+The speaker's output latency now follows both
+(`VPhoneGuestComponents/VirtIOSound/VPVirtIOSoundLatency.h`):
+
+- *Queued ahead of the host.* The output stream takes the most in flight
+  any write found per five-second window, once a run has been going five
+  seconds, plus the period being filled; never less than the lead plus one
+  period. It moves up after two windows in a row that ask for more (to the
+  lesser of them, so one burst does not count) and down after twelve, a
+  minute, that ask for less.
+- *The Mac's output.* `vphone-vm` reads the default output device from
+  CoreAudio, the device Virtualization's `VZHostAudioOutputStreamSink` plays
+  to ("the same device that AudioQueueNewOutput uses", its header): device
+  latency + its output stream's latency, at its nominal rate
+  (`VPhoneHostAudioLatencySync`), the sum the headers give for the time
+  after the HAL's output time. The native player's 14.5 ms on the built-in
+  speakers is that part (15.6 ms there). The safety offset and IO buffer,
+  mixed ahead of the output time, are left out: at the mixer the guest's
+  sound was already 8 ms ahead on the built-in speakers, so what lies before
+  the mixer is covered by the in-flight part. Built-in speakers of a MacBook
+  Pro: 60 + 690 frames, 15.6 ms. It sends the figure after every connect and whenever the
+  default output device or its latency, safety offset, buffer size, rate or
+  streams change, with `audio.host_latency` (`Research/vphoned_http_api.md`);
+  vphoned stores it as `VPhoneVirtIOSoundHostLatency` in
+  `com.apple.coreaudio` for user mobile and posts
+  `com.vphone.audio.host-latency`. The plugin reads the key at load, on that
+  notification and at each start of the speaker's I/O.
+
+The device's `outputLatency` is the sum, in frames of its nominal rate. A
+change goes through `requestConfigurationChange:`: AudioServerPlugIn.h
+requires RequestDeviceConfigurationChange for a change of presentation
+latency, and the host performs it with I/O stopped and restarts I/O after,
+so a player hears a short break when it moves. ASD's `setOutputLatency:`
+(disassembled, guest AudioServerDriver) stores the value and calls
+`changedProperty:forObject:` with 'ltnc'/'outp', which the plugin turns into
+the host's PropertiesChanged. Not yet confirmed on a guest: that the HAL in
+audiomxd performs the change, and that a player already playing picks the
+new latency up rather than only the next one.
+
+What to expect, from the measurements above: on the built-in speakers the
+queued part stays at 3 periods and the host adds 15.6 ms, so the guest's
+sound moves from 8 ms to about 24 ms ahead of its picture at the mixer
+(native: 14.5 ms). On AirPods the queued part should settle at 6 periods
+(512 ms) and the host add about 150 ms, about 400 ms more than before,
+which would leave the guest roughly 100 ms late at the ear unless
+Virtualization's sink buffers less than the half second measured. The
+plugin logs each step to `vpquery.log`: `speaker latency … frames at …
+Hz` at load, `stream 0: queued ahead of the host 3 -> N periods`, `host
+latency notification: … ms stored`, `speaker latency A -> B frames …
+requesting a configuration change`, then `speaker latency B frames
+applied` once the host performed it.
 
 ### Nothing left to set by hand
 
