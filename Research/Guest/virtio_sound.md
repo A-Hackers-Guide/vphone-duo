@@ -278,13 +278,12 @@ never do.
 
 ### The fix
 
-> **Superseded (2026-10-03).** Do not store this value. The plugin now
-> supplies `ProductIDOverride = 8010` in-process on an iPad guest when nothing
-> is stored (§6, "Nothing left to set by hand"), and a stored value wins over
-> it. 198 has no ringtone-preview category, so with it tones stay silent. A
-> guest that still carries a stored 198 should have it deleted:
-> `settings.delete` with domain `com.apple.audio.virtualaudio`, key
-> `ProductIDOverride`. What follows is how the override was found.
+> **Superseded (2026-10-03).** Do not store this value. The plugin supplies
+> `ProductIDOverride = 8010` in-process on an iPad or iPhone guest and vphoned
+> stores the same (§6, "Nothing left to set by hand"). 198 has no
+> ringtone-preview category, so with it tones stay silent; a guest that still
+> carries a stored 198 needs nothing done, the stored value gives way to
+> both. What follows is how the override was found.
 
 ```
 vphone-launchpad-cli guest rpc <machine> settings.set \
@@ -494,17 +493,37 @@ guest gets neither, so it has the whole speaker route or none of it):
 * the device UID is `PuffinOutput` unless `VPhoneVirtIOSoundDeviceUID` names
   another. Elsewhere the default stays `VPhoneVirtIOSound:0`, which
   VirtualAudio leaves unclaimed;
-* `ProductIDOverride` is set to 8010 in the `com.apple.audio.virtualaudio`
-  domain from `halInitializeWithPluginHost:` when nothing stored names one.
-  The plugin loads before VirtualAudio reads its defaults, and both are in
-  audiomxd, so the in-process value is the one it reads; audiomxd's sandbox
-  keeps the write off disk (`settings.get` still shows the domain empty),
-  which is why it is repeated every launch. Each launch logs one line after
-  `=== plugin load ===` saying what was done and whether VirtualAudio was
-  already mapped: `ProductIDOverride on 'iPhone99,11': unset, set to 8010 for
-  this launch; VirtualAudio not loaded yet`. 8010 rather than §4's 198
-  because 198's category map has no ringtone-preview entry
-  (`virtualaudio_speaker_route_throws.md`, layer 1).
+* `ProductIDOverride` in the `com.apple.audio.virtualaudio` domain is 8010,
+  from two places. The plugin sets it from `halInitializeWithPluginHost:` on
+  every launch that does not find 8010 there. The plugin loads before
+  VirtualAudio reads its defaults, and both are in audiomxd, so the
+  in-process value is the one it reads; audiomxd's sandbox keeps the write
+  off disk, which is why it is repeated every launch. Each launch logs one
+  line after `=== plugin load ===` saying what was done and whether
+  VirtualAudio was already mapped: `ProductIDOverride on 'iPhone99,11':
+  unset, set to 8010 for this launch; VirtualAudio not loaded yet`. Nothing
+  guarantees that order, so vphoned stores the same value when it starts
+  (`VPhoneDaemon/Daemon/GuestVirtualAudioProduct.swift`, only on a guest that
+  has the plugin): a stored value needs no order, and every later launch of
+  audiomxd finds it. 8010 rather than §4's 198 because 198's category map
+  has no ringtone-preview entry (`virtualaudio_speaker_route_throws.md`,
+  layer 1).
+* A value already stored gives way to both, so a guest that kept the 198 of
+  §4 needs nothing deleted. `VPhoneVirtIOSoundProductID` in the plugin's
+  settings (`com.apple.coreaudio`) names another ID for the plugin and
+  vphoned alike; 0 there leaves VirtualAudio's key alone.
+
+Measured on a new iPad16,1 / 26.6.2 guest (`avtest-ipad`, 2026-10-04):
+
+| State | `vpquery.log` | audiomxd | `settings.get` |
+| --- | --- | --- | --- |
+| first boot, nothing set | `stored 8010, nothing to do; VirtualAudio not loaded yet` (vphoned was ahead of audiomxd) | — | 8010 |
+| 198 stored by `settings.set`, audiomxd restarted | `stored 198, set to 8010 for this launch; VirtualAudio not loaded yet` | `Defaults key ProductIDOverride was defined to 8010`, `VA Init Status: 0` | 198 |
+| the same guest restarted | `stored 8010, nothing to do; VirtualAudio not loaded yet` | — | 8010 |
+
+What is left of the order: the first launch of audiomxd on a guest where
+vphoned has not stored the value yet, which is the plugin's in-process set
+alone, as before.
 
 Verified on an iPad16,1 / 26.6.2 guest with all the keys deleted and rebooted:
 VirtualAudio initializes, the boot chime and a ringtone preview start I/O on
@@ -752,8 +771,8 @@ service.
 3. VirtualAudio initialized: `audiomxd` logs `Defaults key ProductIDOverride
    was defined to 8010`, `PlugIn initialized ? 2` / `VA Init Status: 0`, no
    `PRECONDITION FAILURE`, and no `VirtualAudio PlugIn is not initialized yet`
-   when an app opens a session. The plugin supplies the override on an iPad
-   guest (§6); `vpquery.log` says so when it had to.
+   when an app opens a session. The plugin and vphoned supply the override
+   (§6); `vpquery.log` says what the plugin found and did.
 4. Sound on the host: audible, and still audible after a stop. Beyond the
    plugin's own defaults (§6) the speaker route needs the VirtualAudio patches
    (`virtualaudio_speaker_route_throws.md`). In `vpquery.log`, every stop —

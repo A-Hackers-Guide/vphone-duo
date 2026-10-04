@@ -309,6 +309,14 @@ the answers they read, so the field is true from that removal until the guest
 restarts, also across a vphoned restart in the same boot; vphoned does not
 restart the guest itself. See `Research/Guest/virtio_sound.md` §7.
 
+At startup vphoned also stores `ProductIDOverride` 8010 in
+`com.apple.audio.virtualaudio` for user mobile, on an iPad or iPhone guest
+that has the sound plugin (`VPhoneDaemon/Daemon/GuestVirtualAudioProduct.swift`).
+VirtualAudio reads the key before it derives a ProductID, and the one it
+derives on a VM never initializes. A value already stored is replaced;
+`VPhoneVirtIOSoundProductID` in `com.apple.coreaudio` names another ID, and 0
+there leaves the key alone. See `Research/Guest/virtio_sound.md` §6.
+
 `screen.unlock` reads the lock state, then turns the display on with
 `SBSUndimScreen` (no toggle, unlike a power press) and presses Home to dismiss
 the Lock Screen: a passcode-free guest goes to the Home Screen, a guest with a

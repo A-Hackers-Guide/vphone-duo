@@ -27,6 +27,9 @@
 //                                    Mic" on an iPad or iPhone guest,
 //                                    "VPhoneVirtIOSoundInput:0" elsewhere)
 //   VPhoneVirtIOSoundNominalRate     44100 to start at the alternate rate
+//   VPhoneVirtIOSoundProductID       the ProductID VirtualAudio is given
+//                                    (default 8010 on an iPad or iPhone
+//                                    guest); 0 leaves VirtualAudio's own
 //   VPhoneVirtIOSoundLeadPeriods     periods of silence queued ahead of the
 //                                    mix at each start, 0 to 8
 
@@ -242,9 +245,22 @@ static const char *VPMachine(void) {
 /// node's acoustic ID, and plays Safari, but a tone's route change dies there
 /// as it does with 198 on an iPad. Both defaults below key on this one
 /// answer, so a guest gets either the whole route or none of it.
+///
+/// `VPhoneVirtIOSoundProductID` in the plugin's settings replaces the answer,
+/// for trying another ID; 0 there leaves VirtualAudio to itself. vphoned
+/// reads the same key (`GuestVirtualAudioProduct`).
 static int VPGuestProductID(void) {
-    const char *machine = VPMachine();
-    return strncmp(machine, "iPad", 4) == 0 || strncmp(machine, "iPhone", 6) == 0 ? 8010 : 0;
+    static int product;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        const char *machine = VPMachine();
+        product = strncmp(machine, "iPad", 4) == 0 || strncmp(machine, "iPhone", 6) == 0 ? 8010 : 0;
+        id chosen = CFBridgingRelease(CFPreferencesCopyAppValue(CFSTR("VPhoneVirtIOSoundProductID"), kSettingsDomain));
+        if ([chosen isKindOfClass:NSNumber.class] && [chosen intValue] >= 0) {
+            product = [chosen intValue];
+        }
+    });
+    return product;
 }
 
 static NSString *VPDeviceUID(ASDStreamDirection direction, unsigned index) {
@@ -273,32 +289,40 @@ static NSString *VPDeviceUID(ASDStreamDirection direction, unsigned index) {
 
 /// Gives VirtualAudio `VPGuestProductID()` through its own defaults key,
 /// `ProductIDOverride` in `com.apple.audio.virtualaudio`, which it reads
-/// before deriving one. This runs in audiomxd before VirtualAudio reads its
-/// defaults, so the key is set here, in the process, on every launch that
-/// finds none: audiomxd's sandbox keeps the write from reaching disk, and it
-/// does not need to. A value someone stored (`settings.set`) is their choice
-/// and stays.
+/// before deriving one. The key is set here, in the process, on every launch
+/// that does not find that value in it: audiomxd's sandbox keeps the write
+/// from reaching disk. Whatever is stored gives way, so a guest that still
+/// has 198 from the earlier recipe plays tones without anyone deleting it;
+/// another ID is chosen with `VPhoneVirtIOSoundProductID`.
 ///
-/// Nothing guarantees that ordering, so the one line logged says what was
-/// done and whether VirtualAudio was already mapped into audiomxd: one that
-/// was not cannot have read its defaults yet; one that was may have.
+/// Set in the process, the value reaches VirtualAudio only when this plugin
+/// initializes before VirtualAudio reads its defaults. That has been the
+/// order on every launch looked at, and nothing guarantees it, so vphoned
+/// stores the same value where every later launch of audiomxd finds it
+/// whatever the order (`GuestVirtualAudioProduct`). The one line logged says
+/// what was done and whether VirtualAudio was already mapped into audiomxd:
+/// one that was not cannot have read its defaults yet; one that was may have.
 static void VPEnsureVirtualAudioProduct(void) {
     BOOL virtualAudioLoaded = VPImageLoaded("/VirtualAudio.plugin/");
     NSString *outcome;
     int product = VPGuestProductID();
     if (product == 0) {
-        outcome = @"no ProductID for this guest, left unset";
+        outcome = @"no ProductID for this guest, left as is";
     } else {
         CFStringRef domain = CFSTR("com.apple.audio.virtualaudio");
         CFStringRef key = CFSTR("ProductIDOverride");
         id existing = CFBridgingRelease(CFPreferencesCopyAppValue(key, domain));
-        if (existing) {
-            outcome = [NSString stringWithFormat:@"stored %@, left as is", existing];
+        if ([existing isKindOfClass:NSNumber.class] && [existing intValue] == product) {
+            outcome = [NSString stringWithFormat:@"stored %d, nothing to do", product];
         } else {
             CFNumberRef value = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &product);
             CFPreferencesSetAppValue(key, value, domain);
             CFRelease(value);
-            outcome = [NSString stringWithFormat:@"unset, set to %d for this launch", product];
+            id now = CFBridgingRelease(CFPreferencesCopyAppValue(key, domain));
+            outcome = [NSString stringWithFormat:@"%@, %@ %d for this launch",
+                existing ? [NSString stringWithFormat:@"stored %@", existing] : @"unset",
+                [now isKindOfClass:NSNumber.class] && [now intValue] == product ? @"set to" : @"could not be set to",
+                product];
         }
     }
     const char *loaded = virtualAudioLoaded ? "already loaded" : "not loaded yet";
