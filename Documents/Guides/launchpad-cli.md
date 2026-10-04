@@ -114,6 +114,7 @@ version while a machine is bound to it; rebind or delete those machines first.
 | `cfw update-environment <name>` | Redeploy the machine's own bundle's guest resources (vphoned, hook dylibs) into it while stopped, through the helper; nothing else changes |
 | `guest send <name> <json>` | One raw `vphone.sock` request (tap, swipe, key, screenshot) |
 | `guest rpc <name> <method> [params]` | Any vphoned method, see `Research/vphoned_http_api.md` |
+| `guest unlock <name> [--passcode <code>] [--timeout <seconds>]` | Turn the screen on and unlock the guest, whatever state it was in (vphoned `screen.unlock`). `--passcode` is needed only when the guest has one |
 | `exec [--bundle <version>] <vphone-cli arguments>` | Run the default bundle's `vphone-cli`, or that version's, streaming its output. `--bundle` must come first |
 
 Machine commands take `--root <library>` when two libraries hold a machine

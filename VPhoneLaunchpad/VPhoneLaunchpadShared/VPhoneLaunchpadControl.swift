@@ -182,6 +182,8 @@ nonisolated struct VPhoneLaunchpadControlCommand: Sendable {
              summary: "Send one raw vphone.sock request, such as {\"t\":\"tap\",\"x\":645,\"y\":1398}."),
         Self(name: "guest.rpc", arguments: ["name", "method", "params..."], options: ["root"], flags: ["screen"],
              summary: "Call a vphoned method; params is one JSON object."),
+        Self(name: "guest.unlock", arguments: ["name"], options: ["root", "passcode", "timeout"], flags: [],
+             summary: "Turn the screen on and unlock the guest (vphoned screen.unlock). --passcode enters the passcode of a guest that has one; --timeout is in seconds, 10 by default."),
 
         Self(name: "exec", arguments: ["arguments..."], options: ["bundle"], flags: [],
              summary: "Run vphone-cli with these arguments and stream its output: the default bundle's, or that of --bundle <version> given before the arguments."),

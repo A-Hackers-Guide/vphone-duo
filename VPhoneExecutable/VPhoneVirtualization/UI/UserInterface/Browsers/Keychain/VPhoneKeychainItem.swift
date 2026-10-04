@@ -36,7 +36,7 @@ struct VPhoneKeychainItem: Identifiable, Hashable {
         case "genp": VPhoneLocalization.text("Password")
         case "inet": VPhoneLocalization.text("Internet")
         case "cert": VPhoneLocalization.text("Certificate")
-        case "keys": VPhoneLocalization.text("Key")
+        case "keys": VPhoneLocalization.text("Cryptographic Key")
         case "idnt": VPhoneLocalization.text("Identity")
         default: itemClass
         }

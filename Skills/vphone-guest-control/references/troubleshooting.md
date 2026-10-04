@@ -59,7 +59,8 @@ notes.
   machine and run `cfw update-environment <name>`.
 - **`ok` but nothing changed on screen:** inputs are asynchronous; wait for the
   attached `image` or take a screenshot. A locked or asleep screen swallows
-  taps: press `power`, then `home`.
+  taps: run `guest unlock <name>`, or on an older vphoned press `power`, then
+  `home`.
 - **Taps land in the wrong place:** the socket takes pixels (1290×2796); the
   `input.*` RPCs take points. Use `ui.tree` / `ui.tap_element` instead.
 - **Port 22 refused over iproxy:** no sshd yet. Use RPC; see
@@ -84,7 +85,8 @@ migration is hung, not that the display is broken.
 
 ## Apps and the bootstrap
 
-- **"Press home to continue" lock screen:** `{"t":"key","name":"home"}`.
+- **"Press home to continue" lock screen:** `guest unlock <name>`, or
+  `{"t":"key","name":"home"}`.
 - **App crashes with `EXC_GUARD` / Mach port guard:** a known kernel-patch
   scope limit on 26.x bases; see `Documents/Guides/troubleshooting.md`.
 - **`dyld ... @loader_path/.jbroot/...` crash** after installing a package:

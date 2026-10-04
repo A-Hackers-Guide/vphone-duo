@@ -26,6 +26,10 @@ bool vp_hid_load(void);
 /// `touchSequence` can carry two fingers at once, which is why this exists.
 void vp_hid_touch2(int phase, double x1, double y1, double x2, double y2);
 
+/// Turn the display on without pressing a button. False when
+/// SpringBoardServices has no SBSUndimScreen.
+bool vp_screen_undim(void);
+
 typedef struct {
     int32_t pid;
     int32_t ppid;

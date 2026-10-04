@@ -739,5 +739,12 @@ final class VPhoneLaunchpadMachineLibrary {
                 return (machine.path, binding)
             })
         }
+
+        /// The mock list without one machine, as a refresh leaves it after
+        /// the machine is deleted.
+        func applyPreview(removing machine: Path) {
+            machines.removeAll { $0.path == machine }
+            selection.remove(machine)
+        }
     }
 #endif

@@ -366,7 +366,11 @@ struct VPhoneLaunchpadMachinesView: View {
             }
             .width(min: 110, ideal: 120)
             TableColumn("Core Bundle") { machine in
+                // Each cell is a hosting view of its own. When its row leaves
+                // the table, the cell is updated once more with an empty
+                // environment, where reading the model is a fatal error.
                 VPhoneLaunchpadMachineBundleLabel(machine: machine.path)
+                    .environment(model)
             }
             .width(min: 70, ideal: 90)
             TableColumn("State") { machine in
