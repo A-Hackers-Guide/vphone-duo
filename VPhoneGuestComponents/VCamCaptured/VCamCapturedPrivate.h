@@ -48,8 +48,9 @@ void vcc_install_microphone_source(void);
 BOOL vcc_microphone_only_source_active(void);
 
 // While that provider is in use, -[AudioRemixSessionManager
-// startNewSessionBlocking] fails the way it does when its session cannot
-// start, instead of running the Audio Mix neural net that faults on a guest.
+// startNewSessionBlocking] reports success without creating the Audio Mix
+// session whose neural net faults on a guest, and the remix node's audio
+// input level is logged.
 void vcc_install_remix_session_skip(void);
 
 void vcc_install_synthetic(void);

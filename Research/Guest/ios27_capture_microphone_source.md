@@ -244,27 +244,73 @@ not have is a guess.
 
 ### What the hook does
 
-The node is written for a session that does not start
+How the node treats markers
 (`-[BWAudioRemixAnalysisMetadataNode renderSampleBuffer:forInput:]`,
-0x1b0600d88):
+0x1b0600d88, and its outlined `.cold.7` / `.cold.9`):
 
-* a non-zero return from `startNewSessionBlocking` (0x1b06010bc `cbnz w0`)
-  skips setting `_shouldSendData` and goes to `emitSampleBuffer:` — the audio
-  passes through;
-* `submitAudioBuffer:` is called only after `sessionReady` returns YES;
-* `-finishAndGetResultsBlockingWithStartingPTS:andEndingPTS:` returns an
-  error when there is no subscriber (`ldr x0, [x0, #0x10]; cbz`) instead of
-  blocking, and `_sendRemixMetadataSampleBuffer` ignores its result.
+* Start or Resume: when `_expectsToRecordOnlyOnce` is set and `sessionReady`
+  is NO it calls `startNewSessionBlocking`. Success (0x1b06010bc `cbnz w0`
+  not taken) sets `_shouldSendData` and goes to `.cold.9`, which emits the
+  marker on the node's audio output and a copy, with the track format
+  description attached, on its metadata output
+  (`_emitCopyOfMarkerBuffer:onOutput:isStartMarkerBuffer:`). Failure goes to
+  0x1b0600f60, which emits on the audio output only.
+* Stop (`.cold.7`): clears `_shouldSendData`, calls
+  `_sendRemixMetadataSampleBuffer`, then either `abortSessionIfNeeded` (record
+  once) or `startNewSessionBlocking` for the next recording. It returns 1 —
+  marker on both outputs through `.cold.9` — unless that start fails; then the
+  Stop goes to the audio output only.
+* Audio buffers: `submitAudioBuffer:` only after `sessionReady` returns YES;
+  the buffer itself is always emitted on the audio output.
+* `-finishAndGetResultsBlockingWithStartingPTS:andEndingPTS:` with no
+  subscriber (`ldr x0, [x0, #0x10]; cbz`) signals -16992 at line 656
+  (`.cold.1`, `mov w4, #0x290`) and returns; `_sendRemixMetadataSampleBuffer`
+  ignores the result.
 
-`VCamCaptured/Microphone/VCamMicrophoneRemix.m` replaces
-`-[AudioRemixSessionManager startNewSessionBlocking]` (`- (int)`, checked
-against the runtime type encoding before wrapping). While the daemon is
-running on the microphone-only provider, it returns -16992, the code the
-method's own failure path signals, without creating the session; otherwise it
-calls the original. The recording keeps its ambisonic audio and loses only the
-Audio Mix analysis track's data.
+The first version of the hook (a6589ad) returned -16992 from
+`startNewSessionBlocking`. Measured on `mictest-iphone` (bundle
+`2.4.0-local.073c7081`): no crash, the recording ran (`stream 0: 293.25 s,
+3421 reads …`, an APAC 4-channel encoder), but at Stop the movie-file sink
+logged `received marker Stop` on inputs 0 and 1 and never on input 2 (presumably
+the node's metadata output), with `signalled err=-16992 at <>:656` in between:
+Voice Memos' recording never finished. That is the Stop branch above with
+its session start failing.
 
-Not yet run in a guest. To check: `vcamcaptured.log` has `remix: wrapped …` at load and
-`Audio Mix analysis session not started (-16992)` at the first recording;
-cameracaptured's pid survives a recording; then the `vpquery.log` line and a
-non-silent `.m4a`.
+`VCamCaptured/Microphone/VCamMicrophoneRemix.m` now has the method report
+success (0) without creating the session, while the daemon is on the
+microphone-only provider; otherwise it calls the original (`- (int)`, checked
+against the runtime type encoding before wrapping). The node then forwards
+Start and Stop on both outputs, `sessionReady` stays NO so no audio is
+submitted to SoundAnalysis, and the finish call takes its no-subscriber error.
+What a recording loses: the Audio Mix metadata track has its format
+description and markers but no samples, so Voice Memos has no Audio Mix data
+for it. The ambisonic audio track is untouched.
+
+Keeping the node out of the graph instead (the metadata configuration that
+`FigCaptureMetadataObjectConfigurationRequiresSpatialAudioMix` reads) would
+avoid the empty track, but the predicate is a C function called inside
+CMCapture, and what puts `kCMMetadataIdentifier_QuickTimeMetadataSpatialAudioMix`
+in Voice Memos' configuration was not traced. It is the fallback if the
+writer refuses a metadata track with no samples.
+
+The same file wraps the node's `renderSampleBuffer:forInput:` (its own
+override only) to log the level of the audio it passes, about every 2 s, as
+`remix input: <ch> ch, <n> buffers, <frames> frames, <z> all zero, peak <x>
+dBFS`. That audio is what the movie file gets; the app's
+`AVCaptureAudioDataOutput` has its own sink pipeline ("Microphone Audio Data
+Sink Pipeline"), not this node.
+
+On the a6589ad run Voice Memos' live waveform stayed flat. Not established
+why. audiomxd builds the route with the SpatialCapture DSP chain
+(`flexible_video_recording`), and its converters log `2 ch, 48000 Hz,
+Float32, interleaved` and `6 ch … deinterleaved`; if the chain reads the plugin's two channels as a six-microphone array, the beamforming
+for D47's microphone array gets two real channels and four it has to invent;
+silence or near-silence after that chain is a possibility, not a finding.
+The level log above tells whether the recording itself carries sound.
+
+Not yet run in a guest. To check: `vcamcaptured.log` has `remix: wrapped …`
+and `remix: measuring …` at load, `Audio Mix analysis session not created` and
+`remix input:` lines during a recording; at Stop the sink logs `received marker
+Stop` on all three inputs and Voice Memos leaves the recording sheet; the
+`.m4a` under the app group's `Recordings/` decodes to something that is not
+zeros and opens in Voice Memos.
