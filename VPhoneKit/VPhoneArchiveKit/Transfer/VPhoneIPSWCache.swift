@@ -142,14 +142,23 @@ public enum VPhoneIPSWCache {
         }
     }
 
-    public static func inspect(_ file: URL) throws -> Archive {
+    /// The IPSW's BuildManifest, read without unpacking anything else.
+    public static func buildManifest(of file: URL) throws -> [String: Any] {
         guard FileManager.default.fileExists(atPath: file.path) else {
             throw Error.missingFile(file)
         }
         guard let data = try? VPhoneArchiveReader.readMember("BuildManifest.plist", from: file),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil)
-              as? [String: Any],
-              let version = plist["ProductVersion"] as? String, !version.isEmpty,
+              as? [String: Any]
+        else {
+            throw Error.invalidManifest(file)
+        }
+        return plist
+    }
+
+    public static func inspect(_ file: URL) throws -> Archive {
+        let plist = try buildManifest(of: file)
+        guard let version = plist["ProductVersion"] as? String, !version.isEmpty,
               let build = plist["ProductBuildVersion"] as? String, !build.isEmpty
         else {
             throw Error.invalidManifest(file)

@@ -2,6 +2,7 @@ import ArgumentParser
 import Darwin
 import FirmwarePatcher
 import Foundation
+import VPhoneArchiveKit
 import VPhoneCoreKit
 import VPhonePatchKit
 import VPhoneSign
@@ -114,6 +115,12 @@ struct VPhoneCustomFirmwareInstaller {
         guard geteuid() == 0 else {
             throw ValidationError("\(mode.summary.capitalized) needs root. Run this command with sudo.")
         }
+        // Launchpad's helper reads this through a pipe, where stdout would
+        // otherwise be block buffered: a warning printed early in the run
+        // would reach the machine's log only with the burst at exit. One line
+        // at a time, as in a terminal.
+        fflush(stdout)
+        setvbuf(stdout, nil, _IOLBF, 0)
         // Ownership checks apply when the caller is known (SUDO_UID, which
         // the Launchpad helper also sets). Plain root trusts its own files.
         let invokingUser = VPhoneInvokingUser.current
@@ -139,6 +146,8 @@ struct VPhoneCustomFirmwareInstaller {
         let restore = mode == .full
             ? try restoreTree(in: bundleDirectory, path: bundlePath, owner: callerUID)
             : nil
+        // Before any disk work, so what it says is not buried under it.
+        recoverBoardDeviceTree(in: bundleDirectory, restore: restore, plan: plan, invokingUser: invokingUser)
 
         let work = try makeWorkDirectory()
         defer {
@@ -1268,7 +1277,8 @@ struct VPhoneCustomFirmwareInstaller {
     /// The iPad's own device tree, `DeviceTree.<board>.im4p`, which `fw patch`
     /// keeps in the VM's `FirmwareOriginals` beside the vphone600 trees,
     /// copied into the work folder by descriptor. Nil when there is none: an
-    /// iPhone guest, or a VM patched by a build that did not keep it.
+    /// iPhone guest, or a VM patched by a build that did not keep it and
+    /// whose IPSW `recoverBoardDeviceTree` could not find.
     ///
     /// The folder is the caller's, so the copy goes through the pinned bundle
     /// descriptor like every other read here, and more than one candidate is
@@ -1277,30 +1287,95 @@ struct VPhoneCustomFirmwareInstaller {
         in bundleDirectory: VPhoneConfinedDirectory,
         work: WorkDirectory,
     ) throws -> URL? {
-        let originals = VPhoneBundleOperations.firmwareOriginalsDirectoryName
-        guard try bundleDirectory.isDirectory(originals) else { return nil }
-        let stash = try bundleDirectory.directory(originals)
-        var found: [(directory: VPhoneConfinedDirectory, name: String, path: String)] = []
-        for tree in try stash.entries() where try stash.isDirectory(tree) {
-            let flash = "\(tree)/Firmware/all_flash"
-            guard try stash.isDirectory(flash) else { continue }
-            let directory = try stash.directory(flash)
-            for name in try directory.entries()
-                where name.hasPrefix("DeviceTree.") && name.hasSuffix(".im4p")
-                && !name.hasPrefix("DeviceTree.vphone600") && (try? directory.isRegularFile(name)) == true
-            {
-                found.append((directory, name, "\(originals)/\(flash)/\(name)"))
-            }
-        }
+        let found = try VPhoneBoardDeviceTree.kept(in: bundleDirectory)
         guard !found.isEmpty else { return nil }
         guard found.count == 1, let board = found.first else {
             throw ValidationError(
-                "Found \(found.count) board device trees in \(originals): \(found.map(\.path).joined(separator: ", ")). Keep one.",
+                "Found \(found.count) board device trees in \(VPhoneBundleOperations.firmwareOriginalsDirectoryName): \(found.map(\.path).joined(separator: ", ")). Keep one.",
             )
         }
         try board.directory.copyFile(from: board.name, to: board.name, in: work.directory)
         print("[*] Board device tree: \(board.path)")
         return work.file(board.name)
+    }
+
+    /// Make sure an iPad VM's `FirmwareOriginals` holds the board tree that
+    /// `stageBoardDeviceTree` stages, recovering it from the IPSW the VM was
+    /// made from when a VM patched before `fw patch` kept it has none. Without
+    /// it the board audio repair cannot run, VirtualAudio looks for the
+    /// iPhone's tunings, and the guest has no sound.
+    ///
+    /// The IPSW cache and the VM folder are the caller's, so the search and
+    /// the write run with the caller's credentials, as `cfw install` records
+    /// its variant: the kernel applies the caller's permissions to every read
+    /// and to the write, and the file left in the VM folder is the caller's.
+    /// The write still goes through the pinned VM folder, and the tree is then
+    /// staged from there like one `fw patch` kept.
+    ///
+    /// Never fails the run: without the tree only the repair is left out, and
+    /// that is said in one `[!]` line naming what is missing and the fix.
+    private func recoverBoardDeviceTree(
+        in bundleDirectory: VPhoneConfinedDirectory,
+        restore: VPhoneConfinedDirectory?,
+        plan: VPhoneVirtualMachinePatchPlan?,
+        invokingUser: VPhoneInvokingUser?,
+    ) {
+        guard plan?.isEnabled(FirmwareGuestSystemPatchSet.prebootBoardAudio) ?? true else { return }
+        let device = configuredGuestDevice(in: bundleDirectory) ?? guestDevice(of: restore)
+        let tree = (device.boardDeviceTreePath as NSString).lastPathComponent
+        let originals = VPhoneBundleOperations.firmwareOriginalsDirectoryName
+        let skipped = "[!] Board audio repair skipped, so this \(device.productType) guest will have no sound:"
+        do {
+            let need = try VPhoneBoardDeviceTree.need(
+                device: device,
+                in: bundleDirectory,
+                recorded: recordedOSVersion(in: bundleDirectory),
+            )
+            let firmware: VPhoneBoardDeviceTree.Firmware
+            switch need {
+            case .none, .kept:
+                return
+            case .unidentified:
+                print("\(skipped) \(originals) has no \(tree), and the VM folder does not say which IPSW it was made from. Copy \(device.boardDeviceTreePath) from that IPSW into \(bundle.path)/\(originals)/<restore tree>/Firmware/all_flash/, then run this again.")
+                return
+            case let .recover(found):
+                firmware = found
+            }
+            let directories = VPhoneBoardDeviceTree.searchDirectories(forVirtualMachineAt: bundle)
+            let fix = "Put that IPSW in \(directories[0].path), or copy its \(device.boardDeviceTreePath) to \(bundle.path)/\(firmware.keptPath), then run this again."
+            print("[*] \(originals) has no \(tree); looking for the \(device.productType) \(firmware.version) (\(firmware.build)) IPSW in \(directories.map(\.path).joined(separator: ", "))")
+            let recover = { () throws -> (source: VPhoneBoardDeviceTree.Source, path: String)? in
+                guard let source = VPhoneBoardDeviceTree.find(firmware, in: directories) else { return nil }
+                return (source, try VPhoneBoardDeviceTree.store(source, for: firmware, in: bundleDirectory))
+            }
+            do {
+                guard let recovered = try invokingUser.map({ try $0.withUserCredentials(recover) }) ?? recover() else {
+                    print("\(skipped) no IPSW for \(device.productType) \(firmware.version) (\(firmware.build)) was found, and \(originals) has no \(tree). \(fix)")
+                    return
+                }
+                print("[+] Board device tree recovered: \(recovered.source.member) from \(recovered.source.archive.path), kept as \(recovered.path)")
+            } catch {
+                print("\(skipped) \(tree) could not be kept in \(originals): \(error). \(fix)")
+            }
+        } catch {
+            print("\(skipped) \(bundle.path)/\(originals) could not be read: \(error). Copy \(device.boardDeviceTreePath) from the VM's IPSW into \(originals)/<restore tree>/Firmware/all_flash/, then run this again.")
+        }
+    }
+
+    /// The guest device `fw prepare` recorded in `config.plist`, read through
+    /// the pinned folder. Nil when it names none, as on a VM older than iPad
+    /// guests.
+    private func configuredGuestDevice(in bundleDirectory: VPhoneConfinedDirectory) -> VPhoneGuestDevice? {
+        guard let data = try? bundleDirectory.readData("config.plist"),
+              let plist = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any]
+        else { return nil }
+        return VPhoneGuestDevice.named(plist["guestProductType"] as? String)
+    }
+
+    /// The iOS version and build `restore-info.json` records.
+    private func recordedOSVersion(in bundleDirectory: VPhoneConfinedDirectory) -> VPhoneRestoreInfo.OSVersion? {
+        guard let data = try? bundleDirectory.readData("restore-info.json") else { return nil }
+        return (try? JSONDecoder().decode(VPhoneRestoreInfo.self, from: data))?.ios
     }
 
     // MARK: - Guest file patches

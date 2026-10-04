@@ -282,8 +282,9 @@ public enum FirmwareGuestSystemPatchSet {
                 summary: """
                 Gives an iPad guest's restored Preboot device tree the iPad's own audio node, as \
                 fw patch now does. Earlier trees kept the iPhone's, whose acoustic ID names tunings \
-                an iPad image does not ship, so iOS's audio routing failed to start. Needs the \
-                iPad's device tree in the VM's FirmwareOriginals.
+                an iPad image does not ship, so iOS's audio routing failed to start. Takes the \
+                iPad's device tree from the VM's FirmwareOriginals, and recovers it there from the \
+                VM's IPSW in ~/.vphone/ipsws when it is missing.
                 """,
                 target: .prebootDeviceTree,
             ),

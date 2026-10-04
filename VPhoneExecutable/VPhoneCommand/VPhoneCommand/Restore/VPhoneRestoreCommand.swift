@@ -313,6 +313,12 @@ struct VPhoneCustomFirmwareUpdateEnvironmentCommand: ParsableCommand {
         A library the VM does not already have is left out, because its absence
         means the VM's patch plan never selected it.
 
+        An iPad VM's audio repair needs the iPad's own DeviceTree.<board>.im4p
+        in the VM's FirmwareOriginals. When a VM patched by an older build has
+        none, it is recovered from the VM's IPSW in ~/.vphone/ipsws (matched by
+        its BuildManifest) and kept there; without that IPSW the repair is
+        skipped with a [!] line naming the fix.
+
         Needs root, and the VM must be powered off.
         """,
     )
