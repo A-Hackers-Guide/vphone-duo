@@ -74,7 +74,9 @@ paste for long or non-ASCII text.
 
 ## Patterns that work
 
-- **Wake and unlock check:** `ping`, then `screenshot` to a file and look at it.
+- **Wake and unlock:** `vphone-launchpad-cli guest unlock myphone` (add
+  `--passcode` when the guest has one). It works from any state; the keys only
+  toggle. Check with `ping`, then `screenshot` to a file and look at it.
 - **Home:** `{"t":"key","name":"home"}`; **power** wakes or locks.
 - **Open an app without hunting for its icon:** `apps.launch` with the bundle id.
 - **Scroll a list:** swipe from lower to upper y, e.g. 2600 → 1400 at x 645.
