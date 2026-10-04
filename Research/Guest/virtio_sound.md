@@ -152,10 +152,43 @@ fault; the tuning directory was. That attempt is not in the tree.
 - `preboot-cfw-devicetree_board_audio`: `cfw install` and `cfw update-environment`
   apply the same replacement to the restored Preboot `devicetree.img4`
   (`vphone-cli cfw patch-dt-board-audio <devicetree.img4> <board.im4p>`), taking
-  the board tree from `FirmwareOriginals`. An iPad VM patched before this has no
-  copy there; put the board's `DeviceTree.<board>.im4p` from its IPSW into
-  `FirmwareOriginals/<restore tree>/Firmware/all_flash/` and run the environment
-  update. An iPhone guest has no board tree there and is left alone.
+  the board tree from `FirmwareOriginals`. An iPhone guest has no board tree
+  there and is left alone.
+- An iPad VM patched before `fw patch` kept the board tree has no copy in
+  `FirmwareOriginals`, and the update used to skip the repair without a word
+  (ipad-mini-01: acousticID stayed 8018, `VA Init Status: 1`). Both commands now
+  recover it first (`VPhoneBoardDeviceTree` in VPhoneArchiveKit):
+  - the firmware is read from the `FirmwareOriginals/<restore tree>` folder name
+    (`iPhoneOS_iPad16,1_26.6.2_23G90_Restore`), or from `restore-info.json`
+    when no such folder is there; the board is the guest device's
+    `deviceClass` (`config.plist` `guestProductType`, iPad16,1 → j410ap);
+  - every `*.ipsw` in the shared cache (`~/.vphone/ipsws`, or
+    `$VPHONE_ROOT/ipsws`) and in the `ipsws` folder beside the VM's library is
+    matched by its BuildManifest, never its file name: same `ProductVersion`
+    and `ProductBuildVersion`, the device among `SupportedProductTypes`, and a
+    build identity for the board whose `DeviceTree` path is
+    `DeviceTree.<board>.im4p`. That one member is read out without unpacking
+    the IPSW;
+  - it is written to `FirmwareOriginals/<restore tree>/Firmware/all_flash/`,
+    mode 0777, so later runs find it there like a tree `fw patch` kept. The
+    search and the write run with the invoking user's credentials, through
+    the pinned VM folder; the file is the user's, not root's.
+
+  The output says which it did:
+
+  ```
+  [*] FirmwareOriginals has no DeviceTree.j410ap.im4p; looking for the iPad16,1 26.6.2 (23G90) IPSW in /Users/<user>/.vphone/ipsws
+  [+] Board device tree recovered: Firmware/all_flash/DeviceTree.j410ap.im4p from /Users/<user>/.vphone/ipsws/<file>.ipsw, kept as FirmwareOriginals/iPhoneOS_iPad16,1_26.6.2_23G90_Restore/Firmware/all_flash/DeviceTree.j410ap.im4p
+  [*] Board device tree: FirmwareOriginals/iPhoneOS_iPad16,1_26.6.2_23G90_Restore/Firmware/all_flash/DeviceTree.j410ap.im4p
+  ```
+
+  When no IPSW matches, the run goes on without the repair and says so in one
+  `[!] Board audio repair skipped, so this iPad16,1 guest will have no sound: …`
+  line naming the build it looked for. The manual fix is still the fallback:
+  put that IPSW in `~/.vphone/ipsws`, or copy its
+  `Firmware/all_flash/DeviceTree.<board>.im4p` into
+  `FirmwareOriginals/<restore tree>/Firmware/all_flash/` yourself, and run the
+  environment update again.
 
 ## 3. Inside the precondition failure (follow-up session, 2026-10-02)
 
