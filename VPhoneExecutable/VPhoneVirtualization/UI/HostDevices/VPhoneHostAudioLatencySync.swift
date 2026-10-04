@@ -10,12 +10,12 @@ import Foundation
 /// its picture back by that: measured on one clock at the Mac's mixer, an
 /// AVPlayer window plays its sound 14.5 ms early on the built-in speakers,
 /// whose device and stream latency come to 15.6 ms, and 140 ms early on
-/// AirPods. The HAL mixes each cycle the safety offset plus one IO buffer
-/// ahead of that output time. The guest sees its writes come back from
-/// Virtualization's queue, which (Virtualization does not say; assumed) is
-/// no later than the queue's buffer is mixed, so from the guest those two
-/// count as well and the figure is all four. On a MacBook Pro's speakers:
-/// 60 + 48 + 690 + 512 frames, 27.3 ms.
+/// AirPods. That sum is the figure. The safety offset and IO buffer, which
+/// the HAL mixes ahead of the output time, are left out: measured at the
+/// Mac's mixer the guest's sound was already 8 ms ahead of its picture on the
+/// built-in speakers, so what lies before the mixer is covered by what the
+/// plugin measures in flight. They are read and logged all the same. On a
+/// MacBook Pro's speakers: 60 + 690 frames, 15.6 ms.
 struct VPhoneHostAudioLatency: Equatable {
     var deviceFrames: UInt32
     var safetyOffsetFrames: UInt32
@@ -24,7 +24,7 @@ struct VPhoneHostAudioLatency: Equatable {
     var sampleRate: Double
 
     var frames: UInt64 {
-        UInt64(deviceFrames) + UInt64(safetyOffsetFrames) + UInt64(streamFrames) + UInt64(bufferFrames)
+        UInt64(deviceFrames) + UInt64(streamFrames)
     }
 
     var seconds: Double {
@@ -33,8 +33,8 @@ struct VPhoneHostAudioLatency: Equatable {
 
     var summary: String {
         String(
-            format: "%.1f ms (device %u + safety offset %u + stream %u + buffer %u frames at %.0f Hz)",
-            seconds * 1000, deviceFrames, safetyOffsetFrames, streamFrames, bufferFrames, sampleRate,
+            format: "%.1f ms (device %u + stream %u frames at %.0f Hz; safety offset %u and buffer %u not counted)",
+            seconds * 1000, deviceFrames, streamFrames, sampleRate, safetyOffsetFrames, bufferFrames,
         )
     }
 }

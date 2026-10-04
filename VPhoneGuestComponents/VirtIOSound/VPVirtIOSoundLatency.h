@@ -12,7 +12,7 @@
 //   the Mac's built-in speakers and 3-5 (up to 8) with AirPods. The tracker
 //   below follows it.
 // - What the Mac's output device adds after its mixer: the device's and its
-//   stream's latency, its safety offset and its IO buffer. vphone-vm reads
+//   stream's latency. vphone-vm reads
 //   that from CoreAudio and vphoned stores it for the plugin, in seconds.
 //
 // The tracker sees the most in flight per window of a few seconds. The

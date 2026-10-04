@@ -530,14 +530,14 @@ The speaker's output latency now follows both
 - *The Mac's output.* `vphone-vm` reads the default output device from
   CoreAudio, the device Virtualization's `VZHostAudioOutputStreamSink` plays
   to ("the same device that AudioQueueNewOutput uses", its header): device
-  latency + safety offset + its output stream's latency + IO buffer, at its
-  nominal rate (`VPhoneHostAudioLatencySync`). The headers sum the device
-  and stream latency, the time after the HAL's output time; the native
-  player's 14.5 ms on the built-in speakers is that part (15.6 ms there).
-  The safety offset and buffer lie between the mix and that output time,
-  after Virtualization hands the guest its write back, so from the guest
-  they count too. Built-in speakers of a MacBook Pro: 60 + 48 + 690 + 512
-  frames, 27.3 ms. It sends the figure after every connect and whenever the
+  latency + its output stream's latency, at its nominal rate
+  (`VPhoneHostAudioLatencySync`), the sum the headers give for the time
+  after the HAL's output time. The native player's 14.5 ms on the built-in
+  speakers is that part (15.6 ms there). The safety offset and IO buffer,
+  mixed ahead of the output time, are left out: at the mixer the guest's
+  sound was already 8 ms ahead on the built-in speakers, so what lies before
+  the mixer is covered by the in-flight part. Built-in speakers of a MacBook
+  Pro: 60 + 690 frames, 15.6 ms. It sends the figure after every connect and whenever the
   default output device or its latency, safety offset, buffer size, rate or
   streams change, with `audio.host_latency` (`Research/vphoned_http_api.md`);
   vphoned stores it as `VPhoneVirtIOSoundHostLatency` in
@@ -557,8 +557,8 @@ audiomxd performs the change, and that a player already playing picks the
 new latency up rather than only the next one.
 
 What to expect, from the measurements above: on the built-in speakers the
-queued part stays at 3 periods and the host adds 27.3 ms, so the guest's
-sound moves from 8 ms to about 36 ms ahead of its picture at the mixer
+queued part stays at 3 periods and the host adds 15.6 ms, so the guest's
+sound moves from 8 ms to about 24 ms ahead of its picture at the mixer
 (native: 14.5 ms). On AirPods the queued part should settle at 6 periods
 (512 ms) and the host add about 150 ms, about 400 ms more than before,
 which would leave the guest roughly 100 ms late at the ear unless

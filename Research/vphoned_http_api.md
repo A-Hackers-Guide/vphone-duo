@@ -354,8 +354,7 @@ for user mobile, posts the Darwin notification
 `com.vphone.audio.host-latency` so a running audiomxd reads it again, and
 returns `{seconds, changed}`; a value within 10 µs of the stored one is
 neither written nor posted (`changed: false`). `vphone-vm` sends the default
-output device's device latency + safety offset + output stream latency + IO
-buffer after every connect and whenever the default output device or one of
+output device's device latency + output stream latency after every connect and whenever the default output device or one of
 those changes (`VPhoneHostAudioLatencySync`). See
 `Research/Guest/virtio_sound.md` §6, "Picture against sound".
 
