@@ -35,10 +35,11 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
     /// a guest keeps the host's 60 Hz mode unless the VM asked otherwise.
     public var applyDisplayRefresh = false
 
-    /// Opt-in on a base older than 27: a narrow allowlist at the same sandbox gate,
-    /// so a process outside an app sandbox can open the paravirtual GPU, video
-    /// decoder, Neural Engine and IOSurface scaler user clients and nothing else.
-    /// Set from the plan; `standard` blocks it.
+    /// On a base older than 27: a narrow allowlist at the same sandbox gate, so a
+    /// process outside an app sandbox can open the paravirtual GPU, video decoder,
+    /// Neural Engine and IOSurface scaler user clients and nothing else. Set from
+    /// the plan, and `standard` turns it on. False here so a patcher built directly
+    /// writes what the reference records were taken from.
     public var applyParavirtUserClients = false
 
     public func findAll() throws -> [PatchRecord] {

@@ -487,7 +487,7 @@
 | JB-28 | A     | `patch_disk_images2_client_abi`       | `com.apple.driver.AppleDiskImages2` kext: `DIDeviceCreatorUserClient::CreateDevice` + `DIDeviceIOUserClient::Connect` ABI-version gates, and the `AllocPortsArray`/`RegisterNotificationPort` notif-port sizing | **iOS-27 DDI (`/System/Developer`) auto-mount — attach layer.** `pymobiledevice3 mounter auto-mount` on the 26.4-kernel / 27-userland hybrid fails at attach: the kernel DiskImages2 driver is ABI v9, the 27 userland's DiskImages2 controller/daemon is ABI v11 (`DIDeviceCreatorUserClient::CreateDevice: Incompatible client: expected ABI version 9 actual 11`). Three layers: **GATE1** NOPs the CreateDevice controller-ABI `cmp #9 ; b.ne` reject; **GATE2b** NOPs the Connect daemon-ABI `cmp #9 ; b.ne` reject (both anchored on the C++ signature cstring → unique `cmp #9`/`b.ne`; version-robust; no-op-in-effect on version-matched userlands where ABI 9==9). **GATE2** (array + 2 bound checks) fixes a RegisterNotificationPort off-by-one (userland registers at index==maxPorts, one past the array) by widening the AllocPortsArray allocation (`lsl x1,xN,#3` → `mov x1,#0x4000`) AND both bound-check field loads (`ldrh [.,#0xd8]`/`ldr [.,#0xe8]` → `mov wD,#0x800`); applied **all-or-nothing** (widening the bound checks without the backing array would let RegisterNotificationPort write past it → corruption) and skipped/logged on builds whose notif-port codegen differs (the off-by-one is 26.4-hybrid-specific). Pairs with the sandbox ops[124] allow (JB-09) and the diskimagesiod userland patch (CFW binary-patch #13). Anchors structural (Capstone decode of the pinned function's instructions); replacement bytes from the Keystone-backed `ARM64Encoder`. **GATE2a anchor note:** the AllocPortsArray size-shift is matched on `lsl` mnemonic + destination `x1` (the unique size-writing lsl in the function) — NOT a 3-operand `lsl xd,xn,#imm` shape, because Capstone on this toolchain decodes the lsl-immediate (a UBFM alias) as **2 operands**; requiring 3 operands makes GATE2 silently skip (the all-or-nothing returns a harmless no-op). Verified on the `c0ecdb4b` 26.4 deployment kernel via `patch-component --component kernel-jb --records-out`: all five di2 records emit (`di2_createdevice_abi`, `di2_connect_abi`, `di2_allocports_size`, `di2_notif_boundcheck_d8`, `di2_notif_boundcheck_e8`) — always verify the di2 records EMIT, not merely that the JB suite reports "no failures". No-op-in-effect for version-matched userlands. |     Y      |
 | JB-29 | C     | `patch_fpfs_scoped_vnode_open`        | Sandbox MACF `mpo_vnode_check_open` (`ops[267]`) → per-process trampoline code cave                  | **iOS-27 random-respring fix (fpfs balloon).** JB-09 blanket-neuters `mpo_vnode_check_open` (`ops[267]` → allow) so processes can read `/var/jb`. But FileProvider's fpfs parent-walk (`fpfs_pkg_fd_lookup` → `openbyid` climbing via `getattrlistat(ATTR_CMN_PAROBJID)`) uses the stock check's EACCES at the domain-container boundary as its terminus; neutered, the walk climbs unbounded → `ResolverService` (FileProviderResolver) balloons to ~12 GB → `vm-compressor-space-shortage` jetsam → backboardd killed → **respring** (seen on 27b4/24A5390f). Fix keeps the global bypass and enforces the real check for the FileProvider daemons only: on 27, `ops[267]` is left un-neutered (removed from JB-09's blanket list — conditional `if !applyIOS27` in `patchSandboxHooksExtended`), then retargeted to a 20-insn code-cave trampoline that inlines `current_proc` (`mrs tpidr_el1` → `ldr [+0x3F0]` uthread → `ldr [+0x18]` proc), loads `p_comm` (`+0x56C`), compares the first 8 bytes to `"Resolver"`/`"fileprov"`, and on match `b`s to the real `vnode_check_open` (restores the terminus) else returns allow (`mov x0,#0 ; ret` → `/var/jb` reads + Sileo/TrollStore icons unaffected). Register-only (x8–x10), no frame/call (~18 insns/open). Struct offsets recovered via the VZ gdb stub on vphone600; cave bytes from the Keystone-backed `ARM64Encoder`, verified by Capstone round-trip; the `ops[267]` retarget preserves the auth-rebase high bits (same encoder family as JB-09). **VALIDATED on-device (2026-07-23, `17,3_27.0_24A5390f` + cloudOS 26.4, JB, `setup_machine` deploy): resprings stop; Sileo/TrollStoreLite icons render.** Backward-compat: a 26.5 base is unaffected (`ops[267]` still blanket-neutered there) — verified byte-identical kernelcache pre-vs-post (`cmp` clean, `sha256` unchanged). See `KernelJBPatchFpfsScopedOpen.swift`. |     Y      |
 | JB-30 | B     | `patchParavirtDisplayRefreshRate`     | `AppleParavirtDisplay::createDisplayAttributes` (AppleParavirtGPUIOGPUFamily), the per-mode timing element call | **120 Hz display timing (opt-in, `kernel-exp-display_refresh_120hz`, off in `standard`).** The host VM service builds its one `PGDisplayMode` with a constant 60.0 Hz and writes it into the display shared state page as a 16-byte entry (u16 width, u16 height, u32 refresh in 16.16 Hz, flags); the guest turns each entry into an IOAV timing element with `ldurh w1,[xN,#-8]; ldurh w2,[xN,#-6]; ldur w3,[xN,#-4]; bl`. The `ldur w3` becomes `movz w3,#120,lsl #16`. Anchor: the `createDisplayAttributes` logger cstring (all refs in one function) + the only w1/w2/w3 load triple off one base at -8/-6/-4 ahead of a call. Gated by `KernelCustomFirmwarePatcher.applyDisplayRefresh`, set from the plan. See `Research/Guest/display_refresh_rate.md`. |   opt-in   |
-| JB-31 | C     | `patchParavirtUserClientsNarrow` (records `kernel-exp-paravirt_user_clients.redirect` / `.cave`) | Same IOUserClient Sandbox gate; the deny block's `ldr Xt,[sp,#imm]` eight bytes before the fail-log `adrp` | **Paravirtual device access on a 26.x / 18.x base (opt-in, off in `standard`).** Narrow replacement for the broad gate-off: at the deny point the class-name C string is already in x0, so a code-cave trampoline reads its first eight bytes and branches to the gate's NotPermitted allow target only for `ApplePar` / `AppleVid` / `AppleVir` / `IOSurfac` (AppleParavirt\*, AppleVideoToolboxParavirt\*, AppleVirtIO\*, IOSurfaceAcceleratorParavirtClient); every other denial runs the displaced `ldr` and falls through to the real deny. Fixes `MTLCreateSystemDefaultDevice()` nil in daemons/CLI and the VideoToolbox/ANE/IOSurface denials (upstream issue #22) without opening the rest. Cave words verified by clang/as + capstone round-trip; the two `b` words via `ARM64Encoder`. Gated by `KernelCustomFirmwarePatcher.applyParavirtUserClients`, set from the plan when `applyIOS27` is false. See `Research/Guest/gpu_acceleration.md`. |   opt-in   |
+| JB-31 | C     | `patchParavirtUserClientsNarrow` (records `kernel-cfw-paravirt_user_clients.redirect` / `.cave`; introduced as `kernel-exp-paravirt_user_clients`, renamed when `standard` turned it on) | Same IOUserClient Sandbox gate; the deny block's `ldr Xt,[sp,#imm]` eight bytes before the fail-log `adrp` | **Paravirtual device access on a 26.x / 18.x base (on in `standard` since 2026-10-04; it shipped opt-in).** Narrow replacement for the broad gate-off: at the deny point the class-name C string is already in x0, so a code-cave trampoline reads its first eight bytes and branches to the gate's NotPermitted allow target only for `ApplePar` / `AppleVid` / `AppleVir` / `IOSurfac` (AppleParavirt\*, AppleVideoToolboxParavirt\*, AppleVirtIO\*, IOSurfaceAcceleratorParavirtClient); every other denial runs the displaced `ldr` and falls through to the real deny. Fixes `MTLCreateSystemDefaultDevice()` nil in daemons/CLI and the VideoToolbox/ANE/IOSurface denials (upstream issue #22) without opening the rest. Cave words verified by clang/as + capstone round-trip; the two `b` words via `ARM64Encoder`. Gated by `KernelCustomFirmwarePatcher.applyParavirtUserClients`, set from the plan when `applyIOS27` is false. See `Research/Guest/gpu_acceleration.md`. |     Y      |
 
 ### EXP-Only Kernel Methods (Reference List)
 
@@ -2579,3 +2579,58 @@ reported eight speaker configurations. After `cfw update-environment` and a
 boot, audiomxd built the recording route with `DSP chain
 'bottom_mic_measurement'` and the guest's plist read back `speaker_general:
 graph=speaker_raw austrip=speaker_measurement vol=["vugd"]`.
+
+## The paravirtual user-client allowlist joins `standard` (2026-10-04)
+
+No new Apple binary patch and no new bytes. JB-31
+(`kernel-cfw-paravirt_user_clients`, formerly `kernel-exp-`; see "Renamed" below) leaves
+`standard`'s block list and `FirmwarePatchSetCatalog.manualOnlyPatches`, so a
+26.x or 18.x guest made with `standard` now gets the narrow IOUserClient
+sandbox allowlist for classes beginning `ApplePar`, `AppleVid`, `AppleVir` and
+`IOSurfac`. On 27 nothing changes: the declaration's `iOSBase` gate is
+`.oneOf([.major(26), .major(18)])`, so the patch skips by version there, and the
+boot-essential `kernel-boot-iouc_sandbox_gate` (JB-10b) already opens every user
+client. The pipeline's no-plan fallback in `buildComponentList` follows the same
+rule (on for an 18.x or 26.x base, off for 27 and for an unreadable base), so a
+pipeline built without a preset agrees with `standard`. The patcher's own default
+stays false, so `KernelcacheCustomFirmwareComparisonTests` still compares against
+the records the reference was taken from.
+
+**Why.** On an iPadOS 26.6.2 guest with the old `standard`, `cameracaptured`
+crash-loops at every boot: its shader prewarm (`FigCapturePreloadShadersInternal`
+→ CMCapture `PrewarmThreadSafeSBPs` → NRFV3 `-[NRFProcessorV3 prewarm]`) is
+refused the GPU at this gate and dies with SIGSEGV at `0xc` inside
+`AppleParavirtGPUMetalIOGPUFamily`. While it crash-loops, the first process to
+touch the AVCapture defaults blocks on a synchronous XPC to it; when a guest app
+starts recording that is SpringBoard's main thread (Control Center's sensor
+indicator → `AVCaptureDeviceDiscoverySession` →
+`AVCaptureProprietaryDefaultsSingleton` → `csr_ensureClientEstablished`), so the
+UI freezes, `audiomxd`'s recording `StartIO` waits 18 s, and the first recording
+after boot fails.
+
+**What it widens, and why that is acceptable.** Every process whose sandbox
+refuses one of those classes at this gate — daemons, command-line tools and
+system XPC services such as `cameracaptured`, WebKit, `spotlightknowledged`,
+`callservicesd` and `vphoned` — now passes it; apps gain nothing, because their
+container profile already opens these devices. The prefix match admits every
+class with those first eight bytes, which on this board means the paravirtual
+GPU and device clients, the paravirtual VideoToolbox decoder, the VirtIO drivers
+(the Neural Engine among them) and IOSurface's clients. Every other class is
+still refused, which is why the narrow patch rather than the broad gate-off is
+the shape on 26.x. For a research VM whose sandbox hooks are already stubbed
+(JB-09) and whose IOUC MACF gate is already open (JB-10), this was the last thing
+stopping a daemon reaching a device every app reaches. See
+`Research/Guest/gpu_acceleration.md`, "On in `standard`".
+
+**Renamed.** The patch was introduced the same day (37ed2e6) as
+`kernel-exp-paravirt_user_clients`, opt-in. The `{component}-{effect}-{name}`
+rule derives `exp` for a patch `standard` leaves off and `cfw` otherwise, so it
+is renamed **`kernel-cfw-paravirt_user_clients`** (records `.redirect` and
+`.cave`), as `dyld-cfw-mis_trust_auth` was renamed the other way on 2026-09-30.
+`fw patch` resolves a VM's `PatchSelection.plist` against the catalogue and
+throws `unknownPatch` for an identifier nothing declares, so a VM whose record
+still names `kernel-exp-paravirt_user_clients` fails there until that entry is
+removed. There is no migration.
+
+**Opting out.** `vphone-cli fw set-patches <vm> --block
+kernel-cfw-paravirt_user_clients`, then re-patch.

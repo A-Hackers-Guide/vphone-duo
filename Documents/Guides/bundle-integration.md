@@ -31,6 +31,21 @@ acquisition. The integrating application owns download, release verification,
 host authorization, installation, and update policy. Developer Tools access
 and AMFI authorization are separate host decisions.
 
+macOS asks for a privacy permission (microphone, location) on behalf of the
+responsible process and ties the grant to its code signature. When
+`vphone-cli` is started with responsibility disclaimed, it becomes the
+responsible process for `vphone-vm`; it is signed ad hoc, so each new bundle
+build is asked again. An integrating application that starts `vphone-cli` as
+an ordinary child of a process with a stable signature, without disclaiming
+responsibility, gets the permission asked once. Launchpad does this with
+`vphone-launchpad-launcher`, which it carries in its own `Contents/MacOS`.
+macOS attributes a tool there to the enclosing app, so the prompt, the usage
+description and the grant are the app's. Under the hardened runtime the app's
+main executable must carry the matching resource entitlement
+(`com.apple.security.device.audio-input`,
+`com.apple.security.personal-information.location`); without it macOS refuses
+the request without asking.
+
 Install and update the whole bundle as one versioned unit. Do not rewrite a
 signed binary in place. When `vphone-vm` changes, its cdhash changes; the
 integrating application must arrange AMFI admission for the new build before

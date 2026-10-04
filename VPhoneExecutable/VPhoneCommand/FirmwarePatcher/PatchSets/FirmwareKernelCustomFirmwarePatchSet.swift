@@ -271,7 +271,8 @@ public enum FirmwareKernelCustomFirmwarePatchSet {
                 Lets a process outside an app sandbox open the paravirtual GPU, video decoder, \
                 Neural Engine and IOSurface scaler, so daemons and command-line tools get Metal \
                 and WebKit decodes video in hardware. Allows only those four device classes by \
-                name; every other sandbox denial stays. Off by default.
+                name; every other sandbox denial stays. Without it cameracaptured cannot \
+                prewarm its shaders and crash-loops at every boot.
                 """,
                 target: .firmware(.kernelcache),
                 applicability: VPhonePatchApplicability(iOSBase: .oneOf([.major(26), .major(18)])),

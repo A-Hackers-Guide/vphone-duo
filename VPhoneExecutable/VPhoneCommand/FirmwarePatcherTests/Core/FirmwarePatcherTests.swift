@@ -604,6 +604,39 @@ struct FirmwarePipelineTests {
         #expect(components.first { $0.name == "Manifest" }?.patcherFactories.isEmpty == true)
     }
 
+    @Test func `standard turns the paravirtual user-client allowlist on before 27`() throws {
+        // The flag the kernel CFW patcher is built with, from the standard plan and
+        // from the no-plan fallback, which has to give the same answer.
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+        func flag(_ base: String?, standard: Bool) throws -> Bool {
+            let version = VPhoneVersion(base)
+            let pipeline = FirmwarePipeline(
+                vmDirectory: root,
+                variant: .jb,
+                verbose: false,
+                preset: standard ? FirmwarePatchSetCatalog.standardPreset : nil,
+            )
+            let plan = try pipeline.resolvePlan(iOSBase: version, cloudOS: VPhoneVersion("26.4"))
+            let components = pipeline.buildComponentList(
+                restoreDir: root,
+                iOSBase: version,
+                plan: plan,
+                gate: plan.map { VPhonePatchGate(plan: $0) } ?? .unrestricted,
+            )
+            let kernel = try #require(components.first { $0.name == "kernelcache" })
+            let patcher = try #require(
+                kernel.patcherFactories.lazy.compactMap { try? $0(Data(), false) as? KernelCustomFirmwarePatcher }.first,
+            )
+            return patcher.applyParavirtUserClients
+        }
+        for standard in [true, false] {
+            #expect(try flag("26.6.2", standard: standard))
+            #expect(try flag("18.6.2", standard: standard))
+            #expect(try !flag("27.0", standard: standard))
+            #expect(try !flag(nil, standard: standard))
+        }
+    }
+
     @Test func `find file supports glob patterns`() throws {
         let fm = FileManager.default
         let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
