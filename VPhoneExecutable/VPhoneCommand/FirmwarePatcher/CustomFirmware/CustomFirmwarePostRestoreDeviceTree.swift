@@ -117,6 +117,21 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         }
     }
 
+    /// Remove the microphone array claims from `/product/audio` in a guest's
+    /// `devicetree.img4` (or bare `.im4p`), in place. See
+    /// `DeviceTreePatcher.removeMicrophoneArrayClaims(from:)`.
+    @discardableResult
+    public static func removeMicrophoneArrayClaims(
+        at url: URL,
+        dryRun: Bool = false,
+        verbose: Bool = true,
+    ) throws -> Outcome {
+        try rewrite(at: url, dryRun: dryRun, verbose: verbose) { blob in
+            let (newBlob, changes, delta) = try withoutMicrophoneArrayClaims(blob)
+            return (newBlob, changes, blob.count + delta)
+        }
+    }
+
     /// The container, payload and flat tree of a device tree file. Refuses a
     /// payload that is not a device tree, is encrypted, or came back still
     /// compressed.
@@ -315,6 +330,23 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         }
         let record = Change(property: "product/haptics", before: "present, \(removed.count)B", after: "absent")
         return (serializeNode(root), [record], -removed.count)
+    }
+
+    /// `blob` without the microphone array claims in `/product/audio`, through
+    /// `DeviceTreePatcher.removeMicrophoneArrayClaims(from:)`, which fw patch
+    /// uses for every new guest. Returns the size change with the changes: each
+    /// property's entry out. A tree with none of them comes back unchanged.
+    public static func withoutMicrophoneArrayClaims(_ blob: Data) throws -> (Data, [Change], Int) {
+        let root = try parseTree(blob, label: "DT")
+        let removed = DeviceTreePatcher.removeMicrophoneArrayClaims(from: root)
+        guard !removed.isEmpty else {
+            return (blob, [], 0)
+        }
+        let records = removed.map {
+            Change(property: "product/audio/\($0.name)", before: $0.value.hex, after: "absent")
+        }
+        let delta = removed.reduce(0) { $0 - 36 - align4($1.value.count) }
+        return (serializeNode(root), records, delta)
     }
 
     /// The root of a flat tree that must fill `blob` exactly.

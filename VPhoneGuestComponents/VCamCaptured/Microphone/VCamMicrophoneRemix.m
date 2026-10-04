@@ -51,6 +51,7 @@ static int vcc_remix_start_hook(id self, SEL _cmd) {
 static IMP vcc_remix_render_orig = NULL;
 static unsigned vcc_level_buffers = 0;
 static unsigned vcc_level_zero_buffers = 0;
+static uint64_t vcc_level_not_finite = 0;
 static uint64_t vcc_level_frames = 0;
 static float vcc_level_peak = 0;
 
@@ -92,6 +93,11 @@ static void vcc_measure_level(CMSampleBufferRef sbuf) {
       const float *s = list->mBuffers[b].mData;
       size_t n = list->mBuffers[b].mDataByteSize / sizeof(float);
       for (size_t i = 0; s && i < n; i++) {
+        // A NaN compares false with everything and would read as silence.
+        if (!isfinite(s[i])) {
+          vcc_level_not_finite++;
+          continue;
+        }
         float v = fabsf(s[i]);
         if (v > peak) peak = v;
       }
@@ -102,12 +108,14 @@ static void vcc_measure_level(CMSampleBufferRef sbuf) {
     if (peak > vcc_level_peak) vcc_level_peak = peak;
     // About every 2 s at 48 kHz.
     if (vcc_level_frames >= 96000) {
-      vcc_log(@"  remix input: %u ch, %u buffers, %llu frames, %u all zero, peak %.1f dBFS",
+      vcc_log(@"  remix input: %u ch, %u buffers, %llu frames, %u all zero, %llu samples not finite, peak %.1f dBFS",
               (unsigned)asbd->mChannelsPerFrame, vcc_level_buffers,
               (unsigned long long)vcc_level_frames, vcc_level_zero_buffers,
+              (unsigned long long)vcc_level_not_finite,
               vcc_level_peak > 0 ? 20 * log10f(vcc_level_peak) : -INFINITY);
       vcc_level_buffers = vcc_level_zero_buffers = 0;
       vcc_level_frames = 0;
+      vcc_level_not_finite = 0;
       vcc_level_peak = 0;
     }
   }

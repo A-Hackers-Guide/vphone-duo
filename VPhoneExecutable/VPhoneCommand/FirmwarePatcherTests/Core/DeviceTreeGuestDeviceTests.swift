@@ -408,6 +408,63 @@ struct DeviceTreeGuestDeviceTests {
         #expect(twice == once)
         #expect(!records.contains { $0.patchID == "devicetree-cfw-product_haptics_node" })
     }
+
+    // MARK: - Microphone array
+
+    /// The claims among the properties around them on the D47 audio node.
+    static let audio = Node(
+        properties: [
+            .string("name", "audio"),
+            .integer("acoustic-id", 8018),
+            .integer("stereo-sound-recording", 1),
+            .integer("supports-audio-mix", 1),
+            .integer("supports-spatial-audio-capture", 1),
+            .integer("supports-spatial-facetime", 1),
+        ],
+        children: [],
+    )
+
+    static let microphoneArrayPatch = "devicetree-cfw-product_audio_microphone_array"
+
+    @Test(arguments: Guest.allCases)
+    func `every guest's audio node loses the microphone array claims`(guest: Guest) throws {
+        // The node stands where the haptics node does in the other fixture.
+        let tree = Self.guestTree(haptics: Self.audio).serialized()
+        let (patched, records) = try Self.patched(tree, as: guest)
+
+        let audio = try #require(Self.read(patched)["device-tree/product/audio"])
+        #expect(audio["supports-spatial-audio-capture"] == nil)
+        #expect(audio["supports-audio-mix"] == nil)
+        // Its neighbours stay, the other spatial answer among them.
+        #expect(Self.integer(audio["acoustic-id"]) == 8018)
+        #expect(Self.integer(audio["stereo-sound-recording"]) == 1)
+        #expect(Self.integer(audio["supports-spatial-facetime"]) == 1)
+
+        let removed = records.filter { $0.patchID == Self.microphoneArrayPatch }
+        #expect(removed.count == 2)
+        #expect(removed.allSatisfy { $0.patchedBytes.isEmpty && $0.originalBytes == Data([1, 0, 0, 0]) })
+    }
+
+    @Test(arguments: Guest.allCases)
+    func `the claims stay when their patch is off`(guest: Guest) throws {
+        let declared = Set(FirmwareDeviceTreePatchSet.manifest.patches.map(\.identifier))
+        #expect(declared.contains(Self.microphoneArrayPatch))
+        let gate = VPhonePatchGate(declared: declared, enabled: declared.subtracting([Self.microphoneArrayPatch]))
+        let (patched, records) = try Self.patched(Self.guestTree(haptics: Self.audio).serialized(), as: guest, gate: gate)
+
+        #expect(!records.contains { $0.patchID == Self.microphoneArrayPatch })
+        let audio = try #require(Self.read(patched)["device-tree/product/audio"])
+        #expect(Self.integer(audio["supports-spatial-audio-capture"]) == 1)
+        #expect(Self.integer(audio["supports-audio-mix"]) == 1)
+    }
+
+    @Test(arguments: Guest.allCases)
+    func `removing the claims a second time changes nothing`(guest: Guest) throws {
+        let (once, _) = try Self.patched(Self.guestTree(haptics: Self.audio).serialized(), as: guest)
+        let (twice, records) = try Self.patched(once, as: guest)
+        #expect(twice == once)
+        #expect(!records.contains { $0.patchID == Self.microphoneArrayPatch })
+    }
 }
 
 private extension Data {

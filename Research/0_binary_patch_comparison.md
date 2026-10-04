@@ -2545,3 +2545,31 @@ both sites written in one run, a second run reporting both already patched.
 The handler's volume-mode test (`and x28, x0, #0x1ffffffff` at 0xea3fc) is
 a branch between two builds of the route, not a precondition, and is not
 touched.
+
+## Guest audio through a Mac's microphone (2026-10-04)
+
+An iPhone guest's audio node and tuning set are the D47's. Three changes take
+out what they assume about its microphones; the measurements are in
+`Research/Guest/virtio_sound_microphone.md` §7.
+
+| Patch | Component | Effect |
+| --- | --- | --- |
+| `devicetree-cfw-product_audio_microphone_array` (new) | Every guest's DeviceTree, `fw patch` | Removes `supports-spatial-audio-capture` and `supports-audio-mix` from `/product/audio` (`DeviceTreePatcher.removeMicrophoneArrayClaims(from:)`). With them iOS 27's Voice Memos records through the four-microphone spatial route and the recording is silent. |
+| `preboot-cfw-devicetree_microphone_array` (new) | Restored Preboot `devicetree.img4`, `cfw install` and `cfw update-environment`, every guest | The same removal for a VM patched before it (`vphone-cli cfw patch-dt-microphone-array`). |
+| `system-virtualaudio-cfw-microphone_graph_chains` (new) | `/Library/Audio/Tunings/<AID>/VAD/graph_configurations.plist` and each `*_mic*_measurement.austrip` beside it | Every `<mic>_general` configuration with a `<mic>_measurement` sibling takes the sibling's `graph`, `austrip` and `propstrip` (`patch-virtualaudio-microphone-chains`), and every AUNBandEQ in those strips has its global gain set to 0 dB (`patch-virtualaudio-microphone-gain`; +18 dB on `bottom_mic_measurement`). A set with no such pair is left alone. |
+
+All three are on in `standard`, need no firmware change, and are in the
+installer's late list, so `cfw update-environment` brings them to a VM whose
+plan predates them. The tuning files themselves are untouched except for the
+one parameter word in each measurement strip; a strip whose saved state is
+not whole parameter records is refused rather than rewritten.
+
+Validation on `mictest-iphone` (iPhone99,11, iOS 27.0, cloudOS 26.4):
+`vphone-cli cfw patch-virtualaudio-microphone-chains` on the guest's own
+plist reported `back_mic_general`, `beamformed_mic_general`,
+`bottom_mic2_general`, `bottom_mic_general` and `front_mic_general`, and a
+second run none; `patch-virtualaudio-microphone-gain` on its
+`bottom_mic_measurement.austrip` reported `AUNBEQ_2 global gain 18.0 dB -> 0
+dB`, changing one word of the saved state. After `cfw update-environment` and a
+boot, audiomxd built the recording route with `DSP chain
+'bottom_mic_measurement'`.

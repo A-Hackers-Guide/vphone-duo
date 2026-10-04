@@ -252,6 +252,70 @@ struct VPhoneCustomFirmwarePatchVirtualAudioGraphConfigurationsCommand: Parsable
     }
 }
 
+// MARK: - patch-virtualaudio-microphone-chains
+
+struct VPhoneCustomFirmwarePatchVirtualAudioMicrophoneChainsCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-virtualaudio-microphone-chains",
+        abstract: "Record through VirtualAudio's measurement microphone chains",
+        discussion: """
+        graph_configurations.plist gives each built-in microphone a
+        <mic>_general configuration for ordinary recording and a
+        <mic>_measurement one. The general chain adds a loudness normalizer, a
+        multiband compressor and a limiter tuned to the board's own
+        microphone; on the Mac's microphone they raise everything by about
+        8 dB, the noise floor with it, and a recording sounds like wind.
+
+        Every <mic>_general entry with a <mic>_measurement sibling takes the
+        sibling's graph, austrip and propstrip; the rest of the entry and the
+        tuning files are left alone. The plist sits on the sealed system
+        volume, so the install stages a copy and this patches the copy.
+
+        Idempotent — a re-run on an already-patched plist, or on a set with no
+        such pairs, reports and exits without rewriting.
+        """,
+    )
+
+    @Argument(help: "Path to graph_configurations.plist", transform: URL.init(fileURLWithPath:))
+    var plist: URL
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
+    var dryRun = false
+
+    func run() throws {
+        try CustomFirmwareVirtualAudioMicrophoneChains.patch(at: plist, dryRun: dryRun, verbose: true)
+    }
+}
+
+// MARK: - patch-virtualaudio-microphone-gain
+
+struct VPhoneCustomFirmwarePatchVirtualAudioMicrophoneGainCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-virtualaudio-microphone-gain",
+        abstract: "Remove the board microphone's gain from a measurement tuning strip",
+        discussion: """
+        A <mic>_measurement.austrip carries the digital gain of the board's own
+        microphone as the global gain of an AUNBandEQ: +18 dB on an
+        iPhone17,3. The Mac's microphone arrives at the level macOS set, so
+        with that gain a recording clips. Every AUNBandEQ's global gain in the
+        strip is set to 0 dB; nothing else in it changes.
+
+        Idempotent — a strip with no gain left reports and exits without
+        rewriting.
+        """,
+    )
+
+    @Argument(help: "Path to a <mic>_measurement.austrip", transform: URL.init(fileURLWithPath:))
+    var strip: URL
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
+    var dryRun = false
+
+    func run() throws {
+        try CustomFirmwareVirtualAudioMicrophoneChains.neutralizeGain(at: strip, dryRun: dryRun, verbose: true)
+    }
+}
+
 // MARK: - patch-campo-entitlements
 
 struct VPhoneCustomFirmwarePatchCampoEntitlementsCommand: ParsableCommand {
@@ -381,5 +445,35 @@ struct VPhoneCustomFirmwarePatchHapticsCommand: ParsableCommand {
 
     func run() throws {
         try CustomFirmwarePostRestoreDeviceTree.removeHaptics(at: deviceTree, dryRun: dryRun, verbose: true)
+    }
+}
+
+// MARK: - patch-dt-microphone-array
+
+struct VPhoneCustomFirmwarePatchMicrophoneArrayCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-dt-microphone-array",
+        abstract: "Remove the microphone array claims from a guest's device tree",
+        discussion: """
+        Removes supports-spatial-audio-capture and supports-audio-mix from
+        /product/audio in a restored device tree, in place, preserving the
+        container's compression, manifest and restore info. Both stand for a
+        four-microphone array; a VM's microphone is the Mac's, one or two
+        channels. With them iOS 27's Voice Memos records through the spatial
+        capture route and its Audio Mix analysis, and the recording is silent.
+        A tree with neither property is left as it is.
+
+        Takes a devicetree.img4 (preferred) or a bare .im4p.
+        """,
+    )
+
+    @Argument(help: "Path to devicetree.img4 or devicetree.im4p", transform: URL.init(fileURLWithPath:))
+    var deviceTree: URL
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
+    var dryRun = false
+
+    func run() throws {
+        try CustomFirmwarePostRestoreDeviceTree.removeMicrophoneArrayClaims(at: deviceTree, dryRun: dryRun, verbose: true)
     }
 }

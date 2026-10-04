@@ -388,6 +388,8 @@ public final class DeviceTreePatcher: BufferedPatcher {
 
         // Every guest, every tree: no VM has the haptics the node promises.
         applyHapticsRemoval(root: root)
+        // Nor the microphone array its audio node answers for.
+        applyMicrophoneArrayRemoval(root: root)
     }
 
     /// Property patches that describe the virtual board rather than a phone,

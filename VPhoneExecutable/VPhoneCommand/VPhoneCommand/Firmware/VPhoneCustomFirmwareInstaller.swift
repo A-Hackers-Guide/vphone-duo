@@ -428,6 +428,11 @@ struct VPhoneCustomFirmwareInstaller {
         if plan?.isEnabled(FirmwareGuestSystemPatchSet.virtualAudioGraphConfigurations) ?? true {
             try patchVirtualAudioGraphConfigurations(system: system, work: work)
         }
+        if plan?.isEnabled(FirmwareGuestSystemPatchSet.virtualAudioMicrophoneChains) ?? true {
+            try patchVirtualAudioGraphConfigurations(
+                system: system, work: work, verb: "patch-virtualaudio-microphone-chains",
+            )
+        }
     }
 
     /// Host bookkeeping in the caller's folder, written with the caller's
@@ -752,6 +757,11 @@ struct VPhoneCustomFirmwareInstaller {
         if on(FirmwareGuestSystemPatchSet.virtualAudioGraphConfigurations) {
             try patchVirtualAudioGraphConfigurations(system: system, work: work)
         }
+        if on(FirmwareGuestSystemPatchSet.virtualAudioMicrophoneChains) {
+            try patchVirtualAudioGraphConfigurations(
+                system: system, work: work, verb: "patch-virtualaudio-microphone-chains",
+            )
+        }
         if on("system-launchd-boot-jetsam_panic_guard_bypass") {
             try patchMachO(
                 system: system,
@@ -779,11 +789,13 @@ struct VPhoneCustomFirmwareInstaller {
         FirmwareGuestSystemPatchSet.virtioSoundDriver,
         FirmwareGuestSystemPatchSet.prebootBoardAudio,
         FirmwareGuestSystemPatchSet.prebootHaptics,
+        FirmwareGuestSystemPatchSet.prebootMicrophoneArray,
         FirmwareGuestSystemPatchSet.virtualAudioSpeakerRouteThrows,
         FirmwareGuestSystemPatchSet.virtualAudioMuteSetThrow,
         FirmwareGuestSystemPatchSet.virtualAudioSpeakerProtectionGate,
         FirmwareGuestSystemPatchSet.virtualAudioVolumeModePrecondition,
         FirmwareGuestSystemPatchSet.virtualAudioGraphConfigurations,
+        FirmwareGuestSystemPatchSet.virtualAudioMicrophoneChains,
     ]
 
     /// `plan`, with each late guest patch it leaves out turned on when the
@@ -1199,6 +1211,9 @@ struct VPhoneCustomFirmwareInstaller {
         if on(FirmwareGuestSystemPatchSet.prebootHaptics) {
             repairs.append(("patch-dt-haptics", []))
         }
+        if on(FirmwareGuestSystemPatchSet.prebootMicrophoneArray) {
+            repairs.append(("patch-dt-microphone-array", []))
+        }
         guard rewriteIdentity || !repairs.isEmpty || !(spoofBuild ?? "").isEmpty else { return }
         guard
             let preboot = volumes.first(where: { ($0["Roles"] as? [String])?.contains("Preboot") == true }),
@@ -1316,8 +1331,8 @@ struct VPhoneCustomFirmwareInstaller {
         )
     }
 
-    /// Flip the speaker chains in every tuning set's graph_configurations.plist
-    /// onto the generic graph path. The plist lives under the acoustic ID the
+    /// Run `verb` on every tuning set's graph_configurations.plist: by default
+    /// the one that flips the speaker chains onto the generic graph path. The plist lives under the acoustic ID the
     /// image ships for (`Library/Audio/Tunings/<AID>/VAD/`), which varies by
     /// board, so the directory is walked rather than named. An image with no
     /// tuning sets — iOS 27's VirtualAudio reads no such plist — is left
@@ -1325,6 +1340,7 @@ struct VPhoneCustomFirmwareInstaller {
     private func patchVirtualAudioGraphConfigurations(
         system: VPhoneConfinedDirectory,
         work: WorkDirectory,
+        verb: String = "patch-virtualaudio-graph-configurations",
     ) throws {
         let tunings = "Library/Audio/Tunings"
         guard try system.exists(tunings), try system.isDirectory(tunings) else {
@@ -1335,8 +1351,18 @@ struct VPhoneCustomFirmwareInstaller {
         for acousticID in try system.directory(tunings).entries().sorted() {
             let plist = "\(tunings)/\(acousticID)/VAD/graph_configurations.plist"
             guard try system.isRegularFile(plist) else { continue }
-            try patchCopy(of: plist, in: system, work: work, verb: "patch-virtualaudio-graph-configurations")
+            try patchCopy(of: plist, in: system, work: work, verb: verb)
             patched += 1
+            guard verb == "patch-virtualaudio-microphone-chains" else { continue }
+            // The strips those chains now record through, without the gain
+            // of the board's own microphone.
+            let strips = "\(tunings)/\(acousticID)/VAD"
+            for name in try system.directory(strips).entries().sorted()
+                where name.contains("_mic") && name.hasSuffix("_measurement.austrip")
+            {
+                guard try system.isRegularFile("\(strips)/\(name)") else { continue }
+                try patchCopy(of: "\(strips)/\(name)", in: system, work: work, verb: "patch-virtualaudio-microphone-gain")
+            }
         }
         if patched == 0 {
             print("  [·] \(tunings): no graph_configurations.plist under any tuning set, left out")

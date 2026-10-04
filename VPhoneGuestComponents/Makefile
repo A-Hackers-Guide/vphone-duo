@@ -115,12 +115,13 @@ test-injection-environment:
 	@$(OUT)/InjectionEnvironmentTests
 
 # Host proof harness for the virtio-snd format choice, the rings, the input
-# reader, the clock and the capture rate converter.
+# reader, the capture's low cut, the clock and the capture rate converter.
 test-virtiosound:
 	@mkdir -p $(OUT)
 	xcrun --sdk macosx clang -O1 -Wall -Wextra -Werror -IVirtIOSound \
 		-o $(OUT)/VirtIOSoundTests \
-		Tests/VirtIOSoundTests.c VirtIOSound/VPVirtIOSoundProtocol.c VirtIOSound/VPVirtIOSoundRing.c
+		Tests/VirtIOSoundTests.c VirtIOSound/VPVirtIOSoundProtocol.c VirtIOSound/VPVirtIOSoundRing.c \
+		VirtIOSound/VPVirtIOSoundFilter.c
 	@$(OUT)/VirtIOSoundTests
 	xcrun --sdk macosx clang -O1 -Wall -Wextra -Werror -IVirtIOSound \
 		-o $(OUT)/VirtIOSoundClockTests \
