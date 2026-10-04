@@ -484,6 +484,25 @@ host. The first return after a start comes 2–80 ms after the write, so the
 host keeps a small buffer of its own, and a `starved` write is not always an
 audible gap.
 
+**Picture against sound.** The lead is reported to the HAL as latency so that
+a player holds its picture back by as much. Measured 2026-10-04 on
+`avtest-ipad` (iPad16,1 / 26.6.2): a clip with a white flash and a 1 kHz beep
+every two seconds, played in the guest's Safari, with the VM's window and the
+Mac's mixed audio captured on one clock (ScreenCaptureKit, the window at 120
+frames a second). The time from each flash to its beep:
+
+| Player | Beep after flash | Pairs |
+| --- | --- | --- |
+| Safari in the guest, first run | -9.3 ms (sd 6.8) | 22 |
+| Safari in the guest, second run | -8.0 ms (sd 7.9) | 20 |
+| AVPlayer in a window on the Mac itself | -14.5 ms (sd 5.6) | 12 |
+
+The guest is within a frame of a player native to the Mac, so the reported
+latency is what the queue adds. The capture is taken at the Mac's compositor
+and mixer; the display and the output device after them are the same for
+both players and are not in the numbers. Only the built-in output was
+measured: no USB or Bluetooth output was attached.
+
 ### Nothing left to set by hand
 
 Both settings §4 and §5 asked for are now what the plugin does unasked, on an
