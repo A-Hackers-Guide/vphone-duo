@@ -674,6 +674,74 @@ its modification time (nothing removed again), and a tone plays — 16.12 s,
 190 writes, none starved. `/v1/health` was not read in that run; the marker
 file is what its field reports.
 
+## 8. The volume moved a number and nothing else (2026-10-04)
+
+On an iPhone guest (iOS 27.0) the volume keys moved the guest's volume
+(`active_volume` 0.5 → 0.625) and the Mac played at the same level
+throughout. Every route activation and every volume change logged
+
+```
+OutputVolumeControl_HAL_Common.cpp:1314  Setting hardware volume to -29.000000 dB
+Device_HAL_Common.mm:317   Set decibel volume value of -29.000000 on HAL device 43 (selector: kAudioDevicePropertyVolumeDecibels; scope: 'outp'; element: 0).
+HALS_UCPlugIn.cpp:1191     HALS_UCPlugIn::ObjectSetPropertyData: failed: … Error: 2003329396
+Device_HAL_Common.mm:330   FAIL with status 2003329396 ("what"): mDeviceID 43 (uid "PuffinOutput"); selector "vold"; scope 'outp'; element 0
+```
+
+The pspk route runs in HardwareOnly volume mode: VirtualAudio leaves the
+loudness to the device and sets `vold` (and `mute`) on it. The HAL turns a
+device-level `vold` or `mute` into a set on the device's volume or mute
+control, and the set reaches the control: `ASDLevelControl`'s
+`setProperty:` (`0x41f50` in the guest's AudioServerDriver) clamps the value
+and tail-calls `changeDecibelValue:` or `changeScalarValue:`, and
+`ASDBooleanControl`'s calls `changeValue:`. The framework's own are
+
+```
+42a20: mov w0, #0x0 ; ret        -[ASDLevelControl changeDecibelValue:]
+42a28: mov w0, #0x0 ; ret        -[ASDLevelControl changeScalarValue:]
+3b680: mov w0, #0x0 ; ret        -[ASDBooleanControl changeValue:]
+```
+
+— a driver is expected to subclass them, and until it does every change is
+refused with 'what'. That is also the mute set `mute_set_throw` quiets: the
+selector was never withheld from the plugin, it arrived at the mute control
+and was refused there.
+
+The plugin's controls are now subclasses whose hooks take the change, and
+the device turns them into a gain its streams apply: silence when muted,
+otherwise the control's decibels as a factor, ramped across one I/O block,
+on the mix as the I/O thread hands it over. The microphone device takes mute
+only.
+
+The speaker's control ranges from -36 dB to 0 dB, not the macOS plugin's -60:
+VirtualAudio maps the guest's volume onto the range in a straight line
+(`VolumeProperties for Port: pspk is [ Min: …; Max: 0 ]`), so the bottom
+decides how loud half volume is, and -30 dB through a Mac's speakers is
+close to nothing.
+
+Measured on the iPhone guest, Safari playing: three volume-up and five
+volume-down presses log `device speaker: unmuted, -15.8 dB, gain 0.163` →
+`-9.0 dB, gain 0.355` → `-20.2 dB, gain 0.097`; audiomxd logs `Setting
+hardware volume to -13.500000 dB` with no `FAIL` for `vold` or `mute`; the
+stream runs 240 s with 0 starved.
+
+Not this: Control Center's volume slider on an iOS 27 guest stays full and
+does not move. SpringBoard cannot reach the volume service at all —
+
+```
+kernel: Protobox: SpringBoard(36) deny(1) mach-lookup com.apple.mediaexperience.avvolumeclient.xpc
+SpringBoard: -AVVolumeClient- -[AVVolumeClient initInternalWithType:]: Failed to create FigVolumeController for type 1: -16155
+SpringBoard: [MRAVVolumeClientEndpoint] VolumeController unavailable; will retry on next activation
+```
+
+audiomxd registers the service and SpringBoard holds
+`com.apple.private.mediaexperience.controlcentervolumeclient.allow`; the
+lookup is refused by the kernel's sandbox. The likely reason, not traced
+further: the sandbox profile for SpringBoard comes with the cloudOS 26.4
+kernel and predates a service iOS 27's SpringBoard asks for, the kind of
+mismatch `kernel-boot-sandbox_ext` opens `proc_check_syscall_unix` for. It
+needs its own kernel-side change. The volume keys do not go through that
+service.
+
 ## Reveal and validation
 
 1. Kernel side present: `strings` on the decompressed kernelcache shows the

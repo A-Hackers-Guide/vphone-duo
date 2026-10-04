@@ -189,6 +189,11 @@ typedef int (^ASDIOBlock)(
 @property (nonatomic, readonly) float minimumDecibelValue;
 @property (nonatomic, readonly) float maximumDecibelValue;
 - (void)setDecibelValue:(float)value;
+- (void)setScalarValue:(float)value;
+/// What a client's set of the control's value ends in. The framework's own
+/// refuse (return NO); a driver that takes the change overrides them.
+- (BOOL)changeDecibelValue:(float)value;
+- (BOOL)changeScalarValue:(float)value;
 @end
 
 /// The matching mute control.
@@ -211,6 +216,8 @@ typedef int (^ASDIOBlock)(
             andObjectClassID:(UInt32)classID;
 @property (nonatomic, readonly, getter=booleanValue) BOOL booleanValue;
 - (void)setValue:(UInt32)value;
+/// As `changeDecibelValue:` above, for a set of the control's value.
+- (BOOL)changeValue:(BOOL)value;
 @end
 
 /// One selectable value of an `ASDSelectorControl`, as the macOS

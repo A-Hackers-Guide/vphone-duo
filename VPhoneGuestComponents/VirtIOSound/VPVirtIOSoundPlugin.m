@@ -77,6 +77,13 @@ static const uint32_t kInputMaximumBacklogPeriods = 4;
 /// it releases the device with them still out.
 static const uint64_t kInputDrainNanoseconds = NSEC_PER_SEC;
 
+/// The speaker volume control's range. VirtualAudio maps the guest's volume
+/// onto it in a straight line, so the bottom decides how loud half volume
+/// is: -18 dB here. The macOS plugin's -60 dB would put it at -30 dB, which
+/// through a Mac's speakers is close to nothing.
+static const float kSpeakerMinimumDecibels = -36.0f;
+static const float kMicrophoneMinimumDecibels = -60.0f;
+
 static CFStringRef const kSettingsDomain = CFSTR("com.apple.coreaudio");
 
 /// The data sources the macOS plugin selects: the internal speaker for its
@@ -396,6 +403,12 @@ typedef struct {
     float *scratch;
     uint32_t bytesPerFrame;
     uint32_t wireRate;
+    /// The gain the device's volume and mute controls ask for, as the bits
+    /// of a float; and the gain the last block ended at, the I/O thread's
+    /// own. Applied to float samples only, which is what the device offers.
+    bool isFloat;
+    _Atomic uint32_t gainBits;
+    float appliedGain;
     /// The lead, in bytes, that the first write after a start queues ahead
     /// of its frames. The stream's queue sets it at the start; the I/O thread
     /// takes it.
@@ -438,10 +451,41 @@ static void VPMixQueueLead(VPMixState *mix, uint32_t lead) {
     }
 }
 
+static uint32_t VPGainBits(float gain) {
+    uint32_t bits;
+    memcpy(&bits, &gain, sizeof(bits));
+    return bits;
+}
+
+/// Scales one block in place to the gain the controls ask for, moving there
+/// across the block so a change does not click. The buffer is the HAL's mix,
+/// handed over for this device to consume.
+static void VPMixApplyGain(VPMixState *mix, float *samples, uint32_t frames) {
+    uint32_t bits = atomic_load_explicit(&mix->gainBits, memory_order_relaxed);
+    float target;
+    memcpy(&target, &bits, sizeof(target));
+    float gain = mix->appliedGain;
+    if ((gain == 1.0f && target == 1.0f) || frames == 0) {
+        return;
+    }
+    uint32_t channels = mix->bytesPerFrame / sizeof(float);
+    float step = (target - gain) / frames;
+    for (uint32_t frame = 0; frame < frames; frame++) {
+        gain += step;
+        for (uint32_t channel = 0; channel < channels; channel++) {
+            samples[frame * channels + channel] *= gain;
+        }
+    }
+    mix->appliedGain = target;
+}
+
 static int VPMixWrite(VPMixState *mix, void *buffer, UInt32 frameCount) {
     uint32_t lead = atomic_exchange_explicit(&mix->leadRequest, 0, memory_order_acquire);
     if (lead > 0) {
         VPMixQueueLead(mix, lead);
+    }
+    if (mix->isFloat) {
+        VPMixApplyGain(mix, buffer, frameCount);
     }
     atomic_fetch_add_explicit(&mix->framesIn, frameCount, memory_order_relaxed);
     uint32_t halRate = atomic_load(mix->halRate);
@@ -513,6 +557,8 @@ typedef struct {
 @property (nonatomic, readonly) UInt32 queuedLatencyFrames;
 /// The device the stream belongs to, which is where its rate is changed.
 @property (weak, nonatomic) ASDAudioDevice *device;
+/// What the device's volume and mute controls come to, 0 to 1.
+- (void)setGain:(float)gain;
 @end
 
 @implementation VPVirtIOSoundStream
@@ -581,6 +627,10 @@ typedef struct {
 
 - (UInt32)queuedLatencyFrames {
     return 0;
+}
+
+- (void)setGain:(float)gain {
+    (void)gain;
 }
 
 // MARK: Property inventory
@@ -815,7 +865,10 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
         .scratch = _resampleScratch,
         .bytesPerFrame = format.bytesPerFrame,
         .wireRate = (uint32_t)format.sampleRate,
+        .isFloat = format.isFloat,
+        .appliedGain = 1.0f,
     };
+    atomic_init(&_mix.gainBits, VPGainBits(1.0f));
     [self installMixBlock];
     [self logFormatWithLeadPeriods:_leadPeriods];
     return self;
@@ -827,6 +880,10 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     }
     free(_resampleScratch);
     VPVirtIOSoundRingDestroy(&_ring);
+}
+
+- (void)setGain:(float)gain {
+    atomic_store_explicit(&_mix.gainBits, VPGainBits(gain), memory_order_relaxed);
 }
 
 // MARK: Rate changes
@@ -1120,20 +1177,33 @@ static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
     BOOL _loggedFirstRead;
     /// Reads the device returned since CoreAudio last started the stream.
     uint64_t _completions;
+    /// The device's mute control. Its volume is not applied: what the host
+    /// captures is already at the level the Mac's input is set to.
+    _Atomic bool _muted;
 }
 
 /// ASDStream releases this block at every stop, as it does the output
 /// stream's (`installMixBlock`), so it goes back in before every start.
 - (void)installReadBlock {
     VPVirtIOSoundInputReader *reader = &_reader;
+    _Atomic bool *muted = &_muted;
+    uint32_t bytesPerFrame = _format.bytesPerFrame;
     self.readInputBlock = ^int(UInt32 frameCount, const AudioServerPlugInIOCycleInfo *cycleInfo,
         void *mainBuffer, void *secondaryBuffer, UInt32 clientID) {
         (void)cycleInfo;
         (void)secondaryBuffer;
         (void)clientID;
+        // Read even when muted, so the ring keeps moving.
         VPVirtIOSoundInputReaderRead(reader, mainBuffer, frameCount);
+        if (atomic_load_explicit(muted, memory_order_relaxed)) {
+            memset(mainBuffer, 0, frameCount * bytesPerFrame);
+        }
         return kAudioHardwareNoError;
     };
+}
+
+- (void)setGain:(float)gain {
+    atomic_store_explicit(&_muted, gain == 0, memory_order_relaxed);
 }
 
 - (instancetype)initWithConnection:(io_connect_t)connection
@@ -1436,6 +1506,25 @@ static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
 
 @end
 
+@class VPVirtIOSoundDevice;
+
+/// iOS's ASD controls refuse every change a client asks for. A set of the
+/// control's value — and of the device's `vold` or `mute`, which the HAL
+/// turns into one — ends in `changeDecibelValue:`, `changeScalarValue:` or
+/// `changeValue:`, and the framework's own return NO (each is `mov w0, #0;
+/// ret` in the guest's AudioServerDriver): the driver is expected to
+/// subclass them. Until it does the HAL answers 'what', VirtualAudio logs
+/// `FAIL … selector "vold"`, and the guest's volume moves nothing. These
+/// take the change and tell the device, which turns it into the gain its
+/// streams apply.
+@interface VPVirtIOSoundLevelControl : ASDLevelControl
+@property (weak, nonatomic) VPVirtIOSoundDevice *device;
+@end
+
+@interface VPVirtIOSoundMuteControl : ASDBooleanControl
+@property (weak, nonatomic) VPVirtIOSoundDevice *device;
+@end
+
 @interface VPVirtIOSoundDevice : ASDAudioDevice
 /// The device for one direction of a service's streams, or nil when the
 /// service has no usable stream that way.
@@ -1444,6 +1533,34 @@ static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
                              index:(unsigned)index
                             plugin:(ASDPlugin *)plugin;
 - (void)addControls;
+- (void)volumeChanged;
+- (void)muteChangedTo:(BOOL)muted;
+@end
+
+@implementation VPVirtIOSoundLevelControl
+
+- (BOOL)changeDecibelValue:(float)value {
+    [self setDecibelValue:value];
+    [self.device volumeChanged];
+    return YES;
+}
+
+- (BOOL)changeScalarValue:(float)value {
+    [self setScalarValue:value];
+    [self.device volumeChanged];
+    return YES;
+}
+
+@end
+
+@implementation VPVirtIOSoundMuteControl
+
+- (BOOL)changeValue:(BOOL)value {
+    [self setValue:value];
+    [self.device muteChangedTo:value];
+    return YES;
+}
+
 @end
 
 @implementation VPVirtIOSoundDevice {
@@ -1462,6 +1579,9 @@ static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
     /// The mute control `addControls` registered, for the device-level
     /// mute selector's forwarding below.
     ASDBooleanControl *_muteControl;
+    ASDLevelControl *_volumeControl;
+    /// The device's streams, which apply the gain the controls come to.
+    NSMutableArray<VPVirtIOSoundStream *> *_streams;
     /// The mute state the device-level selector answers; shadowed beside the
     /// control because the control's own value is only reachable through its
     /// 'bcvl' property, whose getter shape the guest ASD does not publish.
@@ -1516,6 +1636,10 @@ static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
             continue;
         }
         stream.device = self;
+        if (!_streams) {
+            _streams = [NSMutableArray array];
+        }
+        [_streams addObject:stream];
         sampleRate = format.sampleRate;
         latencyFrames = stream.queuedLatencyFrames;
         if (input) {
@@ -1758,8 +1882,8 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
         if (dataSize < sizeof(UInt32) || data == NULL) {
             return NO;
         }
-        _muteState = (*(const UInt32 *)data != 0);
-        [_muteControl setValue:_muteState];
+        [_muteControl setValue:*(const UInt32 *)data != 0];
+        [self muteChangedTo:*(const UInt32 *)data != 0];
         return YES;
     }
     if (VPIsDeviceRateAddress(address)) {
@@ -1779,6 +1903,28 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
 }
 
 // MARK: Controls
+
+/// The gain the streams apply: silence when muted, else the volume control's
+/// decibels as a factor. At the bottom of its range the control means off.
+- (void)applyGain {
+    float decibels = _volumeControl.decibelValue;
+    float gain = _muteState || decibels <= _volumeControl.minimumDecibelValue ? 0 : powf(10, decibels / 20);
+    for (VPVirtIOSoundStream *stream in _streams) {
+        [stream setGain:gain];
+    }
+    VPLogToFile("device %s: %s, %.1f dB, gain %.3f",
+        _direction == ASDStreamDirectionInput ? "microphone" : "speaker",
+        _muteState ? "muted" : "unmuted", decibels, gain);
+}
+
+- (void)volumeChanged {
+    [self applyGain];
+}
+
+- (void)muteChangedTo:(BOOL)muted {
+    _muteState = muted;
+    [self applyGain];
+}
 
 - (void)addControls {
     // The control set a real speaker answers with: one selected data-source
@@ -1822,18 +1968,22 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
     // confirmed both initializers return real ASD controls — so pin the
     // class IDs the way the data-source control above pins 'dsrc'.
     ASDPlugin *plugin = self.plugin;
-    ASDBooleanControl *mute = [[ASDBooleanControl alloc] initWithValue:NO
+    VPVirtIOSoundMuteControl *mute = [[VPVirtIOSoundMuteControl alloc] initWithValue:NO
         isSettable:YES forElement:0 inScope:_direction
         withPlugin:plugin andObjectClassID:kAudioMuteControlClassID];
-    ASDLevelControl *volume = [[ASDLevelControl alloc] initWithDecibelValue:-30.0
-        minimumValue:-60.0 maximumValue:0.0 isSettable:YES
+    float minimum = input ? kMicrophoneMinimumDecibels : kSpeakerMinimumDecibels;
+    VPVirtIOSoundLevelControl *volume = [[VPVirtIOSoundLevelControl alloc] initWithDecibelValue:minimum / 2
+        minimumValue:minimum maximumValue:0.0 isSettable:YES
         forElement:0 inScope:_direction
         withPlugin:plugin andObjectClassID:kAudioVolumeControlClassID];
+    mute.device = self;
+    volume.device = self;
     [self addControl:mute];
     [self addControl:volume];
     [mute setValue:0];
     [volume setDecibelValue:volume.maximumDecibelValue];
     _muteControl = mute;
+    _volumeControl = volume;
     _muteState = 0;
     os_log(VPLog(), "%{public}s controls added: dsrc, mute, volume", input ? "microphone" : "speaker");
     VPLogToFile("%s controls added: dsrc '%s', mute, volume",
