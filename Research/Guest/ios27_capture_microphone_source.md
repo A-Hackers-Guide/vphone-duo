@@ -160,4 +160,31 @@ No firmware byte changes; the dylib already ships in the guest environment.
 
 ## 6. Validation
 
-PENDING
+Done on `mictest-iphone` with the first build of the wrapper (bundle
+`2.4.0-local.9c275f8f`, which tried the guest's own model name only):
+
+```
+mic source: wrapped +[FigCaptureSourceBackingsProvider sharedCaptureSourceBackingsProvider] (orig imp=0x2e520001b0447838)
+mic source: no AVCaptureSession.plist for model VPHONE600
+```
+
+The second line is only reached when the original returned nil, so the
+daemon's own provider is nil at its first source query, as §2 reads. It also
+showed that the guest's model has no plist, which the product-folder fallback
+in §5 answers. That second build has not run in a guest yet: its install
+stopped at Launchpad's administrator prompt.
+
+Still to check, in order, once it runs:
+
+1. `vcamcaptured.log`: `mic source: model D47, 1 source info(s), provider …,
+   hasMicSource=1`, then `serving the microphone-only one`, and no
+   cameracaptured crash report.
+2. Voice Memos Record: no `CaptureSessionRecorderError`; cameracaptured's
+   `captureSession_SetConfiguration` reads `Cam/Audio:0/1`.
+3. `/var/mobile/vpquery.log` gets a `stream 0: … reads, in … frames` line,
+   and the `.m4a` under the Voice Memos app group's `Recordings/` decodes
+   (`afconvert` to WAV) to something that is not zeros.
+
+The mic-only provider hands out a source; whether `BWAudioSourceNode` then
+runs in cameracaptured without anything else from the camera device is not
+established until step 2.
