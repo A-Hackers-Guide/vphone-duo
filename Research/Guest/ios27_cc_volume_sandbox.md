@@ -196,6 +196,68 @@ and needs live validation on a VM the owner controls.
    (de)serializer is extremely fragile and not a semantic anchor; a rejected
    profile breaks boot or the whole guest sandbox.
 
+## The `sandbox_check_by_audit_token` ABI, confirmed (2026-10-04)
+
+Option 1 needs the live signature before any pid-1 interpose can be written.
+Read from `libsystem_sandbox.dylib`, extracted from the guest's shared cache
+(26.6; this is a stable libsystem API and does not change into 27). The
+exported `_sandbox_check_by_audit_token` (at `0x2a4153c50`) disassembles to:
+
+```
+mov  x19, x2            ; filter type kept
+mov  x20, x0            ; x0 is a POINTER to the token
+stp  xzr, x1, [x29,-0x20]
+sub  x0, x29, #0x18
+bl   _sandbox_operation_fixup   ; operates on the x1 operation string
+...
+ldr  w8, [x20, #0x14]   ; reads token fields through x20 (= x0)
+ldr  w9, [x20, #0x1c]
+...
+add  x2, x29, #0x10     ; x2 = incoming sp = va_list of the stack args
+bl   _sandbox_check_common
+retab
+```
+
+So the ABI is:
+
+- **x0** — pointer to the `audit_token_t` (the source signature passes it by
+  value; a 32-byte composite is >16 bytes, so AAPCS64 replaces it with a
+  pointer to a caller copy). Confirmed: the body reads `[x0+0x14]` /`[x0+0x1c]`.
+- **x1** — `const char *operation`.
+- **w2** — the `sandbox_filter_type` enum.
+- **variadic args** — on the stack, starting at the **incoming sp**
+  (`x2 = x29+0x10 = sp_on_entry` is the va_list base). Apple's arm64 ABI puts
+  all variadic arguments on the stack, so for a `mach-lookup` /
+  `SANDBOX_FILTER_GLOBAL_NAME` check the one service-name string is the first
+  stack slot.
+
+The source signature is therefore
+`int sandbox_check_by_audit_token(audit_token_t, const char *operation,
+enum sandbox_filter_type, ...)`.
+
+### Why forwarding is the hazard, and the safe shape
+
+The number of variadic args varies by operation, so a C interpose cannot
+forward the tail with `real(token, op, filter)` — that drops every variadic
+argument, and non-target calls (every other sandbox check launchd makes)
+would be evaluated with a garbage name. The forward has to preserve the
+incoming stack and x0–x2 untouched.
+
+The safe shape is an **assembly tail-call trampoline**, not a C function: on
+entry it compares `operation` against `mach-lookup` and the first stack arg
+against the one service name; on a match it returns 0; otherwise it restores
+sp and x0–x2 to their entry values and `b`s to the real function. Because the
+incoming sp is not disturbed, the real function's va_list still points at the
+original stack args and the tail forwards perfectly. The compares must run on
+a frame of the trampoline's own (saving x0–x2/lr across the `strcmp` calls),
+torn down exactly before the branch.
+
+This is still pid-1 code: a fault here crash-loops launchd and the guest does
+not boot. It needs the trampoline written against this ABI and a boot test on
+a throwaway 27.0 VM before it goes anywhere near a VM that matters. It is the
+owner's call whether to take that surface on, and the permission system gates
+the write.
+
 ## Validation status
 
 - **Verified:** the kernel build and its Sandbox kext; the service/entitlement
@@ -206,6 +268,8 @@ and needs live validation on a VM the owner controls.
   Campo re-signed the identical way with its exceptions honoured.
 - **Inferred:** that SpringBoard's platform profile does not apply
   exception-derived mach-lookup rules (behavioural, not bytecode-proven).
+- **Confirmed (2026-10-04):** the `sandbox_check_by_audit_token` ABI for
+  option 1 (above), so the interpose can be written against a known signature.
 - **Not done:** any working fix — options 1/2 need live validation on a VM the
   owner controls, on surfaces (pid-1 interpose / kernel sandbox) that brick boot
   if wrong.
