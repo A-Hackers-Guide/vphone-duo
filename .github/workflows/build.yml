@@ -60,3 +60,4 @@ jobs:
         run: |
           make -C VPhoneGuestComponents test-loader-links
           make -C VPhoneGuestComponents test-vcam-dataplane
+          make -C VPhoneGuestComponents test-vcam-prewarm

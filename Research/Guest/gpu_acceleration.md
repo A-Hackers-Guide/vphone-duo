@@ -98,13 +98,17 @@ there.
 
 ### On in `standard`
 
-`standard` stopped blocking the patch on 2026-10-04. The case that decided it is
-`cameracaptured`, measured on an iPadOS 26.6.2 guest with the old `standard`:
+`standard` stopped blocking the patch on 2026-10-04. The case put forward for it
+was `cameracaptured`, measured on an iPadOS 26.6.2 guest with the old
+`standard`. **Corrected the same day:** the crash below is not the gate
+refusing the GPU. `cameracaptured` already has a Metal device (its preload
+returns early without one), and it dies on a bug in the paravirtual driver's
+heap textures, which the patch does not touch ("Heap Textures Have No CPU
+Layout" below). What was observed:
 
 - At every boot it prewarms its capture shaders
   (`FigCapturePreloadShadersInternal` → CMCapture `PrewarmThreadSafeSBPs` →
-  NRFV3 `-[NRFProcessorV3 prewarm]`). It is a daemon, so the gate refuses it the
-  GPU, and it dies with SIGSEGV at `0xc` inside
+  NRFV3 `-[NRFProcessorV3 prewarm]`) and dies with SIGSEGV at `0xc` inside
   `AppleParavirtGPUMetalIOGPUFamily`. launchd restarts it, and it crash-loops.
 - While it does, the first process to touch the AVCapture defaults blocks on a
   synchronous XPC to it (`AVCaptureProprietaryDefaultsSingleton` →
@@ -114,9 +118,10 @@ there.
   `audiomxd`'s recording `StartIO` waits 18 s on the same path, and the first
   recording after boot fails.
 
-So a daemon reaching the GPU is not a niche need: a stock system daemon expects
-it. A separate change makes `libvcamcaptured` skip the prewarm defensively; this
-one gives `cameracaptured` the device it expects, so it runs normally.
+What stops the crash is `libvcamcaptured` skipping that prewarm, below. The
+patch stays on in `standard` for what #22 asked: a daemon or a tool on a 26.x
+or 18.x guest gets the GPU and the other paravirtual devices an app already
+reaches.
 
 **What this widens.** The edit is at the IOUserClient sandbox gate only. A
 process whose own sandbox profile refuses `iokit-open-user-client` for a class
@@ -216,6 +221,115 @@ bundle runs only system libraries, so it is out of scope. The post-boot
 recompile is therefore a limitation of the host paravirtual GPU, not a guest
 patch we can write. (A per-app `MTLBinaryArchive` inside a guest app would
 persist that app's own pipelines, but that is an app change, not a VM one.)
+
+## Heap Textures Have No CPU Layout
+
+On the iPadOS 26.6.2 iPad Pro guest (cloudOS 26.4 driver, `standard` preset),
+`cameracaptured` crashed at every boot and launchd throttled its restarts
+(`successive crashes = 6`): `SIGSEGV`, `KERN_INVALID_ADDRESS` at `0xc`, on the
+precompilation queue:
+
+```
+AppleParavirtGPUMetalIOGPUFamily +35956
+NRFV3       -[ToneMappingCurves initWithWithContext:] +1076
+NRFV3       -[RawDFInferenceGen initWithMetalContext:] +112
+NRFV3       -[RawDFProcessor initWithCommandQueue:] +1048
+NRFV3       -[NRFProcessorV3 prewarm] +224
+CMCapture   PrewarmThreadSafeSBPs +9392
+CMCapture   __FigCapturePreloadShadersInternal_block_invoke_2 +1084
+```
+
+While it crash-loops, any process that first touches AVCapture defaults waits
+in a synchronous XPC to it. SpringBoard's main thread did, through the Control
+Center sensor indicator's `AVCaptureDeviceDiscoverySession`, as soon as an app
+started recording, and the guest UI froze until the VM was restarted. audiomxd's
+`StartIO` for the recording blocked 18 s the same way, so the first recording
+after each boot failed.
+
+It is a bug in the guest's Metal driver, not the sandbox gate above:
+
+- `-[ToneMappingCurves initWithWithContext:]` makes a shared `MTLHeap`
+  (`setStorageMode:0`, `setSize:0xc800`), takes textures from it with
+  `-newTextureWithDescriptor:`, and fills each with
+  `-replaceRegion:mipmapLevel:slice:withBytes:bytesPerRow:bytesPerImage:`.
+  `+1076` is the return address of that call.
+- `AppleParavirtTexture` keeps a texture's CPU layout in the ivar `_dimension`.
+  Every initialiser fills it except
+  `-initWithHeap:resource:offset:length:descriptor:`, the one
+  `-[AppleParavirtHeap newTextureWithDescriptor:]` uses.
+  `-replaceRegion:…` (`0x8c28` in the 23E5207q driver; `+35956` is `0x8c74`)
+  starts with `ldr x8, [x0, _dimension]; ldur x19, [x8, #0xc]`. That fault is
+  at `0xc`. `-getBytes:…fromRegion:…` reads it the same way.
+- The daemon has a Metal device. `FigCapturePreloadShadersInternal` takes
+  `[[FigMetalContext metalDevice] newCommandQueue]` first and returns early
+  when it is nil, and the faulting frame is a method of a real
+  `AppleParavirtTexture`. `kernel-exp-paravirt_user_clients` therefore changes
+  nothing here; a guest with it crashes the same way.
+
+Any CPU upload into or readback from a heap-allocated texture faults on this
+driver, in any process. The prewarm is where `cameracaptured` meets it at every
+launch.
+
+To reveal it in a driver, look for the ivar offset slot named `_dimension` in
+`xcrun llvm-objdump --macho --objc-meta-data` (`0x6b7ac` in 23E5207q). List the
+`ldrsw xN, [x8, #0x7ac]` loads of it with `ipsw macho disass <driver> --vaddr
+0xdc8 --count 41000`. In 23E5207q these are every `AppleParavirtTexture` init
+except `initWithHeap:…`, plus `dealloc`, `getBytes:…` and `replaceRegion:…`.
+
+### Skipping the prewarm
+
+`libvcamcaptured` removes the one call to `PrewarmThreadSafeSBPs`
+(`VPhoneGuestComponents/VCamCaptured/Prewarm/`). Prewarming only compiles
+shaders ahead of first use, and nothing waits on that function: it returns
+nothing, stores no global and signals nothing. The rest of the preload still
+runs. That includes the processor flags `FigCapturePreloadShadersInternal`
+records, `DMPerformMigrationIfNeeded`, and the deferred shader cache copy.
+Deferred photo processing waits up to 180 s on that copy's semaphore
+(`FigWaitForDeferredShaderCacheCopyCompletion`), so skipping the whole preload
+would not be safe.
+
+The hook runs synchronously in the dylib's constructor, so it runs before the
+daemon's own launch code, and only when
+`/System/Library/Extensions/AppleParavirtGPUMetalIOGPUFamily.bundle` is
+installed. The call site is found from the one exported symbol, with no fixed
+address:
+
+1. `FigCapturePreloadShaders` is `mov w0, #0; b FigCapturePreloadShadersInternal`.
+2. In that function, before its return, exactly one
+   `adrp x16; add x16, x16, #imm; pacia x16, xN`. This is the block's invoke,
+   `__FigCapturePreloadShadersInternal_block_invoke_2`.
+3. In the block, before its return, exactly one `ldr x0, [xN, #0x20]; bl`
+   whose target is a function of CMCapture's `__text`. That is
+   `PrewarmThreadSafeSBPs(commandQueue)`, with the queue as the block's first
+   capture. iOS 27 has a second captured load in the block, but it calls a
+   stub outside `__text`.
+
+The `bl` becomes a `nop` (`vcc_patch_word`, which checks the old word first).
+Over the real bytes, the scan gives these unslid addresses:
+
+| Build | Internal | Block | Call | `PrewarmThreadSafeSBPs` |
+| --- | --- | --- | --- | --- |
+| iPadOS 26.6.2 (23G90), and the 26.6 cache | `0x1aeb2f06c` | `0x1aeb2f930` | `0x1aeb2fd68` | `0x1aeb300d4` |
+| iOS 27.0 (24A435) | `0x1b0758ff0` | `0x1b07598c4` | `0x1b0759d10` | `0x1b075a070` |
+
+`make -C VPhoneGuestComponents test-vcam-prewarm` runs the same scan over a
+synthetic stream with these decoys and checks each refusal.
+
+On a guest, check these:
+
+- `/var/mobile/Media/SimulatedCamera/vcamcaptured.log` (and `vcamcaptured:` in
+  the system log) has
+  `gpu prewarm: internal 0x… block 0x… call 0x… -> PrewarmThreadSafeSBPs 0x…: skipped`,
+  with the 23G90 addresses above. Any `gpu prewarm: kept, …` line names the
+  step that refused.
+- `logs.crashes` has no `cameracaptured` report newer than the update.
+- `services.print` with label `com.apple.cameracaptured` shows
+  `successive crashes = 0`.
+- Starting a recording in an app neither freezes SpringBoard nor delays the
+  first recording.
+
+This does not fix the driver. NRF or RawDF processing during a real capture,
+or any other heap texture upload, would still fault.
 
 ## Settings That Do Nothing Here
 

@@ -42,6 +42,7 @@
 //   Synthetic/  the synthetic source, device and stream classes
 //   Frames/     the shm frame reader and viewfinder / sink delivery
 //   Hooks/      observation and delivery hooks on the capture graph
+//   Prewarm/    the GPU prewarm skip for the paravirtual Metal driver
 // Cross-file symbols are declared in each folder's header with hidden
 // visibility, so none becomes a public dylib interface.
 
@@ -135,5 +136,9 @@ __attribute__((constructor)) static void vcc_init(void) {
                        vcc_install_copy_streams_from_hook();
                      }
                    });
+
+    // Not delayed: the daemon starts its shader preload at launch, and the
+    // call has to be gone before the precompilation queue reaches it.
+    vcc_install_gpu_prewarm_skip();
   }
 }
