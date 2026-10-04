@@ -117,7 +117,7 @@ struct VPhoneCrashLogsView: View {
             }
             .width(min: 76, ideal: 80, max: 130)
 
-            TableColumn("Size", value: \.size) { report in
+            TableColumn("File Size", value: \.size) { report in
                 VPhonePanelMonoText(report.sizeText, secondary: true)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }

@@ -135,7 +135,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ · %2$@ · 将于%3$@过期"
+            "value" : "%1$@ · %2$@ · 将于 %3$@ 过期"
           }
         }
       }
@@ -340,7 +340,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@失败。"
+            "value" : "%@ 失败。"
           }
         }
       }
@@ -680,7 +680,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@已取消。"
+            "value" : "%@ 已取消。"
           }
         }
       }
@@ -1406,7 +1406,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "允许 bundle 运行"
+            "value" : "允许 Bundle 运行"
           }
         }
       }
@@ -1882,7 +1882,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法读取 %@ 所在的卷宗"
+            "value" : "无法读取 %@ 所在的宗卷"
           }
         }
       }
@@ -1972,7 +1972,7 @@
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "プロンプトをコピー" } },
         "ko" : { "stringUnit" : { "state" : "translated", "value" : "프롬프트 복사" } },
         "vi" : { "stringUnit" : { "state" : "translated", "value" : "Sao chép prompt" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制提示词" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "拷贝提示词" } }
       }
     },
     "Copied" : {
@@ -1981,7 +1981,7 @@
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "コピーしました" } },
         "ko" : { "stringUnit" : { "state" : "translated", "value" : "복사됨" } },
         "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đã sao chép" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已复制" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已拷贝" } }
       }
     },
     "Check Again" : {
@@ -2285,7 +2285,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择导出的机器归档（.tzst 或 .txz）。"
+            "value" : "选择导出的虚拟机归档（.tzst 或 .txz）。"
           }
         }
       }
@@ -2625,7 +2625,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "关闭窗口后，Launchpad 会保留在菜单栏中，你可以从菜单栏启动和停止机器。只有在窗口或菜单打开时，Dock 中才会显示图标。"
+            "value" : "关闭窗口后，Launchpad 会保留在菜单栏中，你可以从菜单栏启动和停止虚拟机。只有在窗口或菜单打开时，Dock 中才会显示图标。"
           }
         }
       }
@@ -3589,7 +3589,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这台机器的自定义固件没有安装完成，无法启动。请在机器菜单中选择“安装自定义固件”，然后再启动。"
+            "value" : "这台虚拟机的自定义固件没有安装完成，无法启动。请在虚拟机菜单中选择“安装自定义固件”，然后再启动。"
           }
         }
       }
@@ -3657,7 +3657,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自定 IPSW"
+            "value" : "自定义 IPSW"
           }
         }
       }
@@ -4201,7 +4201,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用途"
+            "value" : "作用"
           }
         }
       }
@@ -4269,7 +4269,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此 Bundle 中的全部补丁，包括可能导致刚恢复的 26.4 机器无法启动的高级补丁。"
+            "value" : "此 Bundle 中的全部补丁，包括可能导致刚恢复的 26.4 版本虚拟机无法启动的高级补丁。"
           }
         }
       }
@@ -4644,7 +4644,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "过滤补丁"
+            "value" : "筛选补丁"
           }
         }
       }
@@ -4780,7 +4780,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "虚拟机安装后无法更改"
+            "value" : "虚拟机创建后即固定"
           }
         }
       }
@@ -6168,7 +6168,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "其 Info.plist 必须包含 bundle 标识符 %@ 和版本号。"
+            "value" : "其 Info.plist 必须包含 Bundle 标识符 %@ 和版本号。"
           }
         }
       }
@@ -8174,7 +8174,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每台机器启动所需的补丁，并确保显示和摄像头可用。"
+            "value" : "每台虚拟机启动所需的补丁，并确保显示和摄像头可用。"
           }
         }
       }
@@ -8582,7 +8582,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在读取包中的补丁…"
+            "value" : "正在读取 Bundle 中的补丁…"
           }
         }
       }
@@ -10828,7 +10828,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已安装的辅助工具与此 App 中的副本不一致。请重试。"
+            "value" : "已安装的辅助工具与此应用中的副本不一致。请重试。"
           }
         }
       }
@@ -11338,7 +11338,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此构建没有签名团队。请使用你的团队重新构建并签名 App，然后重试。"
+            "value" : "此构建没有签名团队。请使用你的团队重新构建并为此应用签名，然后重试。"
           }
         }
       }
@@ -11474,7 +11474,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法连接辅助工具。请退出并重新打开 App，然后重试。"
+            "value" : "无法连接辅助工具。请退出并重新打开应用，然后重试。"
           }
         }
       }
@@ -11644,7 +11644,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法安装 bundle。请重试。"
+            "value" : "无法安装 Bundle。请重试。"
           }
         }
       }
@@ -11678,7 +11678,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法列出 bundle 的补丁。"
+            "value" : "无法列出 Bundle 的补丁。"
           }
         }
       }
@@ -12632,7 +12632,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请使用 `ditto -c -k --keepParent VPhone.bundle VPhone.zip` 压缩 bundle，或选择 VPhone.bundle 文件夹。"
+            "value" : "请使用 `ditto -c -k --keepParent VPhone.bundle VPhone.zip` 压缩 Bundle，或选择 VPhone.bundle 文件夹。"
           }
         }
       }

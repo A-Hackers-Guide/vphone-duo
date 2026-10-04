@@ -83,7 +83,7 @@ struct VPhoneFileBrowserView: View {
             }
             .width(80)
 
-            TableColumn("Size", value: \.size) { file in
+            TableColumn("File Size", value: \.size) { file in
                 Text(file.displaySize)
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(file.isDirectoryLike ? .secondary : .primary)
