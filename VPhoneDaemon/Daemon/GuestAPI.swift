@@ -178,7 +178,7 @@ enum GuestAPI {
         case "apps.search":
             return try searchApps(string(params, "query"))
         case "apps.refresh":
-            return try refreshApps(directory: params["directory"] as? String)
+            return try refreshAppRegistrations(directory: params["directory"] as? String)
         case "apps.launch":
             let id = try string(params, "bundle_id")
             if let url = params["url"] as? String {
