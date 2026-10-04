@@ -78,8 +78,11 @@ command-line executable remains unentitled and still launches `vphone-vm`.
 
 The guest links IcliKit directly. App registration refresh is available through
 `POST /v1/apps/refresh` or the WebSocket method `apps.refresh`. An optional
-`directory` selects a bundle directory; omitted, it uses the bootstrap's
-`/Applications`. IcliKit verifies registrations by reading them back.
+`directory` selects a bundle directory; omitted, it uses `/Applications` under
+the bootstrap vphoned installed (vphoned runs from the system volume, so
+IcliKit cannot find the bootstrap itself). `system.uicache` is the same call.
+IcliKit verifies registrations by reading them back; a bundle it could not
+register or verify is named in the error message.
 `screen.screenshot` uses IcliKit's native screen capture and returns a base64
 JPEG with `mime_type`, `width`, and `height`; the current VM produces 1290×2796.
 The host's Save/Copy Screenshot menu decodes this guest image. It omits the
@@ -330,8 +333,8 @@ any key is sent. It needs no private entitlement. `timeout` is 1–60 seconds,
 `time.timezone` (capability `timezone`; REST `GET/PUT /v1/timezone`) returns
 `{identifier, automatic, seconds_from_gmt}`: the Olson name
 `/var/db/timezone/localtime` points to under `/var/db/timezone/zoneinfo`, and
-whether timed sets the zone automatically. `{identifier}` pins the zone: it turns
-the automatic time zone off through CoreTime (`TMSetAutomaticTimeZoneEnabled`,
+whether timed sets the zone automatically; IcliKit does the work. `{identifier}`
+pins the zone: it turns the automatic time zone off through CoreTime (`TMSetAutomaticTimeZoneEnabled`,
 which timed accepts only with the `com.apple.timed` entitlement) and asks
 tzlinkd to re-point the link through libutil's `tzlink` (`com.apple.tzlink.allow`);
 tzlinkd then posts `SignificantTimeChangeNotification`, and notifyd's

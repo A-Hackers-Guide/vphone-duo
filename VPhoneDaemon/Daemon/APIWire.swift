@@ -41,17 +41,23 @@ enum APIWire {
             let result = try GuestAPI.execute(method: request.method, params: request.params)
             return .json(["type": "response", "id": request.id ?? NSNull(), "result": result])
         } catch {
-            let (code, message): (String, String) =
-                if let error = error as? IcliError {
-                    (error.code, error.message)
-                } else if let error = error as? GuestAPIError {
-                    (error.code, error.description)
-                } else {
-                    ("operation_failed", String(describing: error))
+            var body: [String: Any]
+            if let error = error as? IcliError {
+                body = ["code": error.code, "message": error.message]
+                // A failed command's output says what failed, which the
+                // generic "command exited with status 1" does not.
+                if case let .commandFailed(output) = error {
+                    body.merge(output.filter { $0.key != "error" }) { $1 }
+                    if output["message"] as? String == nil { body["message"] = error.message }
                 }
+            } else if let error = error as? GuestAPIError {
+                body = ["code": error.code, "message": error.description]
+            } else {
+                body = ["code": "operation_failed", "message": String(describing: error)]
+            }
             return .json(status: 400, [
                 "type": "response", "id": request.id ?? NSNull(),
-                "error": ["code": code, "message": message],
+                "error": body,
             ])
         }
     }

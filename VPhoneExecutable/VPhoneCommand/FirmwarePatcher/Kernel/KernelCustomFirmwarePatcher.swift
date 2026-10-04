@@ -31,6 +31,16 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
     /// byte-identical when false.
     public var applyFrida = false
 
+    /// Opt-in 120 Hz display timing. Set from the plan: `standard` blocks it, so
+    /// a guest keeps the host's 60 Hz mode unless the VM asked otherwise.
+    public var applyDisplayRefresh = false
+
+    /// Opt-in on a base older than 27: a narrow allowlist at the same sandbox gate,
+    /// so a process outside an app sandbox can open the paravirtual GPU, video
+    /// decoder, Neural Engine and IOSurface scaler user clients and nothing else.
+    /// Set from the plan; `standard` blocks it.
+    public var applyParavirtUserClients = false
+
     public func findAll() throws -> [PatchRecord] {
         parseMachO()
         buildADRPIndex()
@@ -57,6 +67,8 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
         if applyIOS27 {
             patchIoucFailedSandbox()
             patchDiskImages2ClientAbi()
+        } else if applyParavirtUserClients {
+            patchParavirtUserClientsNarrow()
         }
 
         // Group B
@@ -83,6 +95,12 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
         if applyFrida {
             patchThreadSetStateEntitlementFlag()
             patchVmMapDeleteImmutableCode()
+        }
+
+        // Opt-in: the paravirtual display advertises 120 Hz instead of the
+        // host's fixed 60 Hz mode.
+        if applyDisplayRefresh {
+            patchParavirtDisplayRefreshRate()
         }
 
         // Group C

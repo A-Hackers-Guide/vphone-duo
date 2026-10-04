@@ -54,11 +54,37 @@ public enum FirmwarePatchSetCatalog {
     ///
     /// `dyld-exp-mis_trust_auth` is off because a userspace hook now does its
     /// job: see ``misTrustAuthPatch``.
+    ///
+    /// `kernel-exp-display_refresh_120hz` is off because it is a preference with a
+    /// cost: see ``displayRefreshPatch``.
+    ///
+    /// `kernel-exp-paravirt_user_clients` is off because it lifts a sandbox denial
+    /// that nothing in the guest needs to boot: see ``paravirtUserClientsPatch``.
     public static let manualOnlyPatches: Set<String> =
         Set(FirmwareKernelFridaPatchSet.manifest.patches.map(\.identifier))
             .union(hypervisorConcealmentPatches)
             .union(experimentalIdentityPatches)
-            .union([misTrustAuthPatch])
+            .union([misTrustAuthPatch, displayRefreshPatch, paravirtUserClientsPatch])
+
+    /// The 120 Hz timing for the paravirtual display.
+    ///
+    /// Off in `standard`: the host's mode is 60 Hz, a guest rendering twice as
+    /// often costs twice the host CPU and GPU, and only a 120 Hz host display
+    /// shows the difference. See `Research/Guest/display_refresh_rate.md`.
+    public static let displayRefreshPatch = "kernel-exp-display_refresh_120hz"
+
+    /// A narrow IOUserClient sandbox allowlist for the paravirtual devices, on a
+    /// base older than 27.
+    ///
+    /// A 26.x sandbox knows nothing of the research board's paravirtual devices,
+    /// so only an app's container profile lets a process open them. A daemon or a
+    /// command-line tool gets no Metal device, WebKit no hardware video decoder,
+    /// and Core ML no Neural Engine. The edit allows only the four paravirt device
+    /// classes, by name, and leaves every other denial in place. Off in `standard`:
+    /// apps already get these devices, so it is a per-VM choice.
+    /// On 27 the broad `kernel-boot-iouc_sandbox_gate` is boot-essential instead. See
+    /// `Research/Guest/gpu_acceleration.md`.
+    public static let paravirtUserClientsPatch = "kernel-exp-paravirt_user_clients"
 
     /// The shared-cache short-circuit of `libmis`'s `checkTrustAndAuthorization`.
     ///

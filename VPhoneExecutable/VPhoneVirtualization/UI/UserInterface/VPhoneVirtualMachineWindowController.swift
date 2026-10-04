@@ -13,6 +13,10 @@ class VPhoneVirtualMachineWindowController: NSObject {
     private var subtitleLabel: NSTextField?
     private var timers: [Timer] = []
     private var keyStateObservers: [NSObjectProtocol] = []
+    private var frameRateTimer: Timer?
+    private var frameRateSampledAt: CFTimeInterval = 0
+    /// The guest's frame rate over the last second; nil while the display is off.
+    private var frameRate: Int?
 
     var captureView: VPhoneVirtualMachineView? {
         virtualMachineView
@@ -124,12 +128,15 @@ class VPhoneVirtualMachineWindowController: NSObject {
         timers.append(Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.pollOrientation() }
         })
+        setFrameRateDisplay(VPhoneFrameRateDisplay.isEnabled)
     }
 
     /// Disconnect the old display and input devices before rebuilding the VM.
     func closeForRestart() {
         timers.forEach { $0.invalidate() }
         timers.removeAll()
+        frameRateTimer?.invalidate()
+        frameRateTimer = nil
         keyStateObservers.forEach { NotificationCenter.default.removeObserver($0) }
         keyStateObservers.removeAll()
         NotificationCenter.default.removeObserver(self)
@@ -313,12 +320,45 @@ class VPhoneVirtualMachineWindowController: NSObject {
                 parts.append(address)
             }
         }
+        if let frameRate {
+            parts.append(VPhoneLocalization.format("%ld fps", frameRate))
+        }
         let subtitle = parts.joined(separator: " - ")
         if window.subtitle != subtitle {
             window.subtitle = subtitle
             subtitleLabel?.stringValue = subtitle
             subtitleLabel?.isHidden = subtitle.isEmpty
         }
+    }
+
+    // MARK: - Frame Rate
+
+    /// Shows the guest's frame rate in the subtitle, sampled once a second.
+    func setFrameRateDisplay(_ enabled: Bool) {
+        frameRateTimer?.invalidate()
+        frameRateTimer = nil
+        frameRate = nil
+        if enabled, VPhoneFrameRateMeter.isAvailable {
+            _ = VPhoneFrameRateMeter.takeFrameCount()
+            frameRateSampledAt = CACurrentMediaTime()
+            frameRate = 0
+            frameRateTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.sampleFrameRate() }
+            }
+        }
+        if let control {
+            updateSubtitle(control: control)
+        }
+    }
+
+    private func sampleFrameRate() {
+        guard frameRate != nil, let control else { return }
+        let now = CACurrentMediaTime()
+        let elapsed = now - frameRateSampledAt
+        guard elapsed > 0 else { return }
+        frameRate = Int((Double(VPhoneFrameRateMeter.takeFrameCount()) / elapsed).rounded())
+        frameRateSampledAt = now
+        updateSubtitle(control: control)
     }
 
     // MARK: - Home Button

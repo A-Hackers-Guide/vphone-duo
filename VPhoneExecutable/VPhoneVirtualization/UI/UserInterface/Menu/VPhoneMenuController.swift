@@ -23,6 +23,7 @@ class VPhoneMenuController {
 
     var hardwareKeyboardItem: NSMenuItem?
     var onHardwareKeyboardChange: ((Bool) async throws -> Void)?
+    var onFrameRateDisplayChange: ((Bool) -> Void)?
 
     var onFilesPressed: (() -> Void)?
     var onKeychainPressed: (() -> Void)?

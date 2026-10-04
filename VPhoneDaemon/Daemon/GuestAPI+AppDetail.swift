@@ -1,5 +1,6 @@
 import Foundation
 import IcliKit
+import IcliSystem
 
 // MARK: - App Detail and System Control
 
@@ -31,7 +32,7 @@ extension GuestAPI {
         case "apps.network_policy":
             return try appNetworkPolicy(string(params, "bundle_id"), repair: bool(params, "repair"))
         case "system.uicache":
-            return try refreshApps(directory: optionalString(params, "directory"))
+            return try refreshAppRegistrations(directory: optionalString(params, "directory"))
         case "system.system_apps":
             return try systemAppsVisibility(set: params["visible"] as? Bool)
         case "system.respring":
@@ -43,6 +44,37 @@ extension GuestAPI {
             return try requestReboot(userspace: userspace, force: true)
         default:
             return nil
+        }
+    }
+}
+
+// MARK: - App Registrations
+
+extension GuestAPI {
+    /// `uicache -a`. Without a directory, IcliKit looks for the bootstrap from
+    /// the running executable, and vphoned runs from the system volume, so it
+    /// finds none and refreshes the system's /Applications, failing on Apple's
+    /// apps. The bootstrap vphoned installed names the directory instead.
+    static func refreshAppRegistrations(directory: String?) throws -> [String: Any] {
+        guard let directory = try directory ?? GuestIrisinInstaller.completedBootstrap().map({ $0.root + "/Applications" })
+        else {
+            throw GuestAPIError.operationFailed("No bootstrap environment was found")
+        }
+        do {
+            return try refreshApps(directory: directory)
+        } catch let IcliError.commandFailed(output) {
+            // The output names the bundles; the error itself gives only a status.
+            let names = { (key: String) in
+                (output[key] as? [String] ?? []).map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")
+            }
+            var sentences: [String] = []
+            if !names("failed").isEmpty {
+                sentences.append("LaunchServices did not register or remove \(names("failed")).")
+            }
+            if !names("unverified").isEmpty {
+                sentences.append("LaunchServices does not list \(names("unverified")) as expected after the refresh.")
+            }
+            throw GuestAPIError.operationFailed(sentences.joined(separator: " "))
         }
     }
 }
