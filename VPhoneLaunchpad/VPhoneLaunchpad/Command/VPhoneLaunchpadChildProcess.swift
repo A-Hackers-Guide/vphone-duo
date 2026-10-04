@@ -10,10 +10,23 @@ import Foundation
 ///   pipe, quitting the app would close the read end and the next line of
 ///   guest serial output would kill the VM with SIGPIPE. The file is tailed
 ///   while the app runs and stays behind as the machine's console log.
-///   The guest is also detached: it gets its own session and is responsible
-///   for itself, so macOS does not keep Launchpad listed as running in the
-///   background, or attribute the guest's privacy prompts to it, after the
-///   app quits.
+///   The guest is also detached: it gets its own session and Launchpad
+///   disclaims responsibility for it, so macOS does not keep Launchpad listed
+///   as running in the background after the app quits.
+///
+///   What is started detached is `vphone-launchpad-launcher` from the app's
+///   Contents/MacOS, with `vphone-cli` and its arguments after it. The
+///   launcher is responsible for itself and starts `vphone-cli` without
+///   disclaiming, so it is responsible for `vphone-vm` and its Virtualization
+///   service. macOS ties a privacy permission (microphone, location) to the
+///   responsible process's signature. `vphone-cli` is signed ad hoc, so every
+///   bundle build would be asked again. A tool in the app's Contents/MacOS
+///   is attributed to the app, so the request is the app's and is asked
+///   once for its Developer ID signature; under the hardened runtime the app
+///   needs the matching entitlement (Resources/VPhoneLaunchpad.entitlements).
+///   Without the launcher (previews, a build that lacks it) or for a
+///   `vphone-cli` it would refuse, Launchpad starts `vphone-cli` directly,
+///   responsible for itself as before.
 final nonisolated class VPhoneLaunchpadChildProcess: @unchecked Sendable {
     private let process = Process()
     /// Set instead of `process` for a detached child.
@@ -44,9 +57,10 @@ final nonisolated class VPhoneLaunchpadChildProcess: @unchecked Sendable {
                 withIntermediateDirectories: true,
             )
             FileManager.default.createFile(atPath: logFile.path, contents: nil)
+            let command = Self.throughLauncher(executable: executable, arguments: arguments)
             let pid = try Self.spawnDetached(
-                executable: executable,
-                arguments: arguments,
+                executable: command.executable,
+                arguments: command.arguments,
                 currentDirectory: currentDirectory,
                 logFile: logFile,
             )
@@ -112,7 +126,8 @@ final nonisolated class VPhoneLaunchpadChildProcess: @unchecked Sendable {
     private func signal(_ signal: Int32) {
         if let detachedPID {
             // Until waitpid reaps it the PID cannot be reused, so this only
-            // ever reaches our own child.
+            // ever reaches our own child. The launcher passes the signal on
+            // to vphone-cli and exits the way it does.
             if lock.withLock({ !hasExited }) {
                 kill(detachedPID, signal)
             }
@@ -139,6 +154,23 @@ final nonisolated class VPhoneLaunchpadChildProcess: @unchecked Sendable {
     }
 
     // MARK: - Detached spawn
+
+    /// The launcher with `executable` and `arguments` after it, when the app
+    /// carries one and it would accept them; otherwise the command unchanged.
+    private static func throughLauncher(
+        executable: URL,
+        arguments: [String],
+    ) -> (executable: URL, arguments: [String]) {
+        guard let launcher = Bundle.main.executableURL?
+            .deletingLastPathComponent()
+            .appendingPathComponent(VPhoneLaunchpadLauncherPolicy.executableName),
+            FileManager.default.isExecutableFile(atPath: launcher.path),
+            (try? VPhoneLaunchpadLauncherPolicy.check(executable: executable.path, arguments: arguments)) != nil
+        else {
+            return (executable, arguments)
+        }
+        return (launcher, [executable.path] + arguments)
+    }
 
     private typealias SetDisclaim = @convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32
 

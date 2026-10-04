@@ -9,6 +9,8 @@
 // Signing is a separate step with a Developer ID identity, run by whoever
 // distributes the app: Build/SignLaunchpad.sh. Leaving CODE_SIGNING_ALLOWED
 // on would sign with whatever identity the build machine happens to have.
+// CODE_SIGN_ENTITLEMENTS is not set either: the app's entitlements,
+// Resources/VPhoneLaunchpad.entitlements, are applied only by that script.
 CODE_SIGNING_ALLOWED = NO
 
 // The team pinned by SMPrivilegedExecutables (app → helper) and
