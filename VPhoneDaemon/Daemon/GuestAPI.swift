@@ -120,6 +120,7 @@ enum GuestAPI {
                 "network_hostname",
                 "network_static_names",
                 "network_resolve",
+                "timezone",
             ],
         ]
     }

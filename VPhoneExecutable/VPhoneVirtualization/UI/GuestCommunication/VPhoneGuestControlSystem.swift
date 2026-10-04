@@ -38,4 +38,14 @@ extension VPhoneGuestControl {
             throw ControlError.guestError("low_power_mode: failed to set state on guest")
         }
     }
+
+    // MARK: - Time Zone
+
+    /// Pins the guest's system time zone to an Olson name such as
+    /// `Asia/Shanghai` and turns its automatic time zone off. Returns false
+    /// when the guest was already pinned to it.
+    func setTimeZone(_ identifier: String) async throws -> Bool {
+        let result = try await call("time.timezone", params: ["identifier": identifier])
+        return result["changed"] as? Bool ?? false
+    }
 }
