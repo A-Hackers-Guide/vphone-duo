@@ -429,11 +429,58 @@ back as NULL/zero`.
 * **Stream formats**: a format set that `ASDStream` refuses becomes the
   device's rate change when the device supports the rate (§4), on both
   kinds of stream.
-* **Device**: `canBeDefaultInputDevice`, `inputSafetyOffset` 100, wire rate
-  only (the 44100 twin is the speaker's; captured frames are not resampled),
+* **Device**: `canBeDefaultInputDevice`, `inputSafetyOffset` 100, the wire
+  rate and the speaker's 44100 twin (captured frames are converted as they
+  are read; "Reading at 44100" below),
   `willDoReadInputBlock` answering for the device's own direction, and the
   macOS plugin's input control set: data source `'imic'` "Microphone", mute
   and volume in the input scope, built the way the speaker's are.
+
+### Reading at 44100
+
+The speaker's device answers 44100 beside the wire's 48000, and a session
+that plays and records sets the rate it wants on both streams of its
+aggregate. With the microphone answering 48000 only, a session that asked for
+44100 did not fail; it was given 48000. Measured on `avtest-ipad`
+(iPad16,1 / 26.6.2) with a test app (`playAndRecord`, preferred rate 44100,
+an `AVAudioEngine` playing a 440 Hz tone and tapping its input):
+
+```
+VirtualAudio_Device.cpp:3135  Client request to set nominal sample rate to 44100.000000 on VAD: '[vdef]'.
+HALS_AHPPlugIn.cpp:126        HALS_AHPPlugIn::ObjectSetPropertyData: got an error from the plug-in routine …, Error: 560226676
+-CMVAEndptMgr- vaemSetSampleRateForDevice: FAILED to set default sample rate. Giving up.
+-CMSessionMgr- cmsSetDeviceSampleRateAndBufferSize: Unable to set sample rate. But let's keep going without exiting this routine.
+```
+
+The app then ran at 48000 and captured 47,600 frames a second. A device with
+a codec honours 44100, and an app that builds its formats on the rate it
+asked for does not expect otherwise, so the microphone now answers it too.
+
+The virtio stream stays at the wire rate, as the speaker's does. The input
+stream carries a 44100 physical format beside its own, the device lists both
+rates, and when the device runs at the other one the read block converts:
+`VPVirtIOSoundConverter` (`VPVirtIOSoundConverter.[ch]`, tested on the host)
+is asked how many wire frames the read takes, those come from the reader as
+before, and each frame handed to the HAL is the straight line between the two
+wire frames around it. The phase is kept in whole units of 1/44100 of a wire
+frame, so the count is exact and the ratio does not drift. It is the
+speaker path's conversion turned around, and it filters nothing first: what
+lies between 22,050 and 24,000 Hz folds back, which a microphone has next to
+none of. Only 32-bit float with one or two channels is converted, which is
+what the host sends; any other format keeps the wire rate alone.
+
+The same app after the change, both rates in one launch:
+
+| Asked | Session | App captured | Plugin, microphone | Plugin, speaker |
+| --- | --- | --- | --- | --- |
+| 48000 | 48000 | 571,200 frames in 12 s | `141 reads, in 577536 frames (47937/s), out 568960 frames, 8960 silent, 0 bytes skipped` | `142 writes, 0 starved, … (47971/s, hal 48000)` |
+| 44100 | 44100 | 524,790 frames in 12 s; 44,100 a second after the first | `device rate 48000 -> 44100`, `141 reads, in 577536 frames (47862/s), out 568425 frames, 10031 silent, 0 bytes skipped` | `142 writes, 0 starved, … (44046/s, hal 44100)` |
+
+`out` on the microphone line counts wire frames whatever rate the HAL reads
+at. The pitch says the conversion runs the right way: with the guest's tone
+coming out of the Mac's speakers into its microphone, the capture's power at
+440 Hz was 44–45 dB at both rates, against 9–18 dB at 404 Hz and 479 Hz,
+where a rate taken the wrong way round would have put it.
 
 ## 6. Reveal and validation
 
@@ -518,11 +565,9 @@ Not done:
 * Whether the kernel returns reads still out at RELEASE is not known. The
   plugin does not depend on it in the normal stop; the one-second fallback
   does, and was not reached.
-* A session at 44100 that both plays and records sets each stream's format
-  in the aggregate, and the microphone device answers 48000 only, so that
-  set is refused and the route would fail as it did before §4's change.
-  Voice Memos records at 48000. If an app needs it, the reader needs the
-  speaker path's resampler, turned around.
+* The capture conversion to 44100 is a straight line between wire frames,
+  with nothing filtered first (§5, "Reading at 44100"). What that costs a
+  recording has not been listened to or measured beyond the tone's pitch.
 * `ssrc` on the input device (§4) is refused. Nothing depended on it.
 * The 1.9 s pause at the first capture (§6) is the host's. If it matters,
   the lead queued on the speaker side is what would cover it.

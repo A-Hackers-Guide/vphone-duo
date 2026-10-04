@@ -51,6 +51,7 @@
 #include <unistd.h>
 
 #include "VPVirtIOSoundClock.h"
+#include "VPVirtIOSoundConverter.h"
 #include "VPVirtIOSoundProtocol.h"
 #include "VPVirtIOSoundRing.h"
 
@@ -581,6 +582,9 @@ typedef struct {
 @property (nonatomic, readonly) UInt32 queuedLatencyFrames;
 /// The device the stream belongs to, which is where its rate is changed.
 @property (weak, nonatomic) ASDAudioDevice *device;
+/// Whether the stream answers `kVPAlternateRate` beside the wire rate,
+/// converting between the two itself.
+@property (nonatomic, readonly) BOOL offersAlternateRate;
 /// What the device's volume and mute controls come to, 0 to 1.
 - (void)setGain:(float)gain;
 @end
@@ -637,6 +641,10 @@ typedef struct {
     format.minimumSampleRate = rate;
     format.maximumSampleRate = rate;
     return format;
+}
+
+- (BOOL)offersAlternateRate {
+    return NO;
 }
 
 - (void)logFormatWithLeadPeriods:(uint32_t)leadPeriods {
@@ -908,6 +916,10 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
 
 - (void)setGain:(float)gain {
     atomic_store_explicit(&_mix.gainBits, VPGainBits(gain), memory_order_relaxed);
+}
+
+- (BOOL)offersAlternateRate {
+    return _format.sampleRate == 48000.0;
 }
 
 // MARK: Rate changes
@@ -1190,9 +1202,64 @@ static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
     [stream readCompletedAtOffset:offset result:result argument:(uint64_t)(uintptr_t)argument];
 }
 
+/// Frames per converter pass; 512 out at 48000→44100 take at most 559 in,
+/// so a 1024-frame scratch bounds the allocation.
+static const uint32_t kCaptureChunkFrames = 512;
+static const uint32_t kCaptureScratchFrames = 1024;
+
+/// What `readInputBlock` captures instead of the stream object, as the mix
+/// block does (`VPMixState`).
+typedef struct {
+    VPVirtIOSoundInputReader *reader;
+    uint32_t bytesPerFrame;
+    uint32_t wireRate;
+    /// The rate CoreAudio reads the stream at, which is the wire rate until
+    /// a route that plays and records at 44100 switches the device. The
+    /// read block reads it, the rate change writes it.
+    _Atomic uint32_t halRate;
+    /// The conversion between the two, the I/O thread's own. `scratch` is
+    /// NULL for a format the converter does not take; the stream then
+    /// offers the wire rate only.
+    VPVirtIOSoundConverter converter;
+    float *scratch;
+    /// Set when the stream starts: the converter starts over, as the reader
+    /// does.
+    _Atomic bool restart;
+} VPCaptureState;
+
+/// Fills `buffer` with `frameCount` captured frames at the rate CoreAudio
+/// reads at, or with silence where the reader has none.
+static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCount) {
+    uint32_t halRate = atomic_load_explicit(&capture->halRate, memory_order_relaxed);
+    bool restart = atomic_exchange_explicit(&capture->restart, false, memory_order_acq_rel);
+    if (halRate == capture->wireRate || capture->scratch == NULL) {
+        VPVirtIOSoundInputReaderRead(capture->reader, buffer, frameCount);
+        return;
+    }
+    VPVirtIOSoundConverter *converter = &capture->converter;
+    if (restart || converter->outputRate != halRate) {
+        VPVirtIOSoundConverterReset(converter, capture->wireRate, halRate, converter->channels);
+    }
+    UInt32 done = 0;
+    while (done < frameCount) {
+        uint32_t chunk = MIN(frameCount - done, kCaptureChunkFrames);
+        float *output = (float *)((uint8_t *)buffer + done * capture->bytesPerFrame);
+        uint32_t needed = VPVirtIOSoundConverterInputFrames(converter, chunk);
+        if (needed > kCaptureScratchFrames) {
+            // No pair of rates the device offers comes near this.
+            memset(output, 0, chunk * capture->bytesPerFrame);
+        } else {
+            VPVirtIOSoundInputReaderRead(capture->reader, capture->scratch, needed);
+            VPVirtIOSoundConverterProcess(converter, capture->scratch, output, chunk);
+        }
+        done += chunk;
+    }
+}
+
 @implementation VPVirtIOSoundInputStream {
     VPVirtIOSoundInputRing _ring;
     VPVirtIOSoundInputReader _reader;
+    VPCaptureState _capture;
     /// Counts stops, so a drain deadline knows the stop it was set for.
     uint64_t _stops;
     /// CoreAudio started the stream while it was `Releasing`.
@@ -1209,7 +1276,7 @@ static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
 /// ASDStream releases this block at every stop, as it does the output
 /// stream's (`installMixBlock`), so it goes back in before every start.
 - (void)installReadBlock {
-    VPVirtIOSoundInputReader *reader = &_reader;
+    VPCaptureState *capture = &_capture;
     _Atomic bool *muted = &_muted;
     uint32_t bytesPerFrame = _format.bytesPerFrame;
     self.readInputBlock = ^int(UInt32 frameCount, const AudioServerPlugInIOCycleInfo *cycleInfo,
@@ -1218,7 +1285,7 @@ static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
         (void)secondaryBuffer;
         (void)clientID;
         // Read even when muted, so the ring keeps moving.
-        VPVirtIOSoundInputReaderRead(reader, mainBuffer, frameCount);
+        VPCaptureRead(capture, mainBuffer, frameCount);
         if (atomic_load_explicit(muted, memory_order_relaxed)) {
             memset(mainBuffer, 0, frameCount * bytesPerFrame);
         }
@@ -1249,13 +1316,58 @@ static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
         .leadBytes = kInputLeadPeriods * _periodBytes,
         .maximumBacklogBytes = kInputMaximumBacklogPeriods * _periodBytes,
     };
+    _capture = (VPCaptureState){
+        .reader = &_reader,
+        .bytesPerFrame = format.bytesPerFrame,
+        .wireRate = (uint32_t)format.sampleRate,
+    };
+    atomic_init(&_capture.halRate, (uint32_t)format.sampleRate);
+    // The 44100 twin, as the speaker's stream has it: a route that plays and
+    // records at that rate sets it on both streams of its aggregate, and
+    // fails when one refuses. The virtio stream stays at the wire rate;
+    // captured frames are converted as they are read. Only for what the
+    // converter takes, which is what the host sends.
+    if (format.sampleRate == 48000.0 && format.isFloat && format.bitsPerChannel == 32
+        && format.channels <= kVPVirtIOSoundConverterMaximumChannels) {
+        _capture.scratch = malloc(kCaptureScratchFrames * format.bytesPerFrame);
+    }
+    if (_capture.scratch) {
+        VPVirtIOSoundConverterReset(&_capture.converter, _capture.wireRate, (uint32_t)kVPAlternateRate,
+            format.channels);
+        ASDStreamFormat *reduced = [self physicalFormatAtRate:kVPAlternateRate];
+        self.physicalFormats = @[self.physicalFormat, reduced];
+        self.physicalFormatSettable = YES;
+        if (VPNominalRateOverride() == kVPAlternateRate) {
+            self.physicalFormat = reduced;
+            atomic_store(&_capture.halRate, (uint32_t)kVPAlternateRate);
+        }
+    }
     [self installReadBlock];
     [self logFormatWithLeadPeriods:kInputLeadPeriods];
     return self;
 }
 
 - (void)dealloc {
+    free(_capture.scratch);
     VPVirtIOSoundInputRingDestroy(&_ring);
+}
+
+- (BOOL)offersAlternateRate {
+    return _capture.scratch != NULL;
+}
+
+// MARK: Rate changes
+
+- (void)deviceChangedToSamplingRate:(double)rate {
+    [super deviceChangedToSamplingRate:rate];
+    uint32_t previous = atomic_load(&_capture.halRate);
+    if (rate > 0 && (uint32_t)rate != previous) {
+        atomic_store(&_capture.halRate, (uint32_t)rate);
+        os_log(VPLog(), "stream %u: device rate %.0f -> %.0f, physical format %.0f Hz",
+            _streamID, (double)previous, rate, self.physicalFormat.sampleRate);
+        VPLogToFile("stream %u: device rate %.0f -> %.0f, physical format %.0f Hz",
+            _streamID, (double)previous, rate, self.physicalFormat.sampleRate);
+    }
 }
 
 /// What the reader keeps between the host's capture and the guest's read.
@@ -1412,6 +1524,7 @@ static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
         self->_startedAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
         // What an earlier run left in the ring is old by now.
         atomic_store(&self->_reader.restart, true);
+        atomic_store(&self->_capture.restart, true);
         switch (self->_state) {
         case VPStreamStateIdle:
             [self startDevice];
@@ -1626,6 +1739,7 @@ static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
 
     double sampleRate = 0;
     UInt32 latencyFrames = 0;
+    BOOL alternate = YES;
     for (uint32_t streamID = 0; streamID < connection.streamCount; streamID++) {
         VPVirtIOSoundPCMInfo info;
         if (![connection getInfo:&info forStream:streamID]) {
@@ -1666,6 +1780,7 @@ static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
         [_streams addObject:stream];
         sampleRate = format.sampleRate;
         latencyFrames = stream.queuedLatencyFrames;
+        alternate = alternate && stream.offersAlternateRate;
         if (input) {
             [self addInputStream:stream];
         } else {
@@ -1677,9 +1792,9 @@ static void VPReadCompleted(void *refcon, IOReturn result, void *argument) {
     }
 
     _wireRate = sampleRate;
-    // Only the mix converts between rates; captured frames reach CoreAudio
-    // at the wire rate.
-    _alternateRate = !input && sampleRate == 48000.0 ? kVPAlternateRate : 0;
+    // The streams convert between the two rates themselves, the mix as it
+    // is written and captured frames as they are read.
+    _alternateRate = alternate ? kVPAlternateRate : 0;
     // The nominal rate the device answers at boot: the wire rate unless the
     // override names the alternate (testing VirtualAudio's aggregate-member
     // selection, which may compare the current nominal rate, not the list).
