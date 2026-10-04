@@ -17,6 +17,7 @@ extension GuestAPI {
             executeDeviceIdentity,
             executeSetupAssistant,
             executeTimeZone,
+            executeAudioLatency,
         ]
         for area in areas {
             if let result = try area(method, params) {
