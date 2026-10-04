@@ -71,6 +71,12 @@
 
                 model.machines.selection = [path("research-01")]
                 await shot("05-machines", suffix)
+                // A deleted machine takes its table row with it. A cell that
+                // reads the model from the environment crashes the run here
+                // unless the column injects it.
+                model.machines.applyPreview(removing: labMachine)
+                await shot("05c-machines-after-delete", suffix)
+                model.machines.applyPreview(creation: creation)
                 model.showsInspector = false
                 await shot("05a-machines-no-inspector", suffix)
                 model.showsInspector = true
