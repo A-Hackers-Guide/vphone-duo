@@ -53,6 +53,7 @@ invalid-request error, read the source named there instead of guessing keys.
 | `display.brightness`, `audio.volume` | `value?` | Omit `value` to read |
 | `display.rotation`, `display.orientation` | `orientation?` | |
 | `display.auto_lock` | none | Auto-Lock in seconds (`never` when it is Never) and the Lock Screen timeout vphoned sets to match |
+| `screen.unlock` | `passcode?`, `timeout?` (10) | Display on and Lock Screen passed, from any state; `guest unlock <machine>` calls it. `passcode` only for a guest that has one, entered once |
 | `device.ioreg` | `plane` | e.g. `IODeviceTree` |
 
 ## Input

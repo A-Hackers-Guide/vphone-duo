@@ -72,6 +72,11 @@ extension GuestAPI {
             return try setRotationLock(locked)
         case "display.auto_lock":
             return GuestLockScreenIdle.describe()
+        case "screen.unlock":
+            return try GuestScreenUnlock.unlock(
+                passcode: optionalString(params, "passcode"),
+                timeout: number(params, "timeout", default: 10),
+            )
         case "audio.volume":
             let category = optionalString(params, "category") ?? "Audio/Video"
             if params["value"] != nil {

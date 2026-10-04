@@ -61,6 +61,7 @@ struct VPhoneLaunchpadControlCommands {
         case "cfw.update-environment": return try await updateGuestEnvironment(request, emit: emit)
         case "guest.send": return try await sendToGuest(request)
         case "guest.rpc": return try await callGuest(request)
+        case "guest.unlock": return try await unlockGuest(request)
         case "exec": return try await exec(request, emit: emit)
         default: throw VPhoneLaunchpadError("\(command.name) is not handled by this Launchpad.")
         }
@@ -721,6 +722,33 @@ struct VPhoneLaunchpadControlCommands {
             "screen": request.flag("screen"),
         ]
         return try await VPhoneLaunchpadGuestSocket.send(object, socketPath: Self.controlSocket(machine))
+    }
+
+    /// vphoned's `screen.unlock`: the display on and the Lock Screen passed,
+    /// whatever state the guest was in.
+    private func unlockGuest(_ request: VPhoneLaunchpadControlRequest) async throws -> Any {
+        let machine = try await machine(request)
+        var params: [String: Any] = [:]
+        if let passcode = request.option("passcode") {
+            params["passcode"] = passcode
+        }
+        if let text = request.option("timeout") {
+            guard let seconds = Double(text), (1 ... 60).contains(seconds) else {
+                throw VPhoneLaunchpadError("--timeout takes 1 to 60 seconds.")
+            }
+            params["timeout"] = seconds
+        }
+        let object: [String: Any] = ["t": "rpc", "method": "screen.unlock", "params": params]
+        do {
+            return try await VPhoneLaunchpadGuestSocket.send(object, socketPath: Self.controlSocket(machine))
+        } catch let error as VPhoneLaunchpadError where error.detail?.contains("Unknown method") == true {
+            // The guest environment is its own layer; an older vphoned stays
+            // in a machine until it is redeployed.
+            throw VPhoneLaunchpadError(
+                "The vphoned in \(machine.name) cannot unlock the screen.",
+                detail: "Its guest environment is older than screen.unlock. Stop the machine and run cfw update-environment with a Core Bundle that has it.",
+            )
+        }
     }
 
     // MARK: - vphone-cli

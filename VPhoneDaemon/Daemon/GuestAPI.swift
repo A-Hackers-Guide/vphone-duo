@@ -100,6 +100,7 @@ enum GuestAPI {
                 "display",
                 "display_orientation",
                 "display_auto_lock",
+                "screen_unlock",
                 "audio",
                 "input_gestures",
                 "ui_inspection",

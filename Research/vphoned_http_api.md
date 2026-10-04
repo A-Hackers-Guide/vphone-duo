@@ -270,7 +270,7 @@ request carries `"force": true`.
 | Area | Methods |
 | --- | --- |
 | Device | `device.snapshot`, `device.info` (snapshot plus network, screen, rotation, brightness, volume, low power, Developer Mode, agent), `device.screen`, `device.network`, `device.ioreg {plane}`, `device.environment`, `device.basebin {archive?}` |
-| Display, audio | `display.brightness {value?}`, `display.rotation {orientation?}`, `display.orientation` (`{degrees, source}`: SpringBoard's interface orientation without a screen capture, for polling; capability `display_orientation`), `display.rotation_lock {locked}`, `display.auto_lock` (`{auto_lock_seconds, never, lock_screen_minimum_seconds}`: Auto-Lock and the Lock Screen timeout vphoned keeps in step with it, see below; capability `display_auto_lock`), `audio.volume {value?, category?}`, `audio.state` |
+| Display, audio | `display.brightness {value?}`, `display.rotation {orientation?}`, `display.orientation` (`{degrees, source}`: SpringBoard's interface orientation without a screen capture, for polling; capability `display_orientation`), `display.rotation_lock {locked}`, `display.auto_lock` (`{auto_lock_seconds, never, lock_screen_minimum_seconds}`: Auto-Lock and the Lock Screen timeout vphoned keeps in step with it, see below; capability `display_auto_lock`), `screen.unlock {passcode?, timeout?}` (`{locked, screen_off, was_locked, was_screen_off}`: the display on and the Lock Screen passed, see below; capability `screen_unlock`), `audio.volume {value?, category?}`, `audio.state` |
 | Input | `input.touch`, `input.hid`, `input.button {name}`, `input.key {name}`, `input.type {text, delay_ms?}`, `input.paste {text}`, `input.tap`, `input.double_tap`, `input.long_press`, `input.swipe`, `input.drag {points}`, `input.touch_sequence {events}` — gesture coordinates are screen points |
 | UI | `ui.tree` (alias `accessibility.tree`), `ui.element_at`, `ui.tap_element`, `ui.wait`, `ui.wait_gone`, `ui.ocr {languages?, min_confidence?}`, `ui.describe`, `screen.screenshot` |
 | Processes | `processes.list {filter?}`, `processes.kill {pid, signal?}` **force**, `memory.jetsam`, `memory.pressure` (only the three kernel memory sysctls, for polling) |
@@ -298,6 +298,16 @@ anything else (`VPhoneDaemon/Daemon/GuestLockScreenIdle.swift`), at startup
 and whenever the settings change. SpringBoard reads the key when it starts, so
 a newly written one holds from the next boot or respring. Measurements:
 `Research/Guest/lock_screen_idle_timer.md`.
+
+`screen.unlock` reads the lock state, then turns the display on with
+`SBSUndimScreen` (no toggle, unlike a power press) and presses Home to dismiss
+the Lock Screen: a passcode-free guest goes to the Home Screen, a guest with a
+passcode gets the passcode pad, into which `passcode` is typed
+(`VPhoneDaemon/Daemon/GuestScreenUnlock.swift`). A lit, unlocked guest returns
+at once; a dark but unlocked one is only woken. A guest with a passcode needs
+`passcode`, entered once and never retried; without it the call fails before
+any key is sent. It needs no private entitlement. `timeout` is 1–60 seconds,
+10 by default. Measurements: `Research/Guest/screen_unlock.md`.
 
 `network.ipv4.get` and `network.ipv4.set` read and write the IPv4 settings of
 one interface (default `en0`) in configd's network preferences,
@@ -345,7 +355,7 @@ Account passwords, boot logo rendering and package installation, removal and
 repository changes are deliberately not exposed. `/v1/health` lists the new
 areas in `capabilities` (`device_info`, `display`, `audio`, `input_gestures`,
 `ui_inspection`, `processes`, `services`, `logs`, `network_capture`,
-`app_details`, `system_control`, `file_tools`, `packages`, `environment_update`, `udid_override`, `setup_skip`, `network_ipv4`, `network_hostname`, `network_static_names`, `network_resolve`, `display_auto_lock`) so a host can hide
+`app_details`, `system_control`, `file_tools`, `packages`, `environment_update`, `udid_override`, `setup_skip`, `network_ipv4`, `network_hostname`, `network_static_names`, `network_resolve`, `display_auto_lock`, `screen_unlock`) so a host can hide
 panels an older agent cannot serve. icli failures reach the caller with
 icli's own error `code` (`failed`, `unavailable`, `device_locked`, …) and
 message.
