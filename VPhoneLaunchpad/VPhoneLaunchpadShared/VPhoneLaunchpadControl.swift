@@ -172,6 +172,8 @@ nonisolated struct VPhoneLaunchpadControlCommand: Sendable {
         summary: "Create a machine through every step, as New Machine does, bound to --bundle (default: the default bundle). --from <step> retries a failed creation from that step."),
         Self(name: "vm.set-bundle", arguments: ["name", "version"], options: ["root"], flags: ["update-environment"],
              summary: "Bind a machine to another installed version; its host programs change at the next start. --update-environment also redeploys that version's guest environment into the stopped machine. The boot chain stays as created."),
+        Self(name: "vm.leases", arguments: [], options: [], flags: ["release"],
+             summary: "DHCP leases on the shared NAT network and the machine that owns each. --release frees the ones iOS guests left with a MAC no machine in any library has, through the root helper."),
 
         Self(name: "cfw.install", arguments: ["name"], options: ["root"], flags: ["keep-artifacts"],
              summary: "Install CFW into a stopped machine with its own bundle, through the root helper."),

@@ -106,6 +106,48 @@ vphone-cli vm config <name> --mac auto     # a new one at the next launch
 A cloned machine keeps the MAC of the original, like its machine identifier.
 Give the clone a new one before running both at once.
 
+## Addresses held by old MACs
+
+In `nat` mode the Mac's DHCP server keeps each address bound to the MAC it
+was given to, even after the lease runs out. It hands that address to anyone
+else only once every other address in the range is taken. Deleting a machine
+or replacing its MAC leaves its address bound to a MAC nothing uses any more,
+and so does every launch made before MACs were saved. New guests then get
+higher and higher addresses, until they reach the fixed addresses picked high
+in the range.
+
+`vm leases` lists the leases on the shared network and who owns each. It
+needs `VPhone.bundle` 2.5 or later:
+
+```sh
+vphone-cli vm leases
+sudo vphone-cli vm leases --release-orphans
+```
+
+An orphan is an iOS or iPadOS guest's lease whose MAC belongs to no machine in
+the library and whose lease has run out. `--release-orphans` removes the
+orphans from `/var/db/dhcpd_leases` and has the DHCP server read the file
+again, so it needs root. It never touches:
+
+- a machine's own lease, even one that ran out while the machine was stopped;
+- a lease that has not run out, such as a running guest's whose MAC was just
+  replaced;
+- leases of other VM apps, or of devices on Internet Sharing.
+
+Machines in another library count only when that library is named too:
+repeat `--library-root` for each. The release refuses to run when a library
+has no machines or a machine's settings cannot be read, since every lease
+there would look orphaned.
+
+In Launchpad, Host Setup shows the count under NAT Network, and Release…
+frees them after an administrator approves. It compares against every
+library Launchpad lists. From the command line:
+
+```sh
+vphone-launchpad-cli vm leases
+vphone-launchpad-cli vm leases --release
+```
+
 ## Fixed address
 
 `--ip` gives the guest a fixed IPv4 address. Without a prefix, `/24` is

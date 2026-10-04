@@ -5,6 +5,7 @@ struct VPhoneLaunchpadHostSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(VPhoneLaunchpadMenuBar.key) private var showsInMenuBar = false
     @State private var showsSkillInstall = false
+    @State private var confirmsRelease = false
 
     private var host: VPhoneLaunchpadHostSetup {
         model.host
@@ -12,6 +13,7 @@ struct VPhoneLaunchpadHostSetupView: View {
 
     var body: some View {
         @Bindable var host = host
+        @Bindable var leases = model.leases
         VPhoneLaunchpadSheet(Text("Host Setup")) {
             form
         } accessory: {
@@ -40,6 +42,18 @@ struct VPhoneLaunchpadHostSetupView: View {
             host.refreshDeveloperTools()
         }
         .errorAlert($host.actionError)
+        .errorAlert($leases.actionError)
+        .task { await model.leases.refresh() }
+        .confirmationDialog(
+            "Release \(model.leases.orphans.count) Addresses?",
+            isPresented: $confirmsRelease,
+        ) {
+            Button("Release") {
+                Task { await model.leases.releaseFromUI() }
+            }
+        } message: {
+            Text("Their leases have run out and no machine in your libraries has their MAC. A guest that comes back with one of these MACs gets a new address.")
+        }
     }
 
     private var form: some View {
@@ -75,6 +89,15 @@ struct VPhoneLaunchpadHostSetupView: View {
                 Text("Advisory")
             } footer: {
                 Text("Advisory checks do not block setup.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                leasesRow
+            } header: {
+                Text("NAT Network")
+            } footer: {
+                Text("The Mac’s DHCP server keeps an address for every guest MAC it has seen, even after the lease runs out. Release frees the addresses of iOS guests no machine uses any more, such as deleted machines. It needs an administrator.")
                     .foregroundStyle(.secondary)
             }
 
@@ -139,6 +162,49 @@ struct VPhoneLaunchpadHostSetupView: View {
                 Button("Skip") { host.setSkipped(check.kind, true) }
                     .help("Continue without this check. The Core Bundle still runs its own checks.")
             }
+        }
+    }
+
+    // MARK: - NAT leases
+
+    private var leasesRow: some View {
+        let leases = model.leases
+        let (status, detail) = leasesStatus
+        return HStack(spacing: 8) {
+            VPhoneLaunchpadStatusIcon(status: status)
+            Text("Addresses held by old guests")
+                .layoutPriority(1)
+            Spacer(minLength: 16)
+            Text(detail)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(detail)
+            if !leases.orphans.isEmpty {
+                Button("Release…") { confirmsRelease = true }
+                    .disabled(leases.isReleasing || !model.canReleaseLeases)
+                    .fixedSize()
+            }
+        }
+    }
+
+    private var leasesStatus: (VPhoneLaunchpadStatus, String) {
+        let leases = model.leases
+        if leases.isReleasing {
+            return (.running, String(localized: "Waiting for administrator approval…"))
+        }
+        switch leases.state {
+        case .unknown, .checking:
+            return (.running, String(localized: "Checking…"))
+        case let .unavailable(reason):
+            return (.pending, reason)
+        case let .failed(reason):
+            return (.warning, reason)
+        case .listed:
+            let count = leases.orphans.count
+            return count == 0
+                ? (.passed, String(localized: "None"))
+                : (.warning, String(localized: "\(count) addresses no machine uses"))
         }
     }
 }

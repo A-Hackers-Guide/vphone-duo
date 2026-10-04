@@ -57,6 +57,7 @@ struct VPhoneLaunchpadControlCommands {
         case "vm.log": return try await log(request)
         case "vm.create": return try await create(request, emit: emit)
         case "vm.set-bundle": return try await setBundle(request, emit: emit)
+        case "vm.leases": return try await leases(request)
         case "cfw.install": return try await installCustomFirmware(request, emit: emit)
         case "cfw.update-environment": return try await updateGuestEnvironment(request, emit: emit)
         case "guest.send": return try await sendToGuest(request)
@@ -693,6 +694,35 @@ struct VPhoneLaunchpadControlCommands {
         }
         library.recordGuestEnvironment(machine, version)
         return ["name": machine.name, "bundle": version, "status": status]
+    }
+
+    // MARK: - DHCP leases
+
+    private func leases(_ request: VPhoneLaunchpadControlRequest) async throws -> Any {
+        let leases = model.leases
+        // The release compares against the machines listed now, so list first.
+        await refreshMachines()
+        if request.flag("release") {
+            let released = try await leases.release()
+            return ["released": released.map(report)]
+        }
+        await leases.refresh()
+        switch leases.state {
+        case let .unavailable(reason), let .failed(reason):
+            throw VPhoneLaunchpadError(reason)
+        default:
+            return leases.leases.map(report)
+        }
+    }
+
+    private func report(_ lease: VPhoneLaunchpadLeases.Lease) -> [String: Any] {
+        var report: [String: Any] = [:]
+        report["address"] = lease.address
+        report["mac"] = lease.mac
+        report["name"] = lease.name
+        report["owner"] = lease.owner
+        report["machine"] = lease.machine
+        return report
     }
 
     // MARK: - Guest

@@ -308,6 +308,32 @@ final class VPhoneLaunchpadHelperClient {
         }
     }
 
+    /// Runs `vm leases --release-orphans --json` as root against the machines
+    /// of `libraryRoots`, and returns the command's JSON output.
+    func releaseOrphanedLeases(bundleVersion: String, libraryRoots: [String]) async throws -> Data {
+        await refresh()
+        if case .outdated = state {
+            try await install()
+        }
+        guard case .ready = state else {
+            throw VPhoneLaunchpadError(String(localized: "Update the privileged helper in Host Setup, then try again."))
+        }
+        let authorization = try await authorizationSession.externalForm()
+        return try await request { proxy, done in
+            proxy.releaseOrphanedLeases(
+                authorization: authorization,
+                bundleVersion: bundleVersion,
+                libraryRoots: libraryRoots,
+            ) { output, message in
+                if let message {
+                    done(.failure(VPhoneLaunchpadError(message)))
+                } else {
+                    done(.success(Data((output ?? "").utf8)))
+                }
+            }
+        }
+    }
+
     /// Never prompts. The helper stops only an install this user started.
     func cancelCustomFirmware() {
         let proxy = currentConnection().remoteObjectProxy as? VPhoneLaunchpadHelperProtocol

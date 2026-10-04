@@ -50,6 +50,7 @@
 
                 model.helper.applyPreview(.notInstalled)
                 model.host.applyPreview(blocked: true)
+                model.leases.applyPreview(orphans: 0)
                 model.bundles.applyPreview(installing: false)
                 await panel(model, .hostSetup, "01-host-setup-first-run", suffix)
 
@@ -64,6 +65,7 @@
                 await panel(model, .coreBundle, "03b-core-bundle-actions", suffix)
                 coreBundleSource = .releases
 
+                model.leases.applyPreview(orphans: 119)
                 await panel(model, .hostSetup, "04-host-setup-passed", suffix)
                 await standalone("04b-skill-install", suffix, size: NSSize(width: 520, height: 460)) {
                     VPhoneLaunchpadSkillInstallView()

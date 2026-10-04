@@ -75,8 +75,9 @@ nonisolated enum VPhoneLaunchpadNames {
     /// reports the identifiers the patch table reads nor takes the arguments
     /// the helper passes. 2.4.0 added the network options of `vm config`
     /// (`--ip`, `--mac`, `--forward`, `--mdns`, `--mac-name`), which a
-    /// machine's Settings pass.
-    private static let minimumBundleComponents = (2, 4, 0)
+    /// machine's Settings pass. 2.5.0 added `vm leases`, which Host Setup
+    /// lists and the helper runs to release orphaned DHCP leases.
+    private static let minimumBundleComponents = (2, 5, 0)
     static let minimumBundleVersion =
         "\(minimumBundleComponents.0).\(minimumBundleComponents.1).\(minimumBundleComponents.2)"
 
