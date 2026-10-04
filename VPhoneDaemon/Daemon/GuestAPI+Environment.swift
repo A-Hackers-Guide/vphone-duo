@@ -16,6 +16,7 @@ extension GuestAPI {
         "libcamfix.dylib",
         "libmisfix.dylib",
         "libhapticsfix.dylib",
+        "libbatteryhealthfix.dylib",
     ]
     static let environmentStaging = "/var/root/Library/Caches/vphone-environment"
 

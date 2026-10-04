@@ -99,12 +99,14 @@ static void vpPrepareLoaderLink(const char *path) {
 // get their loader links prepared.
 static VPInjectionEnvironment vpPrepareChild(const char *path, char *const envp[], const char *kind) {
     const int misFix = vpIsMISFixTarget(path);
-    VPInjectionEnvironment injected = vpInsertHooks(envp, getenv("VPHONE_JB_ROOT"), vpMISFixFor(path));
+    const int batteryHealthFix = vpIsBatteryHealthFixTarget(path);
+    VPInjectionEnvironment injected = vpInsertHooks(envp, getenv("VPHONE_JB_ROOT"), vpInsertedLibraryFor(path));
     if (vpIsInjectionTarget(path) || misFix) {
         vpPrepareLoaderLink(path);
-        char decision[80];
+        char decision[96];
         snprintf(decision, sizeof(decision), "%s%s%s%s", kind, !injected.values ? "unchanged" : "inserted",
-                 misFix ? "+misfix" : "", vpInjectionDisabled(envp) ? "-tweaks-disabled" : "");
+                 misFix ? "+misfix" : batteryHealthFix ? "+batteryhealthfix" : "",
+                 vpInjectionDisabled(envp) ? "-tweaks-disabled" : "");
         vpLogSpawn(path, decision);
     }
     return injected;
