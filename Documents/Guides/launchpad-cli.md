@@ -110,6 +110,7 @@ version while a machine is bound to it; rebind or delete those machines first.
 | `vm wait <name>` / `vm log <name> [--kind create\|dfu\|patch]` | Wait for vphoned; read a console log |
 | `vm create <name> [--bundle <version>] [...] [--device <product-type>] [--from <step>]` | The New Machine pipeline, bound to `--bundle` or the default; `--device` makes an iPad guest, `--from` retries from a step |
 | `vm set-bundle <name> <version> [--update-environment]` | Bind a machine to another installed version. `--update-environment` also redeploys that version's guest environment and needs a stopped machine |
+| `vm leases [--release]` | DHCP leases on the shared NAT network and the machine that owns each. `--release` frees the ones no machine in any library uses, through the helper (see [Networking](networking.md#addresses-held-by-old-macs)) |
 | `cfw install <name>` | Install CFW into a stopped machine with its own bundle, through the helper |
 | `cfw update-environment <name>` | Redeploy the machine's own bundle's guest resources (vphoned, hook dylibs) into it while stopped, through the helper; nothing else changes |
 | `guest send <name> <json>` | One raw `vphone.sock` request (tap, swipe, key, screenshot) |

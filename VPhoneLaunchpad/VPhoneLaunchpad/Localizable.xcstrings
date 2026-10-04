@@ -103,6 +103,159 @@
         }
       }
     },
+    "NAT Network" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "NAT Network" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "NAT ネットワーク" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "NAT 네트워크" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Mạng NAT" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "NAT 网络" } }
+      }
+    },
+    "The Mac’s DHCP server keeps an address for every guest MAC it has seen, even after the lease runs out. Release frees the addresses of iOS guests no machine uses any more, such as deleted machines. It needs an administrator." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The Mac’s DHCP server keeps an address for every guest MAC it has seen, even after the lease runs out. Release frees the addresses of iOS guests no machine uses any more, such as deleted machines. It needs an administrator." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Mac の DHCP サーバーは、一度見たゲストの MAC ごとにアドレスを確保し、リースが切れても手放しません。「解放」は、削除したマシンなど、どのマシンも使っていない iOS ゲストのアドレスを解放します。管理者の承認が必要です。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Mac의 DHCP 서버는 한 번 본 게스트 MAC마다 주소를 잡아 두며, 임대가 만료된 뒤에도 놓지 않습니다. 해제는 삭제한 머신처럼 더 이상 어떤 머신도 쓰지 않는 iOS 게스트의 주소를 풀어 줍니다. 관리자 승인이 필요합니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Máy chủ DHCP của Mac giữ một địa chỉ cho mỗi MAC máy khách từng thấy, kể cả khi hợp đồng thuê đã hết hạn. Giải phóng sẽ thu hồi địa chỉ của các máy khách iOS không còn máy nào dùng, chẳng hạn máy đã xoá. Cần quyền quản trị viên." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Mac 的 DHCP 服务器会为见过的每个客户机 MAC 保留一个地址，租约到期后也不放手。“释放”会收回已经没有机器使用的 iOS 客户机的地址，例如已删除的机器。需要管理员权限。" } }
+      }
+    },
+    "Addresses held by old guests" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Addresses held by old guests" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "古いゲストが保持しているアドレス" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이전 게스트가 점유한 주소" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Địa chỉ do máy khách cũ giữ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "旧客户机占用的地址" } }
+      }
+    },
+    "Release…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Release…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "解放…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "해제…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Giải phóng…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "释放…" } }
+      }
+    },
+    "Release %lld Addresses?" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Release %lld Addresses?" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%lld 個のアドレスを解放しますか?" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "주소 %lld개를 해제하시겠습니까?" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Giải phóng %lld địa chỉ?" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "释放 %lld 个地址？" } }
+      }
+    },
+    "Release" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Release" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "解放" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "해제" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Giải phóng" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "释放" } }
+      }
+    },
+    "Their leases have run out and no machine in your libraries has their MAC. A guest that comes back with one of these MACs gets a new address." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Their leases have run out and no machine in your libraries has their MAC. A guest that comes back with one of these MACs gets a new address." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "これらのリースは期限切れで、ライブラリのどのマシンもその MAC を使っていません。これらの MAC で戻ってきたゲストには新しいアドレスが割り当てられます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 임대는 만료되었고 라이브러리의 어떤 머신도 해당 MAC을 쓰지 않습니다. 이 MAC으로 다시 나타나는 게스트는 새 주소를 받습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Các hợp đồng thuê này đã hết hạn và không máy nào trong thư viện dùng MAC của chúng. Máy khách quay lại với một trong các MAC này sẽ nhận địa chỉ mới." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这些租约已经到期，资料库中也没有机器使用对应的 MAC。之后若有客户机以这些 MAC 回来，会分配到新地址。" } }
+      }
+    },
+    "%lld addresses no machine uses" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld addresses no machine uses" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "どのマシンも使っていないアドレス %lld 個" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "어떤 머신도 쓰지 않는 주소 %lld개" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%lld địa chỉ không máy nào dùng" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 个地址无机器使用" } }
+      }
+    },
+    "Needs a Core Bundle" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Needs a Core Bundle" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Core Bundle が必要です" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Core Bundle이 필요합니다" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cần Core Bundle" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要 Core Bundle" } }
+      }
+    },
+    "No machines" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No machines" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "マシンがありません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "머신 없음" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không có máy" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有机器" } }
+      }
+    },
+    "vm leases failed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "vm leases failed" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "vm leases に失敗しました" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "vm leases 실패" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "vm leases thất bại" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "vm leases 执行失败" } }
+      }
+    },
+    "Already releasing DHCP leases." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Already releasing DHCP leases." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "DHCP リースを解放中です。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이미 DHCP 임대를 해제하는 중입니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang giải phóng hợp đồng thuê DHCP." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在释放 DHCP 租约。" } }
+      }
+    },
+    "Install a Core Bundle first." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Install a Core Bundle first." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "先に Core Bundle をインストールしてください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "먼저 Core Bundle을 설치하십시오." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hãy cài Core Bundle trước." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请先安装 Core Bundle。" } }
+      }
+    },
+    "No machines to compare against." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No machines to compare against." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "比較するマシンがありません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "비교할 머신이 없습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không có máy nào để đối chiếu." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有可用于比对的机器。" } }
+      }
+    },
+    "With no machine listed, every guest's lease would look orphaned." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "With no machine listed, every guest's lease would look orphaned." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "一覧にマシンがないと、すべてのゲストのリースが孤立したものに見えてしまいます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "목록에 머신이 없으면 모든 게스트의 임대가 고아로 보입니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Khi không có máy nào trong danh sách, mọi hợp đồng thuê của máy khách đều trông như mồ côi." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有列出任何机器时，所有客户机的租约都会被当作孤儿。" } }
+      }
+    },
+    "Unable to Release DHCP Leases" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to Release DHCP Leases" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "DHCP リースを解放できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "DHCP 임대를 해제할 수 없음" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không thể giải phóng hợp đồng thuê DHCP" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法释放 DHCP 租约" } }
+      }
+    },
+    "Update the privileged helper in Host Setup, then try again." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Update the privileged helper in Host Setup, then try again." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "「ホスト設定」で特権ヘルパーをアップデートしてから、もう一度お試しください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "호스트 설정에서 권한 있는 도우미를 업데이트한 후 다시 시도하십시오." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hãy cập nhật trình trợ giúp đặc quyền trong Thiết lập máy chủ, rồi thử lại." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请在“主机设置”中更新特权辅助工具，然后重试。" } }
+      }
+    },
     "" : {
 
     },

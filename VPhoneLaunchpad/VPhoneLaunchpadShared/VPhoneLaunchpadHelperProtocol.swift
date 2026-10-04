@@ -70,6 +70,18 @@ nonisolated protocol VPhoneLaunchpadHelperProtocol {
         reply: @escaping @Sendable (Int32, String?) -> Void,
     )
 
+    /// Runs `vphone-cli vm leases --release-orphans --json` from a store
+    /// bundle as root, against the machines of `libraryRoots`, each of which
+    /// the caller must own. It removes the DHCP leases on the shared NAT
+    /// network that iOS guests left behind with a MAC no machine has. Replies
+    /// with the command's JSON output, or with an error message.
+    func releaseOrphanedLeases(
+        authorization: Data,
+        bundleVersion: String,
+        libraryRoots: [String],
+        reply: @escaping @Sendable (String?, String?) -> Void,
+    )
+
     /// Sends SIGINT to a running CFW install started by the same user. It
     /// needs no authorization: it can only stop the caller's own install.
     func cancelCustomFirmware(reply: @escaping @Sendable () -> Void)

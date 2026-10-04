@@ -28,6 +28,35 @@ MAC on several VMs, for example from a manifest template: two guests on one
 L2 network with one MAC cannot both work. Each VM now gets its own, and a clone
 keeps the original's, like its machine identifier.
 
+## Leases held by MACs no machine uses
+
+Read from bootp-534.120.2 (`bootpd.tproj/dhcpd.c`, `bootplib/NICache.c`) and
+checked against `/var/db/dhcpd_leases` on 2026-10-04.
+
+- bootpd looks a client up by its identifier (`1,<mac>`) first. An entry is
+  a binding: an expired lease is renewed in place, with the same address.
+- A new client gets an address no entry holds (`acquire_ip`). Expired entries
+  are reclaimed (`DHCPLeases_reclaim`, oldest first) only when that fails, so
+  a full pool reclaims a stopped machine's lease as readily as a dead one's.
+- On the test Mac the file held 130 entries, `192.168.64.2` to `.131`: 125
+  `iPhone`/`iPad` entries for MACs no machine had (random MACs from launches
+  before `macAddress` was saved, and deleted test machines), the five
+  machines' own, and four `ManagedlMachine` entries from another app.
+- The `name` is the client's host name option. IPConfiguration sends the
+  device type (`get_device_type`) when the network is private, which is how
+  iOS treats it, so a vphone guest is always `iPhone` or `iPad`, whatever
+  `--mdns` set. `vm leases` uses that, the shared subnet, and an expired lease
+  to tell a guest's dead binding from another app's or a live one.
+- bootpd re-reads the file on SIGHUP, before it handles the next packet, and
+  writes it only while handling one (`<file>-` then `rename`). It is started
+  on demand by launchd (`bootps.plist`) and exits when idle. `--release-orphans`
+  checks the file did not change between read and rename, renames a copy
+  with the same owner and mode over it, sends SIGHUP to any running bootpd,
+  and posts `com.apple.bootpd.DHCPLeaseList` as bootpd does.
+- DHCPRELEASE from the host is no substitute: bootpd answers it by setting
+  the entry's lease to now (`dhcp_msgtype_release_e`), which is exactly the
+  state of every orphan already.
+
 ## Fixed address in nat mode: the shared network only
 
 vphoned writes a manual IPv4 configuration into the guest's network

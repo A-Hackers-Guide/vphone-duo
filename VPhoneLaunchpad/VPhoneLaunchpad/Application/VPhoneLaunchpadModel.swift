@@ -32,6 +32,7 @@ final class VPhoneLaunchpadModel {
     let host: VPhoneLaunchpadHostSetup
     let bundles: VPhoneLaunchpadCoreBundle
     let machines: VPhoneLaunchpadMachineLibrary
+    let leases: VPhoneLaunchpadLeases
 
     var panel: Panel?
     /// The panel to open once the sheet on screen has closed.
@@ -43,6 +44,7 @@ final class VPhoneLaunchpadModel {
         host = VPhoneLaunchpadHostSetup(helper: helper, libraryRoot: libraryRoot)
         bundles = VPhoneLaunchpadCoreBundle(helper: helper, history: history)
         machines = VPhoneLaunchpadMachineLibrary(bundles: bundles, helper: helper)
+        leases = VPhoneLaunchpadLeases(bundles: bundles, machines: machines, helper: helper)
         bundles.boundMachines = { [machines] version in machines.machineNames(boundTo: version) }
     }
 
@@ -88,6 +90,15 @@ final class VPhoneLaunchpadModel {
             return false
         }
         return host.isDeveloperToolAuthorized && !bundles.isInstalling
+    }
+
+    /// Releasing DHCP leases runs through the helper; an outdated one is
+    /// replaced on the way.
+    var canReleaseLeases: Bool {
+        switch helper.state {
+        case .ready, .outdated: true
+        default: false
+        }
     }
 
     // MARK: - Lifecycle
@@ -151,6 +162,7 @@ final class VPhoneLaunchpadModel {
 
     func refreshHost() async {
         await host.refresh()
+        await leases.refresh()
     }
 
     // MARK: - Bundle install

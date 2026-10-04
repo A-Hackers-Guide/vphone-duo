@@ -177,6 +177,71 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
         }
     }
 
+    // MARK: - DHCP leases
+
+    func releaseOrphanedLeases(
+        authorization: Data,
+        bundleVersion: String,
+        libraryRoots: [String],
+        reply: @escaping @Sendable (String?, String?) -> Void,
+    ) {
+        let callerUID = callerUID
+        let callerGID = callerGID
+        // Not on `work`: a bundle install queued there would hold it up, and
+        // the lease list has its own guard against a concurrent writer.
+        DispatchQueue.global(qos: .userInitiated).async {
+            let request: VPhoneLaunchpadHelperLeasesRequest
+            do {
+                try VPhoneLaunchpadHelperAuthorization.require(authorization)
+                request = try VPhoneLaunchpadHelperLeasesRequest(
+                    bundleVersion: bundleVersion,
+                    libraryRoots: libraryRoots,
+                    callerUID: callerUID,
+                    callerGID: callerGID,
+                )
+            } catch {
+                reply(nil, error.localizedDescription)
+                return
+            }
+
+            let process = Process()
+            process.executableURL = request.executable
+            process.arguments = request.arguments
+            process.environment = request.environment
+            process.currentDirectoryURL = URL(fileURLWithPath: "/", isDirectory: true)
+            process.standardInput = FileHandle.nullDevice
+            let output = Pipe()
+            let errors = Pipe()
+            process.standardOutput = output
+            process.standardError = errors
+            do {
+                try process.run()
+            } catch {
+                reply(nil, "Unable to start vphone-cli. \(error.localizedDescription)")
+                return
+            }
+            // stderr is drained alongside, so a full pipe cannot stall the child.
+            nonisolated(unsafe) var errorData = Data()
+            let drained = DispatchGroup()
+            DispatchQueue.global().async(group: drained) {
+                errorData = errors.fileHandleForReading.readDataToEndOfFile()
+            }
+            let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            drained.wait()
+            process.waitUntilExit()
+            guard process.terminationReason == .exit, process.terminationStatus == 0 else {
+                // ArgumentParser puts the reason on an "Error: " line, then usage.
+                let message = String(decoding: errorData, as: UTF8.self)
+                    .split(separator: "\n")
+                    .first { $0.hasPrefix("Error: ") }
+                    .map { String($0.dropFirst("Error: ".count)) }
+                reply(nil, message ?? "Unable to release the DHCP leases (vphone-cli exited with \(process.terminationStatus)).")
+                return
+            }
+            reply(text, nil)
+        }
+    }
+
     func cancelCustomFirmware(reply: @escaping @Sendable () -> Void) {
         let callerUID = callerUID
         // Not on `work`: a bundle install queued there must not delay a cancel.
