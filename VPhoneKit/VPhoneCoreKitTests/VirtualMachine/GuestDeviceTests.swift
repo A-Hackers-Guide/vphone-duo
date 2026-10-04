@@ -26,7 +26,7 @@ struct GuestDeviceTests {
     }
 
     @Test
-    func `a VM made before iPad guests is an iPhone17,3`() throws {
+    func `a VM made before iPad guests is an iPhone17,3`() {
         let manifest = VPhoneVirtualMachineManifest.newVM()
         #expect(manifest.guestProductType == nil)
         #expect(manifest.guestDevice == .iPhone17_3)

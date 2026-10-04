@@ -350,7 +350,7 @@ struct NetworkPlanTests {
     @Test func `the Mac's name can be turned off`() throws {
         let off = try VPhoneNetworking.merge(into: .default, edit: VPhoneNetworkEdit(resolvesMacName: false), host: host)
         #expect(off.resolvesMacName == false)
-        #expect(VPhoneNetworking.macStaticNames(plan: try VPhoneNetworking.plan(off, host: host), macName: "Lab-Mac").isEmpty)
+        #expect(try VPhoneNetworking.macStaticNames(plan: VPhoneNetworking.plan(off, host: host), macName: "Lab-Mac").isEmpty)
         let on = try VPhoneNetworking.merge(into: off, edit: VPhoneNetworkEdit(resolvesMacName: true), host: host)
         #expect(on.resolvesMacName == nil)
         #expect(try VPhoneNetworking.plan(on, host: host).resolvesMacName)
@@ -389,7 +389,7 @@ struct NetworkPlanTests {
 
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .xml
-        let plain = String(decoding: try encoder.encode(decoded), as: UTF8.self)
+        let plain = try String(decoding: encoder.encode(decoded), as: UTF8.self)
         #expect(!plain.contains("ipv4"))
         #expect(!plain.contains("portForwards"))
 

@@ -27,7 +27,7 @@ extension GuestAPI {
         case "network.ipv4.set":
             return try networkIPv4(interface: optionalString(params, "interface") ?? "en0", set: params)
         case "network.resolve":
-            let port = (params["port"] as? NSNumber).map { $0.intValue }
+            let port = (params["port"] as? NSNumber).map(\.intValue)
             let family: Int32 = switch optionalString(params, "family") {
             case "ipv4": AF_INET
             case "ipv6": AF_INET6
@@ -303,4 +303,3 @@ extension GuestAPI {
         return outcome
     }
 }
-

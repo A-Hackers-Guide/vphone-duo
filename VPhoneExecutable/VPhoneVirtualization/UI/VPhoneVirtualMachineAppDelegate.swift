@@ -13,6 +13,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
     private var keychainWindowController: VPhoneKeychainWindowController?
     private var appWindowController: VPhoneAppWindowController?
     private var locationProvider: VPhoneLocationProvider?
+    private var timeZoneSync: VPhoneTimeZoneSync?
     private var hostAutomationServer: VPhoneHostAutomationServer?
     private var cameraServer: VPhoneCameraServer?
     private var apiProxy: VPhoneAPIProxy?
@@ -101,6 +102,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
 
             let provider = VPhoneLocationProvider(control: control)
             locationProvider = provider
+            timeZoneSync = VPhoneTimeZoneSync(control: control)
 
             let camServer = VPhoneCameraServer()
             cameraServer = camServer
@@ -211,7 +213,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
             menuController = mc
 
             // Wire location toggle through onConnect/onDisconnect
-            control.onConnect = { [weak self, weak mc, weak provider = locationProvider] caps in
+            control.onConnect = { [weak self, weak mc, weak provider = locationProvider, weak timeZoneSync] caps in
                 mc?.updateConnectAvailability(available: true)
                 mc?.updateInstallAvailability(available: caps.contains("ipa_install"))
                 mc?.updateBootstrapAvailability(available: caps.contains("bootstrap_install"))
@@ -234,11 +236,14 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 }
                 mc?.syncBatteryFromHost()
                 mc?.syncLowPowerModeFromHost()
+                if caps.contains("timezone") {
+                    timeZoneSync?.start()
+                }
                 Task { @MainActor [weak self] in
                     await self?.installPackageIfRequested(caps: caps)
                 }
             }
-            control.onDisconnect = { [weak mc, weak provider = locationProvider] in
+            control.onDisconnect = { [weak mc, weak provider = locationProvider, weak timeZoneSync] in
                 mc?.updateConnectAvailability(available: false)
                 mc?.updateInstallAvailability(available: false)
                 mc?.updateBootstrapAvailability(available: false)
@@ -253,22 +258,27 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 provider?.stopReplay()
                 provider?.stopForwarding()
                 mc?.updateLocationCapability(available: false)
+                timeZoneSync?.stop()
             }
         } else if !command.dfu {
             // Headless mode: auto-start location as before (no menu exists)
-            control.onConnect = { [weak self, weak provider = locationProvider] caps in
+            control.onConnect = { [weak self, weak provider = locationProvider, weak timeZoneSync] caps in
                 if caps.contains("location") {
                     provider?.startForwarding()
                 } else {
                     print("[location] guest does not support location simulation")
                 }
+                if caps.contains("timezone") {
+                    timeZoneSync?.start()
+                }
                 Task { @MainActor [weak self] in
                     await self?.installPackageIfRequested(caps: caps)
                 }
             }
-            control.onDisconnect = { [weak provider = locationProvider] in
+            control.onDisconnect = { [weak provider = locationProvider, weak timeZoneSync] in
                 provider?.stopReplay()
                 provider?.stopForwarding()
+                timeZoneSync?.stop()
             }
         }
 
@@ -308,11 +318,10 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         }
         guard !plan.portForwards.isEmpty else { return }
 
-        let destination: VPhonePortForwarder.Destination
-        if case .tunnel = plan.attachment, let network = vm.tunnelNetwork {
-            destination = .tunnel(network)
+        let destination: VPhonePortForwarder.Destination = if case .tunnel = plan.attachment, let network = vm.tunnelNetwork {
+            .tunnel(network)
         } else {
-            destination = .direct(plan.forwardingAddress)
+            .direct(plan.forwardingAddress)
         }
         let forwarder = VPhonePortForwarder(forwards: plan.portForwards, destination: destination)
         for failure in forwarder.start() {
@@ -390,11 +399,14 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         stopControlServices()
         locationProvider?.stopForwarding()
         locationProvider?.stopReplay()
+        timeZoneSync?.stop()
         cameraServer?.disconnect()
         menuController?.stopBatteryMonitoring()
         windowController?.closeForRestart()
         // Tool windows belong to the old guest connection too.
-        for window in NSApp.windows { window.close() }
+        for window in NSApp.windows {
+            window.close()
+        }
         NSApp.mainMenu = nil
         windowController = nil
         menuController = nil
@@ -402,6 +414,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         keychainWindowController = nil
         appWindowController = nil
         locationProvider = nil
+        timeZoneSync = nil
         cameraServer = nil
         hostAutomationServer = nil
         apiProxy = nil

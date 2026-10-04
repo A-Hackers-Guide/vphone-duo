@@ -533,6 +533,15 @@ final class VPhoneGuestControl {
         return try await call("bootstrap.uninstall", params: ["roots": roots, "reboot": reboot, "force": true])
     }
 
+    /// `uicache -a` for the bootstrap: vphoned registers every app under the
+    /// bootstrap's /Applications again through LaunchServices.
+    func rebuildBootstrapAppRegistrations() async throws -> [String: Any] {
+        guard guestCapabilities.contains("bootstrap_uninstall") else {
+            throw ControlError.unsupportedCapability("bootstrap_uninstall")
+        }
+        return try await call("system.uicache")
+    }
+
     /// Asks the guest to restart. The guest usually restarts before it can
     /// reply, so a dropped connection is the expected result.
     func restartGuest() async throws {

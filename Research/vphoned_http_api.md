@@ -173,7 +173,7 @@ shows every path in a destructive confirmation alert before sending the request.
 ## HTTP and WebSocket contract
 
 JSON resource routes cover device state, apps, input, location, Developer Mode, low power
-mode, clipboard, file listing, and keychain. `GET/PUT
+mode, time zone, clipboard, file listing, and keychain. `GET/PUT
 /v1/files/content?path=<absolute-guest-path>` transfer bytes with
 `application/octet-stream`; upload writes to a temporary file in the same
 directory then renames it after all chunks have been written. JSON bodies
@@ -279,7 +279,7 @@ request carries `"force": true`.
 | Darwin notifications | `notify.post {name, state?}` (`postDarwinNotification`; `state` is a UInt64, as a number or a decimal string, stored before the post), `notify.state {name}` (`darwinNotificationState`) |
 | Network, security | `network.capture {seconds, interface?, filter?}` (writes a pcap in the guest scratch directory and returns its path), `network.ipv4.get {interface?}`, `network.ipv4.set {interface?, method, address?, subnet_mask?, router?, dns?}`, `network.hostname.get`, `network.hostname.set {local_host_name?}`, `network.static_names.get`, `network.static_names.set {entries}`, `network.resolve {host, family?, port?, first_only?, timeout_ms?}` (see below), `security.ssl_killswitch` |
 | Apps | `apps.list`, `search`, `refresh`, `launch`, `terminate`, `foreground`, `open_url`, `install`, `info`, `binary`, `data_dir`, `url_schemes`, `handlers`, `registration`, `register`, `network_policy {repair?}`; `apps.uninstall`, `unregister`, `unregister_dir` **force** |
-| System | `system.uicache`, `system.system_apps {visible?}`, `system.respring` **force**, `system.reboot {userspace?}` **force**, `developer_mode.status`, `developer_mode.enable`, `power.low_power_mode`, `diagnostics.self_test` |
+| System | `system.uicache`, `system.system_apps {visible?}`, `system.respring` **force**, `system.reboot {userspace?}` **force**, `developer_mode.status`, `developer_mode.enable`, `power.low_power_mode`, `time.timezone {identifier?, automatic?}` (see below), `diagnostics.self_test` |
 | Files | `files.list`, `mkdir`, `remove`, `rename`, `read {binary?, limit?}`, `write`, `find`, `copy`, `symlink`, `chmod`, `chown`, `plist`, `plist_set {value \| remove}` |
 | Preferences, clipboard, location | `settings.get/set/delete`, `clipboard.get/set/clear`, `location.set/clear/current` |
 | Keychain | `keychain.list {class?}`, `add`, `delete`, `get`, `update`, `database` |
@@ -318,6 +318,20 @@ at once; a dark but unlocked one is only woken. A guest with a passcode needs
 `passcode`, entered once and never retried; without it the call fails before
 any key is sent. It needs no private entitlement. `timeout` is 1–60 seconds,
 10 by default. Measurements: `Research/Guest/screen_unlock.md`.
+
+`time.timezone` (capability `timezone`; REST `GET/PUT /v1/timezone`) returns
+`{identifier, automatic, seconds_from_gmt}`: the Olson name
+`/var/db/timezone/localtime` points to under `/var/db/timezone/zoneinfo`, and
+whether timed sets the zone automatically. `{identifier}` pins the zone: it turns
+the automatic time zone off through CoreTime (`TMSetAutomaticTimeZoneEnabled`,
+which timed accepts only with the `com.apple.timed` entitlement) and asks
+tzlinkd to re-point the link through libutil's `tzlink` (`com.apple.tzlink.allow`);
+tzlinkd then posts `SignificantTimeChangeNotification`, and notifyd's
+`monitor` on the link (`/etc/notify.conf`) posts `com.apple.system.timezone`,
+so SpringBoard's clock changes at once. `{automatic: true}` hands the zone
+back to timed. Both add `changed`. `vphone-vm` sends the Mac's zone after
+every connect and whenever the Mac's zone changes (`VPhoneTimeZoneSync`), so
+the guest's clock reads the same local time as the host.
 
 `network.ipv4.get` and `network.ipv4.set` read and write the IPv4 settings of
 one interface (default `en0`) in configd's network preferences,

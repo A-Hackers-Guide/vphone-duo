@@ -101,17 +101,17 @@ enum VPhoneHostKeyEvents {
     private static func send(_ type: NSEvent.EventType, keyCode: UInt16, flags: NSEvent.ModifierFlags, in window: NSWindow) {
         guard let view = window.firstResponder as? VPhoneVirtualMachineView ?? window.contentView?.firstVMView,
               let event = NSEvent.keyEvent(
-            with: type,
-            location: .zero,
-            modifierFlags: flags,
-            timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: window.windowNumber,
-            context: nil,
-            characters: "",
-            charactersIgnoringModifiers: "",
-            isARepeat: false,
-            keyCode: keyCode,
-        ) else { return }
+                  with: type,
+                  location: .zero,
+                  modifierFlags: flags,
+                  timestamp: ProcessInfo.processInfo.systemUptime,
+                  windowNumber: window.windowNumber,
+                  context: nil,
+                  characters: "",
+                  charactersIgnoringModifiers: "",
+                  isARepeat: false,
+                  keyCode: keyCode,
+              ) else { return }
         if (NSApp as? VPhoneApplication)?.takeKeyEvent(event, view: view) == true {
             return
         }
@@ -126,9 +126,13 @@ enum VPhoneHostKeyEvents {
 private extension NSView {
     /// The VM view inside this view, when the window's first responder is not it.
     var firstVMView: VPhoneVirtualMachineView? {
-        if let view = self as? VPhoneVirtualMachineView { return view }
+        if let view = self as? VPhoneVirtualMachineView {
+            return view
+        }
         for child in subviews {
-            if let view = child.firstVMView { return view }
+            if let view = child.firstVMView {
+                return view
+            }
         }
         return nil
     }

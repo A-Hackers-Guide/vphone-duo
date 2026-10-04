@@ -39,7 +39,7 @@ final class VPhoneHostHotKeys {
         let setEnabled: SetEnabled
     }
 
-    nonisolated(unsafe) private static let skyLight: SkyLight? = {
+    private nonisolated(unsafe) static let skyLight: SkyLight? = {
         guard let handle = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_NOW),
               let get = dlsym(handle, "CGSGetSymbolicHotKeyValue"),
               let isEnabled = dlsym(handle, "CGSIsSymbolicHotKeyEnabled"),
@@ -53,10 +53,10 @@ final class VPhoneHostHotKeys {
     }()
 
     /// The hot keys this process turned off. Read at exit, from `atexit`.
-    nonisolated(unsafe) private static var suspended: [Int32] = []
+    private nonisolated(unsafe) static var suspended: [Int32] = []
 
-    nonisolated private static let spaceKeyCode: UInt16 = 0x31
-    nonisolated private static let functionModifier: UInt32 = 0x80_0000
+    private nonisolated static let spaceKeyCode: UInt16 = 0x31
+    private nonisolated static let functionModifier: UInt32 = 0x800000
     /// Symbolic hot key identifiers run well below this.
     private static let identifierLimit: Int32 = 512
 
@@ -91,7 +91,7 @@ final class VPhoneHostHotKeys {
         Self.resumeSuspended()
     }
 
-    nonisolated private static func resumeSuspended() {
+    private nonisolated static func resumeSuspended() {
         guard !suspended.isEmpty, let skyLight else { return }
         for identifier in suspended {
             _ = skyLight.setEnabled(identifier, true)
@@ -120,17 +120,17 @@ final class VPhoneHostHotKeys {
     }
 
     /// Shift, Control, Option, Command, fn (`NSEvent.ModifierFlags`' bits).
-    nonisolated private static let deviceIndependentModifiers: UInt32 = 0xFF_0000
+    private nonisolated static let deviceIndependentModifiers: UInt32 = 0xFF0000
 
     // MARK: - Crash Recovery
 
-    nonisolated private static var recordURL: URL {
+    private nonisolated static var recordURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("vphone", isDirectory: true)
             .appendingPathComponent("suspended-hotkeys.plist")
     }
 
-    nonisolated private static func record(_ identifiers: [Int32]) {
+    private nonisolated static func record(_ identifiers: [Int32]) {
         let url = recordURL
         if identifiers.isEmpty {
             try? FileManager.default.removeItem(at: url)

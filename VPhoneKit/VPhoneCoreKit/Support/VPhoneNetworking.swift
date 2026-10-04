@@ -549,7 +549,7 @@ public enum VPhoneNetworking {
             forwards.removeAll { forward in
                 forward.description == name
                     || String(forward.hostPort) == name
-                    || "\(forward.transport.rawValue):\(forward.hostPort)" == name
+                    || name == "\(forward.transport.rawValue):\(forward.hostPort)"
                     || (try? parsePortForward(name)) == forward
             }
             if forwards.count == before {
@@ -561,13 +561,13 @@ public enum VPhoneNetworking {
             forwards.append(forward)
         }
 
-        let merged = NetworkConfig(
+        let merged = try NetworkConfig(
             mode: newMode,
             macAddress: mac,
             bridgeInterface: newBridge,
             ipv4: ipv4,
             portForwards: forwards.isEmpty ? nil : forwards,
-            localHostName: try edit.localHostName.map { try $0.map(validLocalHostName) } ?? current.localHostName,
+            localHostName: edit.localHostName.map { try $0.map(validLocalHostName) } ?? current.localHostName,
             // On is the default, so it is stored as an absent key.
             resolvesMacName: edit.resolvesMacName.map { $0 ? nil : false } ?? current.resolvesMacName,
         )
@@ -723,8 +723,7 @@ public enum VPhoneNetworking {
 
         case .off:
             return VPhoneNetworkPlan(attachment: .none, macAddress: nil, guestIPv4: nil, portForwards: [], localHostName: localHostName,
-                resolvesMacName: false, macAddressForGuest: nil, forwardingAddress: nil,
-            )
+                                     resolvesMacName: false, macAddressForGuest: nil, forwardingAddress: nil)
 
         case .nat:
             guard let resolved else {

@@ -484,9 +484,9 @@ public final class DyldSharedCacheChunkSet {
             .filter { $0.hasPrefix(prefix) }
             .filter { !$0.hasSuffix(".symbols") && !$0.hasSuffix(".map") }
 
-        /// Base file first, then numerically by sub-cache index. Files whose
-        /// suffix is not a bare number (`.75.dylddata`, `.atlas`) sort after,
-        /// by name — they still carry mappings and must not be dropped.
+        // Base file first, then numerically by sub-cache index. Files whose
+        // suffix is not a bare number (`.75.dylddata`, `.atlas`) sort after,
+        // by name — they still carry mappings and must not be dropped.
         func sortKey(_ name: String) -> (Int, Int, String) {
             if name == prefix {
                 return (0, -1, name)
