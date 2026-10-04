@@ -45,6 +45,15 @@ extension VPhoneMenuController {
         uninstallNoRestart.isEnabled = false
         uninstallBootstrapNoRestartItem = uninstallNoRestart
         menu.addItem(uninstallNoRestart)
+
+        let rebuild = makeItem(
+            "Rebuild App Registrations",
+            action: #selector(rebuildAppRegistrations),
+            symbol: "arrow.clockwise.circle",
+        )
+        rebuild.isEnabled = false
+        rebuildAppRegistrationsItem = rebuild
+        menu.addItem(rebuild)
     }
 
     func updateBootstrapAvailability(available: Bool) {
@@ -57,6 +66,7 @@ extension VPhoneMenuController {
         let enabled = available && !isInstallingBootstrap && !isUninstallingBootstrap
         uninstallBootstrapItem?.isEnabled = enabled
         uninstallBootstrapNoRestartItem?.isEnabled = enabled
+        rebuildAppRegistrationsItem?.isEnabled = enabled && !isRebuildingAppRegistrations
     }
 
     @objc func installBootstrap() {
@@ -141,6 +151,7 @@ extension VPhoneMenuController {
         installBootstrapFromFileItem?.isEnabled = false
         uninstallBootstrapItem?.isEnabled = false
         uninstallBootstrapNoRestartItem?.isEnabled = false
+        rebuildAppRegistrationsItem?.isEnabled = false
         let alert = NSAlert()
         alert.messageText = VPhoneLocalization.text("Install Bootstrap")
         alert.informativeText = if let localURL {
@@ -327,6 +338,58 @@ extension VPhoneMenuController {
         updateBootstrapUninstallAvailability(
             available: control.isConnected && control.guestCapabilities.contains("bootstrap_uninstall"),
         )
+    }
+
+    // MARK: - App Registrations
+
+    /// `uicache -a`: registers apps added to or updated in the bootstrap's
+    /// /Applications and removes records of apps deleted from it.
+    @objc func rebuildAppRegistrations() {
+        guard !isInstallingBootstrap, !isUninstallingBootstrap, !isRebuildingAppRegistrations else { return }
+        isRebuildingAppRegistrations = true
+        rebuildAppRegistrationsItem?.isEnabled = false
+        Task {
+            defer {
+                isRebuildingAppRegistrations = false
+                updateBootstrapUninstallAvailability(
+                    available: control.isConnected && control.guestCapabilities.contains("bootstrap_uninstall"),
+                )
+            }
+            guard await control.completedBootstrap() != nil else {
+                VPhoneAlert.present(
+                    title: "Rebuild App Registrations",
+                    message: "No bootstrap environment was found.",
+                    style: .informational,
+                )
+                return
+            }
+            do {
+                let result = try await control.rebuildBootstrapAppRegistrations()
+                let count = { (key: String) in String((result[key] as? [Any])?.count ?? 0) }
+                VPhoneAlert.present(
+                    title: "Rebuild App Registrations",
+                    message: VPhoneLocalization.format(
+                        "Registered %1$@, removed %2$@, %3$@ unchanged.",
+                        count("registered"),
+                        count("unregistered"),
+                        count("unchanged"),
+                    ),
+                    style: .informational,
+                )
+            } catch let VPhoneGuestControl.ControlError.guestError(message) where !message.isEmpty {
+                VPhoneAlert.present(
+                    title: "Unable to Rebuild App Registrations",
+                    message: VPhoneLocalization.format("Unable to rebuild app registrations.\n\n%@", message),
+                    style: .warning,
+                )
+            } catch {
+                VPhoneAlert.present(
+                    title: "Unable to Rebuild App Registrations",
+                    message: "Unable to rebuild app registrations. Check that the guest agent is connected, then try again.",
+                    style: .warning,
+                )
+            }
+        }
     }
 
     private func updateBootstrapProgress(
