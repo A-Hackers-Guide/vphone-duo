@@ -10,9 +10,9 @@
 // recorded in `Research/Guest/virtio_sound.md` — that covers the mute-set
 // patch this suite's second half names.
 
+@testable import FirmwarePatcher
 import Foundation
 import Testing
-@testable import FirmwarePatcher
 import VPhonePatchKit
 
 @Suite("CustomFirmwareVirtualAudio")
@@ -20,9 +20,10 @@ struct CustomFirmwareVirtualAudioTests {
     /// Not a Mach-O at all.
     static let junk = Data(repeating: 0x41, count: 4096)
 
-    @Test("a binary without the message is refused, not searched past",
-          arguments: [Self.junk, Data()])
-    func refusesBinariesWithoutTheSite(_ input: Data) throws {
+    @Test(
+        arguments: [Self.junk, Data()],
+    )
+    func `a binary without the message is refused, not searched past`(_ input: Data) throws {
         var data = input
         #expect(throws: PatcherError.self) {
             try CustomFirmwareVirtualAudio.patch(
@@ -34,15 +35,16 @@ struct CustomFirmwareVirtualAudioTests {
         }
     }
 
-    @Test("the message string is the anchor the records name")
-    func messageIsStable() {
+    @Test
+    func `the message string is the anchor the records name`() {
         #expect(CustomFirmwareVirtualAudio.message == "No default VAD present")
         #expect(CustomFirmwareVirtualAudio.patchID == "system-virtualaudio-cfw-speaker_route_throws")
     }
 
-    @Test("a binary without the mute-set log is refused, not searched past",
-          arguments: [Self.junk, Data()])
-    func refusesBinariesWithoutTheMuteSetSite(_ input: Data) throws {
+    @Test(
+        arguments: [Self.junk, Data()],
+    )
+    func `a binary without the mute-set log is refused, not searched past`(_ input: Data) throws {
         var data = input
         #expect(throws: PatcherError.self) {
             try CustomFirmwareVirtualAudio.patchMuteSet(
@@ -54,16 +56,17 @@ struct CustomFirmwareVirtualAudioTests {
         }
     }
 
-    @Test("the mute-set anchor strings and record identity are stable")
-    func muteSetIdentityIsStable() {
+    @Test
+    func `the mute-set anchor strings and record identity are stable`() {
         #expect(CustomFirmwareVirtualAudio.muteSetMessage == "Set mute value of %u on HAL device")
         #expect(CustomFirmwareVirtualAudio.muteSetException == "Unable to set property data.")
         #expect(CustomFirmwareVirtualAudio.muteSetPatchID == "system-virtualaudio-cfw-mute_set_throw")
     }
 
-    @Test("a binary without the decline log is refused, not searched past",
-          arguments: [Self.junk, Data()])
-    func refusesBinariesWithoutTheSPGateSite(_ input: Data) throws {
+    @Test(
+        arguments: [Self.junk, Data()],
+    )
+    func `a binary without the decline log is refused, not searched past`(_ input: Data) throws {
         var data = input
         #expect(throws: PatcherError.self) {
             try CustomFirmwareVirtualAudio.patchSpeakerProtectionGate(
@@ -75,15 +78,15 @@ struct CustomFirmwareVirtualAudioTests {
         }
     }
 
-    @Test("the SP-gate anchor strings and record identity are stable")
-    func spGateIdentityIsStable() {
+    @Test
+    func `the SP-gate anchor strings and record identity are stable`() {
         #expect(CustomFirmwareVirtualAudio.spGateMessage == "HAL Speaker Protection is missing. Failing route")
         #expect(CustomFirmwareVirtualAudio.spGateFile == "RoutingHandler_Playback_GenericConfig1.cpp")
         #expect(CustomFirmwareVirtualAudio.spGatePatchID == "system-virtualaudio-cfw-speaker_protection_gate")
     }
 
-    @Test("each SP-gate handler has its own file anchor and a record the declaration covers")
-    func spGateHandlersAreDistinct() {
+    @Test
+    func `each SP-gate handler has its own file anchor and a record the declaration covers`() {
         typealias Handler = CustomFirmwareVirtualAudio.SPGateHandler
         #expect(Handler.allCases == [.playback, .playbackAndRecord])
         #expect(Handler.playback.file == CustomFirmwareVirtualAudio.spGateFile)
@@ -98,9 +101,10 @@ struct CustomFirmwareVirtualAudioTests {
         #expect(!Handler.playback.file.contains(Handler.playbackAndRecord.file))
     }
 
-    @Test("a binary without the play-and-record decline is refused, not searched past",
-          arguments: [Self.junk, Data()])
-    func refusesBinariesWithoutTheRecordSPGateSite(_ input: Data) throws {
+    @Test(
+        arguments: [Self.junk, Data()],
+    )
+    func `a binary without the play-and-record decline is refused, not searched past`(_ input: Data) throws {
         var data = input
         #expect(throws: PatcherError.self) {
             try CustomFirmwareVirtualAudio.patchSpeakerProtectionGate(
@@ -113,9 +117,10 @@ struct CustomFirmwareVirtualAudioTests {
         }
     }
 
-    @Test("a binary without the precondition decline is refused, not searched past",
-          arguments: [Self.junk, Data()])
-    func refusesBinariesWithoutTheVolumeGateSite(_ input: Data) throws {
+    @Test(
+        arguments: [Self.junk, Data()],
+    )
+    func `a binary without the precondition decline is refused, not searched past`(_ input: Data) throws {
         var data = input
         #expect(throws: PatcherError.self) {
             try CustomFirmwareVirtualAudio.patchVolumeModePrecondition(
@@ -127,18 +132,18 @@ struct CustomFirmwareVirtualAudioTests {
         }
     }
 
-    @Test("the volume-gate anchor strings and record identity are stable")
-    func volumeGateIdentityIsStable() {
+    @Test
+    func `the volume-gate anchor strings and record identity are stable`() {
         #expect(CustomFirmwareVirtualAudio.volumePreconditionFormat == "PRECONDITION FAILURE (std::logic_error)")
-        #expect(CustomFirmwareVirtualAudio.volumeModePackingMask == 0x1ffffffff)
+        #expect(CustomFirmwareVirtualAudio.volumeModePackingMask == 0x1_FFFF_FFFF)
         #expect(CustomFirmwareVirtualAudio.volumeGatePatchID == "system-virtualaudio-cfw-volume_mode_precondition")
     }
 
     /// `tbz w21, #0, 0x136878` at 0x136620 — the real gate branch, read off
     /// the iPadOS 26.6.2 plugin binary this patch was written against (bytes
     /// d5 12 00 36 at that offset).
-    @Test("the conditional-branch decoder reads the real gate's target")
-    func decodesTheGatesTBZ() {
+    @Test
+    func `the conditional-branch decoder reads the real gate's target`() {
         #expect(
             CustomFirmwareVirtualAudio.decodeConditionalBranchTarget(
                 insn: 0x3600_12D5,
@@ -151,9 +156,9 @@ struct CustomFirmwareVirtualAudioTests {
     /// up to 512 KB ahead instead of up to 256 KB back. The word is built
     /// from its fields — `b.eq` with every immediate bit set, i.e. −1 — not
     /// taken as a literal.
-    @Test("the 19-bit immediate sign-extends")
-    func signExtendsTheImmediate19() {
-        let word: UInt32 = 0x5400_0000 | (0x7FFFF << 5)  // b.eq, imm19 = −1
+    @Test
+    func `the 19-bit immediate sign-extends`() {
+        let word: UInt32 = 0x5400_0000 | (0x7FFFF << 5) // b.eq, imm19 = −1
         #expect(
             CustomFirmwareVirtualAudio.decodeConditionalBranchTarget(
                 insn: word,
@@ -165,8 +170,8 @@ struct CustomFirmwareVirtualAudioTests {
     /// `tbz` reaches ±32 KB through a 14-bit immediate at bits 18-5, and a
     /// 64-bit `cbnz` proves the leading sf/b5 bit is not mistaken for part
     /// of the family. Both words are built from their fields.
-    @Test("the 14-bit and 64-bit families decode")
-    func decodesTheImmediate14And64BitFamilies() {
+    @Test
+    func `the 14-bit and 64-bit families decode`() {
         // tbz w21, #0, imm14 = −1 (bits 30-25 = 011011, bit 24 = 0)
         let tbz: UInt32 = 0x3600_0000 | (0x3FFF << 5) | 21
         #expect(CustomFirmwareVirtualAudio.decodeConditionalBranchTarget(insn: tbz, pc: 0x1000) == 0x0FFC)
@@ -175,8 +180,8 @@ struct CustomFirmwareVirtualAudioTests {
         #expect(CustomFirmwareVirtualAudio.decodeConditionalBranchTarget(insn: cbnz, pc: 0x2000) == 0x2040)
     }
 
-    @Test("the conditional-branch decoder refuses words outside its families")
-    func refusesNonBranchWords() {
+    @Test
+    func `the conditional-branch decoder refuses words outside its families`() {
         #expect(CustomFirmwareVirtualAudio.decodeConditionalBranchTarget(insn: 0xD503_201F, pc: 0) == nil)
         // A `b` — the family `ARM64Encoder.decodeBranchTarget` owns.
         #expect(CustomFirmwareVirtualAudio.decodeConditionalBranchTarget(insn: 0x1400_0002, pc: 0) == nil)

@@ -133,7 +133,7 @@ final class Relay {
     }
 }
 
-// /var is a symlink to /private/var; the child reports the physical path.
+/// /var is a symlink to /private/var; the child reports the physical path.
 func realPath(_ path: String) -> String {
     guard let resolved = realpath(path, nil) else {
         return path

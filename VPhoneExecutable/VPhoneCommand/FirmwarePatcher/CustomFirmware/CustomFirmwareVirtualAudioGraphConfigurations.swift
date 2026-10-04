@@ -87,20 +87,20 @@ public enum CustomFirmwareVirtualAudioGraphConfigurations {
 
         guard let plist = parsed as? [String: Any] else {
             throw PatcherError.invalidFormat(
-                "top-level plist is \(type(of: parsed)), expected dict: \(url.path)"
+                "top-level plist is \(type(of: parsed)), expected dict: \(url.path)",
             )
         }
 
         guard let configurations = plist[configurationsKey] as? [String: Any] else {
             throw PatcherError.invalidFormat(
-                "no '\(configurationsKey)' dict present: \(url.path)"
+                "no '\(configurationsKey)' dict present: \(url.path)",
             )
         }
 
         let speakerNames = configurations.keys.filter { $0.hasPrefix("speaker_") }.sorted()
         guard !speakerNames.isEmpty else {
             throw PatcherError.invalidFormat(
-                "no 'speaker_' configurations in '\(configurationsKey)': \(url.path)"
+                "no 'speaker_' configurations in '\(configurationsKey)': \(url.path)",
             )
         }
 
@@ -109,12 +109,12 @@ public enum CustomFirmwareVirtualAudioGraphConfigurations {
             let configuration = configurations[name]
             guard let entry = configuration as? [String: Any] else {
                 throw PatcherError.invalidFormat(
-                    "configuration '\(name)' is \(type(of: configuration)), expected dict: \(url.path)"
+                    "configuration '\(name)' is \(type(of: configuration)), expected dict: \(url.path)",
                 )
             }
             guard let chainType = entry[chainTypeKey] as? String else {
                 throw PatcherError.invalidFormat(
-                    "configuration '\(name)' has no '\(chainTypeKey)' string: \(url.path)"
+                    "configuration '\(name)' has no '\(chainTypeKey)' string: \(url.path)",
                 )
             }
             switch chainType {
@@ -125,7 +125,7 @@ public enum CustomFirmwareVirtualAudioGraphConfigurations {
             default:
                 throw PatcherError.invalidFormat(
                     "configuration '\(name)' has chainType '\(chainType)', expected "
-                        + "'\(speakerChainType)' or '\(graphChainType)': \(url.path)"
+                        + "'\(speakerChainType)' or '\(graphChainType)': \(url.path)",
                 )
             }
         }

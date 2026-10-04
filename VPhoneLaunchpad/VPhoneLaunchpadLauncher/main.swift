@@ -46,4 +46,5 @@ do {
 } catch {
     fail(failedStatus, error.message)
 }
+
 VPhoneLaunchpadLauncherProcess.exit(withStatusOf: status)

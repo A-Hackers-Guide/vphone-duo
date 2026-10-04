@@ -1194,10 +1194,10 @@ struct VPhoneCustomFirmwareInstaller {
         includeIdentity: Bool,
         boardDeviceTree: URL?,
     ) throws {
-        // Like every guest patch, a VM with no plan still gets it — except the
-        // identity rewrite on an iPad guest, whose installed tree already
-        // carries its own identity from `fw patch`; the rewrite would turn it
-        // back into an iPhone17,3.
+        /// Like every guest patch, a VM with no plan still gets it — except the
+        /// identity rewrite on an iPad guest, whose installed tree already
+        /// carries its own identity from `fw patch`; the rewrite would turn it
+        /// back into an iPhone17,3.
         func on(_ identifier: String) -> Bool {
             let enabled = plan?.isEnabled(identifier) ?? true
             if let plan, !enabled {
@@ -1214,7 +1214,7 @@ struct VPhoneCustomFirmwareInstaller {
                 rewriteIdentity = on(identity)
             }
         }
-        let spoofBuild = includeIdentity ? self.spoofBuild : nil
+        let spoofBuild = includeIdentity ? spoofBuild : nil
         var repairs: [(verb: String, arguments: [String])] = []
         if let boardDeviceTree, on(FirmwareGuestSystemPatchSet.prebootBoardAudio) {
             repairs.append(("patch-dt-board-audio", [boardDeviceTree.path]))
@@ -1432,7 +1432,7 @@ struct VPhoneCustomFirmwareInstaller {
         // No --identifier: codesign keeps the one the bundle already carries.
         _ = try tool("/usr/bin/codesign", [
             "-f", "-s", "-", "--timestamp=none",
-            try system.directory(bundle).path,
+            system.directory(bundle).path,
         ])
     }
 

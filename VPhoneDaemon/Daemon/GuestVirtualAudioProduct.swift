@@ -49,7 +49,9 @@ enum GuestVirtualAudioProduct {
     /// The same answer as the plugin's `VPGuestProductID`: 8010 on an iPad or
     /// iPhone guest, 0 (none) on anything else, unless one was chosen.
     static func product(machine: String, chosen: Int?) -> Int {
-        if let chosen, chosen >= 0 { return chosen }
+        if let chosen, chosen >= 0 {
+            return chosen
+        }
         return machine.hasPrefix("iPad") || machine.hasPrefix("iPhone") ? 8010 : 0
     }
 

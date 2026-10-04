@@ -81,14 +81,16 @@ struct LauncherPolicyTests {
         // Only `vm launch <machine>`.
         for arguments in [[], ["vm"], ["vm", "launch"], ["vm", "stop", "research-01"],
                           ["launch", "vm", "research-01"], ["--headless", "vm", "launch"],
-                          ["cfw", "install", "research-01"]] {
+                          ["cfw", "install", "research-01"]]
+        {
             expectRefused("only `vphone-cli vm launch <machine>`", cli, arguments)
         }
 
         // Only the vphone-cli of a bundle directly in the store.
         for path in [base + "/outside/VPhone.bundle/Contents/MacOS/vphone-cli", macOS + "/vphone-vm",
                      store + "/2.4.0/vphone-cli", store + "/a/b/VPhone.bundle/Contents/MacOS/vphone-cli",
-                     store + "/2.5.0/VPhone.bundle/Contents/MacOS/vphone-cli", "/bin/sh"] {
+                     store + "/2.5.0/VPhone.bundle/Contents/MacOS/vphone-cli", "/bin/sh"]
+        {
             expectRefused("is not the vphone-cli of a bundle in \(store)", path)
         }
         expectRefused("is not a regular file", store + "/dir/VPhone.bundle/Contents/MacOS/vphone-cli")
@@ -117,7 +119,7 @@ struct LauncherPolicyTests {
             for version in installed.sorted() {
                 let path = VPhoneLaunchpadBundleStore.executable(version: version, named: "vphone-cli").path
                 do {
-                    print("accepted \(try Policy.check(executable: path, arguments: launch))")
+                    try print("accepted \(Policy.check(executable: path, arguments: launch))")
                 } catch {
                     print("refused \(version): \(error.message)")
                 }

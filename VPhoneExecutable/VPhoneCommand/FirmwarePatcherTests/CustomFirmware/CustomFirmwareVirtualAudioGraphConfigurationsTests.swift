@@ -8,9 +8,9 @@
 // file's format survives, a re-run writes nothing, and anything unexpected
 // refuses rather than half-patches.
 
+@testable import FirmwarePatcher
 import Foundation
 import Testing
-@testable import FirmwarePatcher
 import VPhonePatchKit
 
 @Suite("CustomFirmwareVirtualAudioGraphConfigurations")
@@ -47,8 +47,8 @@ struct CustomFirmwareVirtualAudioGraphConfigurationsTests {
         return url
     }
 
-    @Test("flips every speaker chain and leaves the rest of the file alone")
-    func flipsSpeakerChains() throws {
+    @Test
+    func `flips every speaker chain and leaves the rest of the file alone`() throws {
         let url = try writeTemporary(Self.tuningSet())
         let outcome = try CustomFirmwareVirtualAudioGraphConfigurations.patch(at: url, verbose: false)
         #expect(outcome == .rewritten(changed: ["speaker_general", "speaker_raw", "speaker_ringtone"]))
@@ -65,9 +65,9 @@ struct CustomFirmwareVirtualAudioGraphConfigurationsTests {
 
         // The only difference from the input is the flipped chainTypes.
         var expected = Self.tuningSet()
-        var expectedConfigurations = expected["Configurations"] as! [String: Any]
+        var expectedConfigurations = try #require(expected["Configurations"] as? [String: Any])
         for name in ["speaker_ringtone", "speaker_general", "speaker_raw"] {
-            var entry = expectedConfigurations[name] as! [String: Any]
+            var entry = try #require(expectedConfigurations[name] as? [String: Any])
             entry["chainType"] = "dflt"
             expectedConfigurations[name] = entry
         }
@@ -76,8 +76,8 @@ struct CustomFirmwareVirtualAudioGraphConfigurationsTests {
         #expect(difference == nil, "unexpected differences beyond the flipped chainTypes: \(difference ?? "")")
     }
 
-    @Test("keeps the plist's format — binary in, binary out")
-    func preservesFormat() throws {
+    @Test
+    func `keeps the plist's format — binary in, binary out`() throws {
         for format in [PropertyListSerialization.PropertyListFormat.binary, .xml] {
             let url = try writeTemporary(Self.tuningSet(), format: format)
             try CustomFirmwareVirtualAudioGraphConfigurations.patch(at: url, verbose: false)
@@ -86,8 +86,8 @@ struct CustomFirmwareVirtualAudioGraphConfigurationsTests {
         }
     }
 
-    @Test("is idempotent and honours dry run")
-    func idempotentAndDryRun() throws {
+    @Test
+    func `is idempotent and honours dry run`() throws {
         let url = try writeTemporary(Self.tuningSet())
         let dry = try CustomFirmwareVirtualAudioGraphConfigurations.patch(at: url, dryRun: true, verbose: false)
         #expect(dry == .dryRun(changed: ["speaker_general", "speaker_raw", "speaker_ringtone"]))
@@ -102,12 +102,13 @@ struct CustomFirmwareVirtualAudioGraphConfigurationsTests {
         #expect(try Data(contentsOf: url) == written)
     }
 
-    @Test("refuses plists it does not understand, not searched past",
-          arguments: [
-        "not a plist at all",
-        "{\"Configurations\": {\"speaker_ringtone\": {\"chainType\": \"sprt\"}}}",
-    ])
-    func refusesUnexpectedInput(_ text: String) throws {
+    @Test(
+        arguments: [
+            "not a plist at all",
+            "{\"Configurations\": {\"speaker_ringtone\": {\"chainType\": \"sprt\"}}}",
+        ],
+    )
+    func `refuses plists it does not understand, not searched past`(_ text: String) throws {
         let url = try writeTemporary(["placeholder": true])
         try Data(text.utf8).write(to: url)
         #expect(throws: PatcherError.self) {
@@ -115,10 +116,10 @@ struct CustomFirmwareVirtualAudioGraphConfigurationsTests {
         }
     }
 
-    @Test("refuses a speaker chain on an unknown chainType")
-    func refusesUnknownChainType() throws {
+    @Test
+    func `refuses a speaker chain on an unknown chainType`() throws {
         var plist = Self.tuningSet()
-        var configurations = plist["Configurations"] as! [String: Any]
+        var configurations = try #require(plist["Configurations"] as? [String: Any])
         configurations["speaker_siri"] = ["chainType": "sprt", "graph": "speaker_general"]
         plist["Configurations"] = configurations
         let url = try writeTemporary(plist)
@@ -127,8 +128,8 @@ struct CustomFirmwareVirtualAudioGraphConfigurationsTests {
         }
     }
 
-    @Test("refuses a plist with no speaker configurations")
-    func refusesNoSpeakerConfigurations() throws {
+    @Test
+    func `refuses a plist with no speaker configurations`() throws {
         let micOnly: [String: Any] = [
             "CommonData": ["tuningPath": "/Library/Audio/Tunings/AID2029/VAD"],
             "Configurations": ["beamformed_mic_general": ["chainType": "dflt", "graph": "beam_mic_general"]],
@@ -139,16 +140,16 @@ struct CustomFirmwareVirtualAudioGraphConfigurationsTests {
         }
     }
 
-    @Test("refuses a plist without the Configurations dict")
-    func refusesMissingConfigurations() throws {
+    @Test
+    func `refuses a plist without the Configurations dict`() throws {
         let url = try writeTemporary(["CommonData": ["tuningPath": "/x"]])
         #expect(throws: PatcherError.self) {
             try CustomFirmwareVirtualAudioGraphConfigurations.patch(at: url, verbose: false)
         }
     }
 
-    @Test("the anchor keys are the ones the tuning set ships")
-    func keysAreStable() {
+    @Test
+    func `the anchor keys are the ones the tuning set ships`() {
         #expect(CustomFirmwareVirtualAudioGraphConfigurations.speakerChainType == "clhs")
         #expect(CustomFirmwareVirtualAudioGraphConfigurations.graphChainType == "dflt")
         #expect(CustomFirmwareVirtualAudioGraphConfigurations.configurationsKey == "Configurations")
@@ -206,7 +207,7 @@ struct CustomFirmwareVirtualAudioGraphConfigurationsTests {
             #expect(patched[name]?["chainType"] as? String == "dflt")
         }
         for name in ["speaker_raw", "speaker_measurement", "bottom_mic_general"] {
-            #expect(NSDictionary(dictionary: try #require(patched[name])) == NSDictionary(dictionary: try #require(original[name])))
+            #expect(try NSDictionary(dictionary: #require(patched[name])) == NSDictionary(dictionary: #require(original[name])))
         }
     }
 

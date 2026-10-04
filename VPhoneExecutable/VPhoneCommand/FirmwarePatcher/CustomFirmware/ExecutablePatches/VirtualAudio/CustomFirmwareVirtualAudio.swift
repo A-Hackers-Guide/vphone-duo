@@ -207,7 +207,7 @@ public enum CustomFirmwareVirtualAudio {
     /// The 33-bit packing mask the handler compares the volume-mode lookup
     /// under — a present flag in bit 32 above the mode's low 32 bits. The
     /// semantic constant the site is recognised by, beside the strings.
-    public static let volumeModePackingMask = 0x1ffffffff
+    public static let volumeModePackingMask = 0x1_FFFF_FFFF
 
     /// Record identity for the volume-gate patch.
     public static let volumeGatePatchID = "system-virtualaudio-cfw-volume_mode_precondition"
@@ -355,7 +355,8 @@ public enum CustomFirmwareVirtualAudio {
             if let insn = siteInstruction, insn.isJump, !insn.isCall,
                let word = wordAt(data, site),
                let target = ARM64Encoder.decodeBranchTarget(insn: word, pc: siteVMA),
-               target == located.epilogueVMA {
+               target == located.epilogueVMA
+            {
                 alreadyPatched += 1
                 continue
             }
@@ -485,7 +486,8 @@ public enum CustomFirmwareVirtualAudio {
         if let insn = siteInstruction, insn.isJump, !insn.isCall,
            let word = wordAt(data, site),
            let target = ARM64Encoder.decodeBranchTarget(insn: word, pc: siteVMA),
-           target == located.epilogueVMA {
+           target == located.epilogueVMA
+        {
             log?("      [=] the mute-set throw already branches to the epilogue")
             return MuteSetReport(outcome: .alreadyPatched, anchor: anchor, records: [], slotRehashes: [])
         }
@@ -819,9 +821,17 @@ public enum CustomFirmwareVirtualAudio {
         let epilogueVMA: UInt64
         let sites: [Int]
 
-        var walkerStartVMA: UInt64 { vma(walkerStartOffset) }
-        var walkerEndVMA: UInt64 { vma(walkerEndOffset) }
-        func vma(_ offset: Int) -> UInt64 { textAddress + UInt64(offset - textStart) }
+        var walkerStartVMA: UInt64 {
+            vma(walkerStartOffset)
+        }
+
+        var walkerEndVMA: UInt64 {
+            vma(walkerEndOffset)
+        }
+
+        func vma(_ offset: Int) -> UInt64 {
+            textAddress + UInt64(offset - textStart)
+        }
     }
 
     static func locate(in data: Data) throws -> Plan {
@@ -933,9 +943,17 @@ public enum CustomFirmwareVirtualAudio {
         let epilogueVMA: UInt64
         let site: Int
 
-        var functionStartVMA: UInt64 { vma(functionStartOffset) }
-        var functionEndVMA: UInt64 { vma(functionEndOffset) }
-        func vma(_ offset: Int) -> UInt64 { textAddress + UInt64(offset - textStart) }
+        var functionStartVMA: UInt64 {
+            vma(functionStartOffset)
+        }
+
+        var functionEndVMA: UInt64 {
+            vma(functionEndOffset)
+        }
+
+        func vma(_ offset: Int) -> UInt64 {
+            textAddress + UInt64(offset - textStart)
+        }
     }
 
     /// Resolve the mute-set throw and the wrapper's epilogue, or say why not.
@@ -1058,9 +1076,17 @@ public enum CustomFirmwareVirtualAudio {
         let blockHead: Int
         let site: Int
 
-        var functionStartVMA: UInt64 { vma(functionStartOffset) }
-        var functionEndVMA: UInt64 { vma(functionEndOffset) }
-        func vma(_ offset: Int) -> UInt64 { textAddress + UInt64(offset - textStart) }
+        var functionStartVMA: UInt64 {
+            vma(functionStartOffset)
+        }
+
+        var functionEndVMA: UInt64 {
+            vma(functionEndOffset)
+        }
+
+        func vma(_ offset: Int) -> UInt64 {
+            textAddress + UInt64(offset - textStart)
+        }
     }
 
     /// How far above a branch target the format-string reference may sit and
@@ -1086,9 +1112,17 @@ public enum CustomFirmwareVirtualAudio {
         /// both gate scans read.
         let fileNameVMAs: Set<UInt64>
 
-        var functionStartVMA: UInt64 { vma(functionStartOffset) }
-        var functionEndVMA: UInt64 { vma(functionEndOffset) }
-        func vma(_ offset: Int) -> UInt64 { textAddress + UInt64(offset - textStart) }
+        var functionStartVMA: UInt64 {
+            vma(functionStartOffset)
+        }
+
+        var functionEndVMA: UInt64 {
+            vma(functionEndOffset)
+        }
+
+        func vma(_ offset: Int) -> UInt64 {
+            textAddress + UInt64(offset - textStart)
+        }
     }
 
     /// Resolve the routing handler, or say why not. The anchors are the
@@ -1168,8 +1202,12 @@ public enum CustomFirmwareVirtualAudio {
     /// Resolve the SP-gate branch, or say why not.
     static func locateSPGate(in data: Data, handler which: SPGateHandler = .playback) throws -> SPGatePlan {
         let handler = try locatePlaybackHandler(in: data, file: which.file)
-        func vma(_ offset: Int) -> UInt64 { handler.vma(offset) }
-        func offset(of address: UInt64) -> Int { handler.textStart + Int(address - handler.textAddress) }
+        func vma(_ offset: Int) -> UInt64 {
+            handler.vma(offset)
+        }
+        func offset(of address: UInt64) -> Int {
+            handler.textStart + Int(address - handler.textAddress)
+        }
 
         // The gate: the one branch in the handler whose target heads the log
         // block — a target at or above which, within the window, the format
@@ -1235,7 +1273,7 @@ public enum CustomFirmwareVirtualAudio {
         // os_log the head used to open.
         guard let above = handler.disasm.disassembleOne(in: data, at: gate.head - 4),
               above.mnemonic == "brk" || ["ret", "retab"].contains(above.mnemonic)
-                  || (above.isJump && !above.isCall && above.detail?.conditionCode == nil)
+              || (above.isJump && !above.isCall && above.detail?.conditionCode == nil)
         else {
             throw PatcherError.invalidFormat(
                 "\(component): the log block at 0x\(hex(vma(gate.head))) is reached by "
@@ -1270,9 +1308,17 @@ public enum CustomFirmwareVirtualAudio {
         let blockHead: Int
         let site: Int
 
-        var functionStartVMA: UInt64 { vma(functionStartOffset) }
-        var functionEndVMA: UInt64 { vma(functionEndOffset) }
-        func vma(_ offset: Int) -> UInt64 { textAddress + UInt64(offset - textStart) }
+        var functionStartVMA: UInt64 {
+            vma(functionStartOffset)
+        }
+
+        var functionEndVMA: UInt64 {
+            vma(functionEndOffset)
+        }
+
+        func vma(_ offset: Int) -> UInt64 {
+            textAddress + UInt64(offset - textStart)
+        }
     }
 
     /// How far above a branch target the precondition block's format and
@@ -1297,8 +1343,12 @@ public enum CustomFirmwareVirtualAudio {
                 "\(component): the string \"\(volumePreconditionFormat)\" is nowhere in the binary's sections",
             )
         }
-        func vma(_ offset: Int) -> UInt64 { handler.vma(offset) }
-        func offset(of address: UInt64) -> Int { handler.textStart + Int(address - handler.textAddress) }
+        func vma(_ offset: Int) -> UInt64 {
+            handler.vma(offset)
+        }
+        func offset(of address: UInt64) -> Int {
+            handler.textStart + Int(address - handler.textAddress)
+        }
 
         // The comparison: the one branch in the handler whose target heads a
         // precondition log block — both the format and the handler's own
@@ -1372,7 +1422,7 @@ public enum CustomFirmwareVirtualAudio {
         // expecting the os_log the head used to open.
         guard let above = handler.disasm.disassembleOne(in: data, at: gate.head - 4),
               above.mnemonic == "brk" || ["ret", "retab"].contains(above.mnemonic)
-                  || (above.isJump && !above.isCall && above.detail?.conditionCode == nil)
+              || (above.isJump && !above.isCall && above.detail?.conditionCode == nil)
         else {
             throw PatcherError.invalidFormat(
                 "\(component): the precondition block at 0x\(hex(vma(gate.head))) is reached by "
@@ -1409,7 +1459,9 @@ public enum CustomFirmwareVirtualAudio {
         while cursor >= branch - 24 {
             defer { cursor -= 4 }
             guard let insn = disasm.disassembleOne(in: data, at: cursor) else { return false }
-            if insn.mnemonic == "cmp" { sawCompare = true }
+            if insn.mnemonic == "cmp" {
+                sawCompare = true
+            }
             guard insn.mnemonic == "and",
                   let operands = insn.detail?.operands, operands.count >= 3,
                   operands[2].type == .immediate,
@@ -1490,7 +1542,8 @@ public enum CustomFirmwareVirtualAudio {
             if insn.mnemonic == "str",
                let operands = insn.detail?.operands, operands.count >= 2,
                operands[0].type == .register,
-               operands[1].type == .memory, operands[1].mem.base == ARM64Register.x(0) {
+               operands[1].type == .memory, operands[1].mem.base == ARM64Register.x(0)
+            {
                 sawObjectStore = true
             }
             if insn.isCall, sawObjectStore {
@@ -1501,7 +1554,8 @@ public enum CustomFirmwareVirtualAudio {
             // to its `brk`) or at the `brk` the compiler plants after a call
             // it knows never returns.
             if insn.mnemonic == "brk"
-                || (insn.isJump && !insn.isCall && insn.detail?.conditionCode == nil) {
+                || (insn.isJump && !insn.isCall && insn.detail?.conditionCode == nil)
+            {
                 return sawObjectStore && sawThrowCall
             }
         }
@@ -1546,7 +1600,9 @@ public enum CustomFirmwareVirtualAudio {
             .sorted { lhs, rhs in
                 let l = lhs.sectionName == "__cstring"
                 let r = rhs.sectionName == "__cstring"
-                if l != r { return l }
+                if l != r {
+                    return l
+                }
                 return lhs.fileOffset < rhs.fileOffset
             }
         var addresses: Set<UInt64> = []
@@ -1555,7 +1611,8 @@ public enum CustomFirmwareVirtualAudio {
             let end = start + Int(section.size)
             var searchFrom = start
             while searchFrom + bytes.count <= end,
-                  let match = range(of: bytes, in: data, start: searchFrom, end: end) {
+                  let match = range(of: bytes, in: data, start: searchFrom, end: end)
+            {
                 let stringStart = cStringStart(in: data, containing: match, notBefore: start)
                 addresses.insert(section.address + UInt64(stringStart - start))
                 searchFrom = match + 1
@@ -1572,8 +1629,8 @@ public enum CustomFirmwareVirtualAudio {
         in data: Data,
         disasm: ARM64Disassembler,
         sections: [String: MachOSectionInfo],
-        textStart: Int,
-        textEnd: Int,
+        textStart _: Int,
+        textEnd _: Int,
         walkerStart: Int,
         walkerEnd: Int,
         epilogueVMA: UInt64,
@@ -1581,7 +1638,8 @@ public enum CustomFirmwareVirtualAudio {
         let needle = Array((terminateFault + "\0").utf8)
         var faultVMA: UInt64?
         for section in sections.values
-        where section.fileOffset > 0 && Int(section.fileOffset) + Int(section.size) <= data.count {
+            where section.fileOffset > 0 && Int(section.fileOffset) + Int(section.size) <= data.count
+        {
             let start = Int(section.fileOffset)
             let end = start + Int(section.size)
             if let match = range(of: needle, in: data, start: start, end: end) {
@@ -1615,8 +1673,9 @@ public enum CustomFirmwareVirtualAudio {
                 break
             }
             if insn.isJump, !insn.isCall, insn.detail?.conditionCode == nil,
-               let target = branchTarget(insn, at: cursor), target >= walkerStart, target < walkerEnd {
-                cursor = Int(target) - 4  // the defer moves past it
+               let target = branchTarget(insn, at: cursor), target >= walkerStart, target < walkerEnd
+            {
+                cursor = Int(target) - 4 // the defer moves past it
                 continue
             }
         }
@@ -1644,7 +1703,8 @@ public enum CustomFirmwareVirtualAudio {
            after.isJump, !after.isCall,
            let word = wordAtCache(data: after.bytes, offset: 0),
            let target = ARM64Encoder.decodeBranchTarget(insn: word, pc: UInt64(site + 4)),
-           target == epilogueVMA {
+           target == epilogueVMA
+        {
             return nil
         }
         return site
@@ -1655,7 +1715,7 @@ public enum CustomFirmwareVirtualAudio {
         return ARM64Encoder.decodeBranchTarget(insn: word, pc: UInt64(offset))
     }
 
-    private static func wordAtCache(data bytes: [UInt8], offset: Int) -> UInt32? {
+    private static func wordAtCache(data bytes: [UInt8], offset _: Int) -> UInt32? {
         guard bytes.count >= 4 else { return nil }
         return UInt32(bytes[0]) | UInt32(bytes[1]) << 8 | UInt32(bytes[2]) << 16 | UInt32(bytes[3]) << 24
     }
@@ -1705,10 +1765,12 @@ public enum CustomFirmwareVirtualAudio {
             guard let insn = disasm.disassembleOne(in: data, at: cursor) else { return false }
             if insn.mnemonic == "adrp",
                let operands = insn.detail?.operands, operands.count >= 2,
-               operands[0].reg == ARM64Register.x(1) {
+               operands[0].reg == ARM64Register.x(1)
+            {
                 if let low = disasm.disassembleOne(in: data, at: cursor + 4), low.mnemonic == "add",
                    let lowOps = low.detail?.operands, lowOps.count >= 3,
-                   lowOps[0].reg == ARM64Register.x(1), lowOps[1].reg == ARM64Register.x(1) {
+                   lowOps[0].reg == ARM64Register.x(1), lowOps[1].reg == ARM64Register.x(1)
+                {
                     sawMessageLoad = true
                 }
             }
@@ -1720,7 +1782,8 @@ public enum CustomFirmwareVirtualAudio {
             // a tail-called throw) or at the `brk` the compiler plants after
             // a call it knows never returns.
             if insn.mnemonic == "brk"
-                || (insn.isJump, !insn.isCall, insn.detail?.conditionCode == nil) == (true, true, true) {
+                || (insn.isJump, !insn.isCall, insn.detail?.conditionCode == nil) == (true, true, true)
+            {
                 return sawMessageLoad && sawConstructorCall
             }
         }
@@ -1736,7 +1799,7 @@ public enum CustomFirmwareVirtualAudio {
         in data: Data,
         sections: [String: MachOSectionInfo],
         textStart: Int,
-        textEnd: Int,
+        textEnd _: Int,
         before offset: Int,
         window: Int = 0x100,
     ) -> (adrp: Int, add: Int)? {
@@ -1772,7 +1835,9 @@ public enum CustomFirmwareVirtualAudio {
             .sorted { lhs, rhs in
                 let l = lhs.sectionName == "__cstring"
                 let r = rhs.sectionName == "__cstring"
-                if l != r { return l }
+                if l != r {
+                    return l
+                }
                 return lhs.fileOffset < rhs.fileOffset
             }
         for section in searchable {
@@ -1800,7 +1865,7 @@ public enum CustomFirmwareVirtualAudio {
 
     /// The same pairs, matching any target in a set.
     private static func adrpAddReferences(
-        to placeholder: UInt64,
+        to _: UInt64,
         formingAnyOf targets: Set<UInt64>,
         in data: Data,
         textStart: Int,
@@ -1841,7 +1906,9 @@ public enum CustomFirmwareVirtualAudio {
                 scanned += 1
             }
             guard let insn = disasm.disassembleOne(in: data, at: cursor) else { return nil }
-            if insn.isCall { continue }
+            if insn.isCall {
+                continue
+            }
             if insn.mnemonic == "brk" || (insn.isJump && insn.detail?.conditionCode == nil) {
                 return cursor
             }
@@ -1876,7 +1943,8 @@ public enum CustomFirmwareVirtualAudio {
         while cursor + 4 <= textEnd {
             defer { cursor += 4 }
             if let insn = disasm.disassembleOne(in: data, at: cursor),
-               insn.mnemonic == "retab" {
+               insn.mnemonic == "retab"
+            {
                 retabOffset = cursor
                 break
             }
@@ -1921,7 +1989,8 @@ public enum CustomFirmwareVirtualAudio {
         var index = retab - 8
         var sawFramePair = false
         while let insn = instruction(index), insn.mnemonic == "ldp",
-              let operands = insn.detail?.operands, operands.count >= 2 {
+              let operands = insn.detail?.operands, operands.count >= 2
+        {
             if operands[0].reg == ARM64Register.x(29), operands[1].reg == ARM64Register.x(30) {
                 sawFramePair = true
             }
@@ -1947,7 +2016,8 @@ public enum CustomFirmwareVirtualAudio {
            let canary = instruction(index - 20), canary.mnemonic == "ldur",
            let canaryOps = canary.detail?.operands, canaryOps.count >= 2,
            canaryOps[1].type == .memory,
-           canaryOps[1].mem.base == ARM64Register.x(29) {
+           canaryOps[1].mem.base == ARM64Register.x(29)
+        {
             return index - 20
         }
         return firstPop
@@ -1981,7 +2051,9 @@ public enum CustomFirmwareVirtualAudio {
                 matched = false
                 break
             }
-            if matched { return offset }
+            if matched {
+                return offset
+            }
         }
         return nil
     }

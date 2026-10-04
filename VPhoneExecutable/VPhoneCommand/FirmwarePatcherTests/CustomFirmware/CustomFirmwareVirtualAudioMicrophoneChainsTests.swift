@@ -6,9 +6,9 @@
 // configurations `graph_configurations.plist` pairs, and a measurement strip
 // whose second AUNBandEQ carries +18 dB as parameter 0 of its saved state.
 
+@testable import FirmwarePatcher
 import Foundation
 import Testing
-@testable import FirmwarePatcher
 import VPhonePatchKit
 
 @Suite("CustomFirmwareVirtualAudioMicrophoneChains")
@@ -119,7 +119,7 @@ struct CustomFirmwareVirtualAudioMicrophoneChainsTests {
         let patched = try Self.configurations(url)
         let original = try #require(Self.tuningSet()["Configurations"] as? [String: [String: Any]])
         for name in ["bottom_mic_measurement", "bottom_mic_voice_messages", "speaker_general", "speaker_measurement"] {
-            #expect(NSDictionary(dictionary: try #require(patched[name])) == NSDictionary(dictionary: try #require(original[name])))
+            #expect(try NSDictionary(dictionary: #require(patched[name])) == NSDictionary(dictionary: #require(original[name])))
         }
         #expect(try Self.read(url)["CommonData"] != nil)
     }
@@ -177,7 +177,7 @@ struct CustomFirmwareVirtualAudioMicrophoneChainsTests {
         let url = try Self.write(Self.tuningSet(), format: format)
         defer { try? FileManager.default.removeItem(at: url) }
         try Patcher.patch(at: url, verbose: false)
-        #expect(CustomFirmwareBuildVersion.detectFormat(try Data(contentsOf: url)) == format)
+        #expect(try CustomFirmwareBuildVersion.detectFormat(Data(contentsOf: url)) == format)
     }
 
     @Test func `a plist of another shape is refused`() throws {
@@ -264,7 +264,7 @@ struct CustomFirmwareVirtualAudioMicrophoneChainsTests {
         defer { try? FileManager.default.removeItem(at: url) }
 
         #expect(try Patcher.neutralizeGain(at: url, verbose: false).isEmpty)
-        #expect(Self.data(try Self.effects(url)[0]) == foreign)
+        #expect(try Self.data(Self.effects(url)[0]) == foreign)
     }
 
     @Test func `parameter data that is not whole records is refused`() throws {

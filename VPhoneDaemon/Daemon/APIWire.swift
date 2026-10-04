@@ -48,7 +48,9 @@ enum APIWire {
                 // generic "command exited with status 1" does not.
                 if case let .commandFailed(output) = error {
                     body.merge(output.filter { $0.key != "error" }) { $1 }
-                    if output["message"] as? String == nil { body["message"] = error.message }
+                    if output["message"] as? String == nil {
+                        body["message"] = error.message
+                    }
                 }
             } else if let error = error as? GuestAPIError {
                 body = ["code": error.code, "message": error.description]

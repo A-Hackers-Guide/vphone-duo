@@ -178,6 +178,7 @@ public enum FirmwareGuestSystemPatchSet {
                 target: .guestFile(path: "/Library/LaunchDaemons"),
                 bootEssential: true,
             ),
+
             // MARK: Audio
 
             VPhonePatchDeclaration(
