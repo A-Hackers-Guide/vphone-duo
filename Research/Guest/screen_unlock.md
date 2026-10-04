@@ -124,9 +124,15 @@ Device › Unlock at Startup in the VM window checked itself, wrote
 `unlocksAtStartup = true` to config.plist at once, left the running guest
 locked, and the next start unlocked it.
 
-Setting a passcode on these guests through Settings did not work: every
-entry, by taps on the pad, by coordinates or as keyboard input, ended in
-"Passcodes Did Not Match". The passcode path therefore stays unmeasured.
+Setting a passcode on `unlockpr-iphone` through Settings did not work. The
+new-passcode pad there takes four digits (its field reads "0 of 4 values
+entered"); a first try with six digits spilled two into the verify step and
+ended in "Passcodes Did Not Match". With four digits, entered a digit every
+1.5–2 s and checked after each, both entries matched, and Settings then
+answered "Passcode Change Failed" (two different codes, same result). The
+guest log in that window showed coreauthd reporting the keybag state as
+"Disabled" but no reason for the failure. The passcode path therefore stays
+unmeasured.
 
 ## Not yet measured
 
