@@ -293,15 +293,16 @@ bundle has no `NSMicrophoneUsageDescription`. `VPhone.bundle` had none.
 Which hash, and what would make macOS ask once, measured on the host
 (2026-10-04) with a small tool that reads
 `AVCaptureDevice.authorizationStatus(for: .audio)`, started responsible for
-itself as Launchpad starts a VM:
+itself as Launchpad starts a VM. Both builds of it were signed ad hoc with
+`designated => identifier "…"`, the one requirement an ad hoc signature could
+share between builds:
 
 | Tool | Status |
 | --- | --- |
 | build 1, before asking | `notDetermined` |
 | build 1, after the prompt was allowed | `authorized` |
 | build 1 copied to another folder | `authorized` |
-| build 2 in build 1's place | `notDetermined` |
-| build 2, both signed with `designated => identifier "…"` | `notDetermined` |
+| build 2, in another folder and in build 1's place | `notDetermined` |
 | another program started by an allowed one, without the disclaim | `authorized` |
 | the same, after the program that started it exited | `authorized` |
 
