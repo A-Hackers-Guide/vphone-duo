@@ -264,6 +264,19 @@ public enum FirmwareKernelCustomFirmwarePatchSet {
                 bootEssential: true,
             ),
 
+            VPhonePatchDeclaration(
+                identifier: FirmwarePatchSetCatalog.paravirtUserClientsPatch,
+                title: "Paravirtual device access",
+                summary: """
+                Lets a process outside an app sandbox open the paravirtual GPU, video decoder, \
+                Neural Engine and IOSurface scaler, so daemons and command-line tools get Metal \
+                and WebKit decodes video in hardware. Allows only those four device classes by \
+                name; every other sandbox denial stays. Off by default.
+                """,
+                target: .firmware(.kernelcache),
+                applicability: VPhonePatchApplicability(iOSBase: .oneOf([.major(26), .major(18)])),
+            ),
+
             // MARK: Display
 
             VPhonePatchDeclaration(

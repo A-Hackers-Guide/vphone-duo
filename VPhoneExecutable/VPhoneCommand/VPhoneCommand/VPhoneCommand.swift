@@ -165,6 +165,9 @@ struct PatchComponentCommand: ParsableCommand {
             // full set.
             patcher.applyIOS27 = targetOS.map { $0.hasPrefix("27.") } ?? true
             patcher.applyFrida = frida
+            // The narrow paravirt user-client allowlist is the 26.x/18.x counterpart
+            // of the iOS-27 sandbox gate; exercise it when the 27 gate is off.
+            patcher.applyParavirtUserClients = !patcher.applyIOS27
             count = try patcher.apply()
             patchedData = patcher.buffer.data
             records = patcher.patches

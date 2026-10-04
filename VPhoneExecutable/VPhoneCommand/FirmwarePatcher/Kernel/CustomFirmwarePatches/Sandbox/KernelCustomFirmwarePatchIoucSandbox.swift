@@ -96,19 +96,19 @@ extension KernelCustomFirmwarePatcher {
     }
 
     /// CBNZ Wt, <label> (32-bit): high byte 0x35.
-    private func isCbnzW(_ insn: UInt32) -> Bool {
+    func isCbnzW(_ insn: UInt32) -> Bool {
         ((insn >> 24) & 0xFF) == 0x35
     }
 
     /// Decode CBZ/CBNZ target (imm19, sign-extended, scaled by 4).
-    private func cbTarget(_ insn: UInt32, at pc: Int) -> Int? {
+    func cbTarget(_ insn: UInt32, at pc: Int) -> Int? {
         let imm19 = (insn >> 5) & 0x7FFFF
         return pc + Int(Int32(bitPattern: imm19 << 13) >> 13) * 4
     }
 
     /// If `insn` is B.EQ <label>, return its target; else nil.
     /// B.cond: [31:24]=0x54, [4]=0, cond=[3:0]; EQ cond = 0.
-    private func bCondEqTarget(_ insn: UInt32, at pc: Int) -> Int? {
+    func bCondEqTarget(_ insn: UInt32, at pc: Int) -> Int? {
         guard (insn & 0xFF00_0010) == 0x5400_0000, (insn & 0xF) == 0x0 else { return nil }
         let imm19 = (insn >> 5) & 0x7FFFF
         return pc + Int(Int32(bitPattern: imm19 << 13) >> 13) * 4
