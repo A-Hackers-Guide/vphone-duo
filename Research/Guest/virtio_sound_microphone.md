@@ -26,6 +26,7 @@ local:
 | Guest kernel | `AppleVirtIOSound` reports stream 0 as an input stream (`direction 1, formats 0xa0020, rates 0x480, channels 1-2`) and serves selector 9, the receive transfer the macOS plugin uses (§6). |
 | Guest HAL plugin | Publishes a second device, the microphone, with the input stream (§5). |
 | Guest routing | The microphone device must be named `Digital Mic`, the route handler for play-and-record needs its speaker-protection gate opened, and the streams must accept the format that route sets on them (§4). With the three, Voice Memos records on an iPad guest (iPadOS 26.6.2). On an iPhone guest (iOS 27.0) the route builds and Voice Memos fails before any I/O, in the capture stack (§6). |
+| Guest tunings | An iPhone guest's device tree and tuning set are the D47's, made for its four microphones and its speaker. With them a recording was silent, then loud and noisy; §7 is what was removed and what the same recording measures now. |
 
 ## 1. The reference implementation: `AVIOStream` input in the macOS plugin
 
@@ -587,9 +588,152 @@ Not done:
 
   That is the capture stack's device discovery on a VM, not the sound
   plugin. No sound has been recorded on an iPhone guest: nothing run there
-  records without `AVCaptureSession`.
+  records without `AVCaptureSession`. The cause and the cameracaptured hook
+  that publishes the microphone anyway are in
+  `ios27_capture_microphone_source.md`.
 
-## 7. Open
+## 7. The tunings were the board's, the microphone is the Mac's (2026-10-04)
+
+With the capture source published (`ios27_capture_microphone_source.md`)
+Voice Memos on the iPhone guest recorded, and what it recorded went through
+four states. Everything here was measured on `mictest-iphone` (iPhone99,11,
+iOS 27.0) with the Mac's built-in microphone, by decoding the recording on
+the host and, from the third state on, comparing it with the capture as the
+plugin received it (`/var/mobile/vpinput.raw`, below).
+
+### Silence: the spatial capture route
+
+The recording was a `.qta` with a four-channel ambisonic track and a stereo
+one, both digital silence, while the HAL's own level report on the input
+showed sound (`RTAID … node=-Input … rms:[-20.5], peaks:[-1.4]`). The
+session's mode was `SpatialCapture` and the route's DSP chain
+`flexible_video_recording`, whose graph
+(`/Library/Audio/Tunings/AID8018/VAD/flexible_video_recording.dspg`) begins
+`[def numMics 4]`: four microphones in, wind suppression and a beamformer
+between them, first-order ambisonics and a stereo fallback out. The plugin
+has two channels, both the Mac's one. Where in that graph they become zero
+was not traced. audiomxd also logs, on every route with a microphone,
+
+```
+EDT Accessor error 'Could not construct' for path: IODeviceTree:/product/audio ; key: mic-trim-gains-1 did not return any data
+FDRDataImpl.cpp:356   Trim Gain key 'mic-trim-gains-2' using version 31091
+FDRDataImpl.cpp:395   EXCEPTION (std::runtime_error): "Unrecognized FDRVersion: 31091 using key mic-trim-gains-2"
+```
+
+31091 is 0x7973, the first two bytes of the placeholder `syscfg/MiGB` that no
+VM's syscfg fills. The exception is caught and the route goes on; whether it
+matters to the silence is not known, and the routes below work with it still
+logged.
+
+Voice Memos asks for that mode because the guest says it can: the audio node
+`devicetree-cfw-product_audio_node` copies from the D47 carries
+`supports-spatial-audio-capture` and `supports-audio-mix`. The second is
+what puts the Audio Mix analysis in the capture graph, whose neural net
+faults in cameracaptured (`ios27_capture_microphone_source.md` §7). Neither
+is true of a VM. `devicetree-cfw-product_audio_microphone_array` removes
+both from every guest's tree and `preboot-cfw-devicetree_microphone_array`
+(`vphone-cli cfw patch-dt-microphone-array`) from a tree already restored.
+`supports-spatial-facetime` and `stereo-sound-recording` stay: nothing run
+here depended on them.
+
+Without them the session is `PlayAndRecord` / default mode, the route
+`[vdef] (cpar/imdf) port pmbi`, and the recording a mono `.m4a` with sound
+in it.
+
+### Loud, and it sounded like wind: the general microphone chain
+
+That route's chain was `bottom_mic_general`: the per-microphone correction
+(`built_in_mic_hardware`: trim gains, one FIR each), `CoexKill`, a channel
+selector, an equalizer, a loudness normalizer (`AULDNM`), a multiband
+compressor (`AUMeisterStueck`) and a limiter (`AUControlFreak`). Against the
+capture, band by band (dBFS RMS over the same 13 s):
+
+| | below 60 Hz | 60–120 | 120–300 | 300–1k | 1k–4k | above 4k | peak |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| capture | -40.4 | -30.6 | -26.7 | -29.0 | -40.8 | -58.1 | -6.7 |
+| recording | -32.5 | -22.7 | -18.8 | -20.7 | -32.3 | -49.8 | -0.6 |
+
+About 8 dB everywhere, speech against the limiter, and the pauses lifted from
+-47 to -37 dBFS. The same microphone on an iPad guest (tuning set AID2019)
+goes through a chain named `placeholder` and comes out as it went in.
+
+The D47 set has a second configuration for each microphone,
+`<mic>_measurement`, for `AVAudioSessionModeMeasurement`: the correction,
+`CoexKill`, the selector and two `AUNBandEQ`s, no dynamics.
+`system-virtualaudio-cfw-microphone_graph_chains` gives every
+`<mic>_general` entry in `graph_configurations.plist` its sibling's `graph`,
+`austrip` and `propstrip` (`vphone-cli cfw
+patch-virtualaudio-microphone-chains`); the entry's channel map and other
+properties stay.
+
+### Clipped: the board microphone's gain
+
+Through the measurement chain the recording was 18 dB above the capture in
+every band (-5.7 dBFS RMS, peaks at +14 dBFS). The strip's second equalizer
+carries it: decoding `bottom_mic_measurement.austrip`, `AUNBEQ_2`'s saved
+state is one record of 81 parameters whose parameter 0, AUNBandEQ's global
+gain, is 18.0; `AUNBEQ_1`'s is 0, with one active band, a high-pass at 30 Hz
+(the preset is named `windFilterNBandEQPreset`). The gain is the digital
+gain of the D47's own microphone. The same patch sets every AUNBandEQ's
+global gain in each `*_mic*_measurement.austrip` to 0
+(`vphone-cli cfw patch-virtualaudio-microphone-gain`); the state's layout is
+big-endian records of scope, element, count and `count` pairs of parameter ID
+and Float32, and a strip that does not parse that way is refused.
+
+After it the recording has the capture's levels: speech at -18 to -22 dBFS
+and pauses at -45 dBFS in both, peaks at -3.1 against -3.4 dBFS. (The two
+were not the same span, so no band table: the dump stops at 16 MB and the
+recording ran on.)
+
+### The Mac's rumble: a low cut in the plugin
+
+What was left is in the capture itself. In its pauses (dBFS RMS):
+
+| 20–40 Hz | 40–60 | 60–80 | 80–100 | 100–150 | 150–250 | 250–500 | 500–1k | 1k–4k |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| -62.4 | -57.2 | -54.9 | -55.4 | -56.7 | -62.6 | -67.3 | -73.9 | -76.3 |
+
+A phone's microphone does not pass much of that range; the D47 chain's only
+high-pass is the 30 Hz one above. The plugin now runs each captured period
+through a fourth-order Butterworth high-pass at 120 Hz before the HAL reads
+it (`VPVirtIOSoundFilter.c`, on the input stream's completion queue, state
+reset at each start). On the capture above, offline, that takes the pauses
+from -46.8 to -55.9 dBFS and speech down 2.2 dB.
+
+Against a recording made by the Mac's own Voice Memos a few minutes apart
+(different words, same room and microphone):
+
+| | peak | whole | pauses | below 60 Hz | 60–120 | 120–300 | 300–1k | 1k–4k |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Mac's Voice Memos | -6.2 | -25.0 | -45 to -46 | -42.2 | -32.3 | -27.6 | -30.7 | -43.7 |
+| guest's capture | -7.6 | -25.7 | -44 to -45 | -41.6 | -33.5 | -28.8 | -30.6 | -40.8 |
+| guest's recording | -7.0 | -26.4 | -50 to -54 | -45.3 | -34.9 | -29.5 | -30.9 | -41.2 |
+
+### What the plugin reports
+
+Each stop of the input stream now also logs the level of what the host sent,
+before the low cut: `stream 0: captured level -23.6 / -23.6 dBFS RMS, peak
+-6.7 / -6.7 dBFS` (both channels are the Mac's one microphone). A start that
+finds `/var/mobile/vpinput.dump` also writes the capture, as received, to
+`/var/mobile/vpinput.raw` (interleaved Float32, 48 kHz, 2 channels, at most
+16 MB) — the file the tables above compare recordings with. `files.read`
+returns 512 KB unless given a `limit`.
+
+### Not done
+
+* An iPad guest was not run again. Its set pairs no general microphone chain
+  with a measurement one in the logs taken earlier (`placeholder`), so the
+  chain patch should find nothing there; the low cut and the device tree
+  removal apply to it and were not measured on it.
+* Only the default-mode recording route was exercised. Voice processing
+  (`mic_voice_*` chains: calls, Siri) still gets the Mac's level where it
+  expects the board microphone's, 18 dB lower by the measurement strip's
+  account.
+* 120 Hz is a judgement between the rumble and a low voice's fundamental
+  (this one's was 147 Hz, where the filter's response is -0.8 dB). It was not tried on other voices or
+  other Macs.
+
+## 8. Open
 
 * Whether the kernel returns reads still out at RELEASE is not known. The
   plugin does not depend on it in the normal stop; the one-second fallback

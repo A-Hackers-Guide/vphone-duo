@@ -254,6 +254,28 @@ public enum FirmwareGuestSystemPatchSet {
                 target: .guestFile(path: "/Library/Audio/Tunings"),
             ),
             VPhonePatchDeclaration(
+                identifier: virtualAudioSpeakerRawChains,
+                title: "VirtualAudio raw speaker chain",
+                summary: """
+                Gives every speaker_* entry in the tuning set's graph_configurations.plist the chain \
+                of speaker_raw: the volume and a limiter. The general chain's loudness normalizer, \
+                virtual bass, equalizers and compressor are tuned to the board's own speaker; \
+                through the Mac's they turn the quiet low end of what plays into noise.
+                """,
+                target: .guestFile(path: "/Library/Audio/Tunings"),
+            ),
+            VPhonePatchDeclaration(
+                identifier: virtualAudioMicrophoneChains,
+                title: "VirtualAudio microphone chains",
+                summary: """
+                Gives every <mic>_general entry in the tuning set's graph_configurations.plist the \
+                tunings of its <mic>_measurement sibling. The general chain's loudness normalizer, \
+                compressor and limiter are tuned to the board's own microphone; on the Mac's they \
+                raise the noise floor about 10 dB and a recording sounds like wind.
+                """,
+                target: .guestFile(path: "/Library/Audio/Tunings"),
+            ),
+            VPhonePatchDeclaration(
                 identifier: prebootBoardAudio,
                 title: "iPad audio configuration",
                 summary: """
@@ -272,6 +294,17 @@ public enum FirmwareGuestSystemPatchSet {
                 iPad, as fw patch now does. With it iOS believes the guest has a Taptic Engine, \
                 plays every tone with its haptic track, and drops the tone when the haptic engine \
                 a VM does not have fails to start.
+                """,
+                target: .prebootDeviceTree,
+            ),
+            VPhonePatchDeclaration(
+                identifier: prebootMicrophoneArray,
+                title: "Microphone array claims",
+                summary: """
+                Removes spatial audio capture and Audio Mix from the audio node of a guest's \
+                restored Preboot device tree, as fw patch now does. Both stand for a \
+                four-microphone array; with them iOS 27's Voice Memos records through the spatial \
+                capture route, which gives silence for the Mac's one or two channels.
                 """,
                 target: .prebootDeviceTree,
             ),
@@ -320,6 +353,15 @@ public enum FirmwareGuestSystemPatchSet {
     /// Speaker device a VM does not have.
     public static let virtualAudioGraphConfigurations = "system-virtualaudio-cfw-speaker_graph_chains"
 
+    /// Every speaker chain in graph_configurations.plist, pointed at the raw
+    /// one so playback is not shaped for a speaker the VM does not have.
+    public static let virtualAudioSpeakerRawChains = "system-virtualaudio-cfw-speaker_raw_chains"
+
+    /// The general microphone chains in graph_configurations.plist, pointed at
+    /// their measurement siblings so a recording is not pushed through
+    /// dynamics tuned to a microphone the VM does not have.
+    public static let virtualAudioMicrophoneChains = "system-virtualaudio-cfw-microphone_graph_chains"
+
     /// The iPad audio node repair in the restored Preboot device tree, for an
     /// iPad VM patched before `fw patch` copied the board's node.
     public static let prebootBoardAudio = "preboot-cfw-devicetree_board_audio"
@@ -327,6 +369,11 @@ public enum FirmwareGuestSystemPatchSet {
     /// The haptics node removal in the restored Preboot device tree, for any
     /// VM patched before `fw patch` removed it from every guest's tree.
     public static let prebootHaptics = "preboot-cfw-devicetree_haptics"
+
+    /// The microphone array claims removed from the restored Preboot device
+    /// tree, for any VM patched before `fw patch` removed them from every
+    /// guest's tree.
+    public static let prebootMicrophoneArray = "preboot-cfw-devicetree_microphone_array"
 
     /// The preset parameter `system-systemversion-cfw-build_version` reads.
     public static let buildVersionParameter = "BuildVersion"

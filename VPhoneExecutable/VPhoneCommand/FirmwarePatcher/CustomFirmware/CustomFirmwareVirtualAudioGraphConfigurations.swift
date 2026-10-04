@@ -168,6 +168,98 @@ public enum CustomFirmwareVirtualAudioGraphConfigurations {
         return .rewritten(changed: changed)
     }
 
+    // MARK: - Raw speaker chain
+
+    /// The configuration whose chain is the speaker with nothing made for the
+    /// board's own driver in it, and the keys that name a chain: its tuning
+    /// files and the graph parameter the volume is sent to.
+    static let rawSpeakerConfiguration = "speaker_raw"
+    static let measurementSpeakerConfiguration = "speaker_measurement"
+    static let chainKeys = ["graph", "austrip", "propstrip", "volumeCommands"]
+
+    /// Give every `speaker_*` configuration at `url` the chain of
+    /// `speaker_raw`, and return the ones that changed, sorted.
+    ///
+    /// `speaker_general` and the configurations built on it run a loudness
+    /// normalizer, a virtual bass, crosstalk cancellation, two equalizers, a
+    /// multiband compressor and a limiter, all tuned to the board's own
+    /// speaker: on the D47 set they raise a system sound by 26 dB. Through
+    /// the Mac's speakers that turns the quiet low end of a recording into
+    /// noise. `speaker_raw` is the same route with only the volume and a
+    /// limiter in it. `speaker_measurement` is left as it is, and so is a set
+    /// with no `speaker_raw`.
+    ///
+    /// - Throws: ``PatcherError/invalidFormat(_:)`` when the file is not a
+    ///   plist, its root or `Configurations` is not a dictionary, or a
+    ///   speaker configuration is not a dictionary.
+    @discardableResult
+    public static func useRawSpeakerChain(
+        at url: URL,
+        dryRun: Bool = false,
+        verbose: Bool = true,
+    ) throws -> [String] {
+        let data = try readFile(at: url)
+        let format = detectFormat(data)
+        guard
+            var plist = (try? PropertyListSerialization.propertyList(from: data, options: [], format: nil)) as? [String: Any],
+            var configurations = plist[configurationsKey] as? [String: Any]
+        else {
+            throw PatcherError.invalidFormat("no '\(configurationsKey)' dict present: \(url.path)")
+        }
+        guard let raw = configurations[rawSpeakerConfiguration] else {
+            if verbose {
+                print("  [.] \(url.lastPathComponent): no '\(rawSpeakerConfiguration)' configuration, left as it is")
+            }
+            return []
+        }
+        guard let raw = raw as? [String: Any] else {
+            throw PatcherError.invalidFormat("configuration '\(rawSpeakerConfiguration)' is not a dict: \(url.path)")
+        }
+
+        var changed: [String] = []
+        for name in configurations.keys.sorted()
+            where name.hasPrefix("speaker_") && name != rawSpeakerConfiguration && name != measurementSpeakerConfiguration
+        {
+            guard var entry = configurations[name] as? [String: Any] else {
+                throw PatcherError.invalidFormat("configuration '\(name)' is not a dict: \(url.path)")
+            }
+            var differs = false
+            for key in chainKeys {
+                let wanted = raw[key]
+                let same = switch (entry[key], wanted) {
+                case (nil, nil): true
+                case let (have?, want?): (have as AnyObject).isEqual(want)
+                default: false
+                }
+                guard !same else { continue }
+                differs = true
+                entry[key] = wanted
+            }
+            guard differs else { continue }
+            configurations[name] = entry
+            changed.append(name)
+            if verbose {
+                print("  [+] \(url.lastPathComponent): \(name) takes the chain of \(rawSpeakerConfiguration)")
+            }
+        }
+
+        if changed.isEmpty {
+            if verbose {
+                print("  [.] \(url.lastPathComponent): speaker chains already '\(rawSpeakerConfiguration)'")
+            }
+            return []
+        }
+        if dryRun {
+            if verbose {
+                print("  [.] dry-run — not writing back")
+            }
+            return changed
+        }
+        plist[configurationsKey] = configurations
+        try PropertyListSerialization.data(fromPropertyList: plist, format: format, options: 0).write(to: url)
+        return changed
+    }
+
     // MARK: - Format detection
 
     /// XML plists start with `<?xml` or `<plist`; binary plists start with

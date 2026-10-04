@@ -165,6 +165,11 @@ extension DeviceTreePatcher {
         // from d47 wouldn't make the VM's actual mic/speaker hardware
         // match, but downstream code already handles missing-syscfg
         // gracefully.
+        //
+        // `supports-spatial-audio-capture` and `supports-audio-mix` are
+        // taken out again after this node is added, by
+        // `devicetree-cfw-product_audio_microphone_array`: they stand for
+        // the D47's microphone array, which no VM has.
         AddChildNodePatch(
             parentPath: ["device-tree", "product"],
             nodeName: "audio",

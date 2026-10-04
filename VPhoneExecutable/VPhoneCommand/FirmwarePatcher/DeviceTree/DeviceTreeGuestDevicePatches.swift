@@ -57,6 +57,7 @@ extension DeviceTreePatcher {
     static let iPadIdentityPatch = "devicetree-cfw-ipad_identity"
     static let iPadAudioPatch = "devicetree-cfw-ipad_audio"
     static let hapticsPatch = "devicetree-cfw-product_haptics_node"
+    static let microphoneArrayPatch = "devicetree-cfw-product_audio_microphone_array"
 
     // MARK: - What Is Copied
 
@@ -292,6 +293,39 @@ extension DeviceTreePatcher {
         return serialize(haptics)
     }
 
+    // MARK: - Microphone Array
+
+    /// `/product/audio` properties that promise processing built on the
+    /// board's microphone array.
+    static let microphoneArrayProperties = ["supports-spatial-audio-capture", "supports-audio-mix"]
+
+    /// Remove `microphoneArrayProperties` from `root`'s `/product/audio`.
+    /// Returns each removed property with its value, in that order; empty when
+    /// the tree has no audio node or none of them.
+    ///
+    /// The iPhone guest's audio node is the D47's, and an iPad guest's is its
+    /// board's; either can say the device captures spatial audio and analyses
+    /// an Audio Mix. A VM's microphone is the Mac's, one or two channels
+    /// through virtio-snd, not the four-microphone array those answers stand
+    /// for. With them iOS 27's Voice Memos records through the SpatialCapture
+    /// route, whose DSP graph (`flexible_video_recording`, four microphones in,
+    /// first-order ambisonics out) gives silence for the two real channels,
+    /// and through the Audio Mix analysis, whose neural net faults in
+    /// cameracaptured. See `Research/Guest/ios27_capture_microphone_source.md`.
+    static func removeMicrophoneArrayClaims(from root: DTNode) -> [(name: String, value: Data)] {
+        guard
+            let product = optionalChild(of: root, named: "product"),
+            let audio = optionalChild(of: product, named: "audio")
+        else { return [] }
+        var removed: [(name: String, value: Data)] = []
+        for name in microphoneArrayProperties {
+            guard let index = audio.properties.firstIndex(where: { $0.name == name }) else { continue }
+            removed.append((name, audio.properties[index].value))
+            audio.properties.remove(at: index)
+        }
+        return removed
+    }
+
     /// The flat encoding of one node and its children, for the patch record.
     private static func serialize(_ node: DTNode) -> Data {
         var out = Data()
@@ -398,6 +432,26 @@ extension DeviceTreePatcher {
         ))
         if verbose {
             print("  -node  : /product/haptics, no actuator or haptic server on a VM (\(removed.count)B)  [\(Self.hapticsPatch)]")
+        }
+    }
+
+    /// Applies `removeMicrophoneArrayClaims(from:)` to the parsed tree,
+    /// whichever guest and role it is for, and records each removal.
+    func applyMicrophoneArrayRemoval(root: DTNode) {
+        guard gateAllows(Self.microphoneArrayPatch) else { return }
+        for (name, value) in Self.removeMicrophoneArrayClaims(from: root) {
+            patches.append(PatchRecord(
+                patchID: Self.microphoneArrayPatch,
+                component: component,
+                fileOffset: 0,
+                virtualAddress: nil,
+                originalBytes: value,
+                patchedBytes: Data(),
+                description: "Remove /device-tree/product/audio/\(name), which needs a microphone array no VM has",
+            ))
+            if verbose {
+                print("  -prop  : /product/audio/\(name) \(value.hex) → absent  [\(Self.microphoneArrayPatch)]")
+            }
         }
     }
 }

@@ -773,12 +773,60 @@ SpringBoard: [MRAVVolumeClientEndpoint] VolumeController unavailable; will retry
 
 audiomxd registers the service and SpringBoard holds
 `com.apple.private.mediaexperience.controlcentervolumeclient.allow`; the
-lookup is refused by the kernel's sandbox. The likely reason, not traced
-further: the sandbox profile for SpringBoard comes with the cloudOS 26.4
-kernel and predates a service iOS 27's SpringBoard asks for, the kind of
-mismatch `kernel-boot-sandbox_ext` opens `proc_check_syscall_unix` for. It
-needs its own kernel-side change. The volume keys do not go through that
-service.
+lookup is refused by the kernel's sandbox. Traced — see
+`Research/Guest/ios27_cc_volume_sandbox.md`. The profile evaluated for
+SpringBoard is the one baked into the cloudOS 26.4 Sandbox kext (iOS 27 ships
+no userland platform profile collection), and it predates the iOS 27 service:
+the 26.4 collection names the old `com.apple.coremedia.volumecontroller.xpc`
+and the sibling mediaexperience services but not `avvolumeclient` nor the
+`controlcentervolume` entitlement. mach-lookup is evaluated by the in-kernel
+Protobox engine (reached from launchd/libxpc's `sandbox_check_by_audit_token`),
+not a `mac_policy_ops` hook, so `kernel-boot-sandbox_ext` cannot reach it.
+The obvious guest-side fix — add the global-name to SpringBoard's own
+`com.apple.security.exception.mach-lookup.global-name` array and re-sign, the
+escape hatch Campo uses — was tried and **does not work for SpringBoard**: the
+name is confirmed in SpringBoard's DER entitlements yet the denial is
+unchanged, because SpringBoard's platform profile does not honour the
+exception entitlement the way Campo's `temporary-sandbox` profile does. The
+remaining options (a scoped `sandbox_check` short-circuit in the launchd hook,
+or a kernel Protobox patch) and their blast radius are in the note. The volume
+keys do not go through that service.
+
+## 9. Playback sounded like wind: the speaker chain was the board's (2026-10-04)
+
+With recordings on an iPhone guest matching the Mac's own (see
+`virtio_sound_microphone.md` §7), playing one back in the guest still
+sounded noisy. Every `speaker_*` configuration of the D47 tuning set
+(AID8018) but two runs `speaker_general.dspg`: a loudness normalizer
+(`AULDNM`), a DC blocker, a virtual bass (`AUVirtualBass`), rotation shading,
+crosstalk cancellation, an equalizer, a volume taper, a multiband compressor,
+a second equalizer, two `AUBuzzKill`s and a limiter — a small speaker's
+correction. audiomxd's own level report across it, for a system sound:
+`PreDSP … rms:[-52.6], peaks:[-35.4]`, `PostDSP … rms:[-26.5], peaks:[-7.8]`,
+26 dB up. Through a Mac's speakers the quiet low end of a recording comes
+out as noise.
+
+`speaker_raw` is the same route with rotation shading, a volume
+(`AUVolume`, driven by the `vugd` graph parameter rather than
+`speaker_general`'s `vtvs`) and a limiter. `system-virtualaudio-cfw-speaker_raw_chains`
+gives every `speaker_*` entry in `graph_configurations.plist` other than
+`speaker_raw` and `speaker_measurement` the raw one's `graph`, `austrip`,
+`propstrip` and `volumeCommands` (`vphone-cli cfw
+patch-virtualaudio-speaker-raw`). It runs after `speaker_graph_chains`, which
+is still what keeps the chain factory off the physical speaker.
+
+Without the normalizer the middle of the volume slider was quiet: the route
+sets the plugin's control in a straight line of decibels over its -36 dB
+range, -20.2 dB at 7/16. The plugin now takes the control's position in its
+range, squared, as the gain (`applyGain`): -14.4 dB at 7/16, -12 dB at half,
+unity at the top. The control's decibels are what VirtualAudio reads back and
+are unchanged.
+
+Heard on `mictest-iphone` by the person testing: "much better" with the raw
+chain, then "a little quiet", which the taper answers. Not measured: the
+level across the raw chain, the volume keys after the change (the plugin's
+log shows the value still arrives), and an iPad guest, whose tuning set this
+patch also rewrites if it has a `speaker_raw`.
 
 ## Reveal and validation
 

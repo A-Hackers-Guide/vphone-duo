@@ -2,10 +2,12 @@
 // the format the plugin asks the device for, the rings' counters, and how
 // captured frames are served.
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "VPVirtIOSoundFilter.h"
 #include "VPVirtIOSoundProtocol.h"
 #include "VPVirtIOSoundRing.h"
 
@@ -428,6 +430,86 @@ static void testReaderDropsWhatTheLastRunLeft(void) {
     VPVirtIOSoundInputRingDestroy(&ring);
 }
 
+// MARK: - High-pass
+
+/// The gain, in decibels, the filter gives a `hertz` sine at 48 kHz on
+/// channel `channel` of `channels`, measured once it has settled.
+static double highPassGain(VPVirtIOSoundHighPass *filter, double hertz, uint32_t channels, uint32_t channel) {
+    enum { kFrames = 48000, kPeriod = 1024 };
+    static float samples[kPeriod * 2];
+    double in = 0, out = 0;
+    VPVirtIOSoundHighPassReset(filter);
+    for (uint32_t start = 0; start < kFrames; start += kPeriod) {
+        for (uint32_t frame = 0; frame < kPeriod; frame++) {
+            for (uint32_t c = 0; c < channels; c++) {
+                samples[frame * channels + c] = (float)(0.5 * sin(2 * M_PI * hertz * (start + frame) / 48000.0));
+            }
+        }
+        VPVirtIOSoundHighPassProcess(filter, samples, kPeriod, channels);
+        // The second half second: the transient is over by then.
+        if (start < kFrames / 2) {
+            continue;
+        }
+        for (uint32_t frame = 0; frame < kPeriod; frame++) {
+            double reference = 0.5 * sin(2 * M_PI * hertz * (start + frame) / 48000.0);
+            double sample = samples[frame * channels + channel];
+            in += reference * reference;
+            out += sample * sample;
+        }
+    }
+    return 10 * log10(out / in);
+}
+
+static void testHighPassCutsRumbleAndKeepsSpeech(void) {
+    VPVirtIOSoundHighPass filter;
+    VPVirtIOSoundHighPassConfigure(&filter, 48000, 120);
+    for (uint32_t channel = 0; channel < 2; channel++) {
+        // Fourth order: 3 dB down at the cutoff, 24 dB an octave below it.
+        CHECK(fabs(highPassGain(&filter, 120, 2, channel) + 3.01) < 0.05);
+        CHECK(fabs(highPassGain(&filter, 60, 2, channel) + 24.1) < 0.3);
+        CHECK(highPassGain(&filter, 30, 2, channel) < -47);
+        // Flat where speech is.
+        CHECK(fabs(highPassGain(&filter, 250, 2, channel)) < 0.1);
+        CHECK(fabs(highPassGain(&filter, 1000, 2, channel)) < 0.01);
+        CHECK(fabs(highPassGain(&filter, 8000, 2, channel)) < 0.01);
+    }
+    // One channel works alone.
+    CHECK(fabs(highPassGain(&filter, 1000, 1, 0)) < 0.01);
+    CHECK(highPassGain(&filter, 30, 1, 0) < -47);
+}
+
+static void testHighPassRemovesAnOffsetAndSurvivesBadSamples(void) {
+    VPVirtIOSoundHighPass filter;
+    VPVirtIOSoundHighPassConfigure(&filter, 48000, 120);
+    static float samples[4800 * 2];
+    for (int i = 0; i < 4800 * 2; i++) {
+        samples[i] = 0.25f;
+    }
+    VPVirtIOSoundHighPassProcess(&filter, samples, 4800, 2);
+    CHECK(fabsf(samples[4799 * 2]) < 1e-4f && fabsf(samples[4799 * 2 + 1]) < 1e-4f);
+
+    // A sample that is not a number is taken as silence, not kept.
+    float bad[8] = {NAN, INFINITY, 0, 0, 0, 0, 0, 0};
+    VPVirtIOSoundHighPassReset(&filter);
+    VPVirtIOSoundHighPassProcess(&filter, bad, 4, 2);
+    for (int i = 0; i < 8; i++) {
+        CHECK(bad[i] == 0);
+    }
+
+    // A reset forgets the past: silence in is silence out.
+    VPVirtIOSoundHighPassProcess(&filter, samples, 4800, 2);
+    VPVirtIOSoundHighPassReset(&filter);
+    float quiet[4] = {0, 0, 0, 0};
+    VPVirtIOSoundHighPassProcess(&filter, quiet, 2, 2);
+    CHECK(quiet[0] == 0 && quiet[1] == 0 && quiet[2] == 0 && quiet[3] == 0);
+
+    // A third channel is passed through untouched.
+    float three[6] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
+    VPVirtIOSoundHighPassReset(&filter);
+    VPVirtIOSoundHighPassProcess(&filter, three, 2, 3);
+    CHECK(three[2] == 0.5f && three[5] == 0.5f && three[0] != 0.5f);
+}
+
 int main(void) {
     testPrefersFloat48k();
     testFallsBackToInteger();
@@ -444,6 +526,8 @@ int main(void) {
     testReaderWaitsForTheLead();
     testReaderBoundsTheBacklog();
     testReaderDropsWhatTheLastRunLeft();
+    testHighPassCutsRumbleAndKeepsSpeech();
+    testHighPassRemovesAnOffsetAndSurvivesBadSamples();
     if (failures) {
         fprintf(stderr, "VirtIOSoundTests: %d failure(s)\n", failures);
         return 1;

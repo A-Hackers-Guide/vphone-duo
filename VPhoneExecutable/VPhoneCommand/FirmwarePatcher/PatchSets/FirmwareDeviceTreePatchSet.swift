@@ -176,6 +176,11 @@ public enum FirmwareDeviceTreePatchSet {
                 "Haptics node",
                 "Removes the Taptic Engine no VM has, so tones play without the haptic track it cannot drive.",
             ),
+            property(
+                "devicetree-cfw-product_audio_microphone_array",
+                "Microphone array claims",
+                "Removes spatial audio capture and Audio Mix, which need a microphone array no VM has, so apps record plain audio.",
+            ),
 
             // MARK: iPad Guest
 

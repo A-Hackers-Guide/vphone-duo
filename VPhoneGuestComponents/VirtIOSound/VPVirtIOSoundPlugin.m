@@ -52,6 +52,7 @@
 
 #include "VPVirtIOSoundClock.h"
 #include "VPVirtIOSoundConverter.h"
+#include "VPVirtIOSoundFilter.h"
 #include "VPVirtIOSoundProtocol.h"
 #include "VPVirtIOSoundRing.h"
 
@@ -80,11 +81,19 @@ static const uint32_t kInputMaximumBacklogPeriods = 4;
 /// How long a stopped input stream waits for its reads to come back before
 /// it releases the device with them still out.
 static const uint64_t kInputDrainNanoseconds = NSEC_PER_SEC;
+/// A start that finds the trigger file also writes what it captures, as the
+/// host sent it, to the path beside it, up to the limit. For comparing the
+/// capture with what a recording app makes of it.
+static const char *const kInputDumpTrigger = "/var/mobile/vpinput.dump";
+static const char *const kInputDumpPath = "/var/mobile/vpinput.raw";
+static const uint64_t kInputDumpMaximumBytes = 16 * 1024 * 1024;
+/// Where the capture's low cut sits. See VPVirtIOSoundFilter.h.
+static const double kInputHighPassHertz = 120;
 
 /// The speaker volume control's range. VirtualAudio maps the guest's volume
-/// onto it in a straight line, so the bottom decides how loud half volume
-/// is: -18 dB here. The macOS plugin's -60 dB would put it at -30 dB, which
-/// through a Mac's speakers is close to nothing.
+/// onto it in a straight line and reads the decibels back, so the range is
+/// only how the guest's volume reaches the plugin: `applyGain` takes the
+/// position in it, not the decibels, as the gain.
 static const float kSpeakerMinimumDecibels = -36.0f;
 static const float kMicrophoneMinimumDecibels = -60.0f;
 
@@ -1268,6 +1277,17 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
     BOOL _loggedFirstRead;
     /// Reads the device returned since CoreAudio last started the stream.
     uint64_t _completions;
+    /// The level of what those reads held, per channel for the first two:
+    /// the largest sample and the sum of squares over `_measuredFrames`.
+    float _peak[2];
+    double _squares[2];
+    uint64_t _measuredFrames;
+    /// Where the captured periods are also written, when
+    /// `kInputDumpTrigger` exists at a start. Diagnostic only.
+    FILE *_dump;
+    uint64_t _dumpedBytes;
+    /// The low cut each captured period goes through before the HAL reads it.
+    VPVirtIOSoundHighPass _highPass;
     /// The device's mute control. Its volume is not applied: what the host
     /// captures is already at the level the Mac's input is set to.
     _Atomic bool _muted;
@@ -1342,6 +1362,9 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
             atomic_store(&_capture.halRate, (uint32_t)kVPAlternateRate);
         }
     }
+    // The low cut runs on each captured period in the ring, at the wire rate,
+    // before the converter above reads it.
+    VPVirtIOSoundHighPassConfigure(&_highPass, format.sampleRate, kInputHighPassHertz);
     [self installReadBlock];
     [self logFormatWithLeadPeriods:kInputLeadPeriods];
     return self;
@@ -1416,6 +1439,54 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
         (unsigned long long)framesOut, seconds > 0 ? framesOut / seconds : 0,
         (unsigned long long)atomic_load(&_reader.silentFrames),
         (unsigned long long)atomic_load(&_reader.skippedBytes));
+    if (_measuredFrames > 0) {
+        double level[2] = {0, 0};
+        double peak[2] = {0, 0};
+        for (unsigned channel = 0; channel < 2; channel++) {
+            level[channel] = 10 * log10(MAX(_squares[channel] / (double)_measuredFrames, 1e-12));
+            peak[channel] = 20 * log10(MAX((double)_peak[channel], 1e-6));
+        }
+        VPLogToFile("stream %u: captured level %.1f / %.1f dBFS RMS, peak %.1f / %.1f dBFS",
+            _streamID, level[0], level[1], peak[0], peak[1]);
+    }
+    if (_dump) {
+        fclose(_dump);
+        _dump = NULL;
+        VPLogToFile("stream %u: wrote %llu captured bytes to %s",
+            _streamID, (unsigned long long)_dumpedBytes, kInputDumpPath);
+    }
+}
+
+/// Adds one returned period to the level counters, and to the dump when
+/// there is one, then runs it through the low cut. Float samples only, which
+/// is what the host sends.
+- (void)measurePeriodAtOffset:(uint32_t)offset {
+    if (!_format.isFloat || _format.bitsPerChannel != 32 || _format.channels == 0) {
+        return;
+    }
+    const float *samples = (const float *)(_ring.bytes + offset);
+    uint32_t channels = _format.channels;
+    uint32_t frames = _periodBytes / _format.bytesPerFrame;
+    for (uint32_t frame = 0; frame < frames; frame++) {
+        for (uint32_t channel = 0; channel < MIN(channels, 2u); channel++) {
+            float sample = samples[frame * channels + channel];
+            if (!isfinite(sample)) {
+                continue;
+            }
+            _peak[channel] = MAX(_peak[channel], fabsf(sample));
+            _squares[channel] += (double)sample * sample;
+        }
+    }
+    if (channels == 1) {
+        _peak[1] = _peak[0];
+        _squares[1] = _squares[0];
+    }
+    _measuredFrames += frames;
+    if (_dump && _dumpedBytes < kInputDumpMaximumBytes) {
+        _dumpedBytes += fwrite(samples, 1, _periodBytes, _dump);
+    }
+    // Measured and dumped as the host sent it; the HAL reads it filtered.
+    VPVirtIOSoundHighPassProcess(&_highPass, (float *)(_ring.bytes + offset), frames, channels);
 }
 
 // MARK: Transfers
@@ -1482,6 +1553,8 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
         // Whatever the slot holds is not this period's capture.
         memset(_ring.bytes + offset, 0, _periodBytes);
         [self reportTransferError:result length:_periodBytes];
+    } else if (_state == VPStreamStateRunning) {
+        [self measurePeriodAtOffset:offset];
     }
     VPVirtIOSoundInputRingDidComplete(&_ring);
     _completions++;
@@ -1518,6 +1591,14 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
 - (void)startStream {
     dispatch_sync(_queue, ^{
         self->_completions = 0;
+        memset(self->_peak, 0, sizeof(self->_peak));
+        memset(self->_squares, 0, sizeof(self->_squares));
+        self->_measuredFrames = 0;
+        self->_dumpedBytes = 0;
+        VPVirtIOSoundHighPassReset(&self->_highPass);
+        if (!self->_dump && access(kInputDumpTrigger, F_OK) == 0) {
+            self->_dump = fopen(kInputDumpPath, "w");
+        }
         atomic_store(&self->_reader.servedFrames, 0);
         atomic_store(&self->_reader.silentFrames, 0);
         atomic_store(&self->_reader.skippedBytes, 0);
@@ -2043,17 +2124,26 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
 
 // MARK: Controls
 
-/// The gain the streams apply: silence when muted, else the volume control's
-/// decibels as a factor. At the bottom of its range the control means off.
+/// The gain the streams apply: silence when muted or at the bottom of the
+/// volume control's range, else the square of the control's position in it.
+///
+/// The guest's speaker chain is the raw one (`speaker_raw_chains`), with none
+/// of the loudness the board's own chain adds at low volumes, so the control's
+/// decibels taken as they are leave the middle of the slider quiet: -18 dB at
+/// half. The square is the usual taper for a volume with nothing after it:
+/// -12 dB at half, -24 dB at a quarter, and unity at the top.
 - (void)applyGain {
     float decibels = _volumeControl.decibelValue;
-    float gain = _muteState || decibels <= _volumeControl.minimumDecibelValue ? 0 : powf(10, decibels / 20);
+    float minimum = _volumeControl.minimumDecibelValue;
+    float position = minimum < 0 ? 1 - decibels / minimum : 1;
+    position = fminf(fmaxf(position, 0), 1);
+    float gain = _muteState ? 0 : position * position;
     for (VPVirtIOSoundStream *stream in _streams) {
         [stream setGain:gain];
     }
-    VPLogToFile("device %s: %s, %.1f dB, gain %.3f",
+    VPLogToFile("device %s: %s, %.1f dB of %.0f, gain %.3f",
         _direction == ASDStreamDirectionInput ? "microphone" : "speaker",
-        _muteState ? "muted" : "unmuted", decibels, gain);
+        _muteState ? "muted" : "unmuted", decibels, minimum, gain);
 }
 
 - (void)volumeChanged {
