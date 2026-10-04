@@ -92,6 +92,7 @@ __attribute__((constructor)) static void vcc_init(void) {
     // Not delayed with the camera hooks below: the daemon asks for its
     // capture sources as soon as a client connects.
     vcc_install_microphone_source();
+    vcc_install_remix_session_skip();
 
     // Schedule install after the daemon has run its own init. The delay
     // gives FigCaptureSourceServerStart's `dispatch_once` block time to

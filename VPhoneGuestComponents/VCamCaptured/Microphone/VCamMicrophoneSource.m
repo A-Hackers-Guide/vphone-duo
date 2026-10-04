@@ -41,7 +41,7 @@ typedef void (*VccSourceInfoFn)(void *device, CFDictionaryRef plist,
 static IMP vcc_shared_provider_orig = NULL;
 static id vcc_mic_provider = nil;
 static BOOL vcc_mic_provider_failed = NO;
-static BOOL vcc_mic_provider_logged_use = NO;
+static BOOL vcc_mic_provider_served = NO;
 
 static BOOL vcc_provider_has_mic(id provider) {
   Ivar iv = class_getInstanceVariable(object_getClass(provider), "_hasMicSource");
@@ -153,12 +153,16 @@ static id vcc_shared_provider_hook(id self, SEL _cmd) {
       vcc_mic_provider = vcc_build_mic_provider(self);
       vcc_mic_provider_failed = (vcc_mic_provider == nil);
     }
-    if (vcc_mic_provider && !vcc_mic_provider_logged_use) {
-      vcc_mic_provider_logged_use = YES;
+    if (vcc_mic_provider && !vcc_mic_provider_served) {
+      vcc_mic_provider_served = YES;
       vcc_log(@"  mic source: daemon built no provider; serving the microphone-only one");
     }
     return vcc_mic_provider;
   }
+}
+
+BOOL vcc_microphone_only_source_active(void) {
+  return vcc_mic_provider_served;
 }
 
 void vcc_install_microphone_source(void) {

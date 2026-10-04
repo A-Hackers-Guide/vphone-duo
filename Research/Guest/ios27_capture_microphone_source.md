@@ -171,20 +171,100 @@ mic source: no AVCaptureSession.plist for model VPHONE600
 The second line is only reached when the original returned nil, so the
 daemon's own provider is nil at its first source query, as §2 reads. It also
 showed that the guest's model has no plist, which the product-folder fallback
-in §5 answers. That second build has not run in a guest yet: its install
-stopped at Launchpad's administrator prompt.
+in §5 answers.
 
-Still to check, in order, once it runs:
+With the fallback (bundle `2.4.0-local.473d5071`, deployed by the
+coordinating session):
 
-1. `vcamcaptured.log`: `mic source: model D47, 1 source info(s), provider …,
-   hasMicSource=1`, then `serving the microphone-only one`, and no
-   cameracaptured crash report.
-2. Voice Memos Record: no `CaptureSessionRecorderError`; cameracaptured's
-   `captureSession_SetConfiguration` reads `Cam/Audio:0/1`.
-3. `/var/mobile/vpquery.log` gets a `stream 0: … reads, in … frames` line,
-   and the `.m4a` under the Voice Memos app group's `Recordings/` decodes
-   (`afconvert` to WAV) to something that is not zeros.
+```
+mic source: no AVCaptureSession.plist for model VPHONE600
+mic source: model D47, 1 source info(s), provider 0x658ca0f00, hasMicSource=1
+mic source: daemon built no provider; serving the microphone-only one
+```
 
-The mic-only provider hands out a source; whether `BWAudioSourceNode` then
-runs in cameracaptured without anything else from the camera device is not
-established until step 2.
+Voice Memos then gets its device and runs the session: `-[AVCaptureSession
+addInput:]: <AVCaptureDeviceInput [iPhone Microphone]>`, an
+`AVCaptureMovieFileOutput` and an `AVCaptureAudioDataOutput`, and
+cameracaptured logs `captureSession_SetConfiguration … Cam/Audio:0/1`,
+`starting source node <AudioDevice, BWAudioSourceNode>`, `AURemoteIO … input
+client: 6 ch, 48000 Hz` and `captureSession_FileSinkStartRecording`. The
+sound plugin delivers (`stream 0: 2.15 s, 24 reads, in 98304 frames …`).
+Every recording then ends about 2 s in with cameracaptured crashing; §7.
+
+## 7. The Audio Mix analysis that crashes cameracaptured
+
+The crash (`cameracaptured-2026-10-03-195510.ips` and three more):
+`EXC_BAD_ACCESS (SIGSEGV) KERN_INVALID_ADDRESS at 0x300` in
+`BNNSGraphContextMakeStreaming`, under `MIL2BNNS::loadContext` →
+`NeuralNet::NeuralNet` → `AUNeuralNet::Initialize` → `DSPGraph` →
+SoundAnalysis → `-[AudioRemixSessionManager startNewSessionBlocking]`.
+Voice Memos sees `AVFoundationErrorDomain -11819` (media services were reset).
+
+### Why there is a remix session at all
+
+* Voice Memos records spatial audio when MobileGestalt answers
+  `DeviceSupportsSpatialAudioCapture` (`RCDeviceSupportsSpatialAudioCapture`,
+  behind `RCSpatialAudioCaptureIsAvailable`, VoiceMemos framework). The
+  guest answers as the D47 it was built from.
+* `CaptureSessionRecorder` then requires first-order ambisonics: in the app
+  binary, right after creating the `AVCaptureDeviceInput`, it calls
+  `isMultichannelAudioModeSupported:2` and, only if YES,
+  `setMultichannelAudioMode:2` (0x1001b274c–0x1001b2760); NO branches to a
+  `swift_allocError` (0x1001b28bc), the same error type its other failures
+  use. There is no stereo fallback in that path.
+* `isMultichannelAudioModeSupported:` ends in
+  `-[AVCaptureFigAudioDevice isAudioCaptureModeSupported:]`, which answers
+  mode 2 from the source attribute `cinematicAudioCaptureSupported` and mode 1
+  from `builtInMicrophoneStereoAudioCaptureSupported` (the two
+  `objc_msgSend` stubs it tail-calls). D47's microphone entry sets both.
+* The movie-file head pipeline (`_buildMovieFileSinkHeadPipeline…`,
+  0x1b0728ac0) adds a `BWAudioRemixAnalysisMetadataNode` next to the
+  "Cinematic Audio Converter" when its metadata configuration asks for one;
+  `FigCaptureMetadataObjectConfigurationRequiresSpatialAudioMix` keys that on
+  `kCMMetadataIdentifier_QuickTimeMetadataSpatialAudioMix`. That the
+  ambisonic mode is what puts this identifier in Voice Memos' configuration
+  is inferred, not traced.
+  Its start marker runs `startNewSessionBlocking`, which builds a SoundAnalysis
+  `SNMovieRemix` session; that is the neural net that faults.
+
+So stripping `cinematicAudioCaptureSupported` from the source (option a)
+would not give a plain recording: Voice Memos would stop at
+`isMultichannelAudioModeSupported:` with its own error instead.
+
+### Why the neural net faults
+
+Not established. audiomxd loads and runs a neural net through the same
+`MIL2BNNS` path in the same recording (the SpatialCapture wind model,
+`graph size is 1032192 bytes`, `context size is 3752 bytes`, `Successfully
+loaded`), from a `.mil` it compiles to `.ir` in its own cache. cameracaptured's
+remix model is shipped as `.ir` (`MIL2BNNS extension is '.ir'`, `graph size is
+1359872 bytes`) and faults in the next step, making the streaming context.
+That the precompiled graph targets something the VM's CPU or BNNS build does
+not have is a guess.
+
+### What the hook does
+
+The node is written for a session that does not start
+(`-[BWAudioRemixAnalysisMetadataNode renderSampleBuffer:forInput:]`,
+0x1b0600d88):
+
+* a non-zero return from `startNewSessionBlocking` (0x1b06010bc `cbnz w0`)
+  skips setting `_shouldSendData` and goes to `emitSampleBuffer:` — the audio
+  passes through;
+* `submitAudioBuffer:` is called only after `sessionReady` returns YES;
+* `-finishAndGetResultsBlockingWithStartingPTS:andEndingPTS:` returns an
+  error when there is no subscriber (`ldr x0, [x0, #0x10]; cbz`) instead of
+  blocking, and `_sendRemixMetadataSampleBuffer` ignores its result.
+
+`VCamCaptured/Microphone/VCamMicrophoneRemix.m` replaces
+`-[AudioRemixSessionManager startNewSessionBlocking]` (`- (int)`, checked
+against the runtime type encoding before wrapping). While the daemon is
+running on the microphone-only provider, it returns -16992, the code the
+method's own failure path signals, without creating the session; otherwise it
+calls the original. The recording keeps its ambisonic audio and loses only the
+Audio Mix analysis track's data.
+
+Not yet run in a guest. To check: `vcamcaptured.log` has `remix: wrapped …` at load and
+`Audio Mix analysis session not started (-16992)` at the first recording;
+cameracaptured's pid survives a recording; then the `vpquery.log` line and a
+non-silent `.m4a`.

@@ -43,6 +43,15 @@ void vcc_swizzle_method(Class cls, SEL sel, IMP newImp, IMP *outOrig);
 // in the constructor, before the daemon's first source query.
 void vcc_install_microphone_source(void);
 
+// YES once the daemon has been served the microphone-only provider, which
+// happens only when it has no capture device of its own.
+BOOL vcc_microphone_only_source_active(void);
+
+// While that provider is in use, -[AudioRemixSessionManager
+// startNewSessionBlocking] fails the way it does when its session cannot
+// start, instead of running the Audio Mix neural net that faults on a guest.
+void vcc_install_remix_session_skip(void);
+
 void vcc_install_synthetic(void);
 void vcc_start_frame_receiver(void);
 void vcc_install_endpoint_hook(void);
