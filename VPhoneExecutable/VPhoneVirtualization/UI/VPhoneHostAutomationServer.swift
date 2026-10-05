@@ -230,6 +230,9 @@ class VPhoneHostAutomationServer {
                     return Self.reply(ok: false, error: "type requires text")
                 }
                 try await connectedControl().clipboardSet(text: text)
+                // Not a copy the user made, so leaving the window does not
+                // put it on the Mac clipboard.
+                captureView?.clipboardSync?.adoptGuestClipboard()
 
             case "rpc":
                 guard let method = json["method"] as? String, !method.isEmpty else {

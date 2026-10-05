@@ -117,6 +117,7 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
                 guard let self, let control = self.control else { return }
                 self.updateHomeButton(connected: control.isConnected)
                 self.updateSubtitle(control: control)
+                self.captureView?.clipboardSync?.connectionChanged(connected: control.isConnected)
             }
         })
 
@@ -227,6 +228,15 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         if window.isKeyWindow, captureView?.hardwareKeyboardEnabled == true {
             VPhoneHostHotKeys.shared.suspend()
         }
+
+        // A guest copy made while this window is key reaches the Mac when it
+        // resigns key; see `VPhoneClipboardSync`.
+        keyStateObservers.append(center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.captureView?.clipboardSync?.adoptGuestClipboard() }
+        })
+        keyStateObservers.append(center.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.captureView?.clipboardSync?.bringGuestCopyToMac() }
+        })
     }
 
     // MARK: - Title
