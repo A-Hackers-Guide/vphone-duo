@@ -83,6 +83,10 @@ struct VPhoneLaunchpadMachineInspector: View {
     /// The machine the catalogue above was read for, so another machine's
     /// patches never show while its own are read.
     @State private var patchCatalogMachine: VPhoneLaunchpadMachinePath?
+    /// The choice the patch editor opens with, set when it is shown.
+    @State private var editedPatches: VPhoneLaunchpadPatchSelection?
+    /// Bumped after a save or an update, so the patches are read again.
+    @State private var patchRevision = 0
 
     private var library: VPhoneLaunchpadMachineLibrary {
         model.machines
@@ -176,6 +180,20 @@ struct VPhoneLaunchpadMachineInspector: View {
             VPhoneLaunchpadCommandHistoryView()
                 .environment(model)
         }
+        .sheet(item: $editedPatches) { initial in
+            let path = machine.path
+            VPhoneLaunchpadPatchSettingsView(
+                initial: initial,
+                bundleVersion: library.bundleVersion(for: path),
+                machine: path,
+            ) { selection in
+                Task {
+                    await library.setPatches(selection, for: path)
+                    patchRevision += 1
+                }
+            }
+            .environment(model)
+        }
     }
 
     static var mixedHelp: String {
@@ -225,6 +243,7 @@ struct VPhoneLaunchpadMachineInspector: View {
         let machine: VPhoneLaunchpadMachinePath
         let bundle: String?
         let state: VPhoneLaunchpadMachineLibrary.RunState
+        let revision: Int
     }
 
     private var patchReadKey: PatchReadKey {
@@ -232,14 +251,16 @@ struct VPhoneLaunchpadMachineInspector: View {
             machine: machine.path,
             bundle: library.bundleVersion(for: machine.path),
             state: library.state(of: machine.path),
+            revision: patchRevision,
         )
     }
 
-    /// The machine's patch choice, read only. The choice is changed with
-    /// `vphone-cli fw set-patches`; this shows the preset, how many boxes
-    /// differ from it, and, when the machine's bundle reports it, how many
-    /// patches have not reached the guest yet. An older bundle does not
-    /// report the last, and the row is left out.
+    /// The machine's patch choice: the preset, how many boxes differ from
+    /// it, and, when the machine's bundle reports it, how many patches have
+    /// not reached the guest yet. An older bundle does not report the last,
+    /// and the row is left out. Edit opens the patch editor on this machine;
+    /// Apply to Guest updates the guest environment, which is what brings
+    /// guest patches in line. Boot-chain patches only a restore changes.
     @ViewBuilder
     private var patchesSection: some View {
         if library.creations[machine.path]?.isRunning != true {
@@ -269,10 +290,24 @@ struct VPhoneLaunchpadMachineInspector: View {
                                     Text("^[\(pending) patch](inflect: true)")
                                 }
                             }
-                            .help(pending == 0
-                                ? String(localized: "The guest has every patch this machine is set to.")
-                                : String(localized: "The patch choice changed after the guest was built. Run vphone-cli fw patches \(machine.name) to see each patch and the step that applies it."))
+                            .help(pendingHelp(catalog, pending: pending))
                         }
+                    }
+                    HStack {
+                        Spacer()
+                        if catalog.installed == true, catalog.pendingGuestPatches > 0 {
+                            Button("Apply to Guest") {
+                                Task {
+                                    await library.updateGuestEnvironment(machine.path)
+                                    patchRevision += 1
+                                }
+                            }
+                            .disabled(library.state(of: machine.path) != .stopped)
+                            .help(library.state(of: machine.path) == .stopped
+                                ? String(localized: "Updates the guest environment, which turns guest patches on or off to match this machine’s choice.")
+                                : String(localized: "Stop the machine to apply its patch choice to the guest."))
+                        }
+                        Button("Edit…") { editedPatches = catalog.selection }
                     }
                 } else if let patchCatalogError {
                     Text("Unavailable")
@@ -285,6 +320,21 @@ struct VPhoneLaunchpadMachineInspector: View {
                 }
             }
         }
+    }
+
+    private func pendingHelp(_ catalog: VPhoneLaunchpadPatchCatalog, pending: Int) -> String {
+        guard pending > 0 else {
+            return String(localized: "The guest has every patch this machine is set to.")
+        }
+        var lines: [String] = []
+        if catalog.pendingGuestPatches > 0 {
+            lines.append(String(localized: "^[\(catalog.pendingGuestPatches) guest patch](inflect: true) to apply with Apply to Guest."))
+        }
+        if catalog.pendingBootChainPatches > 0 {
+            lines.append(String(localized: "^[\(catalog.pendingBootChainPatches) boot chain patch](inflect: true) that only a restore applies."))
+        }
+        lines.append(String(localized: "vphone-cli fw patches \(machine.name) lists each one."))
+        return lines.joined(separator: "\n")
     }
 
     private func overridesHelp(_ catalog: VPhoneLaunchpadPatchCatalog) -> String {

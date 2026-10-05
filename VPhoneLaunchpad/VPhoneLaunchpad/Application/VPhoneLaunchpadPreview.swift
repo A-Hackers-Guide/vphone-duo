@@ -121,6 +121,13 @@
                     VPhoneLaunchpadPatchSettingsView(initial: VPhoneLaunchpadPatchSelection()) { _ in }
                         .environment(model)
                 }
+                await standalone("09c-patch-settings-machine", suffix, size: NSSize(width: 920, height: 680)) {
+                    VPhoneLaunchpadPatchSettingsView(
+                        initial: patchCatalog(preset: nil, machine: true)?.selection ?? VPhoneLaunchpadPatchSelection(),
+                        machine: labMachine,
+                    ) { _ in }
+                        .environment(model)
+                }
                 await sheet(.clone(labMachine), "10-clone", suffix)
                 await sheet(.export([labMachine]), "11-export", suffix)
                 await sheet(.console(path("research-01")), "12-console", suffix)
@@ -310,24 +317,32 @@
         )
 
         /// Stands in for `fw patches --json`. `preset` moves the Frida patches in
-        /// and out of the preset, as the real report does.
-        static func patchCatalog(preset: String?) -> VPhoneLaunchpadPatchCatalog? {
+        /// and out of the preset, as the real report does. For a machine it adds
+        /// what a bundle reports about one: two boxes turned off since the guest
+        /// was built, one in the guest and one in the boot chain, both pending.
+        static func patchCatalog(preset: String?, machine: Bool = false) -> VPhoneLaunchpadPatchCatalog? {
             let active = preset ?? "standard"
             let frida = active == "experimental"
+            let blocked = machine ? #"["kernel-cfw-debugger","dyld-cfw-camera"]"# : "[]"
+            let records = machine ? #""installed":true,"receiptRecorded":true,"pendingPatches":2,"# : ""
+            func pending(_ part: String, _ value: Bool = false) -> String {
+                machine ? #","part":"\#(part)","pending":\#(value)"# : ""
+            }
             let json = """
-            {"activePreset":"\(active)","blockedPatches":[],"allowedPatches":[],
+            {"activePreset":"\(active)","blockedPatches":\(blocked),"allowedPatches":[],\(records)
              "presets":[
                {"identifier":"standard","title":"Standard","summary":"The patches every vphone VM needs to boot custom firmware, with a working display and camera.","patchSets":[]},
                {"identifier":"experimental","title":"Experimental","summary":"Every patch this bundle declares, including the Frida Stalker relaxations.","patchSets":[]}
              ],
              "patches":[
-               {"identifier":"avpbooter-boot-dgst_bypass","title":"AVPBooter digest bypass","summary":"Accepts the resealed boot images instead of the stock digests.","patchSet":"com.vphone.patchset.bootchain","patchSetName":"Boot Chain","target":"AVPBooter","applicability":"any","bootEssential":true,"inPreset":true,"enabled":true},
-               {"identifier":"ibss-cfw-serial_label","title":"iBSS serial label","summary":"Tags iBSS serial output so the boot log names its stage.","patchSet":"com.vphone.patchset.bootchain","patchSetName":"Boot Chain","target":"iBSS","applicability":"any","bootEssential":false,"inPreset":true,"enabled":true},
-               {"identifier":"kernel-cfw-debugger","title":"Kernel debugger gate","summary":"Lets a debugger attach to any process in the guest.","patchSet":"com.vphone.patchset.kernel.base","patchSetName":"Kernel Base","target":"Kernel","applicability":"any","bootEssential":false,"inPreset":true,"enabled":true},
-               {"identifier":"kernel-boot-thread_guard_violation","title":"Thread guard violation","summary":"Stops the guard exception the older kernels raise on first boot.","patchSet":"com.vphone.patchset.kernel.base","patchSetName":"Kernel Base","target":"Kernel","applicability":"iOS 18.x","bootEssential":true,"inPreset":true,"enabled":true},
-               {"identifier":"kernel-exp-frida_thread_set_state_entitlement_flag","title":"Frida thread state entitlement","summary":"Lets Stalker set thread state without the entitlement the kernel asks for.","patchSet":"com.vphone.patchset.kernel.frida","patchSetName":"Frida Stalker","target":"Kernel","applicability":"cloudOS 26.4+","bootEssential":false,"inPreset":\(frida),"enabled":\(frida)},
-               {"identifier":"kernel-exp-frida_vm_map_delete_immutable_code","title":"Frida immutable code unmap","summary":"Allows Stalker to unmap the immutable code it rewrote.","patchSet":"com.vphone.patchset.kernel.frida","patchSetName":"Frida Stalker","target":"Kernel","applicability":"cloudOS 26.4+","bootEssential":false,"inPreset":\(frida),"enabled":\(frida)},
-               {"identifier":"system-vphoned-boot-install","title":"Guest vphoned","summary":"Installs vphoned and its launch daemon into the guest.","patchSet":"com.vphone.patchset.guest.system","patchSetName":"Guest System","target":"Guest filesystem","applicability":"any","bootEssential":true,"inPreset":true,"enabled":true}
+               {"identifier":"avpbooter-boot-dgst_bypass","title":"AVPBooter digest bypass","summary":"Accepts the resealed boot images instead of the stock digests.","patchSet":"com.vphone.patchset.bootchain","patchSetName":"Boot Chain","target":"AVPBooter","applicability":"any","bootEssential":true,"inPreset":true,"enabled":true\(pending("AVPBooter"))},
+               {"identifier":"ibss-cfw-serial_label","title":"iBSS serial label","summary":"Tags iBSS serial output so the boot log names its stage.","patchSet":"com.vphone.patchset.bootchain","patchSetName":"Boot Chain","target":"iBSS","applicability":"any","bootEssential":false,"inPreset":true,"enabled":true\(pending("iBSS"))},
+               {"identifier":"kernel-cfw-debugger","title":"Kernel debugger gate","summary":"Lets a debugger attach to any process in the guest.","patchSet":"com.vphone.patchset.kernel.base","patchSetName":"Kernel Base","target":"kernelcache","applicability":"any","bootEssential":false,"inPreset":true,"enabled":true\(pending("kernelcache", true))},
+               {"identifier":"kernel-boot-thread_guard_violation","title":"Thread guard violation","summary":"Stops the guard exception the older kernels raise on first boot.","patchSet":"com.vphone.patchset.kernel.base","patchSetName":"Kernel Base","target":"kernelcache","applicability":"iOS 18.x","bootEssential":true,"inPreset":true,"enabled":true\(pending("kernelcache"))},
+               {"identifier":"kernel-exp-frida_thread_set_state_entitlement_flag","title":"Frida thread state entitlement","summary":"Lets Stalker set thread state without the entitlement the kernel asks for.","patchSet":"com.vphone.patchset.kernel.frida","patchSetName":"Frida Stalker","target":"kernelcache","applicability":"cloudOS 26.4+","bootEssential":false,"inPreset":\(frida),"enabled":\(frida)\(pending("kernelcache"))},
+               {"identifier":"kernel-exp-frida_vm_map_delete_immutable_code","title":"Frida immutable code unmap","summary":"Allows Stalker to unmap the immutable code it rewrote.","patchSet":"com.vphone.patchset.kernel.frida","patchSetName":"Frida Stalker","target":"kernelcache","applicability":"cloudOS 26.4+","bootEssential":false,"inPreset":\(frida),"enabled":\(frida)\(pending("kernelcache"))},
+               {"identifier":"system-vphoned-boot-install","title":"Guest vphoned","summary":"Installs vphoned and its launch daemon into the guest.","patchSet":"com.vphone.patchset.guest.system","patchSetName":"Guest System","target":"Guest filesystem","applicability":"any","bootEssential":true,"inPreset":true,"enabled":true\(pending("Guest"))},
+               {"identifier":"dyld-cfw-camera","title":"Camera in the shared cache","summary":"Points the camera stack at the virtual camera.","patchSet":"com.vphone.patchset.guest.system","patchSetName":"Guest System","target":"dyld shared cache","applicability":"any","bootEssential":false,"inPreset":true,"enabled":true\(pending("Guest", true))}
              ]}
             """
             return try? JSONDecoder().decode(VPhoneLaunchpadPatchCatalog.self, from: Data(json.utf8))

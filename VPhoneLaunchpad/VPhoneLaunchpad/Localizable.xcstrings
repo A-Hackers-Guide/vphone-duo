@@ -13199,15 +13199,97 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机已包含为此虚拟机设定的全部补丁。" } }
       }
     },
-    "The patch choice changed after the guest was built. Run vphone-cli fw patches %@ to see each patch and the step that applies it." : {
+    "Apply to Guest" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "The patch choice changed after the guest was built. Run vphone-cli fw patches %@ to see each patch and the step that applies it." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲストの構築後にパッチの選択が変更されました。各パッチと適用手順を確認するには、vphone-cli fw patches %@ を実行してください。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트를 빌드한 뒤 패치 선택이 바뀌었습니다. 각 패치와 적용 단계를 보려면 vphone-cli fw patches %@ 를 실행하십시오." } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Lựa chọn bản vá đã thay đổi sau khi máy khách được dựng. Hãy chạy vphone-cli fw patches %@ để xem từng bản vá và bước áp dụng nó." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机构建后补丁选择已更改。运行 vphone-cli fw patches %@ 查看每个补丁及应用它的步骤。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Apply to Guest" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲストに適用" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트에 적용" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Áp dụng cho máy khách" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "应用到客户机" } }
       }
     },
+    "Updates the guest environment, which turns guest patches on or off to match this machine’s choice." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Updates the guest environment, which turns guest patches on or off to match this machine’s choice." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲスト環境を更新し、このマシンの選択に合わせてゲストのパッチをオン／オフします。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트 환경을 업데이트하여 이 머신의 선택에 맞게 게스트 패치를 켜거나 끕니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cập nhật môi trường máy khách, bật hoặc tắt các bản vá máy khách cho khớp với lựa chọn của máy này." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新客户机环境，按此虚拟机的选择打开或关闭客户机补丁。" } }
+      }
+    },
+    "Stop the machine to apply its patch choice to the guest." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Stop the machine to apply its patch choice to the guest." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "パッチの選択をゲストに適用するには、マシンを停止してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "패치 선택을 게스트에 적용하려면 머신을 중지하십시오." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hãy dừng máy để áp dụng lựa chọn bản vá cho máy khách." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "停止虚拟机后才能把补丁选择应用到客户机。" } }
+      }
+    },
+    "^[%lld guest patch](inflect: true) to apply with Apply to Guest." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "^[%lld guest patch](inflect: true) to apply with Apply to Guest." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "「ゲストに適用」で反映するゲストのパッチ：%lld 件。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "‘게스트에 적용’으로 반영할 게스트 패치 %lld개." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%lld bản vá máy khách sẽ được áp dụng bằng “Áp dụng cho máy khách”." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 个客户机补丁可用“应用到客户机”生效。" } }
+      }
+    },
+    "^[%lld boot chain patch](inflect: true) that only a restore applies." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "^[%lld boot chain patch](inflect: true) that only a restore applies." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "復元でのみ反映される起動チェーンのパッチ：%lld 件。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "복원으로만 반영되는 부트 체인 패치 %lld개." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%lld bản vá chuỗi khởi động chỉ được áp dụng khi khôi phục." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 个启动链补丁只有重新恢复才会生效。" } }
+      }
+    },
+    "vphone-cli fw patches %@ lists each one." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "vphone-cli fw patches %@ lists each one." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "各パッチは vphone-cli fw patches %@ で確認できます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "각 패치는 vphone-cli fw patches %@ 로 확인할 수 있습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "vphone-cli fw patches %@ liệt kê từng bản vá." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "运行 vphone-cli fw patches %@ 可逐个查看。" } }
+      }
+    },
+    "No change" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No change" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "変更なし" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "변경 없음" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không thay đổi" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无更改" } }
+      }
+    },
+    "^[%lld guest patch](inflect: true) to apply with a guest environment update" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "^[%lld guest patch](inflect: true) to apply with a guest environment update" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲスト環境の更新で反映するゲストのパッチ：%lld 件" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트 환경 업데이트로 반영할 게스트 패치 %lld개" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%lld bản vá máy khách sẽ áp dụng khi cập nhật môi trường máy khách" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 个客户机补丁在更新客户机环境时生效" } }
+      }
+    },
+    "^[%lld boot chain patch](inflect: true) that only a restore applies" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "^[%lld boot chain patch](inflect: true) that only a restore applies" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "復元でのみ反映される起動チェーンのパッチ：%lld 件" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "복원으로만 반영되는 부트 체인 패치 %lld개" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%lld bản vá chuỗi khởi động chỉ áp dụng khi khôi phục" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 个启动链补丁只有重新恢复才会生效" } }
+      }
+    },
+    "Saving patches…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saving patches…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "パッチを保存中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "패치 저장 중…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang lưu bản vá…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在保存补丁…" } }
+      }
+    },
+
     "Unavailable" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Unavailable" } },

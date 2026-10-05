@@ -613,6 +613,18 @@ final class VPhoneLaunchpadMachineLibrary {
         await perform(String(localized: "Saving settings…"), on: machine, arguments)
     }
 
+    /// Records a new patch choice for the machine with its own bundle's
+    /// `fw set-patches`. Nothing in the guest changes until the guest
+    /// environment is updated, or, for the boot chain, the machine restored.
+    @discardableResult
+    func setPatches(_ selection: VPhoneLaunchpadPatchSelection, for machine: Path) async -> Bool {
+        await perform(
+            String(localized: "Saving patches…"),
+            on: machine,
+            ["fw", "set-patches", machine.name] + selection.setPatchesArguments + machine.libraryArguments,
+        )
+    }
+
     func rename(_ machine: Path, to newName: String) async {
         if await perform(String(localized: "Renaming…"), on: machine, ["vm", "rename", machine.name, newName] + machine.libraryArguments) {
             selection = [Path(libraryRoot: machine.libraryRoot, name: newName)]
