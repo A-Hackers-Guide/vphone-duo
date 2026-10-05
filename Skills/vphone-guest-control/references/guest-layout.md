@@ -91,14 +91,19 @@ they are repaired at every vphoned start.
 
 This step is done in the guest UI, in Irisin; there is no RPC for it.
 
-1. Open Irisin. Select **all** of `apt`, `bash`, `uikittools`, `launchctl`
-   and `openssh-server` at once.
-2. Press and hold the install button and choose **Bootstrap Install**.
+1. Open Irisin and the **OwnGoal Packages** repository
+   (`https://apt.owngoal.dev/`). Find **OwnGoal Bootstrap for vphone**
+   (`owngoal-bootstrap-vphone`).
+2. Install it with **Bootstrap Install**.
 
-Install them together: they depend on each other, and `openssh-server` declares
-some dependencies circularly, so one-by-one installs can fail partway. After the
-first pass, install further packages normally. If the first pass fails, do not
-repair it in place: **Apps > Uninstall Bootstrap…**, then start over.
+That one meta package depends on everything a guest needs: `apt`, `dpkg`,
+`bash`, `zsh`, `sudo`, the core command-line tools, `openssh-server`, `curl`,
+`git`, `uikittools`, `launchctl` and the OwnGoal apps (Irisin, Fila, iGhostVT,
+Xrash, Inspector). Do not install those packages one by one: they depend on each
+other, and `openssh-server` declares some dependencies circularly, so separate
+installs can fail partway. After the first pass, install further packages
+normally. If the first pass fails, do not repair it in place:
+**Apps > Uninstall Bootstrap…**, then start over.
 
 Because this needs someone at the screen, drive it with `ui.tree`,
 `ui.tap_element` and screenshots, or ask the user to do it.
