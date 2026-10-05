@@ -419,6 +419,22 @@
 | 10  | Selector42\|29 shellcode: branch back             | Return from shellcode to stub+4           |    -    |  Y  |  Y  |
 | 11  | Debugger entitlement (selector 42\|37)            | `bl` -> `mov w0, #1`                      |    -    |  Y  |  Y  |
 | 12  | Developer mode bypass                             | NOP conditional guard before deny path    |    -    |  Y  |  Y  |
+| 13  | Pre-check admission: `mov w8, #0xa`               | Tolerated validation-type byte (iOS 27+)  |    -    |  Y  |  Y  |
+| 14  | Pre-check admission: `strb w8, [x19]`             | Write the type byte to the out param      |    -    |  Y  |  Y  |
+| 15  | Pre-check admission: `mov w0, #0x90`              | The policy walk's PASS status             |    -    |  Y  |  Y  |
+| 16  | Pre-check admission: `b <epilogue>`               | Skip the policy callback walk             |    -    |  Y  |  Y  |
+
+> **Pre-check admission (2026-10-04):** rows 13–16 (`txm-boot-precheck_admission`,
+> iOS 27+ only) force the selector-24 pre-check policy walk in TXM 187.100.3
+> (cloudOS 26.4) to its PASS exit. On an iOS 27.0.1 iPhone guest that walk
+> rejects every manifest — Apple's own launchd included, re-signed or pristine —
+> because the trust state it consults never loads from a 27.0.1 restore; the
+> selector-24 caller then exhausts its ad-hoc / CMS / third fallback ladder and
+> kills init (`0x32202`, previously misread as `0x12491`). The anchor is the
+> walk's unique `mov x17, #0x7e51 ; blraa x8, x17` policy-callback invocation
+> combined with its post-indexed `ldr x22, [x20], #0x40` table walk; on
+> 187.100.3 that pair resolves to exactly one function. Full analysis and the
+> experiment trail: `Research/Firmware/txm_selector24_cms_gate.md`.
 
 ## Kernelcache
 
