@@ -2897,6 +2897,40 @@
         }
       }
     },
+    "Apps in the guest quit and the virtual machine stops. This window closes when the guest has shut down." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps in the guest quit and the virtual machine stops. This window closes when the guest has shut down."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲスト内のアプリは終了し、仮想マシンは停止します。ゲストのシステム終了が完了すると、このウインドウは閉じます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트의 앱이 종료되고 가상 머신이 중지됩니다. 게스트가 종료되면 이 윈도우가 닫힙니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Các ứng dụng trong máy khách sẽ thoát và máy ảo sẽ dừng. Cửa sổ này đóng lại khi máy khách đã tắt."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机中的应用将退出，虚拟机随之停止。客户机关机完成后，此窗口会关闭。"
+          }
+        }
+      }
+    },
     "Apps in the guest quit. The guest agent reconnects after the guest starts up." : {
       "localizations" : {
         "en" : {
@@ -17718,6 +17752,108 @@
         }
       }
     },
+    "Shut Down Guest" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shut Down Guest"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストをシステム終了"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트 종료"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tắt máy khách"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机关机"
+          }
+        }
+      }
+    },
+    "Shut Down Guest…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shut Down Guest…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストをシステム終了…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트 종료…"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tắt máy khách…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机关机…"
+          }
+        }
+      }
+    },
+    "Shut down the guest?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shut down the guest?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストをシステム終了しますか?"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트를 종료하시겠습니까?"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tắt máy khách?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要将客户机关机吗？"
+          }
+        }
+      }
+    },
     "Switch Guest Input Source" : {
       "localizations" : {
         "en" : {
@@ -17748,6 +17884,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "切换客体输入法"
+          }
+        }
+      }
+    },
+    "The guest refused the shutdown request." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The guest refused the shutdown request."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストがシステム終了の要求を拒否しました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트가 종료 요청을 거부했습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Máy khách đã từ chối yêu cầu tắt máy."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机拒绝了关机请求。"
           }
         }
       }
@@ -17850,6 +18020,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法读取该钥匙串项目，请重试。"
+          }
+        }
+      }
+    },
+    "Unable to Shut Down Guest" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to Shut Down Guest"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストをシステム終了できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트를 종료할 수 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể tắt máy khách"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法将客户机关机"
           }
         }
       }

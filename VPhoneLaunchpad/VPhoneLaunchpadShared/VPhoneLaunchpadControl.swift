@@ -161,7 +161,7 @@ nonisolated struct VPhoneLaunchpadControlCommand: Sendable {
         Self(name: "vm.start", arguments: ["name"], options: ["root", "timeout"], flags: ["headless", "wait"],
              summary: "Launch a machine. --wait blocks until vphoned answers on vphone.sock."),
         Self(name: "vm.stop", arguments: ["name"], options: ["root"], flags: [],
-             summary: "Stop a machine."),
+             summary: "Stop a machine: the guest shuts down first, and the virtual machine is ended only if it cannot or does not in time."),
         Self(name: "vm.wait", arguments: ["name"], options: ["root", "timeout"], flags: [],
              summary: "Wait until vphoned answers on the machine's vphone.sock."),
         Self(name: "vm.log", arguments: ["name"], options: ["root", "lines", "kind"], flags: [],

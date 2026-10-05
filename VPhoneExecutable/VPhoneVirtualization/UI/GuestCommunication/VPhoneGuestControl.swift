@@ -569,6 +569,15 @@ final class VPhoneGuestControl {
         _ = try await call("system.reboot", params: ["force": true])
     }
 
+    /// Asks the guest to shut down. The virtual machine stops with it, so a
+    /// dropped connection is the expected result.
+    func shutDownGuest() async throws {
+        guard guestCapabilities.contains("system_shutdown") else {
+            throw ControlError.unsupportedCapability("system_shutdown")
+        }
+        _ = try await call("system.shutdown", params: ["force": true])
+    }
+
     func clipboardGet() async throws -> ClipboardContent {
         let (info, image) = try await sendRequest(["t": "clipboard_get"])
         return ClipboardContent(

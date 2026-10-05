@@ -106,7 +106,7 @@ version while a machine is bound to it; rebind or delete those machines first.
 | `bundle set-default <version>` / `bundle verify <version>` | Make a version the default, or re-check it. `bundle use` is the old name of `set-default` |
 | `bundle accept <version> [--off]` / `bundle remove <version>` | Skip failed checks, or remove a version no machine is bound to |
 | `vm list` | Machines in every library with run state, Core Bundle and log path |
-| `vm start <name> [--headless] [--wait]` / `vm stop <name>` | Launch with the machine's bundle, or stop; `--wait` waits for vphoned |
+| `vm start <name> [--headless] [--wait]` / `vm stop <name>` | Launch with the machine's bundle, or stop; `--wait` waits for vphoned. Stop asks the guest to shut down (vphoned `system.shutdown`) and waits up to 30 s; when the guest cannot be asked or does not stop, it ends the virtual machine as before |
 | `vm wait <name>` / `vm log <name> [--kind create\|dfu\|patch]` | Wait for vphoned; read a console log |
 | `vm create <name> [--bundle <version>] [...] [--device <product-type>] [--from <step>]` | The New Machine pipeline, bound to `--bundle` or the default; `--device` makes an iPad guest, `--from` retries from a step |
 | `vm set-bundle <name> <version> [--update-environment]` | Bind a machine to another installed version. `--update-environment` also redeploys that version's guest environment and needs a stopped machine |

@@ -34,8 +34,8 @@ invalid-request error, read the source named there instead of guessing keys.
 - **force methods** refuse to run unless the params carry `"force":true`:
   `processes.kill`, `services.stop|disable|remove|signal|unload`,
   `apps.uninstall|unregister|unregister_dir`, `system.respring`,
-  `system.reboot`, `setup.skip`. The flag is the confirmation: use it only for
-  what the user asked.
+  `system.reboot`, `system.shutdown`, `setup.skip`. The flag is the
+  confirmation: use it only for what the user asked.
 - Results can be large. Methods that read data take `limit`, `max_lines`,
   `max_elements` or a `filter`; use them. A reply in the 8–16 KiB band can be
   lost on close (see [troubleshooting](troubleshooting.md)).
@@ -175,6 +175,7 @@ size problem.
 | --- | --- |
 | `system.uicache` | none; re-registers apps |
 | `system.respring` (force), `system.reboot` (force) | `userspace?` for reboot |
+| `system.shutdown` (force) | none; shuts the guest down, which stops the VM (capability `system_shutdown`) |
 | `setup.status` | none; `setup.skip` (force) skips Setup Assistant |
 | `developer_mode.status` / `enable` | none |
 | `settings.get` | `domain`, `key?` |

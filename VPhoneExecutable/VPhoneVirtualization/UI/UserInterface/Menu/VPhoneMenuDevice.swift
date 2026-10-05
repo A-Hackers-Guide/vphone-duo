@@ -116,6 +116,10 @@ extension VPhoneMenuController {
         restart.isEnabled = false
         restartGuestItem = restart
         menu.addItem(restart)
+        let shutDown = makeItem("Shut Down Guest…", action: #selector(shutDownGuest), symbol: "power")
+        shutDown.isEnabled = false
+        shutDownGuestItem = shutDown
+        menu.addItem(shutDown)
         item.submenu = menu
         return item
     }
@@ -322,6 +326,38 @@ extension VPhoneMenuController {
                 } catch {
                     // The guest restarts before it replies, so the connection
                     // drops. onDisconnect updates the menus.
+                }
+            }
+        }
+    }
+
+    // MARK: - Shut Down
+
+    func updateShutDownAvailability(available: Bool) {
+        shutDownGuestItem?.isEnabled = available
+    }
+
+    @objc func shutDownGuest() {
+        VPhoneAlert.present(
+            title: "Shut down the guest?",
+            message: "Apps in the guest quit and the virtual machine stops. This window closes when the guest has shut down.",
+            style: .warning,
+            buttons: ["Shut Down Guest", "Cancel"],
+        ) { response in
+            guard response == .alertFirstButtonReturn else { return }
+            Task {
+                do {
+                    try await self.control.shutDownGuest()
+                } catch let VPhoneGuestControl.ControlError.guestError(message) {
+                    print("[shutdown] guest refused: \(message)")
+                    VPhoneAlert.present(
+                        title: "Unable to Shut Down Guest",
+                        message: "The guest refused the shutdown request.",
+                        style: .warning,
+                    )
+                } catch {
+                    // The guest can stop before it replies, so the connection
+                    // drops. The process exits when the virtual machine stops.
                 }
             }
         }

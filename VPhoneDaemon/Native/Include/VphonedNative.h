@@ -30,6 +30,10 @@ void vp_hid_touch2(int phase, double x1, double y1, double x2, double y2);
 /// SpringBoardServices has no SBSUndimScreen.
 bool vp_screen_undim(void);
 
+/// Ask launchd to shut the guest down and halt. Returns 0 once the request is
+/// accepted, otherwise an errno value. Needs root.
+int vp_system_halt(void);
+
 typedef struct {
     int32_t pid;
     int32_t ppid;
