@@ -535,6 +535,14 @@ struct VPhoneLaunchpadCreationView: View {
     private func stepRow(_ step: VPhoneLaunchpadCreationPipeline.Step) -> some View {
         LabeledContent {
             HStack(spacing: 8) {
+                if step == .prepare, let fraction = creation.downloadFraction {
+                    ProgressView(value: fraction)
+                        .controlSize(.small)
+                        .frame(width: 120)
+                    Text(fraction, format: .percent.precision(.fractionLength(0)))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
                 if let duration = creation.durations[step] {
                     Text(Self.duration(duration))
                         .monospacedDigit()

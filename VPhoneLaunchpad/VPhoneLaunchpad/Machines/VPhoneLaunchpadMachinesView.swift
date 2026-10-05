@@ -376,7 +376,7 @@ struct VPhoneLaunchpadMachinesView: View {
             TableColumn("State") { machine in
                 VPhoneLaunchpadMachineStateLabel(
                     state: library.state(of: machine.path),
-                    progress: library.exports[machine.path]?.fraction,
+                    progress: library.progress(of: machine.path),
                 )
             }
             .width(min: 150, ideal: 160)

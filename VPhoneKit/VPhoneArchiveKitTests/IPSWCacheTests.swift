@@ -29,6 +29,19 @@ private final class IPSWStubProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+private final class ProgressReports: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [(done: Int64, total: Int64)] = []
+
+    func append(_ done: Int64, _ total: Int64) {
+        lock.withLock { storage.append((done, total)) }
+    }
+
+    var values: [(done: Int64, total: Int64)] {
+        lock.withLock { storage }
+    }
+}
+
 @Suite("IPSW cache", .serialized)
 struct IPSWCacheTests {
     private func fixture(in root: URL) throws -> URL {
@@ -118,6 +131,44 @@ struct IPSWCacheTests {
         #expect(!FileManager.default.fileExists(
             atPath: cacheDir.appendingPathComponent(VPhoneIPSWCache.cacheName(for: url)).path,
         ))
+    }
+
+    /// Launchpad shows this on its firmware step (#590). A cache hit downloads
+    /// nothing and reports nothing.
+    @Test func `download reports progress against the stated size`() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try fixture(in: root)
+        IPSWStubProtocol.payload = try Data(contentsOf: source)
+        IPSWStubProtocol.status = 200
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [IPSWStubProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+
+        let size = Int64(IPSWStubProtocol.payload.count)
+        let reports = ProgressReports()
+        let cacheDir = root.appendingPathComponent("cache")
+        _ = try await VPhoneIPSWCache.resolve(
+            "https://example.invalid/input.ipsw",
+            in: cacheDir,
+            session: session,
+            progress: { done, total in reports.append(done, total) },
+        )
+        let downloaded = reports.values
+        #expect(!downloaded.isEmpty)
+        #expect(downloaded.allSatisfy { $0.total == size })
+        #expect(downloaded.last?.done == size)
+
+        let cached = ProgressReports()
+        _ = try await VPhoneIPSWCache.resolve(
+            "https://example.invalid/input.ipsw",
+            in: cacheDir,
+            session: session,
+            progress: { done, total in cached.append(done, total) },
+        )
+        #expect(cached.values.isEmpty)
     }
 
     /// The cache is shared by every machine, so a download killed midway would
