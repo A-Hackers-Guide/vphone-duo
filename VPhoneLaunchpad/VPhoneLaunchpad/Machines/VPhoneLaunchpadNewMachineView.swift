@@ -352,7 +352,7 @@ struct VPhoneLaunchpadNewMachineView: View {
             Text("Firmware")
         } footer: {
             if !usesCustomSources, let selectedGuest {
-                Text("Recommended firmware pairings for \(selectedGuest.name).")
+                Text("Recommended firmware pairings for \(selectedGuest.detailedName).")
                     .foregroundStyle(.secondary)
             }
         }

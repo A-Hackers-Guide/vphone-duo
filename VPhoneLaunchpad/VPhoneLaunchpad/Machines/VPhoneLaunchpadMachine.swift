@@ -196,6 +196,12 @@ nonisolated struct VPhoneLaunchpadFirmwareCatalog: Decodable, Sendable {
             family == "iPad"
         }
 
+        /// The name with its product type, `iPhone 16 (iPhone17,3)`: Launchpad
+        /// showed only the product type before, which reads as iPhone 17.
+        var detailedName: String {
+            name == productType ? name : "\(name) (\(productType))"
+        }
+
         /// The newest release, or the newest build when every one is a beta.
         var defaultPairing: Pairing? {
             pairings.last { !$0.isBeta } ?? pairings.last
