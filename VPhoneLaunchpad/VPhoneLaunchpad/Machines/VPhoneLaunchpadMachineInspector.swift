@@ -292,6 +292,15 @@ struct VPhoneLaunchpadMachineInspector: View {
                             }
                             .help(pendingHelp(catalog, pending: pending))
                         }
+                        // Said in the open rather than only in the tooltip:
+                        // nothing in this section applies a boot-chain patch,
+                        // so a count with no button would read as a dead end.
+                        if catalog.pendingBootChainPatches > 0 {
+                            Text("Boot chain: ^[\(catalog.pendingBootChainPatches) patch](inflect: true), applied only by restoring the machine, which erases its data.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                     HStack {
                         Spacer()

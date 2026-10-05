@@ -468,7 +468,7 @@ struct VPhoneFirmwareSetPatchesCommand: ParsableCommand {
                                         the restore tree (`--keep-artifacts`).
           Guest (system, dyld cache,    `cfw update-environment` (root), which
           Preboot device tree)          applies this choice both on and off.
-          LLB, kernelcache, TXM,        only a restore.
+          LLB, kernelcache, TXM,        only a restore, which erases the guest's data.
           DeviceTree
           iBSS, iBEC                    used only while restoring.
 

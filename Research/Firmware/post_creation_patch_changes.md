@@ -51,7 +51,7 @@ Counts are declarations in `FirmwarePatcher/PatchSets/*.swift`.
 | --- | --- | --- | --- | --- |
 | AVPBooter | 1 | VM root, `romImages.avpBooter`, read every boot | `fw patch` itself | works, but `fw patch` refuses without a restore tree |
 | iBSS, iBEC | 7 | restore tree only | DFU during a restore | irrelevant to an installed guest; only the next restore uses them |
-| LLB | 6 | NOR (personalized by idevicerestore, `LlbImageData`) | restore | needs a restore; `restore --no-erase` exists but is unvalidated |
+| LLB | 6 | NOR (personalized by idevicerestore, `LlbImageData`) | restore | needs a restore, which erases the guest: an in-place one cannot keep its data (`native_restore_architecture.md`, 2026-10-05) |
 | kernelcache, DeviceTree, TXM | 54 + 30 + 6 | Preboot (personalized) | restore | Preboot can be rewritten by a host mount — `cfw install` already edits `devicetree.img4` there; nothing does it for the kernelcache or TXM |
 | Guest (dyld cache, Mach-O, files, entitlements, Preboot DT) | 34 | System / Preboot volumes of `Disk.img` | `cfw install`, partly `cfw update-environment` | turning on works by re-running; turning off does nothing |
 
@@ -146,8 +146,21 @@ patches plus the late ones the old installer added.
 kernelcache, TXM or DeviceTree into Preboot was dropped before implementation;
 those three, LLB, iBSS and iBEC change only through a restore, and AVPBooter only
 through `fw patch`, which needs the restore tree (`--keep-artifacts`).
-`restore --no-erase` (row 4 of `Research/Restore/native_restore_architecture.md`)
-is still unvalidated.
+A restore always erases the guest: `restore --no-erase` was tried on a test VM
+on 2026-10-05 and replaces the kernel but erases the Data volume as well,
+so it now refuses (row 4 and "An in-place restore cannot keep a guest's data"
+in `Research/Restore/native_restore_architecture.md`).
+
+**Paired DeviceTree patches.** `devicetree-cfw-ipad_audio`,
+`devicetree-cfw-product_haptics_node` and
+`devicetree-cfw-product_audio_microphone_array` write into the tree a restore
+installs; `preboot-cfw-devicetree_board_audio`, `_haptics` and
+`_microphone_array` write the same change into the Preboot tree of a VM restored
+before them. `FirmwareGuestSystemPatchSet.prebootRepairs` names the pairs, and
+the drift report reads the tree patch as applied when its Preboot repair is
+live, so a VM restored before the tree patches no longer shows them as needing
+a restore. The Launchpad inspector says in the open how many boot-chain patches
+are pending and that only a restore, which erases the guest, applies them.
 
 ## Validation (2026-10-04)
 

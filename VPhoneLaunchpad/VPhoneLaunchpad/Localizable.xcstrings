@@ -13199,6 +13199,15 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机已包含为此虚拟机设定的全部补丁。" } }
       }
     },
+    "Boot chain: ^[%lld patch](inflect: true), applied only by restoring the machine, which erases its data." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Boot chain: ^[%lld patch](inflect: true), applied only by restoring the machine, which erases its data." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "起動チェーン：%lld 件のパッチ。マシンを復元した場合にのみ反映され、復元するとデータは消去されます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "부트 체인: 패치 %lld개. 머신을 복원해야만 반영되며, 복원하면 데이터가 지워집니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chuỗi khởi động: %lld bản vá, chỉ được áp dụng khi khôi phục máy, việc này sẽ xoá dữ liệu của máy." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动链：%lld 个补丁，只有重新恢复虚拟机才会生效，而恢复会清除其数据。" } }
+      }
+    },
     "Apply to Guest" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Apply to Guest" } },

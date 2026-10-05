@@ -5366,6 +5366,10 @@ static int restore_wait_for_reconnect(struct idevicerestore_client_t* client)
 int restore_device(struct idevicerestore_client_t* client, plist_t build_identity)
 {
 	int err = 0;
+	/* vphone: the first unrecoverable error. The loop reads one more message
+	   after FLAG_QUIT is set, and its handler overwrote err with 0, so a
+	   failed restore returned success. */
+	int fatal_err = 0;
 	char* type = NULL;
 	plist_t node = NULL;
 	plist_t message = NULL;
@@ -5699,6 +5703,8 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 		// an unrecoverable error, so we need to bail.
 		if (err < 0) {
 			logger(LL_ERROR, "Unable to successfully restore device\n");
+			if (fatal_err == 0)
+				fatal_err = err;
 			client->flags |= FLAG_QUIT;
 		}
 
@@ -5883,5 +5889,7 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 #endif
 
 	restore_client_free(client);
+	if (err >= 0 && fatal_err < 0)
+		err = fatal_err;
 	return err;
 }

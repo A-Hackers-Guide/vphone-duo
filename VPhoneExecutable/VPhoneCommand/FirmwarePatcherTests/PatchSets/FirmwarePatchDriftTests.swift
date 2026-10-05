@@ -37,6 +37,7 @@ struct FirmwarePatchDriftTests {
             patch("txm", .firmware(.txm)),
             patch("dyld", .dyldSharedCache),
             patch("dt", .prebootDeviceTree),
+            patch("tree-node", .firmware(.deviceTree)),
         ]
     }
 
@@ -116,6 +117,7 @@ struct FirmwarePatchDriftTests {
         planned: Set<String>?,
         applied: [String: Set<String>]?,
         notApplicable: Set<String> = [],
+        standIns: [String: String] = [:],
     ) -> [String: FirmwarePatchDrift.PatchState] {
         let list = FirmwarePatchDrift.states(
             declarations: declarations,
@@ -123,6 +125,7 @@ struct FirmwarePatchDriftTests {
             planned: planned,
             applied: applied,
             notApplicable: notApplicable,
+            standIns: standIns,
             part: part,
         )
         return Dictionary(uniqueKeysWithValues: list.map { ($0.identifier, $0) })
@@ -164,6 +167,38 @@ struct FirmwarePatchDriftTests {
         // With no Guest part recorded, the plan still decides.
         let unknown = states(wanted: ["dt"], planned: [], applied: [:], notApplicable: ["dt"])
         #expect(unknown["dt"]?.isPending == true)
+    }
+
+    @Test
+    func `A boot-chain patch whose Preboot stand-in is live is not pending`() {
+        // Restored before the tree patch existed: the plan has no "tree-node",
+        // but the Preboot repair "dt" put the same change into the guest.
+        let live = states(
+            wanted: ["tree-node", "dt"],
+            planned: ["dt"],
+            applied: ["Guest": ["dt"]],
+            standIns: ["tree-node": "dt"],
+        )
+        #expect(live["tree-node"]?.applied == true)
+        #expect(live["tree-node"]?.isPending == false)
+        // Without the repair live, the tree patch still needs a restore.
+        let missing = states(
+            wanted: ["tree-node", "dt"],
+            planned: ["dt"],
+            applied: ["Guest": []],
+            standIns: ["tree-node": "dt"],
+        )
+        #expect(missing["tree-node"]?.isPending == true)
+        #expect(missing["tree-node"]?.delivery == .restore)
+    }
+
+    @Test
+    func `Every Preboot stand-in names a declared Preboot repair and a declared tree patch`() {
+        let byID = Dictionary(FirmwarePatchSetCatalog.allDeclarations.map { ($0.identifier, $0.target) }, uniquingKeysWith: { a, _ in a })
+        for (treePatch, repair) in FirmwareGuestSystemPatchSet.prebootRepairs {
+            #expect(byID[treePatch] == .firmware(.deviceTree), "\(treePatch)")
+            #expect(byID[repair] == .prebootDeviceTree, "\(repair)")
+        }
     }
 
     @Test
