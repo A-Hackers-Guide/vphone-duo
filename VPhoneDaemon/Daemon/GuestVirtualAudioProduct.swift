@@ -67,6 +67,6 @@ enum GuestVirtualAudioProduct {
         guard sysctlbyname("hw.machine", nil, &size, nil, 0) == 0, size > 0 else { return "" }
         var bytes = [CChar](repeating: 0, count: size + 1)
         guard sysctlbyname("hw.machine", &bytes, &size, nil, 0) == 0 else { return "" }
-        return String(cString: bytes)
+        return String(decoding: bytes.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 }

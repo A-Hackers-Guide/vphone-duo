@@ -15,7 +15,7 @@ struct VerboseCustomFirmwareDebug {
         let patcher = KernelCustomFirmwarePatcher(data: data, verbose: true)
 
         // Initialize patcher state (same as findAll() but without running patches)
-        try patcher.parseMachO()
+        patcher.parseMachO()
         patcher.buildADRPIndex()
         patcher.buildBLIndex()
         patcher.buildSymbolTable()

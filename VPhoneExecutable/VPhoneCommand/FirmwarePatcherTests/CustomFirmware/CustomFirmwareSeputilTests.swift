@@ -481,9 +481,9 @@ struct CustomFirmwareSeputilShapeTests {
         return data
     }
 
-    @Test func `reads the field after the last separator`() {
+    @Test func `reads the field after the last separator`() throws {
         // The mountpoint field is left alone; the one after the last "/" moves.
-        let field = try? #require(CustomFirmwareSeputil.fileField(of: Array("%s/%s.gl".utf8)))
+        let field = try #require(CustomFirmwareSeputil.fileField(of: Array("%s/%s.gl".utf8)))
         #expect(field == 3 ..< 5)
         #expect(CustomFirmwareSeputil.fileField(of: Array("/mnt7/%s.gl".utf8)) == 6 ..< 8)
         // No separator, wrong suffix, or a field that is not two bytes wide:

@@ -615,11 +615,11 @@ struct DyldSharedCacheMISTrustAuthShapeDetectorTests {
 @Suite(.serialized)
 struct DyldSharedCacheMISTrustAuthDerivedSeedTests {
     @Test
-    func `A derived 32-bit add word disassembles as a w-register add`() {
+    func `A derived 32-bit add word disassembles as a w-register add`() throws {
         let decoded = ARM64Disassembler().disassemble(MISFixture.derivation, at: 0)
-        let instruction = try? #require(decoded.first)
-        #expect(instruction?.mnemonic == "add")
-        let operands = instruction?.detail?.operands
+        let instruction = try #require(decoded.first)
+        #expect(instruction.mnemonic == "add")
+        let operands = instruction.detail?.operands
         #expect(operands?.count == 3)
         #expect(operands?[0].reg.name == "w26")
         #expect(operands?[1].reg.name == "w23")

@@ -39,7 +39,7 @@ final class VPhoneHostHotKeys {
         let setEnabled: SetEnabled
     }
 
-    private nonisolated(unsafe) static let skyLight: SkyLight? = {
+    private nonisolated static let skyLight: SkyLight? = {
         guard let handle = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_NOW),
               let get = dlsym(handle, "CGSGetSymbolicHotKeyValue"),
               let isEnabled = dlsym(handle, "CGSIsSymbolicHotKeyEnabled"),
