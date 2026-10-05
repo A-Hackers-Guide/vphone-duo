@@ -12,6 +12,7 @@ Each [release](https://github.com/Lakr233/vphone-cli/releases) has up to three f
 
 | Series | Notarized | Not Notarized |
 | --- | --- | --- |
+| 2.6 | 2.6.0 | — |
 | 2.5 | 2.5.0 | — |
 | 2.4 | 2.4.0, 2.4.1 | — |
 | 2.3 | 2.3.0 | — |
