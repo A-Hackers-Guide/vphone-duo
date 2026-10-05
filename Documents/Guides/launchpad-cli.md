@@ -3,12 +3,17 @@
 `vphone-launchpad-cli` ships in `vphone-launchpad.app/Contents/MacOS`. It
 drives the running Launchpad over a Unix socket at
 `~/Library/Application Support/vphone-launchpad/control.sock` (mode 0600,
-served only to the same user) and starts Launchpad in the background when it
-is not running. It has no privileges and no state of its own: bundles are
-installed through Launchpad's helper, each machine runs through the
-`vphone-cli` of its own Core Bundle, and every command appears in Launchpad's
-window and command history. Nothing listens on the network; reach it over ssh
-from another machine.
+served only to the same user) and starts Launchpad when it is not running. It
+has no privileges and no state of its own: bundles are installed through
+Launchpad's helper, each machine runs through the `vphone-cli` of its own Core
+Bundle, and every command appears in Launchpad's window and command history.
+Nothing listens on the network; reach it over ssh from another machine.
+
+A Launchpad the CLI starts opens hidden and does not take focus from the app
+in front; click its Dock icon, or Open Launchpad in the menu bar, to show the
+window. Pass `--foreground` (before the command, or among the options of any
+command but `exec`) to start it with its window in front instead. Neither
+changes a Launchpad that is already running.
 
 Progress lines go to stderr as they arrive. The result is one JSON document on
 stdout. The exit status is 0 on success and 1 on failure, with the reason on

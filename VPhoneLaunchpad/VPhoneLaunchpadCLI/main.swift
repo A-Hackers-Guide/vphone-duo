@@ -11,10 +11,14 @@ import Foundation
 
 func usage() -> String {
     var text = """
-    usage: vphone-launchpad-cli <command> [arguments] [options]
+    usage: vphone-launchpad-cli [--foreground] <command> [arguments] [options]
 
     Drives a running vphone-launchpad, starting it if needed. Progress goes to
     stderr; the result is JSON on stdout.
+
+    A Launchpad started by this tool starts hidden and leaves the frontmost
+    app alone; its window comes back from the Dock or the menu bar.
+    --foreground opens it with its window in front instead.
 
     Each machine runs with the Core Bundle it is bound to. The default bundle
     is only what vm create binds by default and what exec and library-wide
@@ -35,7 +39,7 @@ func fail(_ message: String, detail: String? = nil) -> Never {
     exit(1)
 }
 
-func parse(_ words: [String]) -> VPhoneLaunchpadControlRequest {
+func parse(_ words: [String], foreground: inout Bool) -> VPhoneLaunchpadControlRequest {
     // Two words name a grouped command ("vm start"), one word the others.
     var rest = words
     var command: VPhoneLaunchpadControlCommand?
@@ -91,7 +95,9 @@ func parse(_ words: [String]) -> VPhoneLaunchpadControlRequest {
             value = String(name[name.index(after: equals)...])
             name = String(name[..<equals])
         }
-        if command.flags.contains(name), value == nil {
+        if name == "foreground", value == nil {
+            foreground = true
+        } else if command.flags.contains(name), value == nil {
             request.options[name] = "true"
         } else if command.options.contains(name) {
             if value == nil, index < rest.count {
@@ -147,14 +153,17 @@ func connectControl() -> Int32? {
     return fd
 }
 
-/// Opens the Launchpad this tool ships in, in the background, else the one
-/// Launch Services knows, and waits for its socket.
-func launchAndConnect() -> Int32 {
+/// Opens the Launchpad this tool ships in, else the one Launch Services knows,
+/// and waits for its socket. By default it starts hidden and does not become
+/// the active app: its window is still created, and the window's task is what
+/// opens the socket.
+func launchAndConnect(foreground: Bool) -> Int32 {
     let executable = Bundle.main.executableURL?.resolvingSymlinksInPath()
     let app = executable?.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let open = Process()
     open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-    open.arguments = app?.pathExtension == "app" ? ["-g", app!.path] : ["-g", "-b", "com.vphone.launchpad"]
+    let target = app?.pathExtension == "app" ? [app!.path] : ["-b", "com.vphone.launchpad"]
+    open.arguments = (foreground ? [] : ["-g", "-j"]) + target
     open.standardOutput = FileHandle.nullDevice
     open.standardError = FileHandle.nullDevice
     FileHandle.standardError.write(Data("starting vphone-launchpad…\n".utf8))
@@ -175,14 +184,20 @@ func launchAndConnect() -> Int32 {
 
 // MARK: - Main
 
-let words = Array(CommandLine.arguments.dropFirst())
+var words = Array(CommandLine.arguments.dropFirst())
+// --foreground goes before the command, or among the options of any command
+// but exec, whose arguments all belong to vphone-cli.
+var foreground = words.first == "--foreground"
+if foreground {
+    words.removeFirst()
+}
 if words.isEmpty || ["help", "-h", "--help"].contains(words[0]) {
     print(usage(), terminator: "")
     exit(words.isEmpty ? 1 : 0)
 }
 
-let request = parse(words)
-let fd = connectControl() ?? launchAndConnect()
+let request = parse(words, foreground: &foreground)
+let fd = connectControl() ?? launchAndConnect(foreground: foreground)
 
 guard var line = try? JSONEncoder().encode(request) else {
     fail("unable to encode the request.")
