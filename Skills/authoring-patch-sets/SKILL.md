@@ -217,7 +217,15 @@ fails if they drift.
 
 ### What a VM Records
 
-`fw set-patches` writes `<vm>/PatchSelection.plist`, and is the only writer:
+A VM carries three patch records, each with its own writers:
+
+| File | What it says | Written by |
+| --- | --- | --- |
+| `<vm>/PatchSelection.plist` | what the owner wants: a preset plus the boxes they changed | `fw set-patches`; `vm create` (preset only); `fw patch` (rewrites it with what it ran, `--preset` included) |
+| `<vm>/PatchPlan.plist` | what the last `fw patch` resolved | `fw patch` |
+| `<vm>/PatchReceipt.plist` | what is live in the guest, part by part | each step that puts patched bytes into the guest |
+
+`fw set-patches` is how a person changes the first:
 
 ```zsh
 vphone-cli fw set-patches lab --preset extended --block kernel-cfw-debugger
@@ -229,6 +237,20 @@ identifier the preset already agrees with is dropped, so a later preset revision
 still reaches a VM whose boxes were never touched. The Launchpad's patch editor
 reads `fw patches --json` and writes through this verb rather than touching a VM
 bundle itself. Blocking a boot-essential patch is allowed; it warns on stderr.
+
+A selection reaches the guest only through the step that owns the bytes, which
+depends on where the patch lands; changing it on a machine that already exists is
+covered in `Research/Firmware/post_creation_patch_changes.md`. In short: the
+boot chain follows the plan and reaches the guest only through a restore (or,
+for AVPBooter, the next `fw patch`); guest-side patches follow the *current*
+selection, and `cfw install` and `cfw update-environment` apply them both ways —
+on, or reverted when turned off — and record the `Guest` part of the receipt.
+`vphone-cli fw patches <vm>` compares all three records.
+
+If your patch targets the guest, make it revertible: back the file up before
+the first write (`.bak` beside it) or, for the dyld cache, write through a
+`DyldSharedCacheChunkSet` with undo capture so its bytes land in the undo log.
+A guest patch with no way back is reported "not revertible" and stays live.
 
 ## Out-of-Tree Patch Sets
 

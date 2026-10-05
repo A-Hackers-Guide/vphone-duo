@@ -2641,3 +2641,36 @@ removed. There is no migration.
 
 **Opting out.** `vphone-cli fw set-patches <vm> --block
 kernel-cfw-paravirt_user_clients`, then re-patch.
+
+## Guest patches follow the selection, both ways (2026-10-04)
+
+No new Apple binary patch. This changes how every guest-side patch in this
+document (the dyld shared cache rows, the guest Mach-O and file patches, the
+Preboot device-tree repairs) is applied after a VM exists, so it is recorded
+here. Full write-up and live validation:
+`Research/Firmware/post_creation_patch_changes.md`.
+
+**Before.** `cfw install` applied the guest half from `PatchPlan.plist`, and
+turning a guest patch off on an installed VM did nothing: the step was skipped
+and the patched bytes stayed. The dyld cache patches were applied in place with
+no record of what they replaced.
+
+**Now.** `cfw install` and `cfw update-environment` resolve the guest half from
+the VM's current `PatchSelection.plist`, apply what is on and revert what is
+off. Mach-O, entitlement and guest-file patches revert from the `.bak` beside
+the file; the Preboot device tree from `devicetree.img4.bak`; the dyld cache
+from `.vphone-dsc-undo.json` in the cache directory, which holds the original
+bytes of every content write a cache verb makes (slot hashes are re-derived by
+re-attesting, not logged). Each cache verb takes `--undo-log`/`--undo-id`, and
+the hidden `cfw patch-dsc-revert` verb applies the log. What is live is recorded
+in the `Guest` part of `<vm>/PatchReceipt.plist`.
+
+**Existing VMs.** A guest installed before this change has no undo log and no
+backup for the files several patches share, so those patches are reported "not
+revertible" when turned off and stay recorded as live; nothing is guessed. Every
+dyld row above that a cache verb idempotently re-runs keeps its undo records, so
+a revert works however many installs later it happens.
+
+**Boot chain unchanged.** Boot-chain patches still reach a guest only through a
+restore (AVPBooter through `fw patch`); `fw set-patches` and `fw patches <vm>`
+say so per patch.

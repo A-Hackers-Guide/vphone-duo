@@ -2,6 +2,7 @@ import ArgumentParser
 import FirmwarePatcher
 import Foundation
 import VPhoneCoreKit
+import VPhonePatchKit
 
 struct VPhoneFirmwareCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -380,6 +381,13 @@ struct VPhoneFirmwarePatchesCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "patches",
         abstract: "List the patch sets, presets and individual patches this bundle can apply",
+        discussion: """
+        With a VM named, the report also compares the VM's choice with what its
+        last `fw patch` planned (PatchPlan.plist) and what is recorded as applied
+        in the guest (PatchReceipt.plist), and flags each patch whose wanted state
+        has not reached the guest yet. A VM no receipt-writing step has touched
+        reports its applied state as unknown.
+        """,
     )
 
     @OptionGroup var lib: VPhoneLibraryOption
@@ -393,10 +401,13 @@ struct VPhoneFirmwarePatchesCommand: ParsableCommand {
         // A VM is optional: without one, this reports what the bundle can do.
         var selection = VPhoneVirtualMachinePatchSelection()
         var vmName: String?
+        var machine: VPhonePatchCatalogReport.MachineRecords?
         if let name {
             let resolvedName = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
+            let bundle = try lib.library.bundle(named: resolvedName)
             vmName = resolvedName
-            selection = try VPhonePatchPresetStore.selection(forVM: lib.library.bundle(named: resolvedName).url)
+            selection = VPhonePatchPresetStore.selection(forVM: bundle.url)
+            machine = .read(bundle)
         }
         if let preset {
             selection.presetIdentifier = preset
@@ -415,11 +426,12 @@ struct VPhoneFirmwarePatchesCommand: ParsableCommand {
             selection: selection,
             activePreset: active,
             presets: presets,
+            machine: machine,
         )
         if json {
             try print(report.jsonText())
         } else {
-            print(report.text())
+            print(report.text(libraryArguments: lib.commandSuffix))
         }
     }
 }
@@ -435,7 +447,7 @@ struct VPhoneFirmwarePatchesCommand: ParsableCommand {
 struct VPhoneFirmwareSetPatchesCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "set-patches",
-        abstract: "Record which patches a VM applies, for the next fw patch",
+        abstract: "Record which patches a VM applies",
         discussion: """
         Replaces the VM's PatchSelection.plist. Every run writes the whole record:
         --block and --allow name the complete lists, so a run naming neither drops
@@ -445,8 +457,22 @@ struct VPhoneFirmwareSetPatchesCommand: ParsableCommand {
         already agrees with is dropped, so a later preset revision still reaches a
         VM whose boxes were never touched.
 
-        Nothing is patched here. The choice applies the next time `fw patch` runs
-        for the VM, and `cfw install` follows the plan that run records.
+        Nothing is patched here. On a VM that is not installed yet, the next
+        `fw patch`, restore and `cfw install` build it with this choice.
+
+        On an installed VM the choice is still recorded, and the command then
+        lists each patch whose new state has not reached the guest, by where it
+        lands and the step that delivers it:
+
+          AVPBooter                     `fw patch`; read at the next boot. Needs
+                                        the restore tree (`--keep-artifacts`).
+          Guest (system, dyld cache,    `cfw update-environment` (root), which
+          Preboot device tree)          applies this choice both on and off.
+          LLB, kernelcache, TXM,        only a restore.
+          DeviceTree
+          iBSS, iBEC                    used only while restoring.
+
+        `fw patches <vm>` shows the same comparison at any time.
         """,
     )
 
@@ -517,5 +543,62 @@ struct VPhoneFirmwareSetPatchesCommand: ParsableCommand {
         try VPhoneHostFilePermissions.makeAccessible(at: bundle.url)
         print("[fw set-patches] \(name): preset \(selection.presetIdentifier)"
             + ", \(selection.blockedPatches.count) off, \(selection.allowedPatches.count) on")
+        reportPending(selection: selection, preset: resolved, bundle: bundle, name: name)
+    }
+
+    /// On an installed VM, a new choice reaches the guest only through the
+    /// step that owns each part, so say which patches still differ from what
+    /// the guest has (or, with no receipt, from the last plan) and how each
+    /// gets there. A VM that is not installed yet needs no such note: the
+    /// steps that build it read this choice.
+    private func reportPending(
+        selection: VPhoneVirtualMachinePatchSelection,
+        preset: VPhonePatchPreset,
+        bundle: VPhoneBundle,
+        name: String,
+    ) {
+        let machine = VPhonePatchCatalogReport.MachineRecords.read(bundle)
+        guard machine.installed == true else { return }
+        let report = VPhonePatchCatalogReport(
+            vmName: name,
+            selection: selection,
+            activePreset: preset,
+            presets: [],
+            machine: machine,
+        )
+        guard let states = report.states() else { return }
+        let pending = states.filter { $0.isPending == true }
+        if pending.isEmpty {
+            if states.allSatisfy({ $0.isPending == nil }) {
+                print("[fw set-patches] \(name) is installed, but neither a plan nor a receipt records"
+                    + " what its guest has, so what this change still needs is unknown.")
+            } else {
+                print("[fw set-patches] \(name) is installed and already matches this choice.")
+            }
+            return
+        }
+        print("[fw set-patches] \(name) is installed. \(pending.count) patch(es) differ from what its guest has:")
+        for line in VPhonePatchCatalogReport.pendingSteps(
+            pending,
+            vmName: name,
+            libraryArguments: lib.commandSuffix,
+        ) {
+            print(line)
+        }
+    }
+}
+
+// MARK: - Library Arguments
+
+extension VPhoneLibraryOption {
+    /// ` --library-root <root>` when one was given, for a command printed back
+    /// to the user, so it finds the same VM.
+    var commandSuffix: String {
+        guard let libraryRoot else { return "" }
+        let safe = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "/._-~+@%:,="))
+        let quoted = libraryRoot.unicodeScalars.allSatisfy(safe.contains)
+            ? libraryRoot
+            : "'" + libraryRoot.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        return " --library-root \(quoted)"
     }
 }

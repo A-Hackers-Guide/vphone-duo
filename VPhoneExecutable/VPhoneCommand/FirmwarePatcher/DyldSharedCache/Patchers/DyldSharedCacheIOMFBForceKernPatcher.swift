@@ -168,9 +168,12 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
     public static func patch(
         chunksDirectory: URL,
         dryRun: Bool = false,
+        captureUndo: Bool = false,
+        onUndo: ((DyldSharedCacheUndoLog) -> Void)? = nil,
         log: ((String) -> Void)? = stdoutLog,
     ) throws -> Outcome {
-        let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory)
+        let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory, captureUndo: captureUndo)
+        defer { if captureUndo, let undo = chunks.takeUndoLog() { onUndo?(undo) } }
         let resolver = try DyldSharedCacheSymbolResolver(chunks: chunks)
         return try patch(chunks: chunks, resolver: resolver, dryRun: dryRun, log: log)
     }
