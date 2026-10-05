@@ -48,11 +48,11 @@ extension FirmwarePipeline {
         let includeKernelCustomFirmware = includesSet(FirmwareKernelCustomFirmwarePatchSet.identifier)
         let includeDeviceTree = includesSet(FirmwareDeviceTreePatchSet.identifier)
 
-        // An iPad guest boots a device tree of its own (7b) and needs LLB to give
-        // it the iPad's display scale (4).
+        // A guest that presents its board boots a device tree of its own (7b),
+        // and an iPad needs LLB to give it the iPad's display scale (4).
         let guestDevice = readGuestDevice(restoreDir)
         let guestTreeURL = restoreDir.appending(path: FirmwareManifest.guestDeviceTreePath)
-        let hasGuestTree = guestDevice.isPad && FileManager.default.fileExists(atPath: guestTreeURL.path)
+        let hasGuestTree = guestDevice.presentsBoard && FileManager.default.fileExists(atPath: guestTreeURL.path)
         let boardTreeURL = restoreDir.appending(path: guestDevice.boardDeviceTreePath)
 
         // Whether the plan turned a patch on. Without a plan, fall back to the
@@ -178,7 +178,9 @@ extension FirmwarePipeline {
             patcherFactories: includeBootChain ? [{ data, verbose in
                 let p = IBootPatcher(data: data, mode: .llb, verbose: verbose)
                 p.extraBootArgs = extraBootArgs
-                p.displayScale = hasGuestTree ? UInt16(guestDevice.screen.scale) : nil
+                // The boot video word always says 3x, which is already right
+                // for an iPhone board.
+                p.displayScale = hasGuestTree && guestDevice.screen.scale != 3 ? UInt16(guestDevice.screen.scale) : nil
                 p.gate = gate
                 return p
             }] : [],
@@ -254,7 +256,8 @@ extension FirmwarePipeline {
 
         // 7. DeviceTree — JB includes the former EXP identity and camera
         //    properties so the guest presents a consistent iPhone17,3 identity.
-        //    An iPad guest restores with this tree and boots its own copy (7b).
+        //    A guest that presents its board restores with this tree and boots
+        //    its own copy (7b).
         let dtIncludeIdentity = variant == .jb || variant == .exp
         components.append(ComponentDescriptor(
             name: "DeviceTree",
@@ -273,8 +276,8 @@ extension FirmwarePipeline {
             }] : [],
         ))
 
-        // 7b. The iPad's installed DeviceTree, which `fw prepare` split off so it
-        //     can carry the iPad identity through restore.
+        // 7b. The board's installed DeviceTree, which `fw prepare` split off so
+        //     it can carry the board identity through restore.
         if hasGuestTree {
             components.append(ComponentDescriptor(
                 name: "GuestDeviceTree",

@@ -366,13 +366,14 @@ struct VPhoneCustomFirmwareInstaller {
             boardDeviceTree: boardDeviceTree,
         ))
         // Selected patches this guest has nothing for, so the receipt does not
-        // report them as missing forever: the board audio repair on an iPhone,
-        // which has no board tree, and the build spoof with no value set. An
-        // iPad whose board tree could not be recovered is not among them: its
-        // repair is missing, and drift should keep saying so.
+        // report them as missing forever: the board audio repair on an
+        // iPhone17,3, which has no board tree, and the build spoof with no value
+        // set. A board-presenting guest whose board tree could not be recovered
+        // is not among them: its repair is missing, and drift should keep
+        // saying so.
         var notApplicableGuest = Set<String>()
         let device = configuredGuestDevice(in: bundleDirectory) ?? guestDevice(of: restore)
-        if !device.isPad {
+        if !device.presentsBoard {
             notApplicableGuest.insert(FirmwareGuestSystemPatchSet.prebootBoardAudio)
         }
         if buildVersion?.isEmpty ?? true {
@@ -1537,7 +1538,7 @@ struct VPhoneCustomFirmwareInstaller {
         let identity = FirmwareGuestIdentityPatchSet.prebootDeviceTreeIdentity
         var rewriteIdentity = false
         if includeIdentity {
-            if guestDevice.isPad {
+            if guestDevice.presentsBoard {
                 print("  [·] \(identity): skipped, the device tree already presents \(guestDevice.productType)")
             } else {
                 rewriteIdentity = enabled(identity)

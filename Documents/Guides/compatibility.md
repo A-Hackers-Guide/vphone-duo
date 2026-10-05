@@ -40,6 +40,14 @@ day: `iPhone17,3 27.0.1 + 26.4-23E5207q` with the patch boots to the guest
 and answers a vphoned `device.info`. Until a bundle release carrying the
 patch ships, treat 27.0.x past 24A435 as needing a current local build.
 
+## Other iPhone models
+
+See [Other iPhone models](iphone-models.md).
+
+| Host | iPhone restore IPSW | PCC/cloudOS IPSW | Observed result |
+| --- | --- | --- | --- |
+| Mac17,9 (M5 Pro) 27.0.1 | `18,1_26.6.2_23G90` (iPhone 17 Pro) | `26.4-23E5207q` | Launchpad `vm create` (2.5.1 local bundle): prepare, patch, restore, CFW, boot to the home screen at 402x874 pt @3x, `model` iPhone18,1, vphoned ping |
+
 ## iPadOS
 
 See [iPadOS guests](ipados.md).
