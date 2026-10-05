@@ -203,6 +203,8 @@ public enum DyldSharedCacheCameraPatcher {
         symbolCacheURL: URL? = nil,
         dryRun: Bool = false,
         force: Bool = false,
+        captureUndo: Bool = false,
+        onUndo: ((DyldSharedCacheUndoLog) -> Void)? = nil,
         log: ((String) -> Void)? = stdoutLog,
     ) throws -> Result {
         try apply(
@@ -211,6 +213,8 @@ public enum DyldSharedCacheCameraPatcher {
             symbolCacheURL: symbolCacheURL,
             dryRun: dryRun,
             force: force,
+            captureUndo: captureUndo,
+            onUndo: onUndo,
             log: log,
         )
     }
@@ -244,9 +248,12 @@ public enum DyldSharedCacheCameraPatcher {
         symbolCacheURL: URL?,
         dryRun: Bool,
         force: Bool,
+        captureUndo: Bool = false,
+        onUndo: ((DyldSharedCacheUndoLog) -> Void)? = nil,
         log: ((String) -> Void)?,
     ) throws -> Result {
-        let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory)
+        let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory, captureUndo: captureUndo)
+        defer { if captureUndo, let undo = chunks.takeUndoLog() { onUndo?(undo) } }
         let resolver = try DyldSharedCacheSymbolResolver(
             mainCacheURL: symbolCacheURL ?? chunks.mainCacheURL,
         )

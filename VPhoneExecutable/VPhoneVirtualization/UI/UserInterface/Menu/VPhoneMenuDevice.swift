@@ -104,6 +104,14 @@ extension VPhoneMenuController {
         addUDIDItems(to: menu)
         menu.addItem(NSMenuItem.separator())
         addSetupAssistantItem(to: menu)
+        // Saved to this machine and read when vphoned next starts in the guest.
+        let unlockItem = makeItem("Unlock at Startup", action: #selector(toggleUnlockAtStartup), symbol: "lock.open")
+        unlockItem.state = control.unlocksAtStartup ? .on : .off
+        unlockItem.toolTip = VPhoneLocalization.text(
+            "Wake the guest and dismiss its Lock Screen each time it starts.",
+        )
+        unlockAtStartupItem = unlockItem
+        menu.addItem(unlockItem)
         let restart = makeItem("Restart Guest…", action: #selector(restartGuest), symbol: "arrow.clockwise")
         restart.isEnabled = false
         restartGuestItem = restart
@@ -260,6 +268,23 @@ extension VPhoneMenuController {
         VPhoneTrackpadGestures.isEnabled = enabled
         trackpadGesturesItem?.state = enabled ? .on : .off
         captureView?.trackpadGesturesEnabled = enabled
+    }
+
+    /// Saved to this machine's config.plist; it takes effect from the next
+    /// guest start and does not unlock the guest now.
+    @objc func toggleUnlockAtStartup() {
+        let enabled = !control.unlocksAtStartup
+        do {
+            try onUnlockAtStartupChange?(enabled)
+            control.unlocksAtStartup = enabled
+            unlockAtStartupItem?.state = enabled ? .on : .off
+        } catch {
+            VPhoneAlert.present(
+                title: "Unable to Change Unlock at Startup",
+                message: error.localizedDescription,
+                style: .warning,
+            )
+        }
     }
 
     /// Shows the guest's frame rate in the window subtitle. Persisted.

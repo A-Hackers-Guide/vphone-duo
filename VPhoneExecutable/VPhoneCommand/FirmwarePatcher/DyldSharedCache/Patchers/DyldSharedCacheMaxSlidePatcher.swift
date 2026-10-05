@@ -198,6 +198,8 @@ public enum DyldSharedCacheMaxSlidePatcher {
         kernelRegionSize: UInt64 = kernelSharedRegionSize,
         dryRun: Bool = false,
         force: Bool = false,
+        captureUndo: Bool = false,
+        onUndo: ((DyldSharedCacheUndoLog) -> Void)? = nil,
         verbose: Bool = true,
     ) throws -> Result {
         let mainChunkName = "dyld_shared_cache_\(architecture)"
@@ -210,7 +212,10 @@ public enum DyldSharedCacheMaxSlidePatcher {
 
         // The patcher's own chunk set: see the note at the top of the file about
         // why its write log must not be the caller's.
-        let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory, architecture: architecture)
+        let chunks = try DyldSharedCacheChunkSet(
+            directory: chunksDirectory, architecture: architecture, captureUndo: captureUndo,
+        )
+        defer { if captureUndo, let undo = chunks.takeUndoLog() { onUndo?(undo) } }
         let headerVMA = try headerVMA(of: chunks)
         let header = try readHeader(from: chunks, at: headerVMA, chunkName: mainChunkName)
 

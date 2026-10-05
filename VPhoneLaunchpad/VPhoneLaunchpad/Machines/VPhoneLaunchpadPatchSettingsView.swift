@@ -288,7 +288,7 @@ struct VPhoneLaunchpadPatchSettingsView: View {
         if selection.hasOverrides {
             parts.append(String(localized: "\(selection.blocked.count) turned off, \(selection.allowed.count) turned on from the preset"))
         }
-        parts.append(String(localized: "Fixed once the machine is installed"))
+        parts.append(String(localized: "Applied when the machine is installed"))
         return parts.joined(separator: " · ")
     }
 

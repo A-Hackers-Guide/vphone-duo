@@ -66,7 +66,12 @@ enum VPhoneAlert {
         alert.informativeText = VPhoneLocalization.text(message)
         alert.alertStyle = style
         for button in buttons {
-            alert.addButton(withTitle: VPhoneLocalization.text(button))
+            let added = alert.addButton(withTitle: VPhoneLocalization.text(button))
+            // AppKit gives Esc to a button only when its title is the English
+            // "Cancel", so a localized one has to be bound here.
+            if button == "Cancel" {
+                added.keyEquivalent = "\u{1b}"
+            }
         }
         return alert
     }

@@ -108,10 +108,16 @@ public final class DyldSharedCacheChunkSet {
 
     private let architecture: String
 
-    /// Guards the two pieces of lazily built state below.
+    /// Guards the three pieces of mutable state below.
     private let stateLock = NSLock()
     private var writeLog: [DyldSharedCacheWriteSpan] = []
     private var loadedLocalSymbols: DyldSharedCacheLocalSymbolTable?
+
+    /// When set, every `write(at:_:)` first reads the bytes it is about to
+    /// replace and captures them here, so a later run can put them back for a
+    /// patch that has since been turned off. Nil disables capture, which is the
+    /// default and what every read-only or throwaway use of this type wants.
+    private var undoCaptureLog: DyldSharedCacheUndoLog?
 
     // MARK: - Construction
 
@@ -121,9 +127,12 @@ public final class DyldSharedCacheChunkSet {
     ///   - directory: the directory holding `dyld_shared_cache_<arch>*`.
     ///   - architecture: cache architecture suffix; `arm64e` for every device
     ///     this project targets.
-    public init(directory: URL, architecture: String = "arm64e") throws {
+    ///   - captureUndo: start capturing the original bytes of every write into
+    ///     an undo log, retrievable with ``takeUndoLog()``. Off by default.
+    public init(directory: URL, architecture: String = "arm64e", captureUndo: Bool = false) throws {
         self.directory = directory
         self.architecture = architecture
+        undoCaptureLog = captureUndo ? DyldSharedCacheUndoLog() : nil
         chunkURLs = try Self.enumerateChunks(in: directory, architecture: architecture)
         guard !chunkURLs.isEmpty else {
             throw DyldSharedCacheError.noChunksFound(directory: directory.path)
@@ -302,12 +311,39 @@ public final class DyldSharedCacheChunkSet {
         guard !data.isEmpty else { return DyldSharedCacheWriteSpan.byte(at: vma) }
         let span = DyldSharedCacheWriteSpan(vma: vma, length: data.count)
         let (chunkURL, range) = try fileRange(of: span)
+        // Capture the bytes about to be overwritten before writing, so a later
+        // run can put them back. Read once here rather than re-reading the
+        // whole span later, and only when capture is on.
+        let captured: Data? = stateLock.withLock { undoCaptureLog != nil }
+            ? try Self.read(url: chunkURL, offset: UInt64(range.lowerBound), length: data.count)
+            : nil
         let handle = try FileHandle(forUpdating: chunkURL)
         defer { try? handle.close() }
         try handle.seek(toOffset: UInt64(range.lowerBound))
         try handle.write(contentsOf: data)
-        stateLock.withLock { writeLog.append(span) }
+        stateLock.withLock {
+            writeLog.append(span)
+            if let captured, captured != data {
+                undoCaptureLog?.capture(
+                    chunk: chunkURL.lastPathComponent,
+                    fileOffset: range.lowerBound,
+                    vma: vma,
+                    original: captured,
+                )
+            }
+        }
         return span
+    }
+
+    /// The undo log captured so far, if capture was enabled, and clear it so a
+    /// second call does not hand back the same records. The caller stamps the
+    /// records with the patch identifier this cache set applied.
+    public func takeUndoLog() -> DyldSharedCacheUndoLog? {
+        stateLock.withLock {
+            guard let log = undoCaptureLog else { return nil }
+            undoCaptureLog = DyldSharedCacheUndoLog()
+            return log
+        }
     }
 
     /// Every span `write(at:_:)` has put on disk through this chunk set, oldest

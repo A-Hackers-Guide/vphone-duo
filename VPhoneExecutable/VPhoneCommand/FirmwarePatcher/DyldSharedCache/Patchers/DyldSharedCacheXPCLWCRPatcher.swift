@@ -116,9 +116,12 @@ public enum DyldSharedCacheXPCLWCRPatcher {
     public static func apply(
         directory: URL,
         dryRun: Bool = false,
+        captureUndo: Bool = false,
+        onUndo: ((DyldSharedCacheUndoLog) -> Void)? = nil,
         log: ((String) -> Void)? = DyldSharedCacheCodeSignature.stderrLog,
     ) throws -> Outcome {
-        let chunks = try DyldSharedCacheChunkSet(directory: directory)
+        let chunks = try DyldSharedCacheChunkSet(directory: directory, captureUndo: captureUndo)
+        defer { if captureUndo, let undo = chunks.takeUndoLog() { onUndo?(undo) } }
         return try apply(chunks: chunks, dryRun: dryRun, log: log)
     }
 

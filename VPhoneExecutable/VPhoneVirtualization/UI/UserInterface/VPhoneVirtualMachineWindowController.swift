@@ -4,7 +4,7 @@ import Virtualization
 import VPhoneCoreKit
 
 @MainActor
-class VPhoneVirtualMachineWindowController: NSObject {
+class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
     private var windowController: NSWindowController?
     private weak var control: VPhoneGuestControl?
     private weak var virtualMachineView: VPhoneVirtualMachineView?
@@ -62,6 +62,7 @@ class VPhoneVirtualMachineWindowController: NSObject {
         )
 
         window.isReleasedWhenClosed = false
+        window.delegate = self
         window.level = .normal
         VPhoneAlert.hostWindow = window
         window.contentAspectRatio = windowSize
@@ -129,6 +130,16 @@ class VPhoneVirtualMachineWindowController: NSObject {
             Task { @MainActor in self?.pollOrientation() }
         })
         setFrameRateDisplay(VPhoneFrameRateDisplay.isEnabled)
+    }
+
+    // MARK: - Close
+
+    /// Closing the display window stops the VM, so the close button asks the
+    /// same question as ⌘Q, with the window still up, instead of closing
+    /// first. `closeForRestart` closes without asking.
+    func windowShouldClose(_: NSWindow) -> Bool {
+        NSApp.terminate(nil)
+        return false
     }
 
     /// Disconnect the old display and input devices before rebuilding the VM.

@@ -77,6 +77,8 @@ paste for long or non-ASCII text.
 - **Wake and unlock:** `vphone-launchpad-cli guest unlock myphone` (add
   `--passcode` when the guest has one). It works from any state; the keys only
   toggle. Check with `ping`, then `screenshot` to a file and look at it.
+  A machine with `vm config <name> --unlock-at-startup on` (run through
+  `vphone-launchpad-cli exec`) is unlocked by the host each time it starts.
 - **Home:** `{"t":"key","name":"home"}`; **power** wakes or locks.
 - **Open an app without hunting for its icon:** `apps.launch` with the bundle id.
 - **Scroll a list:** swipe from lower to upper y, e.g. 2600 → 1400 at x 645.

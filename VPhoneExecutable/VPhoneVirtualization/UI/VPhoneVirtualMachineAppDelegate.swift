@@ -22,6 +22,10 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
     private var sigintSource: DispatchSourceSignal?
     private var didAttemptAutoInstall = false
     private var isRestartingVirtualMachine = false
+    /// Set when the stop was asked for without the window or ⌘Q: a SIGINT
+    /// from `vm stop` or Launchpad, which must not wait for an answer.
+    private var stopConfirmed = false
+    private var isConfirmingStop = false
 
     init(command: VPhoneBootCommand) {
         self.command = command
@@ -42,9 +46,15 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
 
         signal(SIGINT, SIG_IGN)
         let src = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
-        src.setEventHandler {
+        src.setEventHandler { [weak self] in
             print("\n[vphone] SIGINT — shutting down")
-            NSApp.terminate(nil)
+            self?.stopConfirmed = true
+            if self?.isConfirmingStop == true {
+                // A quit is waiting on the question; this answers it.
+                NSApp.reply(toApplicationShouldTerminate: true)
+            } else {
+                NSApp.terminate(nil)
+            }
         }
         src.activate()
         sigintSource = src
@@ -95,6 +105,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         let control = VPhoneGuestControl()
         self.control = control
         if !command.dfu {
+            control.unlocksAtStartup = vm.unlocksAtStartup
             startNetworkServices(vm: vm, control: control)
             let vphonedURL = URL(fileURLWithPath: command.vphonedBin)
             if FileManager.default.fileExists(atPath: vphonedURL.path) {
@@ -168,6 +179,11 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
             }
             mc.onFrameRateDisplayChange = { [weak wc] enabled in
                 wc?.setFrameRateDisplay(enabled)
+            }
+            mc.onUnlockAtStartupChange = { [config = command.config] enabled in
+                let manifest = try VPhoneVirtualMachineManifest.load(from: config)
+                try manifest.updating(unlocksAtStartup: enabled).write(to: config)
+                try VPhoneHostFilePermissions.makeAccessible(at: config)
             }
             mc.captureView = wc.captureView
             mc.touchIDMonitor = wc.touchIDMonitor
@@ -470,6 +486,25 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_: Notification) {
         stopControlServices()
+    }
+
+    /// Quitting turns the guest off at once, so a quit from the window or ⌘Q
+    /// asks first while the VM runs. A SIGINT stop, a headless VM and a VM
+    /// that never started quit straight away.
+    func applicationShouldTerminate(_: NSApplication) -> NSApplication.TerminateReply {
+        guard !command.noGraphics, !stopConfirmed, vm != nil else { return .terminateNow }
+        guard !isConfirmingStop else { return .terminateCancel }
+        isConfirmingStop = true
+        VPhoneAlert.present(
+            title: "Stop the Virtual Machine?",
+            message: "Quitting turns the guest off at once, as pulling the power would. Anything not saved in the guest is lost.",
+            style: .warning,
+            buttons: ["Stop", "Cancel"],
+        ) { [weak self] response in
+            self?.isConfirmingStop = false
+            NSApp.reply(toApplicationShouldTerminate: response == .alertFirstButtonReturn)
+        }
+        return .terminateLater
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {

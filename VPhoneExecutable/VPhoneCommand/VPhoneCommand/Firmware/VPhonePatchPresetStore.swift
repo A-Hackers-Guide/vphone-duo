@@ -105,11 +105,124 @@ public struct VPhoneVirtualMachinePatchPlan: Codable, Sendable, Hashable {
     }
 }
 
+/// What is live in the guest now, part by part.
+///
+/// `PatchSelection.plist` is what the owner wants and `PatchPlan.plist` is what
+/// the last `fw patch` built; neither says what the guest actually runs. A
+/// boot-chain file patched in the restore tree reaches the guest only when a
+/// restore flashes it, and a guest patch only when `cfw install` writes it. Each
+/// step that puts bytes into the guest replaces its own part here, so the
+/// difference between this and the plan is exactly what a change still has to
+/// reach.
+///
+/// Parts are keyed by ``part(for:)``: a boot-chain component's raw value for a
+/// `.firmware` target, ``guestPart`` for everything `cfw install` writes.
+public struct VPhoneVirtualMachinePatchReceipt: Codable, Sendable, Hashable {
+    public struct Entry: Codable, Sendable, Hashable {
+        /// The enabled patch identifiers whose bytes are in this part, sorted.
+        public var patches: [String]
+        /// The verb that wrote the part: `fw patch`, `restore`, `cfw install`, …
+        public var writer: String
+        /// The `VPhone.bundle` version that wrote it, when known.
+        public var bundleVersion: String?
+        public var date: Date
+        /// Selected patches the writer found nothing to do for on this guest:
+        /// a repair for hardware it does not have, a spoof with no value set.
+        /// They are neither live nor missing, so they never count as drift.
+        public var notApplicable: [String]
+
+        public init(
+            patches: some Sequence<String>,
+            writer: String,
+            bundleVersion: String?,
+            date: Date = Date(),
+            notApplicable: some Sequence<String> = [String](),
+        ) {
+            self.patches = Array(Set(patches)).sorted()
+            self.writer = writer
+            self.bundleVersion = bundleVersion
+            self.date = date
+            self.notApplicable = Array(Set(notApplicable)).sorted()
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case patches = "Patches"
+            case writer = "Writer"
+            case bundleVersion = "BundleVersion"
+            case date = "Date"
+            case notApplicable = "NotApplicable"
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            patches = try container.decode([String].self, forKey: .patches)
+            writer = try container.decode(String.self, forKey: .writer)
+            bundleVersion = try container.decodeIfPresent(String.self, forKey: .bundleVersion)
+            date = try container.decode(Date.self, forKey: .date)
+            notApplicable = try container.decodeIfPresent([String].self, forKey: .notApplicable) ?? []
+        }
+    }
+
+    public static let guestPart = "Guest"
+
+    public var parts: [String: Entry]
+
+    public init(parts: [String: Entry] = [:]) {
+        self.parts = parts
+    }
+
+    /// The part a patch with this target lives in.
+    public static func part(for target: VPhonePatchTarget) -> String {
+        if case let .firmware(component) = target {
+            return component.rawValue
+        }
+        return guestPart
+    }
+
+    /// Every patch identifier live in some part.
+    public var appliedPatches: Set<String> {
+        Set(parts.values.flatMap(\.patches))
+    }
+
+    /// Replaces one part. A writer records every part it wrote, including one
+    /// it left with no patches, so a part that was reverted reads as empty
+    /// rather than as unknown.
+    public mutating func record(
+        _ part: String,
+        patches: some Sequence<String>,
+        writer: String,
+        bundleVersion: String?,
+        notApplicable: some Sequence<String> = [String](),
+    ) {
+        parts[part] = Entry(patches: patches, writer: writer, bundleVersion: bundleVersion, notApplicable: notApplicable)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case parts = "Parts"
+    }
+
+    public func encoded() throws -> Data {
+        let encoder = PropertyListEncoder()
+        encoder.outputFormat = .xml
+        return try encoder.encode(self)
+    }
+
+    public static func decode(_ data: Data) throws -> Self {
+        try PropertyListDecoder().decode(Self.self, from: data)
+    }
+}
+
 // MARK: - Store
 
 public enum VPhonePatchPresetStore {
     public static let selectionFileName = "PatchSelection.plist"
     public static let planFileName = "PatchPlan.plist"
+    /// Written by whatever puts patched bytes into the guest; see
+    /// ``VPhoneVirtualMachinePatchReceipt``. Root writers (`cfw install`) go
+    /// through the VM's confined directory with ``VPhoneVirtualMachinePatchReceipt/encoded()``
+    /// rather than ``write(_:forVM:)``, and leave the file mode `0777` like
+    /// every other host VM artifact.
+    public static let receiptFileName = "PatchReceipt.plist"
 
     // MARK: Presets
 
@@ -211,6 +324,29 @@ public enum VPhonePatchPresetStore {
 
     public static func write(_ plan: VPhoneVirtualMachinePatchPlan, forVM directory: URL) throws {
         try write(plan, to: directory.appendingPathComponent(planFileName))
+    }
+
+    // MARK: VM Receipt
+
+    /// What is live in the guest, or nil for a VM no receipt-writing build has
+    /// touched — that VM's state is unknown, not empty.
+    public static func receipt(forVM directory: URL) -> VPhoneVirtualMachinePatchReceipt? {
+        let url = directory.appendingPathComponent(receiptFileName)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? VPhoneVirtualMachinePatchReceipt.decode(data)
+    }
+
+    /// Reads, changes and writes the receipt in one step, starting from an
+    /// empty one when the VM has none.
+    public static func updateReceipt(
+        forVM directory: URL,
+        _ body: (inout VPhoneVirtualMachinePatchReceipt) -> Void,
+    ) throws {
+        var receipt = receipt(forVM: directory) ?? VPhoneVirtualMachinePatchReceipt()
+        body(&receipt)
+        let url = directory.appendingPathComponent(receiptFileName)
+        try receipt.encoded().write(to: url, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: url.path)
     }
 
     private static func write(_ value: some Encodable, to url: URL) throws {

@@ -49,6 +49,10 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
         /// Whether the preset the report was made against turns it on. What the
         /// checkmarks are a difference from.
         let inPreset: Bool
+        /// Whether the machine's wanted state for this patch has not reached its
+        /// guest yet. Reported only for a named machine, by a bundle that
+        /// compares its records; nil otherwise.
+        let pending: Bool?
 
         var id: String {
             identifier
@@ -103,6 +107,23 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
     let allowedPatches: [String]
     let presets: [Preset]
     let patches: [Patch]
+
+    // Reported only for a named machine, and only by a bundle that compares a
+    // machine's records. An older bundle leaves them out, and every reader
+    // treats their absence as "not known".
+
+    /// Whether `cfw install` finished on the machine; nil when unknown.
+    let installed: Bool?
+    /// Whether the machine has a receipt saying what its guest runs.
+    let receiptRecorded: Bool?
+    /// How many patches differ from what the machine's guest has, or nil when
+    /// nothing records what it has.
+    let pendingPatches: Int?
+
+    /// The overrides the machine's choice makes on its preset.
+    var overrideCount: Int {
+        blockedPatches.count + allowedPatches.count
+    }
 
     func preset(_ identifier: String) -> Preset? {
         presets.first { $0.identifier == identifier }

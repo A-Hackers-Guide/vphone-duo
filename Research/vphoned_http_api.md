@@ -330,6 +330,15 @@ at once; a dark but unlocked one is only woken. A guest with a passcode needs
 any key is sent. It needs no private entitlement. `timeout` is 1–60 seconds,
 10 by default. Measurements: `Research/Guest/screen_unlock.md`.
 
+A machine with `unlocksAtStartup` in its `config.plist` (`vphone-cli vm config
+<name> --unlock-at-startup on`, Device > Unlock at Startup in the VM window, or
+the Startup section of a machine's Settings in Launchpad) has `vphone-vm` call
+`screen.unlock` with a 60 s timeout when a vphoned that has just started
+connects. `/v1/health` carries `instance`, a UUID vphoned makes when it starts,
+so the host tells a start (guest boot, userspace reboot, a vphoned update) from
+a probe it lost and found again; only a new instance is unlocked. A guest still
+in Setup Assistant is left alone.
+
 `time.timezone` (capability `timezone`; REST `GET/PUT /v1/timezone`) returns
 `{identifier, automatic, seconds_from_gmt}`: the Olson name
 `/var/db/timezone/localtime` points to under `/var/db/timezone/zoneinfo`, and
