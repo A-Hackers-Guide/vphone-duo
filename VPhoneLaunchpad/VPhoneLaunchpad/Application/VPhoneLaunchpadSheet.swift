@@ -53,6 +53,27 @@ struct VPhoneLaunchpadSheet<Content: View, Accessory: View, Actions: View>: View
     }
 }
 
+/// A segmented control over a sheet's form that shows one page of it at a
+/// time, so a sheet with several groups of settings stays short instead of
+/// growing past the screen. The sheet resizes to the page, as a settings
+/// window does.
+struct VPhoneLaunchpadSheetPages<Page: Hashable, Labels: View>: View {
+    @Binding var selection: Page
+    @ViewBuilder let labels: Labels
+
+    var body: some View {
+        Picker(selection: $selection) {
+            labels
+        } label: {
+            EmptyView()
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .padding(.top, 16)
+    }
+}
+
 extension VPhoneLaunchpadSheet where Accessory == EmptyView {
     init(
         _ title: Text,

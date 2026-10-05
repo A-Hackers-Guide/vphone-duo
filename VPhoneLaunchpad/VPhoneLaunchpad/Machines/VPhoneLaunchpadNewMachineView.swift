@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 
 /// Name, location, Core Bundle, guest device and firmware pairing from
-/// `fw catalog`, hardware and options.
+/// `fw catalog`, hardware and options, on three pages. Every page has
+/// defaults, so Create works from any of them.
 /// Create hands off to the pipeline sheet.
 struct VPhoneLaunchpadNewMachineView: View {
     let onCreate: (VPhoneLaunchpadMachinePath) -> Void
@@ -31,8 +32,12 @@ struct VPhoneLaunchpadNewMachineView: View {
     @State private var patches = VPhoneLaunchpadPatchSelection()
     @State private var patchCatalog: VPhoneLaunchpadPatchCatalog?
     @State private var patchCatalogError: String?
-    @State private var showsAdvanced = false
     @State private var keepArtifacts = false
+    @State private var page = Page.general
+
+    enum Page: Hashable {
+        case general, hardware, advanced
+    }
 
     private var selectedGuest: VPhoneLaunchpadFirmwareCatalog.Device? {
         catalog?.guests.first { $0.id == guest }
@@ -108,33 +113,49 @@ struct VPhoneLaunchpadNewMachineView: View {
 
     var body: some View {
         VPhoneLaunchpadSheet(Text("New Machine")) {
-            Form {
-                Section {
-                    TextField("Name", text: $name)
-                    locationPicker
-                } footer: {
-                    if let problem = nameProblem ?? locationProblem {
-                        Text(problem).foregroundStyle(.red)
+            VStack(spacing: 0) {
+                VPhoneLaunchpadSheetPages(selection: $page) {
+                    Text("General").tag(Page.general)
+                    Text("Hardware").tag(Page.hardware)
+                    Text("Advanced").tag(Page.advanced)
+                }
+                Form {
+                    switch page {
+                    case .general:
+                        Section {
+                            TextField("Name", text: $name)
+                            locationPicker
+                        } footer: {
+                            if let problem = nameProblem ?? locationProblem {
+                                Text(problem).foregroundStyle(.red)
+                            }
+                        }
+
+                        bundleSection
+
+                        firmware
+                    case .hardware:
+                        Section {
+                            Stepper("CPU: \(cpu) cores", value: $cpu, in: 1 ... ProcessInfo.processInfo.activeProcessorCount)
+                            Stepper("Memory: \(memoryMB) MB", value: $memoryMB, in: 2048 ... 65536, step: 1024)
+                            Stepper("Disk: \(diskSizeGB) GB", value: $diskSizeGB, in: 32 ... 512, step: 16)
+                        } footer: {
+                            Text(spaceNote).foregroundStyle(.secondary)
+                        }
+                    case .advanced:
+                        VPhoneLaunchpadNewMachineAdvancedView(
+                            network: $network,
+                            patches: $patches,
+                            keepArtifacts: $keepArtifacts,
+                            patchCatalog: patchCatalog,
+                            patchCatalogError: patchCatalogError,
+                            reloadPatches: { Task { await loadPatchCatalog() } },
+                            bundleVersion: bundleVersion,
+                        )
                     }
                 }
-
-                bundleSection
-
-                firmware
-
-                Section {
-                    Stepper("CPU: \(cpu) cores", value: $cpu, in: 1 ... ProcessInfo.processInfo.activeProcessorCount)
-                    Stepper("Memory: \(memoryMB) MB", value: $memoryMB, in: 2048 ... 65536, step: 1024)
-                    Stepper("Disk: \(diskSizeGB) GB", value: $diskSizeGB, in: 32 ... 512, step: 16)
-                } header: {
-                    Text("Hardware")
-                } footer: {
-                    Text(spaceNote).foregroundStyle(.secondary)
-                }
-
-                advancedSection
+                .formStyle(.grouped)
             }
-            .formStyle(.grouped)
         } actions: {
             Button("Cancel") { dismiss() }
                 .keyboardShortcut(.cancelAction)
@@ -144,18 +165,6 @@ struct VPhoneLaunchpadNewMachineView: View {
         }
         .frame(width: 560)
         .fixedSize(horizontal: false, vertical: true)
-        .sheet(isPresented: $showsAdvanced) {
-            VPhoneLaunchpadNewMachineAdvancedView(
-                network: $network,
-                patches: $patches,
-                keepArtifacts: $keepArtifacts,
-                patchCatalog: patchCatalog,
-                patchCatalogError: patchCatalogError,
-                reloadPatches: { Task { await loadPatchCatalog() } },
-                bundleVersion: bundleVersion,
-            )
-            .environment(model)
-        }
         // Each bundle version has its own firmware pairings and patch sets.
         .task(id: bundleVersion) { await loadCatalog() }
         .task(id: bundleVersion) { await loadPatchCatalog() }
@@ -163,43 +172,12 @@ struct VPhoneLaunchpadNewMachineView: View {
             let root = model.machines.preferredRoot
             location = root
             name = suggestedName(in: root)
-        }
-    }
-
-    // MARK: - Advanced
-
-    /// Network, patches and restore options, which rarely change, behind one row.
-    private var advancedSection: some View {
-        Section {
-            LabeledContent("Advanced") {
-                HStack(spacing: 8) {
-                    Text(verbatim: advancedSummary)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Button("Edit…") { showsAdvanced = true }
+            #if DEBUG
+                if VPhoneLaunchpadPreview.isActive {
+                    page = VPhoneLaunchpadPreview.newMachinePage
                 }
-            }
-        } footer: {
-            let essentialOff = patchCatalog.map { patches.bootEssentialOff(in: $0) } ?? []
-            if !essentialOff.isEmpty {
-                Label {
-                    Text("^[\(essentialOff.count) boot-essential patch](inflect: true) off: \(essentialOff.map(\.identifier).joined(separator: ", "))")
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                }
-                .foregroundStyle(.orange)
-            }
+            #endif
         }
-    }
-
-    /// The network mode and the patch preset, the two choices most likely to matter.
-    private var advancedSummary: String {
-        let network = VPhoneLaunchpadNewMachineAdvancedView.networkTitle(network)
-        guard let preset = patchCatalog?.preset(patches.preset)?.displayTitle else {
-            return network
-        }
-        return "\(network) · \(preset)"
     }
 
     // MARK: - Core Bundle

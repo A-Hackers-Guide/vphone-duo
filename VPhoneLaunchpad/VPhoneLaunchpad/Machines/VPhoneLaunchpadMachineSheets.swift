@@ -7,15 +7,20 @@ import SwiftUI
 /// fields start from the first machine; only the ones edited are written, to
 /// every machine, so values the machines do not share are left alone. A fixed
 /// address, a MAC and forwarded ports belong to one machine, so they are only
-/// offered when one is selected.
+/// offered when one is selected, on pages of their own.
 struct VPhoneLaunchpadMachineSettingsView: View {
     private enum Field {
         case cpu, memory, network, address, mac, forwards, mdns, macName, unlock
     }
 
+    enum Page: Hashable {
+        case general, network, forwards
+    }
+
     let machines: [VPhoneLaunchpadMachine]
     @Environment(VPhoneLaunchpadModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @State private var page = Page.general
     @State private var cpu: Int
     @State private var memoryMB: Int
     @State private var network: String
@@ -104,55 +109,35 @@ struct VPhoneLaunchpadMachineSettingsView: View {
 
     var body: some View {
         VPhoneLaunchpadSheet(title) {
-            Form {
-                Section {
-                    Stepper("CPU: \(cpu) cores", value: $cpu, in: 1 ... ProcessInfo.processInfo.activeProcessorCount)
-                    Stepper("Memory: \(memoryMB) MB", value: $memoryMB, in: 2048 ... 65536, step: 1024)
-                } header: {
-                    Text("Hardware")
-                }
-                Section {
-                    Picker("Mode", selection: $network) {
-                        Text("NAT").tag("nat")
-                        Text("Bridged").tag("bridged")
-                        Text("Tunnel").tag("tunnel")
-                        Text("None").tag("none")
-                    }
-                    if network == "bridged" {
-                        TextField("Interface", text: $bridgeInterface, prompt: Text("First available"))
-                    }
-                    if network == "tunnel" {
-                        Text("Traffic leaves through this Mac's own connections, so it follows the Mac's VPN.")
-                            .foregroundStyle(.secondary)
-                    }
-                    if dropsForwards {
-                        Text("This mode cannot forward ports, so saving removes the port forwards.")
-                            .foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("Network")
-                } footer: {
-                    if machines.count > 1 {
-                        Text("Only the settings you change are applied to each machine.")
-                            .foregroundStyle(.secondary)
-                    }
-                }
+            VStack(spacing: 0) {
+                // Several machines share only hardware, the network mode and
+                // startup, which fit on one page.
                 if single {
-                    addressSection
+                    VPhoneLaunchpadSheetPages(selection: $page) {
+                        Text("General").tag(Page.general)
+                        Text("Network").tag(Page.network)
+                        Text("Port Forwarding").tag(Page.forwards)
+                    }
                 }
-                if single, forwardsSupported {
-                    forwardsSection
+                Form {
+                    if !single || page == .general {
+                        hardwareSection
+                    }
+                    if !single || page == .network {
+                        networkSection
+                        if single {
+                            addressSection
+                        }
+                    }
+                    if single, page == .forwards {
+                        forwardsSection
+                    }
+                    if !single || page == .general {
+                        startupSection
+                    }
                 }
-                Section {
-                    Toggle("Unlock at startup", isOn: $unlocksAtStartup)
-                } header: {
-                    Text("Startup")
-                } footer: {
-                    Text("Each time the guest starts, its screen is turned on and the Lock Screen dismissed.")
-                        .foregroundStyle(.secondary)
-                }
+                .formStyle(.grouped)
             }
-            .formStyle(.grouped)
         } actions: {
             Button("Cancel") { dismiss() }
                 .keyboardShortcut(.cancelAction)
@@ -175,6 +160,64 @@ struct VPhoneLaunchpadMachineSettingsView: View {
         .onChange(of: advertisesName) { edited.insert(.mdns) }
         .onChange(of: resolvesMacName) { edited.insert(.macName) }
         .onChange(of: unlocksAtStartup) { edited.insert(.unlock) }
+        #if DEBUG
+        .onAppear {
+            if VPhoneLaunchpadPreview.isActive {
+                page = VPhoneLaunchpadPreview.machineSettingsPage
+            }
+        }
+        #endif
+    }
+
+    private var hardwareSection: some View {
+        Section {
+            Stepper("CPU: \(cpu) cores", value: $cpu, in: 1 ... ProcessInfo.processInfo.activeProcessorCount)
+            Stepper("Memory: \(memoryMB) MB", value: $memoryMB, in: 2048 ... 65536, step: 1024)
+        } header: {
+            Text("Hardware")
+        }
+    }
+
+    private var startupSection: some View {
+        Section {
+            Toggle("Unlock at startup", isOn: $unlocksAtStartup)
+        } header: {
+            Text("Startup")
+        } footer: {
+            Text("Each time the guest starts, its screen is turned on and the Lock Screen dismissed.")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var networkSection: some View {
+        Section {
+            Picker("Mode", selection: $network) {
+                Text("NAT").tag("nat")
+                Text("Bridged").tag("bridged")
+                Text("Tunnel").tag("tunnel")
+                Text("None").tag("none")
+            }
+            if network == "bridged" {
+                TextField("Interface", text: $bridgeInterface, prompt: Text("First available"))
+            }
+            if network == "tunnel" {
+                Text("Traffic leaves through this Mac's own connections, so it follows the Mac's VPN.")
+                    .foregroundStyle(.secondary)
+            }
+            if dropsForwards {
+                Text("This mode cannot forward ports, so saving removes the port forwards.")
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            if !single {
+                Text("Network")
+            }
+        } footer: {
+            if machines.count > 1 {
+                Text("Only the settings you change are applied to each machine.")
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     private var addressSection: some View {
@@ -217,7 +260,23 @@ struct VPhoneLaunchpadMachineSettingsView: View {
         }
     }
 
+    /// The page stays when the mode cannot forward, so the segments do not
+    /// change under the pointer; it says why it is empty instead.
+    @ViewBuilder
     private var forwardsSection: some View {
+        if forwardsSupported {
+            forwardsList
+        } else {
+            Section {
+                Text(dropsForwards
+                    ? "This mode cannot forward ports, so saving removes the port forwards."
+                    : "Port forwarding needs NAT or Tunnel. Change the mode in Network.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var forwardsList: some View {
         Section {
             ForEach(forwards, id: \.self) { forward in
                 HStack {
@@ -255,8 +314,6 @@ struct VPhoneLaunchpadMachineSettingsView: View {
                 .help("Add")
             }
             Toggle("Reachable from other devices", isOn: $newOnAllAddresses)
-        } header: {
-            Text("Port Forwarding")
         } footer: {
             Text("A forwarded port listens on this Mac only, unless it is reachable from other devices.")
                 .foregroundStyle(.secondary)

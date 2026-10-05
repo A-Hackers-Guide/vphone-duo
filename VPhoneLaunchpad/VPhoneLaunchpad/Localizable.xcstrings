@@ -1394,40 +1394,6 @@
         }
       }
     },
-    "Advanced Options" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Advanced Options"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "詳細オプション"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "고급 옵션"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tùy chọn nâng cao"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "高级选项"
-          }
-        }
-      }
-    },
     "Advisory" : {
       "localizations" : {
         "en" : {
@@ -4287,40 +4253,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下载并准备固件"
-          }
-        }
-      }
-    },
-    "Edit…" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edit…"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "編集…"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "편집…"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sửa…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "编辑…"
           }
         }
       }
@@ -13013,6 +12945,24 @@
         "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 모드는 포트를 전달할 수 없으므로 저장하면 포트 포워드가 제거됩니다." } },
         "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chế độ này không chuyển tiếp cổng được, nên khi lưu các chuyển tiếp cổng sẽ bị xóa." } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此模式不能转发端口，保存后会移除端口转发。" } }
+      }
+    },
+    "Port forwarding needs NAT or Tunnel. Change the mode in Network." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Port forwarding needs NAT or Tunnel. Change the mode in Network." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ポートフォワーディングには NAT またはトンネルが必要です。モードは「ネットワーク」で変更します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "포트 포워딩에는 NAT 또는 터널이 필요합니다. 모드는 네트워크에서 변경하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chuyển tiếp cổng cần NAT hoặc Đường hầm. Đổi chế độ trong Mạng." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "端口转发需要 NAT 或隧道模式，请在“网络”中更改模式。" } }
+      }
+    },
+    "General" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "General" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "一般" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "일반" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chung" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通用" } }
       }
     },
     "mDNS Name" : {

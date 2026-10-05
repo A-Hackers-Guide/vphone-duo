@@ -17,6 +17,9 @@
         static let sheetNotification = Notification.Name("VPhoneLaunchpadPreviewSheet")
         /// The source a Core Bundle sheet opens on.
         static var coreBundleSource = VPhoneLaunchpadCoreBundleView.Source.releases
+        /// The pages New Machine and machine settings open on.
+        static var newMachinePage = VPhoneLaunchpadNewMachineView.Page.general
+        static var machineSettingsPage = VPhoneLaunchpadMachineSettingsView.Page.general
 
         // MARK: - Driver
 
@@ -93,17 +96,11 @@
                 await shot("06-machines-creating", suffix)
 
                 await sheet(.newMachine, "07-new-machine", suffix)
-                await standalone("07b-new-machine-advanced", suffix, size: NSSize(width: 520, height: 560)) {
-                    VPhoneLaunchpadNewMachineAdvancedView(
-                        network: .constant("nat"),
-                        patches: .constant(VPhoneLaunchpadPatchSelection()),
-                        keepArtifacts: .constant(false),
-                        patchCatalog: nil,
-                        patchCatalogError: nil,
-                        reloadPatches: {},
-                    )
-                    .environment(model)
-                }
+                newMachinePage = .hardware
+                await sheet(.newMachine, "07-new-machine-hardware", suffix)
+                newMachinePage = .advanced
+                await sheet(.newMachine, "07-new-machine-advanced", suffix)
+                newMachinePage = .general
                 await sheet(.creation(path("ios27-rc")), "08-creation-progress", suffix)
                 creation.applyPreview(failed: true)
                 await sheet(.creation(path("ios27-rc")), "08b-creation-failed", suffix)
@@ -114,6 +111,11 @@
                 model.machines.selection = [labMachine]
                 if let machine = model.machines.selected {
                     await sheet(.settings([machine]), "09-machine-settings", suffix)
+                    machineSettingsPage = .network
+                    await sheet(.settings([machine]), "09-machine-settings-network", suffix)
+                    machineSettingsPage = .forwards
+                    await sheet(.settings([machine]), "09-machine-settings-forwards", suffix)
+                    machineSettingsPage = .general
                 }
                 await standalone("09b-patch-settings", suffix, size: NSSize(width: 920, height: 680)) {
                     VPhoneLaunchpadPatchSettingsView(initial: VPhoneLaunchpadPatchSelection()) { _ in }
