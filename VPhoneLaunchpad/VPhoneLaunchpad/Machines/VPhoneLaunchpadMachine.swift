@@ -93,11 +93,14 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
     /// `false` when the last CFW install did not finish, `nil` when unknown.
     let customFirmwareInstalled: Bool?
     let udid: String?
+    /// Whether vphone-vm unlocks the guest each time it starts. Nil from a
+    /// bundle older than the setting.
+    let unlocksAtStartup: Bool?
     /// The library `vm list` was run on. Not part of the JSON.
     var libraryRoot = ""
 
     private enum CodingKeys: String, CodingKey {
-        case name, cpuCount, memoryMB, diskSizeBytes, network, restoreInfo, customFirmwareInstalled, udid
+        case name, cpuCount, memoryMB, diskSizeBytes, network, restoreInfo, customFirmwareInstalled, udid, unlocksAtStartup
     }
 
     /// The inspector's firmware line. A restore whose CFW install never
@@ -194,6 +197,12 @@ nonisolated struct VPhoneLaunchpadFirmwareCatalog: Decodable, Sendable {
 
         var isPad: Bool {
             family == "iPad"
+        }
+
+        /// The name with its product type, `iPhone 16 (iPhone17,3)`: Launchpad
+        /// showed only the product type before, which reads as iPhone 17.
+        var detailedName: String {
+            name == productType ? name : "\(name) (\(productType))"
         }
 
         /// The newest release, or the newest build when every one is a beta.

@@ -96,4 +96,11 @@ nonisolated protocol VPhoneLaunchpadHelperProtocol {
 @objc(VPhoneLaunchpadHelperClientProtocol)
 nonisolated protocol VPhoneLaunchpadHelperClientProtocol {
     func helperDidEmit(line: String)
+
+    /// Replies once every line sent before it has been handled. The helper
+    /// waits for this before it replies to the request that produced them:
+    /// XPC orders the helper's own messages, but a request's reply can reach
+    /// the app ahead of lines still queued, and the app stops listening for
+    /// lines when the reply arrives.
+    func helperDidFinishOutput(reply: @escaping @Sendable () -> Void)
 }

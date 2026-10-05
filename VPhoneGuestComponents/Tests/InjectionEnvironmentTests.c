@@ -51,11 +51,22 @@ static void namesTheMISFixTargets(void) {
     assert(!vpIsMISFixTarget(NULL));
 }
 
+static void namesTheBatteryHealthFixTarget(void) {
+    assert(vpIsBatteryHealthFixTarget("/Applications/Preferences.app/Preferences"));
+    assert(!vpIsBatteryHealthFixTarget("/Applications/Preferences.app/PreferencesX"));
+    assert(!vpIsBatteryHealthFixTarget("/System/Library/CoreServices/SpringBoard.app/SpringBoard"));
+    assert(!vpIsBatteryHealthFixTarget(NULL));
+    // The two hooks never compete for one process's single extra slot.
+    assert(!vpIsMISFixTarget("/Applications/Preferences.app/Preferences"));
+    assert(!vpInsertedLibraryFor(NULL));
+}
+
 int main(void) {
     insertsBoth();
     addsExtraBesideAnExistingHook();
     leavesACompleteEnvironmentAlone();
     namesTheMISFixTargets();
+    namesTheBatteryHealthFixTarget();
     puts("InjectionEnvironmentTests: ok");
     return 0;
 }

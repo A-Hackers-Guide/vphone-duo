@@ -59,6 +59,14 @@ final class VPhoneGuestControl {
     /// name or a bridged address can change while the VM runs). Nil sends
     /// nothing.
     @ObservationIgnored var guestStaticNames: (() -> [VPhoneNetworking.StaticName])?
+    /// Whether to wake the guest and dismiss its Lock Screen when a vphoned
+    /// that has just started connects, from the manifest. Read at each connect,
+    /// so a change from the menu holds from the next guest start.
+    @ObservationIgnored var unlocksAtStartup = false
+    /// The `instance` of the last vphoned connected to. Kept across
+    /// disconnects: a lost probe reconnects to the same vphoned, which is not
+    /// a start.
+    @ObservationIgnored private var connectedInstance: String?
     /// Called whenever the address the guest reports changes, nil on disconnect.
     @ObservationIgnored var onGuestIPAddressChange: ((String?) -> Void)?
 
@@ -201,6 +209,16 @@ final class VPhoneGuestControl {
                 isConnected = true
                 print("[control] connected to vphoned HTTP API (iOS \(guestIOSVersion ?? "?"))")
                 onConnect?(guestCapabilities)
+                let instance = info["instance"] as? String
+                let started = instance == nil || instance != connectedInstance
+                connectedInstance = instance
+                if started, unlocksAtStartup, capabilities.contains("screen_unlock") {
+                    if setupPending {
+                        print("[unlock] Setup Assistant is pending; leaving the guest as it is")
+                    } else {
+                        Task { await unlockAtStartup() }
+                    }
+                }
                 if capabilities.contains("environment_update") {
                     Task { await syncEnvironment() }
                 }
@@ -549,6 +567,15 @@ final class VPhoneGuestControl {
             throw ControlError.unsupportedCapability("system_control")
         }
         _ = try await call("system.reboot", params: ["force": true])
+    }
+
+    /// Asks the guest to shut down. The virtual machine stops with it, so a
+    /// dropped connection is the expected result.
+    func shutDownGuest() async throws {
+        guard guestCapabilities.contains("system_shutdown") else {
+            throw ControlError.unsupportedCapability("system_shutdown")
+        }
+        _ = try await call("system.shutdown", params: ["force": true])
     }
 
     func clipboardGet() async throws -> ClipboardContent {

@@ -254,8 +254,10 @@ final class VPhoneLaunchpadHelperClient {
         onLine: @escaping @Sendable (String) -> Void,
     ) async throws -> Int32 {
         let authorization = try await authorizationSession.externalForm()
-        receiver.setHandler(onLine)
-        defer { receiver.setHandler(nil) }
+        guard receiver.claim(onLine) else {
+            throw Self.firmwareBusy
+        }
+        defer { receiver.release() }
         return try await withTaskCancellationHandler {
             try await request { proxy, done in
                 proxy.installCustomFirmware(
@@ -286,8 +288,10 @@ final class VPhoneLaunchpadHelperClient {
         onLine: @escaping @Sendable (String) -> Void,
     ) async throws -> Int32 {
         let authorization = try await authorizationSession.externalForm()
-        receiver.setHandler(onLine)
-        defer { receiver.setHandler(nil) }
+        guard receiver.claim(onLine) else {
+            throw Self.firmwareBusy
+        }
+        defer { receiver.release() }
         return try await withTaskCancellationHandler {
             try await request { proxy, done in
                 proxy.updateGuestEnvironment(
@@ -338,6 +342,11 @@ final class VPhoneLaunchpadHelperClient {
     func cancelCustomFirmware() {
         let proxy = currentConnection().remoteObjectProxy as? VPhoneLaunchpadHelperProtocol
         proxy?.cancelCustomFirmware {}
+    }
+
+    /// A CFW install or environment update from this app is still streaming.
+    private static var firmwareBusy: VPhoneLaunchpadError {
+        VPhoneLaunchpadError(String(localized: "Another CFW install or environment update is in progress. Wait for it to finish, then try again."))
     }
 
     // MARK: - XPC plumbing
@@ -504,17 +513,39 @@ final nonisolated class VPhoneLaunchpadHelperAuthorizationSession: @unchecked Se
 }
 
 /// Receives output lines the helper streams back during a CFW install.
+///
+/// One operation owns it at a time, as the helper runs one at a time. A second
+/// request made while one is streaming is turned away here: if it set its own
+/// handler, the running install's lines would go to the wrong log, and when it
+/// finished it would clear the handler the running install still needs.
 final nonisolated class VPhoneLaunchpadHelperReceiver: NSObject, VPhoneLaunchpadHelperClientProtocol, @unchecked Sendable {
     private let lock = NSLock()
     private var handler: (@Sendable (String) -> Void)?
 
-    func setHandler(_ handler: (@Sendable (String) -> Void)?) {
-        lock.withLock { self.handler = handler }
+    /// Takes the receiver for one operation; false while another holds it.
+    func claim(_ handler: @escaping @Sendable (String) -> Void) -> Bool {
+        lock.withLock {
+            guard self.handler == nil else {
+                return false
+            }
+            self.handler = handler
+            return true
+        }
+    }
+
+    func release() {
+        lock.withLock { handler = nil }
     }
 
     func helperDidEmit(line: String) {
         let handler = lock.withLock { self.handler }
         handler?(line)
+    }
+
+    /// XPC hands this over after every line sent before it, so replying is
+    /// how the helper learns they have all been written.
+    func helperDidFinishOutput(reply: @escaping @Sendable () -> Void) {
+        reply()
     }
 }
 

@@ -4904,38 +4904,13 @@
         }
       }
     },
-    "Fixed once the machine is installed" : {
+    "Applied when the machine is installed" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fixed once the machine is installed"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "マシンのインストール後は変更できません"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "머신을 설치한 후에는 변경할 수 없음"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Không thể thay đổi sau khi cài máy ảo"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "虚拟机创建后即固定"
-          }
-        }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Applied when the machine is installed" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "マシンのインストール時に適用されます" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "머신을 설치할 때 적용됨" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Được áp dụng khi cài máy ảo" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在安装虚拟机时应用" } }
       }
     },
     "Free disk space" : {
@@ -5770,6 +5745,15 @@
         "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트 환경 업데이트 중…" } },
         "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang cập nhật môi trường máy khách…" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在更新客户机环境…" } }
+      }
+    },
+    "Another CFW install or environment update is in progress. Wait for it to finish, then try again." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Another CFW install or environment update is in progress. Wait for it to finish, then try again." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "別の CFW インストールまたはゲスト環境の更新が実行中です。完了するまで待ってから、もう一度お試しください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "다른 CFW 설치 또는 게스트 환경 업데이트가 진행 중입니다. 완료될 때까지 기다린 후 다시 시도하십시오." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Một lần cài CFW hoặc cập nhật môi trường máy khách khác đang chạy. Hãy đợi nó xong rồi thử lại." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "另一个 CFW 安装或客户机环境更新正在进行。请等它完成后再试。" } }
       }
     },
     "Unable to update the guest environment." : {
@@ -10747,6 +10731,40 @@
         }
       }
     },
+    "Shutting down…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shutting down…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システム終了中…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "종료 중…"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang tắt máy…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在关机…"
+          }
+        }
+      }
+    },
     "Stopping…" : {
       "localizations" : {
         "en" : {
@@ -13024,6 +13042,42 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在客户机内解析这台 Mac 的名称" } }
       }
     },
+    "Startup" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Startup" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "起動" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "시작" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Khởi động" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动" } }
+      }
+    },
+    "Unlock at startup" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unlock at startup" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "起動時にロックを解除" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "시작 시 잠금 해제" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Mở khóa khi khởi động" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动时解锁" } }
+      }
+    },
+    "Unlock at Startup" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unlock at Startup" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "起動時にロックを解除" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "시작 시 잠금 해제" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Mở khóa khi khởi động" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动时解锁" } }
+      }
+    },
+    "Each time the guest starts, its screen is turned on and the Lock Screen dismissed." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Each time the guest starts, its screen is turned on and the Lock Screen dismissed." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲストが起動するたびに画面をオンにし、ロック画面を閉じます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트가 시작될 때마다 화면을 켜고 잠금 화면을 닫습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Mỗi khi máy khách khởi động, màn hình được bật và Màn hình khóa được đóng." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机每次启动时点亮屏幕并关闭锁定屏幕。" } }
+      }
+    },
     "%@ (Default)" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ (Default)" } },
@@ -13123,13 +13177,94 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "默认" } }
       }
     },
-    "Fixed when the machine was created." : {
+    "The Core Bundle that built the boot chain when the machine was created." : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fixed when the machine was created." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "マシンの作成時に固定されています。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "머신을 만들 때 고정되었습니다." } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Được cố định khi tạo máy." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在创建机器时已固定。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The Core Bundle that built the boot chain when the machine was created." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "マシンの作成時にブートチェーンを構築したコアバンドルです。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "머신을 만들 때 부트 체인을 빌드한 코어 번들입니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Bundle lõi đã dựng chuỗi khởi động khi tạo máy." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创建虚拟机时构建启动链的核心 Bundle。" } }
+      }
+    },
+    "Overrides" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Overrides" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "変更" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "변경 사항" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Thay đổi" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更改" } }
+      }
+    },
+    "%lld changed from the preset" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld changed from the preset" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "プリセットから %lld 件を変更" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "프리셋에서 %lld개 변경" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đã đổi %lld so với cấu hình sẵn" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "相对预设更改了 %lld 个" } }
+      }
+    },
+    "Off: %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Off: %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "オフ：%@" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "끔: %@" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Tắt: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭：%@" } }
+      }
+    },
+    "On: %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "On: %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "オン：%@" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "켬: %@" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Bật: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启用：%@" } }
+      }
+    },
+    "Not Applied" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Not Applied" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "未適用" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "적용 안 됨" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chưa áp dụng" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未应用" } }
+      }
+    },
+    "^[%lld patch](inflect: true)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "^[%lld patch](inflect: true)" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%lld 件のパッチ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "패치 %lld개" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%lld bản vá" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 个补丁" } }
+      }
+    },
+    "The guest has every patch this machine is set to." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The guest has every patch this machine is set to." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このマシンに設定したパッチはすべてゲストに適用されています。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 머신에 설정한 패치가 모두 게스트에 적용되어 있습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Máy khách đã có mọi bản vá được đặt cho máy này." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机已包含为此虚拟机设定的全部补丁。" } }
+      }
+    },
+    "The patch choice changed after the guest was built. Run vphone-cli fw patches %@ to see each patch and the step that applies it." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The patch choice changed after the guest was built. Run vphone-cli fw patches %@ to see each patch and the step that applies it." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲストの構築後にパッチの選択が変更されました。各パッチと適用手順を確認するには、vphone-cli fw patches %@ を実行してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트를 빌드한 뒤 패치 선택이 바뀌었습니다. 각 패치와 적용 단계를 보려면 vphone-cli fw patches %@ 를 실행하십시오." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Lựa chọn bản vá đã thay đổi sau khi máy khách được dựng. Hãy chạy vphone-cli fw patches %@ để xem từng bản vá và bước áp dụng nó." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机构建后补丁选择已更改。运行 vphone-cli fw patches %@ 查看每个补丁及应用它的步骤。" } }
+      }
+    },
+    "Unavailable" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unavailable" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "利用できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "사용할 수 없음" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không khả dụng" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "不可用" } }
       }
     },
     "Guest Environment" : {
@@ -13150,13 +13285,13 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主机程序" } }
       }
     },
-    "Host programs change at the next start. The guest environment is updated now on stopped machines; running machines keep theirs until it is updated later. The boot chain and patches stay as they were when the machine was created." : {
+    "Host programs change at the next start. The guest environment is updated now on stopped machines; running machines keep theirs until it is updated later. Guest patches follow each machine’s patch choice when its guest environment is updated. The boot chain stays as it was built." : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Host programs change at the next start. The guest environment is updated now on stopped machines; running machines keep theirs until it is updated later. The boot chain and patches stay as they were when the machine was created." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ホストプログラムは次回の起動時に切り替わります。停止中のマシンではゲスト環境を今すぐ更新します。実行中のマシンは、後で更新するまで現在のゲスト環境のままです。ブートチェーンとパッチはマシン作成時のままです。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "호스트 프로그램은 다음 시작부터 바뀝니다. 정지된 머신은 게스트 환경을 지금 업데이트하고, 실행 중인 머신은 나중에 업데이트할 때까지 기존 환경을 유지합니다. 부트 체인과 패치는 머신을 만들 때 그대로 유지됩니다." } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chương trình máy chủ sẽ thay đổi từ lần khởi động tiếp theo. Môi trường máy khách được cập nhật ngay trên các máy đang dừng; máy đang chạy giữ môi trường hiện tại cho đến khi được cập nhật sau. Chuỗi khởi động và các bản vá giữ nguyên như khi tạo máy." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主机程序在下次启动时切换。已停止的机器会立即更新客户机环境；正在运行的机器保留原有环境，直到之后再更新。启动链和补丁保持创建机器时的状态。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Host programs change at the next start. The guest environment is updated now on stopped machines; running machines keep theirs until it is updated later. Guest patches follow each machine’s patch choice when its guest environment is updated. The boot chain stays as it was built." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ホストプログラムは次回の起動時に切り替わります。停止中のマシンではゲスト環境を今すぐ更新します。実行中のマシンは、後で更新するまで現在のゲスト環境のままです。ゲストのパッチは、ゲスト環境の更新時に各マシンのパッチ選択に従います。ブートチェーンは構築時のままです。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "호스트 프로그램은 다음 시작부터 바뀝니다. 정지된 머신은 게스트 환경을 지금 업데이트하고, 실행 중인 머신은 나중에 업데이트할 때까지 기존 환경을 유지합니다. 게스트 패치는 게스트 환경을 업데이트할 때 각 머신의 패치 선택을 따릅니다. 부트 체인은 빌드된 그대로 유지됩니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chương trình máy chủ sẽ thay đổi từ lần khởi động tiếp theo. Môi trường máy khách được cập nhật ngay trên các máy đang dừng; máy đang chạy giữ môi trường hiện tại cho đến khi được cập nhật sau. Các bản vá máy khách theo lựa chọn bản vá của từng máy khi môi trường máy khách được cập nhật. Chuỗi khởi động giữ nguyên như khi được dựng." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主机程序在下次启动时切换。已停止的机器会立即更新客户机环境；正在运行的机器保留原有环境，直到之后再更新。客户机补丁在更新客户机环境时按各机器的补丁选择应用。启动链保持构建时的状态。" } }
       }
     },
     "Install it in Core Bundle, or choose another version for this machine." : {
@@ -13231,13 +13366,13 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 的核心 Bundle 未安装。请为它选择其他核心 Bundle。" } }
       }
     },
-    "The boot chain and patches are fixed when the machine is created; host programs and the guest environment can be changed later." : {
+    "The boot chain is built when the machine is created. Host programs, the guest environment and guest patches can be changed later." : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "The boot chain and patches are fixed when the machine is created; host programs and the guest environment can be changed later." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブートチェーンとパッチはマシンの作成時に固定されます。ホストプログラムとゲスト環境は後から変更できます。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "부트 체인과 패치는 머신을 만들 때 고정됩니다. 호스트 프로그램과 게스트 환경은 나중에 변경할 수 있습니다." } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chuỗi khởi động và các bản vá được cố định khi tạo máy; chương trình máy chủ và môi trường máy khách có thể thay đổi sau." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动链和补丁在创建机器时固定；主机程序和客户机环境之后仍可更改。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The boot chain is built when the machine is created. Host programs, the guest environment and guest patches can be changed later." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ブートチェーンはマシンの作成時に構築されます。ホストプログラム、ゲスト環境、ゲストのパッチは後から変更できます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "부트 체인은 머신을 만들 때 빌드됩니다. 호스트 프로그램, 게스트 환경, 게스트 패치는 나중에 변경할 수 있습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chuỗi khởi động được dựng khi tạo máy. Chương trình máy chủ, môi trường máy khách và các bản vá máy khách có thể thay đổi sau." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动链在创建机器时构建。主机程序、客户机环境和客户机补丁之后仍可更改。" } }
       }
     },
     "The guest environment is from %@." : {

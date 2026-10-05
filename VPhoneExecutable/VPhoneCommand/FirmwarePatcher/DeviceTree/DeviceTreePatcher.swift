@@ -325,9 +325,10 @@ public final class DeviceTreePatcher: BufferedPatcher {
         if includeIdentityPatches {
             patchesToApply.append(contentsOf: Self.identityPropertyPatches)
         }
-        // An iPad's installed tree takes its artwork, notch and camera geometry
-        // from the iPad edits, and none of the iPhone17,3 identity.
-        let presentsGuest = device.isPad && role == .installed
+        // A board-presenting guest's installed tree takes its artwork, notch and
+        // camera geometry from the board edits, and none of the iPhone17,3
+        // identity.
+        let presentsGuest = device.presentsBoard && role == .installed
         if presentsGuest {
             patchesToApply.removeAll { !Self.deviceNeutralPatches.contains($0.patchID) }
         }

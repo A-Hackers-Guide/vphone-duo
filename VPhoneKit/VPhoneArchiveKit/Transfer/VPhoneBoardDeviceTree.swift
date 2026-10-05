@@ -3,8 +3,9 @@ import Foundation
 import VPhoneCoreKit
 
 /// A guest's own device tree, `DeviceTree.<board>.im4p`, as a VM folder
-/// keeps it and as the IPSW the VM was made from carries it: an iPad's for its
-/// audio node, an iPhone's (`DeviceTree.d47ap.im4p`) for its product description.
+/// keeps it and as the IPSW the VM was made from carries it: a board-presenting
+/// guest's for its audio node, an iPhone17,3's (`DeviceTree.d47ap.im4p`) for its
+/// product description.
 ///
 /// `fw patch` keeps the tree in the VM's `FirmwareOriginals`, mirrored under
 /// the restore tree's name, and the board audio repair that `cfw install` and
@@ -99,9 +100,10 @@ public enum VPhoneBoardDeviceTree {
 
     /// What a run has to do about a VM's board tree.
     public enum Need: Equatable {
-        /// Nothing to do. Every guest has a board tree now — an iPad's carries
-        /// its audio node, an iPhone's its product description — so `need`
-        /// does not answer this; it stays for callers that switch over `Need`.
+        /// Nothing to do. Every guest has a board tree now — a board-presenting
+        /// guest's carries its audio node, an iPhone17,3's its product
+        /// description — so `need` does not answer this; it stays for callers
+        /// that switch over `Need`.
         case none
         /// `FirmwareOriginals` already holds one, or several, which staging
         /// refuses to choose between.

@@ -1,25 +1,30 @@
-// DeviceTreeGuestDevicePatches.swift — The iPad presentation of the vphone600 tree.
+// DeviceTreeGuestDevicePatches.swift — The board presentation of the vphone600 tree.
 //
 // vphone600ap is a virtual iPhone: `artwork-device-idiom` is "phone", the root
 // `model` is iPhone99,11, and most `/product` properties are `syscfg/xxxx`
 // placeholders (flag 0x8000) that no syscfg on a VM ever fills. An iPadOS
 // userland reads the same nodes, so a guest restored from an iPad IPSW lays
-// itself out as a phone unless the tree it boots says otherwise.
+// itself out as a phone unless the tree it boots says otherwise, and one
+// restored from another iPhone's IPSW finds placeholders where its own panel
+// size, buttons and audio tunings should be.
 //
-// The answers come from the iPad's own device tree, `DeviceTree.<board>.im4p`,
-// which the IPSW carries and the restore tree keeps:
+// The answers come from the board's own device tree, `DeviceTree.<board>.im4p`,
+// which the IPSW carries and the restore tree keeps. Every guest device but the
+// iPhone17,3 gets them (`VPhoneGuestDevice.presentsBoard`); the patch IDs keep
+// the `ipad_` names they were introduced with, because presets list them.
 //
 //   - the `/product` properties in `copiedProductProperties` take the board's
 //     values, and are removed where the board has none — so an iPad mini keeps
 //     `disable-chamois` and an M-series iPad, which has Stage Manager, does not;
-//   - the phone-only placeholders no iPad carries (Dynamic Island,
-//     reachability, ringer switch, volume-button geometry, CarPlay, Watch
-//     pairing) are removed, which is what "absent" means to MobileGestalt;
+//   - the phone-only placeholders (Dynamic Island, reachability, ringer
+//     switch, volume-button geometry, CarPlay, Watch pairing) take the board's
+//     values, and are removed where it has none (every one on an iPad), which
+//     is what "absent" means to MobileGestalt;
 //   - the root and `/product` identity becomes the board's, with VPHONE600AP
 //     kept second in `compatible` so the platform expert still binds.
 //
 // What stays vphone600: everything that describes the virtual hardware —
-// `graphics-featureset-class` (the paravirtual GPU is APPLE7, not the iPad's),
+// `graphics-featureset-class` (the paravirtual GPU is APPLE7, not the board's),
 // `framebuffer-identifier`, `has-virtualization`, the guest agent port, memory
 // class and boot flags.
 //
@@ -165,7 +170,7 @@ extension DeviceTreePatcher {
             }
         }
 
-        // An iPad has no ring/silent switch.
+        // An iPad has no ring/silent switch; nor does a board whose tree lacks one.
         let sourceButtons = try? child(of: source, named: "buttons")
         if sourceButtons.flatMap({ value($0, "function-button_ringeren") }) == nil {
             edits.append(GuestEdit(nodePath: ["device-tree", "buttons"], property: "function-button_ringeren",

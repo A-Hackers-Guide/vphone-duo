@@ -302,6 +302,7 @@ struct VPhoneLaunchpadControlCommands {
         if let udid = machine.udid {
             report["udid"] = udid
         }
+        report["unlocksAtStartup"] = machine.unlocksAtStartup ?? false
         if let info = machine.restoreInfo {
             report["ios"] = "\(info.ios.version) (\(info.ios.build))"
             report["cloudOS"] = "\(info.cloudOS.version) (\(info.cloudOS.build))"
@@ -833,9 +834,12 @@ final nonisolated class VPhoneLaunchpadLogFollower: @unchecked Sendable {
 
 /// One request to a machine's vphone.sock: a JSON line in, a JSON line out.
 nonisolated enum VPhoneLaunchpadGuestSocket {
-    static func send(_ object: [String: Any], socketPath: String) async throws -> Any {
+    /// `timeout` is how long to wait for the reply, in seconds. vphone-vm
+    /// waits on vphoned for up to its own limit, and an rpc such as a package
+    /// install can take a while, so the default is long.
+    static func send(_ object: [String: Any], socketPath: String, timeout: Int = 120) async throws -> Any {
         let line = try JSONSerialization.data(withJSONObject: object) + Data([0x0A])
-        let response = try await Task.detached { try exchange(line, socketPath: socketPath) }.value
+        let response = try await Task.detached { try exchange(line, socketPath: socketPath, timeout: timeout) }.value
         guard let json = try? JSONSerialization.jsonObject(with: response) else {
             throw VPhoneLaunchpadError("The machine sent a reply that could not be read. Try again.", detail: String(decoding: response.prefix(512), as: UTF8.self))
         }
@@ -845,7 +849,7 @@ nonisolated enum VPhoneLaunchpadGuestSocket {
         return json
     }
 
-    private static func exchange(_ line: Data, socketPath: String) throws -> Data {
+    private static func exchange(_ line: Data, socketPath: String, timeout seconds: Int) throws -> Data {
         guard FileManager.default.fileExists(atPath: socketPath) else {
             throw VPhoneLaunchpadError(
                 "The machine has no vphone.sock.",
@@ -861,9 +865,7 @@ nonisolated enum VPhoneLaunchpadGuestSocket {
             throw VPhoneLaunchpadError("Unable to open a socket.")
         }
         defer { close(fd) }
-        // vphone-vm waits on vphoned for up to its own limit; an rpc such as
-        // a package install can take a while.
-        var timeout = timeval(tv_sec: 120, tv_usec: 0)
+        var timeout = timeval(tv_sec: seconds, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
         _ = fcntl(fd, F_SETNOSIGPIPE, 1)
         let connected = withUnsafePointer(to: &address) {

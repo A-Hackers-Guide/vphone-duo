@@ -32,7 +32,7 @@ each from a bundle at a different time:
 | --- | --- | --- |
 | Host Programs | `vphone-cli`, `vphone-vm` | The bound bundle, on every command. A new binding applies at the next start. |
 | Guest Environment | vphoned and the hook dylibs | `cfw install` at creation, and `cfw update-environment` (stopped machine) later. |
-| Boot Chain | Patched firmware, restore, CFW patches | `fw patch`, `restore` and `cfw install` at creation. Fixed; only a new machine changes it. |
+| Boot Chain | Patched firmware, restore, CFW patches | `fw patch`, `restore` and `cfw install` at creation. After that, `vphone-cli fw set-patches` changes the choice and `vphone-cli fw patches <vm>` lists what has not reached the guest: guest patches apply at the next `cfw update-environment`, AVPBooter at the next `fw patch` while the restore tree is kept, and the rest of the boot chain only with a restore. Launchpad shows the count in the inspector. |
 
 The **default** bundle (formerly "active") decides only the version
 `vm create` binds when `--bundle` is not given, and what `exec` and
@@ -106,7 +106,7 @@ version while a machine is bound to it; rebind or delete those machines first.
 | `bundle set-default <version>` / `bundle verify <version>` | Make a version the default, or re-check it. `bundle use` is the old name of `set-default` |
 | `bundle accept <version> [--off]` / `bundle remove <version>` | Skip failed checks, or remove a version no machine is bound to |
 | `vm list` | Machines in every library with run state, Core Bundle and log path |
-| `vm start <name> [--headless] [--wait]` / `vm stop <name>` | Launch with the machine's bundle, or stop; `--wait` waits for vphoned |
+| `vm start <name> [--headless] [--wait]` / `vm stop <name>` | Launch with the machine's bundle, or stop; `--wait` waits for vphoned. Stop asks the guest to shut down (vphoned `system.shutdown`) and waits up to 30 s; when the guest cannot be asked or does not stop, it ends the virtual machine as before |
 | `vm wait <name>` / `vm log <name> [--kind create\|dfu\|patch]` | Wait for vphoned; read a console log |
 | `vm create <name> [--bundle <version>] [...] [--device <product-type>] [--from <step>]` | The New Machine pipeline, bound to `--bundle` or the default; `--device` makes an iPad guest, `--from` retries from a step |
 | `vm set-bundle <name> <version> [--update-environment]` | Bind a machine to another installed version. `--update-environment` also redeploys that version's guest environment and needs a stopped machine |

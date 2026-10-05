@@ -24,6 +24,9 @@ class VPhoneMenuController {
     var hardwareKeyboardItem: NSMenuItem?
     var onHardwareKeyboardChange: ((Bool) async throws -> Void)?
     var onFrameRateDisplayChange: ((Bool) -> Void)?
+    /// Saves the unlock-at-startup setting to this machine's config.plist.
+    var onUnlockAtStartupChange: ((Bool) throws -> Void)?
+    var unlockAtStartupItem: NSMenuItem?
 
     var onFilesPressed: (() -> Void)?
     var onKeychainPressed: (() -> Void)?
@@ -50,6 +53,7 @@ class VPhoneMenuController {
     var settingsGetItem: NSMenuItem?
     var settingsSetItem: NSMenuItem?
     var restartGuestItem: NSMenuItem?
+    var shutDownGuestItem: NSMenuItem?
     var setUDIDItem: NSMenuItem?
     var resetUDIDItem: NSMenuItem?
     var skipSetupAssistantItem: NSMenuItem?

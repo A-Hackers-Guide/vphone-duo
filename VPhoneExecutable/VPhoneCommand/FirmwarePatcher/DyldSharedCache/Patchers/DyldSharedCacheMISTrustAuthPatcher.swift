@@ -266,9 +266,12 @@ public enum DyldSharedCacheMISTrustAuthPatcher {
     public static func patch(
         chunksDirectory: URL,
         dryRun: Bool = false,
+        captureUndo: Bool = false,
+        onUndo: ((DyldSharedCacheUndoLog) -> Void)? = nil,
         log: ((String) -> Void)? = stdoutLog,
     ) throws -> Report {
-        let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory)
+        let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory, captureUndo: captureUndo)
+        defer { if captureUndo, let undo = chunks.takeUndoLog() { onUndo?(undo) } }
         log?("  [.] \(chunksDirectory.path): \(chunks.chunkURLs.count) chunk(s), "
             + "\(chunks.mappings.count) mapping(s)")
 

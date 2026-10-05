@@ -527,9 +527,57 @@ final class VPhoneLaunchpadMachineLibrary {
         await refresh()
     }
 
+    /// Stops a machine. The guest is asked to shut down first, so it quits its
+    /// apps and unmounts its volumes. `vm stop`, which ends the virtual
+    /// machine the way cutting the power would, follows only when the guest
+    /// cannot be asked or has not stopped in time.
     func stop(_ machine: Path) async {
+        if await shutDownGuest(machine) {
+            await refresh()
+            return
+        }
         await perform(String(localized: "Stopping…"), on: machine, ["vm", "stop", machine.name] + machine.libraryArguments)
         launched[machine]?.interrupt()
+    }
+
+    /// How long a guest gets to shut down before `vm stop` takes over.
+    private static let guestShutdownTimeout: TimeInterval = 30
+
+    /// Sends vphoned's `system.shutdown` over the machine's vphone.sock and
+    /// waits for the virtual machine to stop. False when the guest could not
+    /// be asked (not started up yet, in DFU, or a vphoned older than the
+    /// method) or is still running when the time is up.
+    private func shutDownGuest(_ machine: Path) async -> Bool {
+        // A panicked guest has no vphoned left to ask.
+        guard !panicked.contains(machine) else {
+            return false
+        }
+        activities[machine] = String(localized: "Shutting down…")
+        defer { activities[machine] = nil }
+        let request: [String: Any] = ["t": "rpc", "method": "system.shutdown", "params": ["force": true]]
+        let socket = machine.url.appendingPathComponent("vphone.sock").path
+        do {
+            _ = try await VPhoneLaunchpadGuestSocket.send(request, socketPath: socket, timeout: 10)
+        } catch {
+            return await !isRunning(machine)
+        }
+        let deadline = Date().addingTimeInterval(Self.guestShutdownTimeout)
+        while Date() < deadline {
+            if await !isRunning(machine) {
+                return true
+            }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        return false
+    }
+
+    /// Whether the machine's virtual machine is still up: the process
+    /// Launchpad started, or for one started elsewhere, whoever holds its disk.
+    private func isRunning(_ machine: Path) async -> Bool {
+        if let child = launched[machine] {
+            return child.isRunning
+        }
+        return await Task.detached { !Self.machinesHoldingDisks([machine]).isEmpty }.value
     }
 
     // MARK: - Edits
@@ -543,6 +591,7 @@ final class VPhoneLaunchpadMachineLibrary {
         network: String?,
         bridgeInterface: String?,
         networkArguments: [String] = [],
+        unlocksAtStartup: Bool? = nil,
     ) async {
         var arguments = ["vm", "config", machine.name] + machine.libraryArguments
         if let cpu {
@@ -558,6 +607,9 @@ final class VPhoneLaunchpadMachineLibrary {
             arguments += ["--bridge-interface", bridgeInterface]
         }
         arguments += networkArguments
+        if let unlocksAtStartup {
+            arguments += ["--unlock-at-startup", unlocksAtStartup ? "on" : "off"]
+        }
         await perform(String(localized: "Saving settings…"), on: machine, arguments)
     }
 

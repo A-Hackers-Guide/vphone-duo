@@ -223,7 +223,7 @@ struct VPhoneLaunchpadNewMachineView: View {
                 }
             }
         } footer: {
-            Text("The boot chain and patches are fixed when the machine is created; host programs and the guest environment can be changed later.")
+            Text("The boot chain is built when the machine is created. Host programs, the guest environment and guest patches can be changed later.")
                 .foregroundStyle(.secondary)
         }
     }
@@ -352,7 +352,7 @@ struct VPhoneLaunchpadNewMachineView: View {
             Text("Firmware")
         } footer: {
             if !usesCustomSources, let selectedGuest {
-                Text("Recommended firmware pairings for \(selectedGuest.name).")
+                Text("Recommended firmware pairings for \(selectedGuest.detailedName).")
                     .foregroundStyle(.secondary)
             }
         }

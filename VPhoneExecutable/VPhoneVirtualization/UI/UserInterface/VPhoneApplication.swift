@@ -35,7 +35,10 @@ final class VPhoneApplication: NSApplication {
     private static let escapeKeyCode: UInt16 = 53
 
     override func sendEvent(_ event: NSEvent) {
+        // While a sheet is up, its keys are its own: Esc must reach its
+        // Cancel button, not the guest's back gesture.
         guard event.type == .keyDown || event.type == .keyUp || event.type == .flagsChanged,
+              event.window?.attachedSheet == nil,
               let view = event.window?.firstResponder as? VPhoneVirtualMachineView
         else {
             super.sendEvent(event)

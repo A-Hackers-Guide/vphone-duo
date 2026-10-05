@@ -104,10 +104,22 @@ extension VPhoneMenuController {
         addUDIDItems(to: menu)
         menu.addItem(NSMenuItem.separator())
         addSetupAssistantItem(to: menu)
+        // Saved to this machine and read when vphoned next starts in the guest.
+        let unlockItem = makeItem("Unlock at Startup", action: #selector(toggleUnlockAtStartup), symbol: "lock.open")
+        unlockItem.state = control.unlocksAtStartup ? .on : .off
+        unlockItem.toolTip = VPhoneLocalization.text(
+            "Wake the guest and dismiss its Lock Screen each time it starts.",
+        )
+        unlockAtStartupItem = unlockItem
+        menu.addItem(unlockItem)
         let restart = makeItem("Restart Guest…", action: #selector(restartGuest), symbol: "arrow.clockwise")
         restart.isEnabled = false
         restartGuestItem = restart
         menu.addItem(restart)
+        let shutDown = makeItem("Shut Down Guest…", action: #selector(shutDownGuest), symbol: "power")
+        shutDown.isEnabled = false
+        shutDownGuestItem = shutDown
+        menu.addItem(shutDown)
         item.submenu = menu
         return item
     }
@@ -262,6 +274,23 @@ extension VPhoneMenuController {
         captureView?.trackpadGesturesEnabled = enabled
     }
 
+    /// Saved to this machine's config.plist; it takes effect from the next
+    /// guest start and does not unlock the guest now.
+    @objc func toggleUnlockAtStartup() {
+        let enabled = !control.unlocksAtStartup
+        do {
+            try onUnlockAtStartupChange?(enabled)
+            control.unlocksAtStartup = enabled
+            unlockAtStartupItem?.state = enabled ? .on : .off
+        } catch {
+            VPhoneAlert.present(
+                title: "Unable to Change Unlock at Startup",
+                message: error.localizedDescription,
+                style: .warning,
+            )
+        }
+    }
+
     /// Shows the guest's frame rate in the window subtitle. Persisted.
     @objc func toggleFrameRateDisplay(_ sender: NSMenuItem) {
         let enabled = !VPhoneFrameRateDisplay.isEnabled
@@ -297,6 +326,38 @@ extension VPhoneMenuController {
                 } catch {
                     // The guest restarts before it replies, so the connection
                     // drops. onDisconnect updates the menus.
+                }
+            }
+        }
+    }
+
+    // MARK: - Shut Down
+
+    func updateShutDownAvailability(available: Bool) {
+        shutDownGuestItem?.isEnabled = available
+    }
+
+    @objc func shutDownGuest() {
+        VPhoneAlert.present(
+            title: "Shut down the guest?",
+            message: "Apps in the guest quit and the virtual machine stops. This window closes when the guest has shut down.",
+            style: .warning,
+            buttons: ["Shut Down Guest", "Cancel"],
+        ) { response in
+            guard response == .alertFirstButtonReturn else { return }
+            Task {
+                do {
+                    try await self.control.shutDownGuest()
+                } catch let VPhoneGuestControl.ControlError.guestError(message) {
+                    print("[shutdown] guest refused: \(message)")
+                    VPhoneAlert.present(
+                        title: "Unable to Shut Down Guest",
+                        message: "The guest refused the shutdown request.",
+                        style: .warning,
+                    )
+                } catch {
+                    // The guest can stop before it replies, so the connection
+                    // drops. The process exits when the virtual machine stops.
                 }
             }
         }

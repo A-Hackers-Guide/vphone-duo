@@ -34,6 +34,12 @@ public enum DyldSharedCacheError: Error, CustomStringConvertible, Sendable {
     case symbolNotFound(symbol: String, image: String?)
     /// An image path is not in the cache's image list.
     case imageNotFound(String)
+    /// An undo-log record names a chunk that is not a plain file beside the
+    /// cache — a path with a separator or a parent reference. Refused rather
+    /// than written through.
+    case undoChunkOutsideCache(chunk: String)
+    /// An undo-log record does not fit the cache it claims to describe.
+    case undoRecordInvalid(chunk: String, reason: String)
 
     public var description: String {
         switch self {
@@ -63,6 +69,10 @@ public enum DyldSharedCacheError: Error, CustomStringConvertible, Sendable {
             }
         case let .imageNotFound(path):
             "Image \(path) is not in the cache"
+        case let .undoChunkOutsideCache(chunk):
+            "Undo-log chunk \(chunk) is not a plain file beside the cache"
+        case let .undoRecordInvalid(chunk, reason):
+            "Undo-log record for \(chunk) is invalid: \(reason)"
         }
     }
 }

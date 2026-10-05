@@ -57,4 +57,45 @@ extension VPhoneGuestControl {
         let result = try await call("audio.host_latency", params: ["seconds": seconds])
         return result["changed"] as? Bool ?? false
     }
+
+    // MARK: - Unlock at Startup
+
+    /// Wakes a guest whose vphoned has just started and dismisses its Lock
+    /// Screen through `screen.unlock`. vphoned can come up well before
+    /// SpringBoard on a cold boot; the method waits for SpringBoard itself, so
+    /// it is given the longest timeout it takes.
+    ///
+    /// SpringBoard can still read "unlocked, lit" after it reports that it has
+    /// started, before it raises the Lock Screen, and `screen.unlock` then has
+    /// nothing to do. So an answer that the guest was already unlocked is
+    /// checked again until the Lock Screen appears or the startup window ends.
+    func unlockAtStartup() async {
+        let window = ContinuousClock.now + .seconds(90)
+        do {
+            while true {
+                let result = try await call("screen.unlock", params: ["timeout": 60])
+                if result["was_locked"] as? Bool == true {
+                    print("[unlock] dismissed the Lock Screen at startup")
+                    return
+                }
+                guard try await waitForLockScreen(until: window) else {
+                    print("[unlock] the guest stayed unlocked through startup")
+                    return
+                }
+            }
+        } catch {
+            print("[unlock] could not unlock the guest at startup: \(error)")
+        }
+    }
+
+    /// Whether the guest shows its Lock Screen before `deadline`.
+    private func waitForLockScreen(until deadline: ContinuousClock.Instant) async throws -> Bool {
+        while ContinuousClock.now < deadline {
+            try await Task.sleep(for: .seconds(1))
+            if try await call("device.screen")["locked"] as? Bool == true {
+                return true
+            }
+        }
+        return false
+    }
 }

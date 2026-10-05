@@ -173,6 +173,7 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
             emit("$ vphone-cli \(request.arguments.joined(separator: " "))  (as root)")
             VPhoneLaunchpadLineReader.readLines(from: pipe.fileHandleForReading) { emit($0) }
             process.waitUntilExit()
+            finishOutput()
             reply(process.terminationStatus, nil)
         }
     }
@@ -295,5 +296,20 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
     private func emit(_ line: String) {
         let client = connection?.remoteObjectProxy as? VPhoneLaunchpadHelperClientProtocol
         client?.helperDidEmit(line: line)
+    }
+
+    /// Waits until the app has handled every line emitted so far, the
+    /// connection fails, or 30 seconds pass. Without it the request's reply
+    /// could overtake the last lines, which then reach an app that has stopped
+    /// listening: the output a command flushes when it exits never made the
+    /// console log. Bounded, so a stuck app cannot hold the install lock.
+    private func finishOutput() {
+        let handled = DispatchSemaphore(value: 0)
+        let proxy = connection?.remoteObjectProxyWithErrorHandler { _ in handled.signal() }
+        guard let client = proxy as? VPhoneLaunchpadHelperClientProtocol else {
+            return
+        }
+        client.helperDidFinishOutput { handled.signal() }
+        _ = handled.wait(timeout: .now() + 30)
     }
 }

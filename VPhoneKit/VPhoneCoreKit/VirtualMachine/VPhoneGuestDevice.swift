@@ -48,6 +48,14 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         family == .iPad
     }
 
+    /// Whether the guest boots a device tree of its own that presents this
+    /// board, built by `fw patch` from the board's tree in the IPSW. Every
+    /// device but the iPhone17,3 does; that one keeps the fixed D47 identity
+    /// `cfw install` writes into the restored tree.
+    public var presentsBoard: Bool {
+        productType != Self.iPhone17_3.productType
+    }
+
     // MARK: - Known Devices
 
     /// iPhone 16 (D47AP), the device every catalog IPSW targets.
@@ -58,6 +66,41 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         productName: "iPhone 16",
         screen: .default,
     )
+
+    private static func iPhone(
+        _ productType: String,
+        _ deviceClass: String,
+        _ productName: String,
+        width: Int,
+        height: Int,
+    ) -> VPhoneGuestDevice {
+        VPhoneGuestDevice(
+            family: .iPhone,
+            productType: productType,
+            deviceClass: deviceClass,
+            productName: productName,
+            screen: .init(width: width, height: height, pixelsPerInch: 460, scale: 3.0),
+        )
+    }
+
+    /// iPhone 16 Pro: 1206x2622, 402x874 points.
+    public static let iPhone17_1 = iPhone("iPhone17,1", "d93ap", "iPhone 16 Pro", width: 1206, height: 2622)
+    /// iPhone 16 Pro Max: 1320x2868, 440x956 points.
+    public static let iPhone17_2 = iPhone("iPhone17,2", "d94ap", "iPhone 16 Pro Max", width: 1320, height: 2868)
+    /// iPhone 16 Plus: 1290x2796, 430x932 points.
+    public static let iPhone17_4 = iPhone("iPhone17,4", "d48ap", "iPhone 16 Plus", width: 1290, height: 2796)
+    /// iPhone 16e: 1170x2532, 390x844 points.
+    public static let iPhone17_5 = iPhone("iPhone17,5", "v59ap", "iPhone 16e", width: 1170, height: 2532)
+    /// iPhone 17 Pro: 1206x2622, 402x874 points.
+    public static let iPhone18_1 = iPhone("iPhone18,1", "v53ap", "iPhone 17 Pro", width: 1206, height: 2622)
+    /// iPhone 17 Pro Max: 1320x2868, 440x956 points.
+    public static let iPhone18_2 = iPhone("iPhone18,2", "v54ap", "iPhone 17 Pro Max", width: 1320, height: 2868)
+    /// iPhone 17: 1206x2622, 402x874 points.
+    public static let iPhone18_3 = iPhone("iPhone18,3", "v57ap", "iPhone 17", width: 1206, height: 2622)
+    /// iPhone Air: 1260x2736, 420x912 points.
+    public static let iPhone18_4 = iPhone("iPhone18,4", "d23ap", "iPhone Air", width: 1260, height: 2736)
+    /// iPhone 17e: 1170x2532, 390x844 points.
+    public static let iPhone18_5 = iPhone("iPhone18,5", "v159ap", "iPhone 17e", width: 1170, height: 2532)
 
     private static func iPad(
         _ productType: String,
@@ -95,6 +138,8 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
 
     public static let known: [VPhoneGuestDevice] = [
         iPhone17_3,
+        iPhone17_4, iPhone17_1, iPhone17_2, iPhone17_5,
+        iPhone18_3, iPhone18_4, iPhone18_1, iPhone18_2, iPhone18_5,
         iPad16_1,
         iPad15_7,
         iPad15_3, iPad15_5,

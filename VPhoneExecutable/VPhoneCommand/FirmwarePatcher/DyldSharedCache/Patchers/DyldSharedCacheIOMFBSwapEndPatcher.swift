@@ -125,6 +125,8 @@ public enum DyldSharedCacheIOMFBSwapEndPatcher {
         chunksDirectory: URL,
         targetSize: UInt32 = defaultTargetSize,
         dryRun: Bool = false,
+        captureUndo: Bool = false,
+        onUndo: ((DyldSharedCacheUndoLog) -> Void)? = nil,
         log: ((String) -> Void)? = DyldSharedCacheCodeSignature.stderrLog,
     ) throws -> DyldSharedCacheIOMFBSwapEndPatch {
         // Before opening a 6.7 GB cache and its 1.2 GB symbol table: a target
@@ -132,7 +134,8 @@ public enum DyldSharedCacheIOMFBSwapEndPatcher {
         // as one rather than as whatever the cache happens to say first.
         _ = try replacement(forTargetSize: targetSize)
 
-        let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory)
+        let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory, captureUndo: captureUndo)
+        defer { if captureUndo, let undo = chunks.takeUndoLog() { onUndo?(undo) } }
         let resolver = try DyldSharedCacheSymbolResolver(chunks: chunks)
         return try patch(
             chunks: chunks,

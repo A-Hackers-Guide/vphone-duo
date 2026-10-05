@@ -10,6 +10,10 @@ public struct VPhoneBundleReport: Codable, Equatable, Sendable {
     /// `false` when the last `cfw install` did not finish; `nil` when unknown.
     public let customFirmwareInstalled: Bool?
     public let udid: String?
+    /// Whether vphone-vm unlocks the guest each time it starts. Always
+    /// present, so a client can tell a bundle that knows the setting from one
+    /// that does not.
+    public let unlocksAtStartup: Bool
 
     public init(bundle: VPhoneBundle) {
         name = bundle.name
@@ -20,5 +24,6 @@ public struct VPhoneBundleReport: Codable, Equatable, Sendable {
         restoreInfo = VPhoneRestoreInfo.load(fromBundle: bundle)
         customFirmwareInstalled = VPhoneRestoreInfo.customFirmwareInstalled(inBundle: bundle)
         udid = VPhoneRestoreOperations.resolveUDID(bundle: bundle)
+        unlocksAtStartup = bundle.manifest.unlocksScreenAtStartup
     }
 }

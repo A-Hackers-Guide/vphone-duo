@@ -88,6 +88,192 @@ public enum VPhoneFirmwareCatalog {
         .init(iosName: "iOS 27.0.1", iosURL: "https://updates.cdn-apple.com/2026FallFCS/38dca0ee-bb5d-4132-ad13-62d57bcd6d32/iPhone17,3_27.0.1_24A446_Restore.ipsw", cloudosName: "cloudOS 26.4", cloudosURL: cloud264),
     ]
 
+    /// iOS releases of the iPhones other than the iPhone17,3, one entry per
+    /// IPSW, oldest first. Each model has an IPSW of its own. The URLs are
+    /// Apple's, as ipsw.me lists them; betas and release candidates are left
+    /// out.
+    static let iPhoneReleases: [(devices: [String], releases: [(version: String, url: String)])] = [
+        // iPhone 16 Pro
+        (devices: ["iPhone17,1"], releases: [
+            ("26.0", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-40536/E62697A1-4565-4068-867C-A64017377220/iPhone17,1_26.0_23A341_Restore.ipsw"),
+            ("26.0.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-43810/F2F7E980-637D-43E2-95B0-086153F454D4/iPhone17,1_26.0.1_23A355_Restore.ipsw"),
+            ("26.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-12752/58F5FDED-E1C5-47ED-A530-A8454B5E1052/iPhone17,1_26.1_23B85_Restore.ipsw"),
+            ("26.2", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-91292/E0B40965-4758-4C5C-B83C-E9F75BCCE139/iPhone17,1_26.2_23C55_Restore.ipsw"),
+            ("26.2.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/047-34169/C32FC87E-E6D2-47D1-915A-EC741FE24B6E/iPhone17,1_26.2.1_23C71_Restore.ipsw"),
+            ("26.3", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-53989/8683F123-A494-4419-82A9-DE287B1B281D/iPhone17,1_26.3_23D127_Restore.ipsw"),
+            ("26.3.1", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-90340/9306A4A2-C849-42B8-BF39-1FD9E2A20CE1/iPhone17,1_26.3.1_23D8133_Restore.ipsw"),
+            ("26.4", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-03453/2D779380-A8AB-4612-B820-43A317AE66D1/iPhone17,1_26.4_23E246_Restore.ipsw"),
+            ("26.4.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-28459/AD0EA9E1-53B4-48C8-81A3-D19DD7D8139D/iPhone17,1_26.4.1_23E254_Restore.ipsw"),
+            ("26.4.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-60269/F123C921-03F7-44FA-BF63-CD9F2D1F9BEF/iPhone17,1_26.4.2_23E261_Restore.ipsw"),
+            ("26.5", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-75601/BB8D0F8A-1430-4123-8782-563C2005AF64/iPhone17,1_26.5_23F77_Restore.ipsw"),
+            ("26.5.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-25812/09FF5085-9C4C-4DED-ACB2-0B0A07B46705/iPhone17,1_26.5.2_23F84_Restore.ipsw"),
+            ("26.6", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-57119/CBE71A83-42C2-4ED3-AAFC-190CFEF5E9C5/iPhone17,1_26.6_23G71_Restore.ipsw"),
+            ("26.6.1", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-73026/F0618CC5-229F-4EE6-BCDD-3F987B287E0A/iPhone17,1_26.6.1_23G83_Restore.ipsw"),
+            ("26.6.2", "https://updates.cdn-apple.com/2026SummerFCS/87a2b7df-6a1a-4c43-baa9-9b2315095b3f/iPhone17,1_26.6.2_23G90_Restore.ipsw"),
+            ("27.0", "https://updates.cdn-apple.com/2026FallFCS/16584c22-bd85-424c-a45d-5aa78098db98/iPhone17,1_27.0_24A437_Restore.ipsw"),
+            ("27.0.1", "https://updates.cdn-apple.com/2026FallFCS/59ffd938-75b6-41e5-af04-f4295ee8aeb3/iPhone17,1_27.0.1_24A446_Restore.ipsw"),
+        ]),
+        // iPhone 16 Pro Max
+        (devices: ["iPhone17,2"], releases: [
+            ("26.0", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-41023/5740BA6D-F4D8-4825-B5BE-CB70E3CF8B79/iPhone17,2_26.0_23A341_Restore.ipsw"),
+            ("26.0.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-43738/0A1C263B-75EA-4DC1-9A0C-079BD4A650A8/iPhone17,2_26.0.1_23A355_Restore.ipsw"),
+            ("26.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-14402/3BEC16D3-DCE3-455C-AE34-2114C57A9D3E/iPhone17,2_26.1_23B85_Restore.ipsw"),
+            ("26.2", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-91662/EA5BF9C7-FE70-4CA2-A940-9367E535E8E7/iPhone17,2_26.2_23C55_Restore.ipsw"),
+            ("26.2.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/047-34217/D03B52DE-E9B3-42DD-87AE-7FAB872C8272/iPhone17,2_26.2.1_23C71_Restore.ipsw"),
+            ("26.3", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-59425/A84BC28C-CF4D-42B4-8B16-ABAB4F0803E9/iPhone17,2_26.3_23D127_Restore.ipsw"),
+            ("26.3.1", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-89601/D42C034F-0875-4AF8-A6A7-9E5B07964EB5/iPhone17,2_26.3.1_23D8133_Restore.ipsw"),
+            ("26.4", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-09210/3FE1318C-6856-4C1D-B511-A668E72E880C/iPhone17,2_26.4_23E246_Restore.ipsw"),
+            ("26.4.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-28520/A337CFF5-F5D1-4C4E-BA6F-1576CFC13708/iPhone17,2_26.4.1_23E254_Restore.ipsw"),
+            ("26.4.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-60239/FCB4CEE1-6A25-4BCD-9D66-CADE51B21E81/iPhone17,2_26.4.2_23E261_Restore.ipsw"),
+            ("26.5", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-79891/E8EE3704-C08A-4187-BFAB-3A3031499D26/iPhone17,2_26.5_23F77_Restore.ipsw"),
+            ("26.5.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-26194/0358D1F3-1C15-44F7-A711-93D2987CA188/iPhone17,2_26.5.2_23F84_Restore.ipsw"),
+            ("26.6", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-58447/B097FD44-AF14-43CE-BEC0-CE218A859ADC/iPhone17,2_26.6_23G71_Restore.ipsw"),
+            ("26.6.1", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-73460/FE7F3B72-D934-4017-9508-03178240D462/iPhone17,2_26.6.1_23G83_Restore.ipsw"),
+            ("26.6.2", "https://updates.cdn-apple.com/2026SummerFCS/a1dbd14a-9e9d-49b3-9af6-02286d68883f/iPhone17,2_26.6.2_23G90_Restore.ipsw"),
+            ("27.0", "https://updates.cdn-apple.com/2026FallFCS/2f4f3b1f-a7cd-4c38-ae94-2ebd11a76253/iPhone17,2_27.0_24A437_Restore.ipsw"),
+            ("27.0.1", "https://updates.cdn-apple.com/2026FallFCS/3741bcd4-e0a6-43a7-bac1-74f363efb9ab/iPhone17,2_27.0.1_24A446_Restore.ipsw"),
+        ]),
+        // iPhone 16 Plus
+        (devices: ["iPhone17,4"], releases: [
+            ("26.0", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-41540/CB687B5F-0A31-4FBE-BFF9-D1069792A5DB/iPhone17,4_26.0_23A341_Restore.ipsw"),
+            ("26.0.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-44016/0CDDD881-6A8B-4960-9DF7-C8A24D6FF68C/iPhone17,4_26.0.1_23A355_Restore.ipsw"),
+            ("26.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-12124/FD18BC86-63E5-4FE1-AD33-D4B62995ECF2/iPhone17,4_26.1_23B85_Restore.ipsw"),
+            ("26.2", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-91142/728A69B0-F3DD-41B5-ADCA-B7685FFC8402/iPhone17,4_26.2_23C55_Restore.ipsw"),
+            ("26.2.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/047-34222/91C8E99B-8830-4E83-A9B7-47A452520F96/iPhone17,4_26.2.1_23C71_Restore.ipsw"),
+            ("26.3", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-43178/1862BD5D-CE56-4250-BEF9-FA48CCC0FFFE/iPhone17,4_26.3_23D127_Restore.ipsw"),
+            ("26.3.1", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-90343/B08DC413-474A-4345-860F-BD012CB23696/iPhone17,4_26.3.1_23D8133_Restore.ipsw"),
+            ("26.4", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-02138/98EB8109-8570-45AF-9989-808E8FDFB935/iPhone17,4_26.4_23E246_Restore.ipsw"),
+            ("26.4.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-28494/0BB1EDAA-9965-49EA-AB1E-DA534A7CF372/iPhone17,4_26.4.1_23E254_Restore.ipsw"),
+            ("26.4.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-60841/29E88F64-8C49-4789-83D1-674B0BA4E1B3/iPhone17,4_26.4.2_23E261_Restore.ipsw"),
+            ("26.5", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-79783/F7C100D3-3A04-4D4F-8CDB-5ADDA10594E1/iPhone17,4_26.5_23F77_Restore.ipsw"),
+            ("26.5.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-25874/6B056695-9268-4775-BB6E-5C0C3ED64C20/iPhone17,4_26.5.2_23F84_Restore.ipsw"),
+            ("26.6", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-58925/2F435FAA-0C75-4034-8610-3ADEF6D2E78A/iPhone17,4_26.6_23G71_Restore.ipsw"),
+            ("26.6.1", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-75160/D83A8969-3179-4D59-9F72-37FFC825CD9A/iPhone17,4_26.6.1_23G83_Restore.ipsw"),
+            ("26.6.2", "https://updates.cdn-apple.com/2026SummerFCS/911faed2-7d37-4532-8a4a-bd60530e1b11/iPhone17,4_26.6.2_23G90_Restore.ipsw"),
+            ("27.0", "https://updates.cdn-apple.com/2026FallFCS/601712cb-7aa9-4914-b421-91d45da959e6/iPhone17,4_27.0_24A437_Restore.ipsw"),
+            ("27.0.1", "https://updates.cdn-apple.com/2026FallFCS/ff004e4f-0c2c-489a-b3c2-42b07bb962bc/iPhone17,4_27.0.1_24A446_Restore.ipsw"),
+        ]),
+        // iPhone 16e
+        (devices: ["iPhone17,5"], releases: [
+            ("26.0", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-40473/648A4749-E039-441F-8207-3CCCB0DEA68F/iPhone17,5_26.0_23A341_Restore.ipsw"),
+            ("26.0.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-44366/261B2170-B316-415F-B6A2-80C41F2635E7/iPhone17,5_26.0.1_23A355_Restore.ipsw"),
+            ("26.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-13748/1A9D15D6-0015-4590-B7CF-32EAAE847EEE/iPhone17,5_26.1_23B85_Restore.ipsw"),
+            ("26.2", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-91680/D275D617-A543-46A6-A66D-70FEF31F909E/iPhone17,5_26.2_23C55_Restore.ipsw"),
+            ("26.2.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-69799/13079A5C-BCE7-4243-8673-3A4D53B2306D/iPhone17,5_26.2.1_23C71_Restore.ipsw"),
+            ("26.3", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-61657/C27364D5-1CDD-4B2A-8073-095F206A146F/iPhone17,5_26.3_23D127_Restore.ipsw"),
+            ("26.3.1", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-90412/C5B5B7F3-7034-43CF-8671-2564EB510B64/iPhone17,5_26.3.1_23D8133_Restore.ipsw"),
+            ("26.4", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-09229/FE79A39F-EAC1-4197-84A1-B85738D8D0E0/iPhone17,5_26.4_23E246_Restore.ipsw"),
+            ("26.4.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-28556/EB4B373E-CE25-4B71-A5E1-60CE9A35712B/iPhone17,5_26.4.1_23E254_Restore.ipsw"),
+            ("26.4.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-60273/CE3DB083-76B9-4E5D-94FB-DED041A78DAE/iPhone17,5_26.4.2_23E261_Restore.ipsw"),
+            ("26.5", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-42069/B3E5E8B7-23BA-4E42-9DD5-AD3DF6EDFC0D/iPhone17,5_26.5_23F77_Restore.ipsw"),
+            ("26.5.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-26559/1BB7BFFB-0CF4-4884-8CC5-9379EAE49F35/iPhone17,5_26.5.2_23F84_Restore.ipsw"),
+            ("26.6", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-57347/93853233-10D5-4C30-B6CA-AD4E70581573/iPhone17,5_26.6_23G71_Restore.ipsw"),
+            ("26.6.1", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-74909/1F205126-CF35-4228-852C-4033E008A83C/iPhone17,5_26.6.1_23G83_Restore.ipsw"),
+            ("26.6.2", "https://updates.cdn-apple.com/2026SummerFCS/19c41505-0ca3-4039-8594-b8169550b4c6/iPhone17,5_26.6.2_23G90_Restore.ipsw"),
+            ("27.0", "https://updates.cdn-apple.com/2026FallFCS/d79065c6-1467-4207-b204-4c8f9d080aa1/iPhone17,5_27.0_24A437_Restore.ipsw"),
+            ("27.0.1", "https://updates.cdn-apple.com/2026FallFCS/096468f2-4871-44bd-bcba-5b661400d70b/iPhone17,5_27.0.1_24A446_Restore.ipsw"),
+        ]),
+        // iPhone 17 Pro
+        (devices: ["iPhone18,1"], releases: [
+            ("26.0", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-45797/04671623-D2C1-4851-B2B4-19E96540E7D9/iPhone18,1_26.0_23A345_Restore.ipsw"),
+            ("26.0.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-50562/D2196EC3-5BC9-4694-ADF0-243489046B4D/iPhone18,1_26.0.1_23A355_Restore.ipsw"),
+            ("26.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-13936/78E94D51-CAD3-45DF-BC13-CD7D2E6E6E8F/iPhone18,1_26.1_23B85_Restore.ipsw"),
+            ("26.2", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-91375/AC7B0625-98D2-4A75-9AF2-E01F93DFF78D/iPhone18,1_26.2_23C55_Restore.ipsw"),
+            ("26.2.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-68716/36B64BD0-F945-45BD-8905-6E01F4F916E4/iPhone18,1_26.2.1_23C71_Restore.ipsw"),
+            ("26.3", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/089-58415/DFFC8F23-94E8-46C2-B60C-1BA35DDE76D3/iPhone18,1_26.3_23D127_Restore.ipsw"),
+            ("26.3.1", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-89687/5CA55B41-9683-4BCC-A5F6-5D39EBF86AA1/iPhone18,1_26.3.1_23D8133_Restore.ipsw"),
+            ("26.4", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-01483/985F1DAD-1F04-4D76-8D79-393E165867DD/iPhone18,1_26.4_23E246_Restore.ipsw"),
+            ("26.4.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-28571/4A9F66FB-09DA-4019-8C86-F1A14996572F/iPhone18,1_26.4.1_23E254_Restore.ipsw"),
+            ("26.4.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-60858/9DD6EA7E-DAD8-4CAC-A7CA-F6DC55F55E9F/iPhone18,1_26.4.2_23E261_Restore.ipsw"),
+            ("26.5", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-58991/67D386A6-5CBD-44D8-9E90-C6107A892180/iPhone18,1_26.5_23F77_Restore.ipsw"),
+            ("26.5.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-88894/CF6FDC3F-3E68-4ADE-85AA-390E18FCE138/iPhone18,1_26.5.1_23F81_Restore.ipsw"),
+            ("26.5.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-26301/EB6F54FA-685C-4206-9233-4E5AF14A34A6/iPhone18,1_26.5.2_23F84_Restore.ipsw"),
+            ("26.6", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-57285/88580B31-DFDB-4502-884F-DA40EC871038/iPhone18,1_26.6_23G71_Restore.ipsw"),
+            ("26.6.1", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-75048/DA1909FD-EE14-421B-BB9C-A85335254485/iPhone18,1_26.6.1_23G83_Restore.ipsw"),
+            ("26.6.2", "https://updates.cdn-apple.com/2026SummerFCS/f768ecdf-e037-44e6-bfa6-949b6d127c4f/iPhone18,1_26.6.2_23G90_Restore.ipsw"),
+            ("27.0", "https://updates.cdn-apple.com/2026FallFCS/e4bd9396-e611-4d22-b29a-0ed802448015/iPhone18,1_27.0_24A437_Restore.ipsw"),
+            ("27.0.1", "https://updates.cdn-apple.com/2026FallFCS/8451c50e-8b6f-4f5c-94c2-81469528464e/iPhone18,1_27.0.1_24A446_Restore.ipsw"),
+        ]),
+        // iPhone 17 Pro Max
+        (devices: ["iPhone18,2"], releases: [
+            ("26.0", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-45687/D1257A3B-15FD-4B7C-918F-24C20E9C8915/iPhone18,2_26.0_23A345_Restore.ipsw"),
+            ("26.0.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-50536/B604C1FC-63A8-4D3F-9F48-D8DA2B3F6FA5/iPhone18,2_26.0.1_23A355_Restore.ipsw"),
+            ("26.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-13227/120921ED-C509-4448-9094-116E911F3133/iPhone18,2_26.1_23B85_Restore.ipsw"),
+            ("26.2", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-91582/DFC72BAF-5ED1-4EA6-AD28-EC152F00888B/iPhone18,2_26.2_23C55_Restore.ipsw"),
+            ("26.2.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-96292/D73A6327-9058-4021-8AE6-05EDD1817682/iPhone18,2_26.2.1_23C71_Restore.ipsw"),
+            ("26.3", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-61640/4D73254B-089A-43A3-8179-80F520F5328F/iPhone18,2_26.3_23D127_Restore.ipsw"),
+            ("26.3.1", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-89691/F4F2DBF0-41AA-4B6E-ABDB-96EAB5D7CE1E/iPhone18,2_26.3.1_23D8133_Restore.ipsw"),
+            ("26.4", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-02792/6C4662D4-DD36-4EA9-8DC5-9EB9153CFAED/iPhone18,2_26.4_23E246_Restore.ipsw"),
+            ("26.4.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-28564/0FF93EFE-56DF-4C00-858E-B8213A4ED33D/iPhone18,2_26.4.1_23E254_Restore.ipsw"),
+            ("26.4.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-60865/DB8F9C6B-5DBB-4017-B160-1DE010879BB8/iPhone18,2_26.4.2_23E261_Restore.ipsw"),
+            ("26.5", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-56404/B6269659-BD71-4CB7-AF7C-F8D9C3CC6E2D/iPhone18,2_26.5_23F77_Restore.ipsw"),
+            ("26.5.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-88880/8FFF31F6-B39C-4572-AC7F-541BAB1F3A32/iPhone18,2_26.5.1_23F81_Restore.ipsw"),
+            ("26.5.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-26432/CF51E589-7C43-4B55-B909-CF585DAD0570/iPhone18,2_26.5.2_23F84_Restore.ipsw"),
+            ("26.6", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-57413/ED42973A-9AB0-41DC-B564-11A133F29F29/iPhone18,2_26.6_23G71_Restore.ipsw"),
+            ("26.6.1", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-75094/69BCC770-5451-4FE7-ADF4-52E2A2AB0EB3/iPhone18,2_26.6.1_23G83_Restore.ipsw"),
+            ("26.6.2", "https://updates.cdn-apple.com/2026SummerFCS/1a337b3d-ffd8-424a-abc4-092b64d551ab/iPhone18,2_26.6.2_23G90_Restore.ipsw"),
+            ("27.0", "https://updates.cdn-apple.com/2026FallFCS/8d2fc0d7-5c81-4712-ac4e-c4a88de4cef7/iPhone18,2_27.0_24A437_Restore.ipsw"),
+            ("27.0.1", "https://updates.cdn-apple.com/2026FallFCS/3b7299da-a6a5-4bf6-82db-cd37f8c2d160/iPhone18,2_27.0.1_24A446_Restore.ipsw"),
+        ]),
+        // iPhone 17
+        (devices: ["iPhone18,3"], releases: [
+            ("26.0", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-41338/A4CC0565-1F51-4F4B-B303-CA52DDE0E53B/iPhone18,3_26.0_23A341_Restore.ipsw"),
+            ("26.0.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-44719/9A187866-AC58-449C-8B5A-597098F99465/iPhone18,3_26.0.1_23A355_Restore.ipsw"),
+            ("26.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-12066/4F86CB11-E6FA-47CB-96A8-527A4CBD9273/iPhone18,3_26.1_23B85_Restore.ipsw"),
+            ("26.2", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-91206/3B9DB894-526C-4B1E-9D67-AD838CEAB9A4/iPhone18,3_26.2_23C55_Restore.ipsw"),
+            ("26.2.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-97410/74A69CBC-C68F-43AF-ACBD-3D9127A423B7/iPhone18,3_26.2.1_23C71_Restore.ipsw"),
+            ("26.3", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/089-71645/C2713B5B-2752-4F35-A082-2963ED6DA5E3/iPhone18,3_26.3_23D127_Restore.ipsw"),
+            ("26.3.1", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-91280/B587C50E-AFE4-43DF-954F-1EFD3637F11C/iPhone18,3_26.3.1_23D8133_Restore.ipsw"),
+            ("26.4", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-01484/6C4962EB-0B7E-4721-81A5-A0307FBB17EA/iPhone18,3_26.4_23E246_Restore.ipsw"),
+            ("26.4.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-28570/FEA1985C-5AF6-43BA-8A91-6F08B778B866/iPhone18,3_26.4.1_23E254_Restore.ipsw"),
+            ("26.4.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-60274/553CD561-76CB-4B5A-B029-23FB47055236/iPhone18,3_26.4.2_23E261_Restore.ipsw"),
+            ("26.5", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-59599/450F9107-3236-4F2A-9A7B-806E99CD1568/iPhone18,3_26.5_23F77_Restore.ipsw"),
+            ("26.5.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-88893/ABC2FBFD-AA2D-4FE6-A736-2F02E1BEC46A/iPhone18,3_26.5.1_23F81_Restore.ipsw"),
+            ("26.5.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-26412/773D76F3-DC28-4A7C-BA4B-D2650858E1D5/iPhone18,3_26.5.2_23F84_Restore.ipsw"),
+            ("26.6", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-57094/9A1B4782-299B-4868-BE2F-23736A07D105/iPhone18,3_26.6_23G71_Restore.ipsw"),
+            ("26.6.1", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-75080/6B80B95C-7F76-4D7A-86DE-C095321A8146/iPhone18,3_26.6.1_23G83_Restore.ipsw"),
+            ("26.6.2", "https://updates.cdn-apple.com/2026SummerFCS/c2f9fa07-0acc-4038-99f4-d7a4b1ac9c06/iPhone18,3_26.6.2_23G90_Restore.ipsw"),
+            ("27.0", "https://updates.cdn-apple.com/2026FallFCS/b18c9502-c21d-4555-9bf7-21f3a238e6d7/iPhone18,3_27.0_24A437_Restore.ipsw"),
+            ("27.0.1", "https://updates.cdn-apple.com/2026FallFCS/052dd27b-a831-4746-b00a-2e6a7f5a5586/iPhone18,3_27.0.1_24A446_Restore.ipsw"),
+        ]),
+        // iPhone Air
+        (devices: ["iPhone18,4"], releases: [
+            ("26.0", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-39795/6A1A4D22-A7DC-4C2C-A147-D4D9D4EB7D1F/iPhone18,4_26.0_23A341_Restore.ipsw"),
+            ("26.0.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/093-44415/65359B2E-9997-4686-B335-CEEA4524A334/iPhone18,4_26.0.1_23A355_Restore.ipsw"),
+            ("26.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-14211/A9EC7D63-0F1D-49B9-A57B-1D0C85EE98F8/iPhone18,4_26.1_23B85_Restore.ipsw"),
+            ("26.2", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-91442/02FFE81E-3F12-4062-B78C-5822BF18B9ED/iPhone18,4_26.2_23C55_Restore.ipsw"),
+            ("26.2.1", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/047-34147/A3A2F9E9-F393-4ACE-BE3A-F420BB1B09AC/iPhone18,4_26.2.1_23C71_Restore.ipsw"),
+            ("26.3", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-36499/FCDEA0A9-965D-4532-ADDB-7154132ADB5A/iPhone18,4_26.3_23D127_Restore.ipsw"),
+            ("26.3.1", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-90993/98D32C32-13A6-44CD-B971-C14B07D0ECBC/iPhone18,4_26.3.1_23D8133_Restore.ipsw"),
+            ("26.4", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-06787/B893F5E8-6B35-451C-AC71-E6F82D1438B4/iPhone18,4_26.4_23E246_Restore.ipsw"),
+            ("26.4.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-28480/EC855F8B-2096-43ED-8D87-1F058209B743/iPhone18,4_26.4.1_23E254_Restore.ipsw"),
+            ("26.4.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-60829/FCA761D9-CE09-4A4A-9F6B-6F3BDFCDA3A4/iPhone18,4_26.4.2_23E261_Restore.ipsw"),
+            ("26.5", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-62508/AC32AA07-3983-4F2D-B953-E2C54534DF9F/iPhone18,4_26.5_23F77_Restore.ipsw"),
+            ("26.5.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-88739/AF8FDCAB-F2FE-45B5-BD3A-0DA8509AAE6C/iPhone18,4_26.5.1_23F81_Restore.ipsw"),
+            ("26.5.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-27097/3D77FCC8-81A6-4298-8721-90F70EE21076/iPhone18,4_26.5.2_23F84_Restore.ipsw"),
+            ("26.6", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-57973/6338BC4D-F714-4BAF-B5D6-8786310374C8/iPhone18,4_26.6_23G71_Restore.ipsw"),
+            ("26.6.1", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-73502/CCE4FF03-AB03-49A0-B259-1AD69AA7CB5F/iPhone18,4_26.6.1_23G83_Restore.ipsw"),
+            ("26.6.2", "https://updates.cdn-apple.com/2026SummerFCS/c459f07a-97b9-4057-ab6d-8241040687d9/iPhone18,4_26.6.2_23G90_Restore.ipsw"),
+            ("27.0", "https://updates.cdn-apple.com/2026FallFCS/fdb27442-4a14-48d1-bf30-574a47241a3f/iPhone18,4_27.0_24A437_Restore.ipsw"),
+            ("27.0.1", "https://updates.cdn-apple.com/2026FallFCS/91255a6b-fab1-4e33-a38a-6de41a2bb61c/iPhone18,4_27.0.1_24A446_Restore.ipsw"),
+        ]),
+        // iPhone 17e
+        (devices: ["iPhone18,5"], releases: [
+            ("26.3.1", "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/047-90413/DB3F26E5-E4EA-440E-89AD-41224783EBE1/iPhone18,5_26.3.1_23D8133_Restore.ipsw"),
+            ("26.4", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-03475/CDD56EEE-78C6-4E10-BE9E-A3E491E7850A/iPhone18,5_26.4_23E246_Restore.ipsw"),
+            ("26.4.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-28568/DA03BD6A-B629-48C6-8386-9C0C10D00740/iPhone18,5_26.4.1_23E254_Restore.ipsw"),
+            ("26.4.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-60276/437E50C4-A6AC-46FC-BC2C-0C990DF53C7E/iPhone18,5_26.4.2_23E261_Restore.ipsw"),
+            ("26.5", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-41484/C3A82719-BEFF-4194-A5CC-494D9D336C24/iPhone18,5_26.5_23F77_Restore.ipsw"),
+            ("26.5.1", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-88882/D5969BF4-8C08-4D55-8B88-05BFE453EDDA/iPhone18,5_26.5.1_23F81_Restore.ipsw"),
+            ("26.5.2", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-26279/05914D79-44CE-4676-931A-196FD4097CC7/iPhone18,5_26.5.2_23F84_Restore.ipsw"),
+            ("26.6", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-57120/653D93F3-501E-451B-BE75-E90751A1BAF6/iPhone18,5_26.6_23G71_Restore.ipsw"),
+            ("26.6.1", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-73050/DE636DB6-94E8-4B51-9925-6D7BA82DA935/iPhone18,5_26.6.1_23G83_Restore.ipsw"),
+            ("26.6.2", "https://updates.cdn-apple.com/2026SummerFCS/543c77da-97fc-4e4e-b2e2-942b8d34c723/iPhone18,5_26.6.2_23G90_Restore.ipsw"),
+            ("27.0", "https://updates.cdn-apple.com/2026FallFCS/dff48a54-47d4-4a76-909e-21ac46b95468/iPhone18,5_27.0_24A437_Restore.ipsw"),
+            ("27.0.1", "https://updates.cdn-apple.com/2026FallFCS/dad095d6-083a-4ff2-a2be-29503e316461/iPhone18,5_27.0.1_24A446_Restore.ipsw"),
+        ]),
+    ]
+
     /// iPadOS releases, one entry per iPad IPSW, oldest first. Each IPSW also
     /// covers the cellular twins, which run as their Wi-Fi model
     /// (`VPhoneGuestDevice.aliases`), so `devices` lists only the models a guest
@@ -194,18 +380,19 @@ public enum VPhoneFirmwareCatalog {
         ]),
     ]
 
-    /// The pairings for one guest device, oldest first: the iPhone list, or
-    /// the iPad's releases with the cloudOS an iPhone of that release uses.
-    /// A cellular iPad gets its Wi-Fi model's; an unknown device gets none.
+    /// The pairings for one guest device, oldest first: the iPhone17,3 list,
+    /// or another model's releases with the cloudOS an iPhone17,3 of that
+    /// release uses. A cellular iPad gets its Wi-Fi model's; an unknown device
+    /// gets none.
     public static func pairings(for device: String) -> [VPhoneFirmwarePairing] {
         guard let guest = VPhoneGuestDevice.named(device) else { return [] }
-        guard guest.isPad else { return pairings }
-        let releases = iPadReleases.first { $0.devices.contains(guest.productType) }?.releases ?? []
+        guard guest.presentsBoard else { return pairings }
+        let releases = (iPhoneReleases + iPadReleases).first { $0.devices.contains(guest.productType) }?.releases ?? []
         return releases.map { release in
             let cloudOS = recommendedCloudOS(forVersion: release.version)
             return VPhoneFirmwarePairing(
                 device: guest.productType,
-                iosName: "iPadOS \(release.version)",
+                iosName: "\(guest.isPad ? "iPadOS" : "iOS") \(release.version)",
                 iosURL: release.url,
                 cloudosName: cloudOS.name,
                 cloudosURL: cloudOS.url,

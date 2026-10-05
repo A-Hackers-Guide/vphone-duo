@@ -139,6 +139,32 @@ struct BundleOperationsTests {
         #expect(updated.manifest.networkConfig.mode == .nat)
     }
 
+    @Test func `update config persists unlock at startup`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let rom = try fakeROM(); let seprom = try fakeROM()
+        defer { try? FileManager.default.removeItem(at: rom); try? FileManager.default.removeItem(at: seprom) }
+        let lib = VPhoneLibrary(root: root)
+        _ = try VPhoneBundleOperations.create(
+            .init(name: "unlock", cpuCount: 8, memoryMB: 8192, diskSizeGB: 1, romSource: rom, sepromSource: seprom),
+            in: lib,
+        )
+        #expect(VPhoneBundleReport(bundle: try lib.bundle(named: "unlock")).unlocksAtStartup == false)
+
+        _ = try VPhoneBundleOperations.updateConfig(
+            bundleNamed: "unlock", in: lib, cpuCount: nil, memoryMB: nil, unlocksAtStartup: true,
+        )
+        #expect(VPhoneBundleReport(bundle: try lib.bundle(named: "unlock")).unlocksAtStartup)
+
+        // Another edit leaves it alone; off turns it off.
+        _ = try VPhoneBundleOperations.updateConfig(bundleNamed: "unlock", in: lib, cpuCount: 4, memoryMB: nil)
+        #expect(try lib.bundle(named: "unlock").manifest.unlocksScreenAtStartup)
+        _ = try VPhoneBundleOperations.updateConfig(
+            bundleNamed: "unlock", in: lib, cpuCount: nil, memoryMB: nil, unlocksAtStartup: false,
+        )
+        #expect(try !lib.bundle(named: "unlock").manifest.unlocksScreenAtStartup)
+    }
+
     @Test func `update config persists network`() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }

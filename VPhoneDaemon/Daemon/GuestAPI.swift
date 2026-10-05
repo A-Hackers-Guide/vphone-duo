@@ -47,6 +47,11 @@ enum GuestAPI {
         return sha256Hex(data)
     }()
 
+    /// New each time vphoned starts: after a guest boot, a userspace reboot, an
+    /// update or a crash. A host tells a vphoned that just started from a
+    /// connection it lost and found again by this, not by reconnecting.
+    static let instance = UUID().uuidString
+
     static func sha256Hex(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
@@ -76,6 +81,7 @@ enum GuestAPI {
             "api_version": 1,
             "status": "ok",
             "binary_hash": binaryHash,
+            "instance": instance,
             "ios": "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)",
             "ip": ip ?? "",
             "setup_pending": setupAssistantPending(),
@@ -111,6 +117,7 @@ enum GuestAPI {
                 "network_capture",
                 "app_details",
                 "system_control",
+                "system_shutdown",
                 "file_tools",
                 "files_app_drop",
                 "packages",

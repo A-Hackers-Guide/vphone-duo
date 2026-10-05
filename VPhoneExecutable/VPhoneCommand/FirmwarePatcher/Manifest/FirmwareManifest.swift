@@ -204,27 +204,28 @@ public enum FirmwareManifest {
 
     // MARK: - Guest Device Tree
 
-    /// Where an iPad guest's installed device tree is kept, beside the
-    /// vphone600 one that restore boots with.
+    /// Where a board-presenting guest's installed device tree is kept, beside
+    /// the vphone600 one that restore boots with.
     public static let guestDeviceTreePath = "Firmware/all_flash/DeviceTree.vphone600ap.guest.im4p"
 
-    /// Points an iPad identity's installed `DeviceTree` at a copy of the
-    /// vphone600 tree, so `fw patch` can give that copy the iPad identity.
+    /// Points the installed `DeviceTree` of a guest that presents its board
+    /// (an iPad, or an iPhone other than the iPhone17,3) at a copy of the
+    /// vphone600 tree, so `fw patch` can give that copy the board's identity.
     ///
     /// The DFU device restores with `RestoreDeviceTree`, and `restored_external`
     /// checks its root `model` and `target-type` against the manifest — the
     /// reason the iPhone identity is only rewritten after restore. The
     /// installed `DeviceTree` is a separate manifest entry that restore only
     /// personalizes and writes to Preboot, so giving it its own file lets the
-    /// iPad identity ride through restore without a root-only rewrite on the
-    /// host. An iPhone identity is returned unchanged.
+    /// board identity ride through restore without a root-only rewrite on the
+    /// host. An iPhone17,3 identity is returned unchanged.
     static func separateGuestDeviceTree(
         for device: VPhoneGuestDevice,
         identity: PlistDict,
         restoreDir: URL,
         verbose: Bool,
     ) throws -> PlistDict {
-        guard device.isPad else { return identity }
+        guard device.presentsBoard else { return identity }
         guard var manifest = identity["Manifest"] as? PlistDict,
               var deviceTree = manifest["DeviceTree"] as? PlistDict,
               var info = deviceTree["Info"] as? PlistDict,

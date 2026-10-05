@@ -132,9 +132,13 @@ public enum DyldSharedCacheLockdownModePatcher {
     public static func patch(
         chunksDirectory: URL,
         dryRun: Bool = false,
+        captureUndo: Bool = false,
+        onUndo: ((DyldSharedCacheUndoLog) -> Void)? = nil,
         log: ((String) -> Void)? = DyldSharedCacheCodeSignature.stderrLog,
     ) throws -> Outcome {
-        try patch(in: DyldSharedCacheChunkSet(directory: chunksDirectory), dryRun: dryRun, log: log)
+        let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory, captureUndo: captureUndo)
+        defer { if captureUndo, let undo = chunks.takeUndoLog() { onUndo?(undo) } }
+        return try patch(in: chunks, dryRun: dryRun, log: log)
     }
 
     /// Patch an already-open cache.

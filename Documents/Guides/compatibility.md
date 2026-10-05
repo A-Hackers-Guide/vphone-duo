@@ -31,6 +31,23 @@ The cloudOS 26.4 beta image (`26.4-23E5207q`) is the newest one that contains `v
 
 Use `vphone-cli fw catalog` to inspect the current catalogue. Other iPhone and iPad versions may work with `26.4-23E5207q`, but they have not passed this same end-to-end check.
 
+**iPhone17,3 27.0.1 (24A446)** fails first boot on bundle 2.5.0 and earlier
+(reproduced 2026-10-04, including with the pristine Apple launchd): TXM's
+selector-24 pre-check rejects every binary at init and the boot panics with
+`unexpected SIGKILL of init`. The `txm-boot-precheck_admission` patch
+(`Research/Firmware/txm_selector24_cms_gate.md`) fixes it; verified the same
+day: `iPhone17,3 27.0.1 + 26.4-23E5207q` with the patch boots to the guest
+and answers a vphoned `device.info`. Until a bundle release carrying the
+patch ships, treat 27.0.x past 24A435 as needing a current local build.
+
+## Other iPhone models
+
+See [Other iPhone models](iphone-models.md).
+
+| Host | iPhone restore IPSW | PCC/cloudOS IPSW | Observed result |
+| --- | --- | --- | --- |
+| Mac17,9 (M5 Pro) 27.0.1 | `18,1_26.6.2_23G90` (iPhone 17 Pro) | `26.4-23E5207q` | Launchpad `vm create` (2.5.1 local bundle): prepare, patch, restore, CFW, boot to the home screen at 402x874 pt @3x, `model` iPhone18,1, vphoned ping |
+
 ## iPadOS
 
 See [iPadOS guests](ipados.md).

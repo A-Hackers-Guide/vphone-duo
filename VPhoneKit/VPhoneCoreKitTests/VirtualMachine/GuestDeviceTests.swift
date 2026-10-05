@@ -78,4 +78,23 @@ struct GuestDeviceTests {
         }
         #expect(VPhoneGuestDevice.iPad17_3.screen == .init(width: 2064, height: 2752, pixelsPerInch: 264, scale: 2.0))
     }
+
+    @Test
+    func `every other iPhone presents its own board at 3x`() {
+        #expect(!VPhoneGuestDevice.iPhone17_3.presentsBoard)
+        for device in VPhoneGuestDevice.known where device.family == .iPhone && device != .iPhone17_3 {
+            #expect(device.presentsBoard)
+            #expect(device.screen.scale == 3.0)
+            #expect(device.screen.pixelsPerInch == 460)
+            #expect(device.screen.width < device.screen.height)
+            #expect(VPhoneGuestDevice.detect(buildManifest: ["SupportedProductTypes": [device.productType]]) == device)
+            #expect(device.restoreTreeName(version: "27.0", build: "24A437") == "\(device.productType)_27.0_24A437_Restore")
+        }
+        for device in VPhoneGuestDevice.known where device.isPad {
+            #expect(device.presentsBoard)
+        }
+        #expect(VPhoneGuestDevice.named("iPhone18,1") == .iPhone18_1)
+        #expect(VPhoneGuestDevice.iPhone18_1.deviceClass == "v53ap")
+        #expect(VPhoneGuestDevice.iPhone18_1.screen == .init(width: 1206, height: 2622, pixelsPerInch: 460, scale: 3.0))
+    }
 }
