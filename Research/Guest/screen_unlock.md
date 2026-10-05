@@ -87,9 +87,9 @@ Settings) has `vphone-vm` call `screen.unlock` with a 60 s timeout when a
 vphoned that has just started connects. vphoned's `/v1/health` carries
 `instance`, a UUID made when it starts; the host keeps the last one it saw
 across disconnects, so a probe that drops and reconnects to the same vphoned
-is not unlocked again. A guest still in Setup Assistant is skipped, and a
-passcode guest stays locked (the call refuses without a passcode, and none is
-stored).
+is not unlocked again. A guest still in Setup Assistant is skipped. A vphone guest cannot have a
+passcode (see "Why a passcode cannot be set" below), so the setting never
+meets one.
 
 Measured on 2026-10-04 on `autounlock-iphone` (iPhone17,3, iOS 27.0 24A435,
 no passcode, Auto-Lock 1 minute), bundle 2.6.0-local:
@@ -172,11 +172,10 @@ cannot be made, and `screen.unlock`'s passcode path cannot be run.
 
 ## Not yet measured
 
-- **Passcode guests.** Setting a passcode on a research guest is not
-  automated, so the Home-raises-the-pad-then-type path is unrun. It is written
-  to the behavior of a real device (Home/menu raises passcode entry); treat it
-  as untested until a passcode guest is available.
-- iPadOS, and iOS 27.0.1 (its guests kernel-panic at first boot, separate
+- **Passcode guests.** vphone does not support a passcode (see "Why a
+  passcode cannot be set" above), so the Home-raises-the-pad-then-type path
+  cannot be run. It is written to the behavior of a real device.
+- iOS 27.0.1 (its guests kernel-panic at first boot, separate
   issue).
 
 ## Reproducing

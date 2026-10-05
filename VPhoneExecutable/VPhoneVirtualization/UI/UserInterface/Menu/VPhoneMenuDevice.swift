@@ -108,7 +108,7 @@ extension VPhoneMenuController {
         let unlockItem = makeItem("Unlock at Startup", action: #selector(toggleUnlockAtStartup), symbol: "lock.open")
         unlockItem.state = control.unlocksAtStartup ? .on : .off
         unlockItem.toolTip = VPhoneLocalization.text(
-            "Wake the guest and dismiss its Lock Screen each time it starts. A guest with a passcode stays locked.",
+            "Wake the guest and dismiss its Lock Screen each time it starts.",
         )
         unlockAtStartupItem = unlockItem
         menu.addItem(unlockItem)

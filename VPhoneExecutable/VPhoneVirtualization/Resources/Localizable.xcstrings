@@ -207,37 +207,37 @@
         }
       }
     },
-    "Wake the guest and dismiss its Lock Screen each time it starts. A guest with a passcode stays locked." : {
+    "Wake the guest and dismiss its Lock Screen each time it starts." : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wake the guest and dismiss its Lock Screen each time it starts. A guest with a passcode stays locked."
+            "value" : "Wake the guest and dismiss its Lock Screen each time it starts."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ゲストが起動するたびに画面をスリープ解除し、ロック画面を閉じます。パスコードを設定したゲストはロックされたままです。"
+            "value" : "ゲストが起動するたびに画面をスリープ解除し、ロック画面を閉じます。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "게스트가 시작될 때마다 화면을 깨우고 잠금 화면을 닫습니다. 암호가 설정된 게스트는 잠긴 상태로 유지됩니다."
+            "value" : "게스트가 시작될 때마다 화면을 깨우고 잠금 화면을 닫습니다."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Đánh thức máy khách và đóng Màn hình khóa mỗi khi khởi động. Máy khách có mật mã vẫn bị khóa."
+            "value" : "Đánh thức máy khách và đóng Màn hình khóa mỗi khi khởi động."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "客户机每次启动时唤醒屏幕并关闭锁定屏幕。设有密码的客户机仍保持锁定。"
+            "value" : "客户机每次启动时唤醒屏幕并关闭锁定屏幕。"
           }
         }
       }

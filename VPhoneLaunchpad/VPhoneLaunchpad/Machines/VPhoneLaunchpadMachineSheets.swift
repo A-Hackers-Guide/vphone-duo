@@ -148,7 +148,7 @@ struct VPhoneLaunchpadMachineSettingsView: View {
                 } header: {
                     Text("Startup")
                 } footer: {
-                    Text("Each time the guest starts, its screen is turned on and the Lock Screen dismissed. A guest with a passcode stays locked.")
+                    Text("Each time the guest starts, its screen is turned on and the Lock Screen dismissed.")
                         .foregroundStyle(.secondary)
                 }
             }

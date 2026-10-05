@@ -337,8 +337,7 @@ the Startup section of a machine's Settings in Launchpad) has `vphone-vm` call
 connects. `/v1/health` carries `instance`, a UUID vphoned makes when it starts,
 so the host tells a start (guest boot, userspace reboot, a vphoned update) from
 a probe it lost and found again; only a new instance is unlocked. A guest still
-in Setup Assistant is left alone, and a guest with a passcode stays locked: the
-passcode is never stored.
+in Setup Assistant is left alone.
 
 `time.timezone` (capability `timezone`; REST `GET/PUT /v1/timezone`) returns
 `{identifier, automatic, seconds_from_gmt}`: the Olson name

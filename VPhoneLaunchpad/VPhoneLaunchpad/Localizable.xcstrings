@@ -13051,13 +13051,13 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动时解锁" } }
       }
     },
-    "Each time the guest starts, its screen is turned on and the Lock Screen dismissed. A guest with a passcode stays locked." : {
+    "Each time the guest starts, its screen is turned on and the Lock Screen dismissed." : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Each time the guest starts, its screen is turned on and the Lock Screen dismissed. A guest with a passcode stays locked." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲストが起動するたびに画面をオンにし、ロック画面を閉じます。パスコードを設定したゲストはロックされたままです。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트가 시작될 때마다 화면을 켜고 잠금 화면을 닫습니다. 암호가 설정된 게스트는 잠긴 상태로 유지됩니다." } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Mỗi khi máy khách khởi động, màn hình được bật và Màn hình khóa được đóng. Máy khách có mật mã vẫn bị khóa." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机每次启动时点亮屏幕并关闭锁定屏幕。设有密码的客户机仍保持锁定。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Each time the guest starts, its screen is turned on and the Lock Screen dismissed." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲストが起動するたびに画面をオンにし、ロック画面を閉じます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트가 시작될 때마다 화면을 켜고 잠금 화면을 닫습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Mỗi khi máy khách khởi động, màn hình được bật và Màn hình khóa được đóng." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机每次启动时点亮屏幕并关闭锁定屏幕。" } }
       }
     },
     "%@ (Default)" : {

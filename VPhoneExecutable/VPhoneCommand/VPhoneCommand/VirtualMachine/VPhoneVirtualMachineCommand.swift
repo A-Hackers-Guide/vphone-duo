@@ -231,8 +231,8 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
         --mac-name off withdraws it. Applied each time vphone-vm connects to the guest.
 
         --unlock-at-startup on has vphone-vm wake the guest and dismiss its Lock Screen each time \
-        vphoned starts in it: after the VM starts and after the guest reboots. A guest with a \
-        passcode stays locked; the passcode is never stored. Applies from the next connect.
+        vphoned starts in it: after the VM starts and after the guest reboots. Applies from the \
+        next connect.
         """,
     )
 

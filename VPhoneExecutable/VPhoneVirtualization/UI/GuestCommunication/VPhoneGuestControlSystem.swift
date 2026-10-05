@@ -63,8 +63,7 @@ extension VPhoneGuestControl {
     /// Wakes a guest whose vphoned has just started and dismisses its Lock
     /// Screen through `screen.unlock`. vphoned can come up well before
     /// SpringBoard on a cold boot; the method waits for SpringBoard itself, so
-    /// it is given the longest timeout it takes. A guest with a passcode
-    /// refuses without one and stays locked: the passcode is never stored.
+    /// it is given the longest timeout it takes.
     ///
     /// SpringBoard can still read "unlocked, lit" after it reports that it has
     /// started, before it raises the Lock Screen, and `screen.unlock` then has
