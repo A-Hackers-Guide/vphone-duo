@@ -16,19 +16,21 @@ extension VPhoneMenuController {
         recordingItem = toggle
         menu.addItem(toggle)
         menu.addItem(NSMenuItem.separator())
-        // Shift-Command-3 and -4 keep the macOS screenshot muscle memory: the
-        // file first, the clipboard second.
+        // Not Shift-Command-3 and -4: those are the Mac's own screenshot hot
+        // keys, which the window server takes before the menu sees them (see
+        // `VPhoneHostHotKeys`). Control-Command-C is Simulator's Copy Screen;
+        // saving is Shift-Command-S, since a plain Command-S is the guest's.
         menu.addItem(makeItem(
             "Copy Screenshot to Mac Clipboard",
             action: #selector(copyScreenshotToClipboard),
-            keyEquivalent: "4",
-            modifiers: [.command, .shift],
+            keyEquivalent: "c",
+            modifiers: [.command, .control],
             symbol: "camera.viewfinder",
         ))
         menu.addItem(makeItem(
             "Save Screenshot to File",
             action: #selector(saveScreenshotToFile),
-            keyEquivalent: "3",
+            keyEquivalent: "s",
             modifiers: [.command, .shift],
             symbol: "square.and.arrow.down",
         ))

@@ -21,11 +21,13 @@ extension VPhoneMenuController {
         connectFileBrowserItem = fileBrowser
         menu.addItem(fileBrowser)
 
+        // Control-Command-K: Shift-Command-K is Device > Use Hardware Keyboard,
+        // which comes first in the menu bar and would take the key.
         let keychainBrowser = makeItem(
             "Keychain Browser",
             action: #selector(openKeychain),
             keyEquivalent: "k",
-            modifiers: [.command, .shift],
+            modifiers: [.command, .control],
             symbol: "key",
         )
         keychainBrowser.isEnabled = false
