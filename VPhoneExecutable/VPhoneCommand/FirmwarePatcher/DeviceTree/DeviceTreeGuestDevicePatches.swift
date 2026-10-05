@@ -331,6 +331,96 @@ extension DeviceTreePatcher {
         return removed
     }
 
+    // MARK: - iPhone Product
+
+    /// `/product` properties an iPhone guest takes from its board's tree when
+    /// its own holds a `syscfg/` placeholder for them.
+    ///
+    /// On vphone600 these are placeholders no syscfg fills, and MobileGestalt
+    /// reads a placeholder as absent. Settings then has no Siri page (`assistant`),
+    /// no Model Name (`product-name`), no dictation (`dictation`), and the
+    /// button geometry SpringBoard lays out against is missing. Measured on a
+    /// 26.6.2 iPhone17,3 guest: with these from D47AP, Siri opens from the side
+    /// button, dictation appears, and Camera Control and the Action Button are
+    /// in Settings (with `iPhoneAddedProductProperties` and
+    /// `iPhoneButtonProperties`).
+    ///
+    /// Only what describes the product to userland is listed. Properties that
+    /// promise hardware the VM does not have — Bluetooth, baseband, NFC,
+    /// exclaves, `has-*`, the graphics feature set, `framebuffer-identifier`,
+    /// display calibration — stay as vphone600 has them.
+    static let iPhoneProductProperties = [
+        // What Settings and MobileGestalt name the device.
+        "product-name", "product-description",
+        // Siri and dictation.
+        "assistant", "siri-gesture", "dictation", "offline-dictation", "builtin-mics",
+        // Buttons SpringBoard and Settings lay out against.
+        "side-button-location", "volume-up-button-location", "volume-down-button-location",
+        // Display and chrome.
+        "artwork-scale-factor", "chrome-identifier", "compatible-device-fallback",
+        "display-corner-radius", "display-mirroring", "oled-display", "thin-bezel", "large-format-phone",
+        // UI and feature switches.
+        "ui-pip", "ui-reachability", "ui-background-quality", "ui-weather-quality",
+        "hme-in-arkit", "carplay-2", "location-reminders", "watch-companion",
+    ]
+
+    /// `/product` properties vphone600 lacks altogether, added from the board:
+    /// the Action Button's and Camera Control's geometry, and Camera Control
+    /// itself, without which Settings has no Camera Control page.
+    static let iPhoneAddedProductProperties = [
+        "ringer-button-location", "camera-button-location", "supports-camera-button",
+    ]
+
+    /// `/buttons` properties taken from the board when they are placeholders.
+    /// `function-button_ringeren` is what MobileGestalt reads for the Action
+    /// Button. vphone600's `/buttons` has no `compatible`, so no button driver
+    /// binds to the node and the board's function reference is never followed.
+    static let iPhoneButtonProperties = ["function-button_ringeren"]
+
+    /// One property `presentPhoneProduct` set: where, and its value before
+    /// (nil when it was added).
+    struct PhoneProductChange {
+        let path: String
+        let before: Data?
+        let after: Data
+    }
+
+    /// Give an iPhone guest's `/product` and `/buttons` the board's values for
+    /// `iPhoneProductProperties`, `iPhoneAddedProductProperties` and
+    /// `iPhoneButtonProperties`.
+    ///
+    /// A listed property is copied only when the guest's is a placeholder (or,
+    /// for the added ones, missing) and the board's is a real value, so a tree
+    /// that already has them, or a board that lacks one, is left as it is.
+    /// Returns what changed, empty when nothing did.
+    static func presentPhoneProduct(in root: DTNode, from source: DTNode) -> [PhoneProductChange] {
+        var changes: [PhoneProductChange] = []
+        func fill(_ names: [String], node: String, add: Bool) {
+            guard
+                let target = optionalChild(of: root, named: node),
+                let board = optionalChild(of: source, named: node)
+            else { return }
+            for name in names {
+                guard let value = board.properties.first(where: { $0.name == name }),
+                      value.flags & placeholderFlag == 0
+                else { continue }
+                if let existing = target.properties.first(where: { $0.name == name }) {
+                    guard existing.flags & placeholderFlag != 0 else { continue }
+                    changes.append(PhoneProductChange(path: "\(node)/\(name)", before: existing.value, after: value.value))
+                    existing.flags = 0
+                    existing.value = value.value
+                } else if add {
+                    target.properties.append(DTProperty(name: name, flags: 0, value: value.value, valueOffset: 0))
+                    changes.append(PhoneProductChange(path: "\(node)/\(name)", before: nil, after: value.value))
+                }
+            }
+        }
+        fill(iPhoneProductProperties, node: "product", add: false)
+        fill(iPhoneAddedProductProperties, node: "product", add: true)
+        fill(iPhoneButtonProperties, node: "buttons", add: false)
+        return changes
+    }
+
     /// The flat encoding of one node and its children, for the patch record.
     private static func serialize(_ node: DTNode) -> Data {
         var out = Data()

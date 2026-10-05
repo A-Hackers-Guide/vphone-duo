@@ -2709,3 +2709,43 @@ a revert works however many installs later it happens.
 **Boot chain unchanged.** Boot-chain patches still reach a guest only through a
 restore (AVPBooter through `fw patch`); `fw set-patches` and `fw patches <vm>`
 say so per patch.
+
+## An iPhone guest's product description from D47AP (2026-10-04)
+
+An iPhone17,3 guest had no Siri page, no Camera Control, no Action Button and no
+Model Name, whatever its identity patches. Most of vphone600's `/product` is
+`syscfg/xxxx` placeholders (flag `0x8000`) that no syscfg fills on a VM, and
+MobileGestalt reads a placeholder as absent. An iPad guest already takes these
+from its board tree (`devicetree-cfw-ipad_*`); an iPhone guest did not, although
+its IPSW carries the iPhone's own tree, `Firmware/all_flash/DeviceTree.d47ap.im4p`.
+
+| Patch | Component | Effect |
+| --- | --- | --- |
+| `preboot-cfw-devicetree_iphone_product` (new) | Restored Preboot `devicetree.img4`, `cfw install` and `cfw update-environment`, iPhone17,3 guests (a board-presenting guest already boots its own board's description) | `DeviceTreePatcher.presentPhoneProduct` (`vphone-cli cfw patch-dt-iphone-product <dt> <board>`): fills the `iPhoneProductProperties` placeholders in `/product` from D47AP, adds `iPhoneAddedProductProperties`, and fills `/buttons/function-button_ringeren`. Only a placeholder is overwritten, only with a real board value. The board tree comes from `FirmwareOriginals`, or is recovered there from the VM's IPSW in `~/.vphone/ipsws` (`VPhoneBoardDeviceTree.need` now answers for the iPhone17,3 too). |
+
+What is copied, and why:
+
+| Group | Properties | What it turns on |
+| --- | --- | --- |
+| Name | `product-name`, `product-description` | About › Model Name |
+| Siri | `assistant`, `siri-gesture`, `dictation`, `offline-dictation`, `builtin-mics` | Settings › Siri, side-button Siri, dictation |
+| Buttons | `side-button-location`, `volume-up-button-location`, `volume-down-button-location`; added `ringer-button-location`, `camera-button-location`, `supports-camera-button`; `/buttons/function-button_ringeren` | Settings › Action Button and Camera Control (with Accessibility pages) |
+| Display, UI | `artwork-scale-factor`, `chrome-identifier`, `compatible-device-fallback`, `display-corner-radius`, `display-mirroring`, `oled-display`, `thin-bezel`, `large-format-phone`, `ui-pip`, `ui-reachability`, `ui-background-quality`, `ui-weather-quality`, `hme-in-arkit`, `carplay-2`, `location-reminders`, `watch-companion` | the rest of D47AP's description |
+
+Deliberately left as vphone600 has them: anything that promises hardware the VM
+does not have — `bluetooth-*`, `baseband-chipset`, `nfc-express`, `exclaves-enabled`,
+`has-*`, `graphics-featureset-*`, `framebuffer-identifier`, `wifi-chipset`, the
+display calibration placeholders — and the vphone600-only placeholders
+(`gestalt-variant-id`, `variant-name`, `thinning-product-type`,
+`jetsam-properties-product-type`, `vm-supports-generative-models`).
+`/buttons` keeps no `compatible`, so no button driver binds to it and the
+board's function reference in `function-button_ringeren` is never followed.
+
+Measured on iOS 26.6.2 (23G90) + cloudOS 26.4 (23E5207q), preset `standard` plus
+the nine identity patches, by applying the same edit to the installed tree by
+hand: Settings shows Siri, Camera Control (Camera and Accessibility pages) and
+the Action Button; Siri opens from a long side-button press (HID 0x0C/0x30); the
+Action Button's long press (HID 0x0B/0x2D) runs Flashlight and Camera with the
+Dynamic Island, with no tweak; the search field gains dictation. The guest boots
+normally. Not yet measured: the change on a VM without the identity patches, on
+iOS 18.x, and a Camera Control press.

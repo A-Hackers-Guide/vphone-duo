@@ -290,6 +290,20 @@ public enum FirmwareGuestSystemPatchSet {
                 target: .prebootDeviceTree,
             ),
             VPhonePatchDeclaration(
+                identifier: prebootIPhoneProduct,
+                title: "iPhone product description",
+                summary: """
+                Gives an iPhone guest's restored Preboot device tree the product description of the \
+                iPhone's own tree: model name, Siri and dictation, button and display geometry, \
+                Camera Control and the Action Button. vphone600 leaves them as syscfg placeholders, \
+                which MobileGestalt reads as absent, so Settings has no Siri, Camera Control or Action \
+                Button and About no Model Name. Hardware the VM does not have is left out. Takes the \
+                iPhone's device tree from the VM's FirmwareOriginals, and recovers it there from the \
+                VM's IPSW in ~/.vphone/ipsws when it is missing.
+                """,
+                target: .prebootDeviceTree,
+            ),
+            VPhonePatchDeclaration(
                 identifier: prebootHaptics,
                 title: "Haptics node",
                 summary: """
@@ -368,6 +382,10 @@ public enum FirmwareGuestSystemPatchSet {
     /// The iPad audio node repair in the restored Preboot device tree, for an
     /// iPad VM patched before `fw patch` copied the board's node.
     public static let prebootBoardAudio = "preboot-cfw-devicetree_board_audio"
+
+    /// The iPhone product description in the restored Preboot device tree,
+    /// taken from the iPhone's own tree: see `DeviceTreePatcher.presentPhoneProduct`.
+    public static let prebootIPhoneProduct = "preboot-cfw-devicetree_iphone_product"
 
     /// The haptics node removal in the restored Preboot device tree, for any
     /// VM patched before `fw patch` removed it from every guest's tree.

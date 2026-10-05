@@ -103,6 +103,29 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         }
     }
 
+    /// Give an iPhone guest's `devicetree.img4` (or bare `.im4p`) the product
+    /// description of the iPhone's own tree at `boardURL`, in place. See
+    /// `DeviceTreePatcher.presentPhoneProduct`.
+    @discardableResult
+    public static func presentPhoneProduct(
+        at url: URL,
+        board boardURL: URL,
+        dryRun: Bool = false,
+        verbose: Bool = true,
+    ) throws -> Outcome {
+        let boardData: Data
+        do {
+            boardData = try Data(contentsOf: boardURL)
+        } catch {
+            throw PatcherError.fileNotFound(boardURL.path)
+        }
+        let board = try openDeviceTree(boardData, path: boardURL.path).blob
+        return try rewrite(at: url, dryRun: dryRun, verbose: verbose) { blob in
+            let (newBlob, changes, delta) = try withPhoneProduct(blob, board: board)
+            return (newBlob, changes, blob.count + delta)
+        }
+    }
+
     /// Remove `/product/haptics` from a guest's `devicetree.img4` (or bare
     /// `.im4p`), in place. See `DeviceTreePatcher.removeHaptics(from:)`.
     @discardableResult
@@ -316,6 +339,34 @@ public enum CustomFirmwarePostRestoreDeviceTree {
             after: "acoustic-id \(acousticID(change.after)), \(change.after.count)B",
         )
         return (serializeNode(root), [record], change.after.count - change.before.count)
+    }
+
+    /// `blob` with the product description of the iPhone's own flat tree
+    /// `board`, through `DeviceTreePatcher.presentPhoneProduct`. Returns the
+    /// size change with the changes: a filled placeholder trades its value's
+    /// padded length for the board's, an added property brings its 36-byte
+    /// header too. A tree that already has them comes back unchanged.
+    public static func withPhoneProduct(_ blob: Data, board: Data) throws -> (Data, [Change], Int) {
+        func describe(_ value: Data) -> String {
+            let text = value.prefix(while: { $0 != 0 })
+            if !text.isEmpty, text.count == value.count - 1 || text.count == value.count,
+               let string = String(data: text, encoding: .utf8), string.allSatisfy({ $0.isASCII && !$0.isNewline })
+            {
+                return string
+            }
+            return value.hex
+        }
+        let root = try parseTree(blob, label: "DT")
+        let source = try parseTree(board, label: "board DT")
+        let changes = DeviceTreePatcher.presentPhoneProduct(in: root, from: source)
+        guard !changes.isEmpty else { return (blob, [], 0) }
+        let records = changes.map {
+            Change(property: $0.path, before: $0.before.map(describe) ?? "absent", after: describe($0.after))
+        }
+        let delta = changes.reduce(0) { sum, change in
+            sum + align4(change.after.count) - (change.before.map { align4($0.count) } ?? -36)
+        }
+        return (serializeNode(root), records, delta)
     }
 
     /// `blob` without `/product/haptics`, through
