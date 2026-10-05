@@ -7,6 +7,9 @@ import VPhoneCoreKit
 /// ⌘C, ⌘X and ⌘V in the VM window carry the clipboard through vphoned.
 /// Paste sends a changed Mac clipboard to the guest before the guest pastes;
 /// copy and cut bring the guest clipboard back once the guest has written it.
+/// A copy made in the guest without those keys (by touch, or by an app)
+/// reaches the Mac when the VM window resigns key, which is when the user
+/// goes to paste it somewhere else.
 /// Only small text and images are synced (`VPhoneClipboardTransfer`).
 @MainActor
 final class VPhoneClipboardSync {
@@ -15,6 +18,18 @@ final class VPhoneClipboardSync {
     /// unchanged Mac clipboard is not sent again, so a guest copy made by
     /// touch is not overwritten by an older Mac one.
     private var syncedMacChangeCount: Int?
+    /// The guest clipboard as last sent to or written from the Mac, or as
+    /// adopted when the window became key or the guest connected. Only a
+    /// later guest change is brought to the Mac on resign key. The count
+    /// starts again with each vphoned instance, so it is kept with the
+    /// instance that gave it and never compared across one.
+    private var syncedGuest: (instance: String?, changeCount: Int)?
+    /// Moves on with every adopt and every sync. A read that finishes after
+    /// a later one started is dropped, so a slow read (a guest request may
+    /// wait out the 120 s socket timeout) neither holds up nor undoes a newer
+    /// one.
+    private var guestGeneration = 0
+    private var isAdoptingForConnection = false
     private var copyTask: Task<Void, Never>?
 
     /// How long copy waits for the guest to write its clipboard.
@@ -38,6 +53,7 @@ final class VPhoneClipboardSync {
         let changeCount = pasteboard.changeCount
         let payload = changeCount == syncedMacChangeCount ? nil : Self.macPayload(from: pasteboard)
         Task {
+            var sent = false
             if let payload {
                 do {
                     switch payload {
@@ -45,11 +61,19 @@ final class VPhoneClipboardSync {
                     case let .image(data): try await control.clipboardSet(imageData: data)
                     }
                     syncedMacChangeCount = changeCount
+                    sent = true
                 } catch {
                     print("[clipboard] Mac to guest: \(error)")
                 }
             }
             Self.sendChord(usage: Self.usageV, to: control)
+            // Read behind the paste key, which does not change the clipboard,
+            // so the paste is not held up. The Mac clipboard the guest now
+            // holds is not brought back on resign key, where it would replace
+            // rich text with its plain text.
+            if sent {
+                await adopt(from: control)
+            }
         }
     }
 
@@ -73,9 +97,75 @@ final class VPhoneClipboardSync {
         }
     }
 
+    // MARK: - Window Focus
+
+    /// Takes the guest clipboard as it is now as synced. Called when the
+    /// window becomes key: a change made while it was not, by automation or
+    /// Guest Tools, was not copied by the user here.
+    func adoptGuestClipboard() {
+        guard let control, isAvailable else { return }
+        Task { await adopt(from: control) }
+    }
+
+    /// Brings a guest copy made since the last sync to the Mac. Called when
+    /// the window resigns key, so text copied by touch can be pasted in a Mac
+    /// app. Without a count from this vphoned there is nothing known to be new.
+    func bringGuestCopyToMac() {
+        guard let control, isAvailable,
+              let synced = syncedGuest, synced.instance == control.connectedInstance
+        else { return }
+        let generation = guestGeneration
+        Task {
+            guard let info = try? await control.clipboardInfoAfterQueuedInput(),
+                  generation == guestGeneration, synced.instance == control.connectedInstance,
+                  info.changeCount != synced.changeCount
+            else { return }
+            await writeToMac(info, control: control)
+        }
+    }
+
+    /// Follows the connection the window polls. A vphoned that has connected
+    /// gives the first count, so a copy made before the window ever resigned
+    /// key still reaches the Mac; a disconnect forgets it.
+    func connectionChanged(connected: Bool) {
+        guard connected else {
+            syncedGuest = nil
+            return
+        }
+        guard let control, isAvailable, !isAdoptingForConnection,
+              syncedGuest == nil || syncedGuest?.instance != control.connectedInstance
+        else { return }
+        isAdoptingForConnection = true
+        Task {
+            await adopt(from: control)
+            isAdoptingForConnection = false
+        }
+    }
+
+    /// Takes the count read now as synced, unless a later adopt or sync
+    /// started before the read came back.
+    private func adopt(from control: VPhoneGuestControl) async {
+        guestGeneration += 1
+        let generation = guestGeneration
+        let instance = control.connectedInstance
+        guard let info = try? await control.clipboardInfoAfterQueuedInput(),
+              generation == guestGeneration, instance == control.connectedInstance
+        else { return }
+        markGuestSynced(info.changeCount, instance: instance)
+    }
+
+    private func markGuestSynced(_ changeCount: Int, instance: String?) {
+        guestGeneration += 1
+        syncedGuest = (instance, changeCount)
+    }
+
     // MARK: - Guest to Mac
 
+    /// Writes the guest clipboard to the Mac. The count is taken as synced
+    /// even when nothing is written, so content too large or of another kind
+    /// is not tried again on every resign key.
     private func writeToMac(_ info: VPhoneGuestControl.ClipboardContent, control: VPhoneGuestControl) async {
+        markGuestSynced(info.changeCount, instance: control.connectedInstance)
         let pasteboard = NSPasteboard.general
         switch VPhoneClipboardTransfer.guestKind(text: info.text, hasImage: info.hasImage) {
         case .text:

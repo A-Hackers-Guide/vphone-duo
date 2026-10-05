@@ -65,8 +65,9 @@ final class VPhoneGuestControl {
     @ObservationIgnored var unlocksAtStartup = false
     /// The `instance` of the last vphoned connected to. Kept across
     /// disconnects: a lost probe reconnects to the same vphoned, which is not
-    /// a start.
-    @ObservationIgnored private var connectedInstance: String?
+    /// a start. Guest counters such as the clipboard's change count start
+    /// again with each instance.
+    @ObservationIgnored private(set) var connectedInstance: String?
     /// Called whenever the address the guest reports changes, nil on disconnect.
     @ObservationIgnored var onGuestIPAddressChange: ((String?) -> Void)?
 

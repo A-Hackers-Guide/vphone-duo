@@ -61,7 +61,11 @@ text selector and skip coordinates entirely.
 
 ## Typing text
 
-`{"t":"type"}` only fills the clipboard. Either follow it with a paste:
+`{"t":"type"}` only fills the clipboard. It stays in the guest: a guest
+clipboard change made while the VM window is key is copied to the Mac
+clipboard when the window loses focus, but not one made by `type`. A
+`clipboard.set` through `rpc` is treated like a copy in the guest. Either
+follow it with a paste:
 
 ```sh
 vphone-launchpad-cli guest send myphone '{"t":"type","text":"hello","screen":false}'
