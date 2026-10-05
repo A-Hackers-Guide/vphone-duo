@@ -67,3 +67,44 @@ passed its guest test, the stale
 `/var/mobile/Library/vphone-vcam.log` files from the earlier build were
 removed through the guest API. A subsequent directory listing contained
 neither file.
+
+## The patch race that froze the whole VM (2026-10-05)
+
+"Opening the camera freezes the VM" had two crashes behind it, both in
+`cameracaptured`, and the freeze itself was never a camera-graph problem:
+when the daemon crash-loops and launchd throttles it, every process that
+first touches AVCapture — SpringBoard included — blocks in a synchronous
+XPC to it, and the whole UI stops answering. The prewarm crash (row 23 of
+the CFW table) was the first trigger; the second, still present after that
+fix, was ours.
+
+`vcc_patch_word` rewrites CMCapture shared-cache `__text` through
+`vm_protect(RW|COPY)` → write → `vm_protect(RX)`. During that window the
+whole 16K page has no execute permission, and the pages it touches are live
+XPC server code the daemon runs constantly. Two crash reports caught the
+race red-handed, both with the patching thread (`vcc_install_csp_requires_
+master_clock_hook` → `vcc_scan_and_patch` → `vcc_patch_word`) in the same
+process when another thread died fetching an instruction in a page mid-flip
+(region snapshot: `r-x/rwx`, `SM=COW`):
+
+| Report | Faulting queue | Dying frame |
+| --- | --- | --- |
+| `ipad-mini-01` `cameracaptured-2026-10-03-045638.ips` | `com.apple.coremedia.flashlight(34)-messages` | `__FigFlashlightGetClassID_block_invoke`, SIGBUS `KERN_PROTECTION_FAILURE` |
+| `ipad-pro-13` `cameracaptured-2026-10-04-225558.ips` | `com.apple.coremedia.capturesource(523)-messages` | `captureSourceServer_handleRegisterNotificationForProprietaryDefaultChangesMessage`, same exception |
+
+The capturesource queue is exactly what fires when a client opens the
+camera: registering for source-change notifications is part of enumeration.
+So "open camera" both restarts the daemon's traffic (after any crash or
+restart, the hook reinstall at +3 s re-opens the window) and supplies the
+thread that dies in it.
+
+The fix (row 25 of the CFW table) stops the world around the flip:
+`task_threads` + `thread_suspend` of every other thread, the two
+`vm_protect` calls, the word write and the icache invalidation, then
+`thread_resume`. The stopped section takes no locks, allocates nothing and
+logs nothing — a frozen thread holding the malloc lock must not deadlock
+the patcher — and all `vcc_log` calls moved after the resume. A mutex
+serialises patchers. Kill-and-relaunch stress (killing `cameracaptured`
+with Camera.app auto-reconnecting, the same collision the crashes came
+from) is the validation.
+
