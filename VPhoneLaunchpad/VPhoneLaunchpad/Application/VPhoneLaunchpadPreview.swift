@@ -102,6 +102,8 @@
                 await sheet(.newMachine, "07-new-machine-advanced", suffix)
                 newMachinePage = .general
                 await sheet(.creation(path("ios27-rc")), "08-creation-progress", suffix)
+                creation.applyPreview(downloading: 0.42)
+                await sheet(.creation(path("ios27-rc")), "08a-creation-downloading", suffix)
                 creation.applyPreview(failed: true)
                 await sheet(.creation(path("ios27-rc")), "08b-creation-failed", suffix)
                 creation.applyPreview()

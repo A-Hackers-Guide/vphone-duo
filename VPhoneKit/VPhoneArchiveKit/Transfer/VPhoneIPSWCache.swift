@@ -47,10 +47,14 @@ public enum VPhoneIPSWCache {
         }
     }
 
+    /// `progress` is called with `(bytesDone, totalBytes)` while a remote
+    /// IPSW downloads, only when the server states the size. A local source
+    /// or a cache hit never calls it.
     public static func resolve(
         _ source: String,
         in cacheDirectory: URL,
         session: URLSession = URLSession(configuration: .ephemeral),
+        progress: (@Sendable (Int64, Int64) -> Void)? = nil,
     ) async throws -> Archive {
         guard let url = URL(string: source), let scheme = url.scheme?.lowercased() else {
             return try inspect(URL(fileURLWithPath: source))
@@ -82,7 +86,7 @@ public enum VPhoneIPSWCache {
         }
         let output = try FileHandle(forWritingTo: pending)
         defer { try? output.close() }
-        let (response, size) = try await download(request, into: output, session: session)
+        let (response, size) = try await download(request, into: output, session: session, progress: progress)
         try output.close()
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw Error.unexpectedHTTP(url, (response as? HTTPURLResponse)?.statusCode ?? 0)
@@ -187,9 +191,10 @@ public enum VPhoneIPSWCache {
         _ request: URLRequest,
         into output: FileHandle,
         session: URLSession,
+        progress: (@Sendable (Int64, Int64) -> Void)?,
     ) async throws -> (URLResponse, Int64) {
         let task = session.dataTask(with: request)
-        let writer = DownloadWriter(output: output)
+        let writer = DownloadWriter(output: output, progress: progress)
         task.delegate = writer
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -205,13 +210,15 @@ public enum VPhoneIPSWCache {
     /// before the task resumes, so the mutable state is never shared.
     private final class DownloadWriter: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         let output: FileHandle
+        let progress: (@Sendable (Int64, Int64) -> Void)?
         var continuation: CheckedContinuation<(URLResponse, Int64), Swift.Error>?
         private var response: URLResponse?
         private var written: Int64 = 0
         private var writeError: Swift.Error?
 
-        init(output: FileHandle) {
+        init(output: FileHandle, progress: (@Sendable (Int64, Int64) -> Void)?) {
             self.output = output
+            self.progress = progress
         }
 
         func urlSession(
@@ -230,6 +237,9 @@ public enum VPhoneIPSWCache {
             do {
                 try output.write(contentsOf: data)
                 written += Int64(data.count)
+                if let progress, let total = response?.expectedContentLength, total > 0 {
+                    progress(written, total)
+                }
             } catch {
                 writeError = error
                 dataTask.cancel()

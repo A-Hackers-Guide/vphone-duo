@@ -81,6 +81,10 @@ final class VPhoneLaunchpadCreationPipeline {
     private(set) var statuses: [Step: VPhoneLaunchpadStatus] = [:]
     private(set) var durations: [Step: TimeInterval] = [:]
     private(set) var current: Step?
+    /// How far the IPSW `fw prepare` is downloading has come, while one is
+    /// downloading. Each of the two IPSWs counts from zero; a cached one and
+    /// a Core Bundle that reports no progress leave it nil.
+    private(set) var downloadFraction: Double?
     /// The creation log. The sheet shows it in a terminal; the model keeps
     /// only the last few lines, for error details.
     private let log: VPhoneLaunchpadLogWriter
@@ -178,6 +182,7 @@ final class VPhoneLaunchpadCreationPipeline {
         defer {
             isRunning = false
             current = nil
+            downloadFraction = nil
             dfu?.terminate()
             dfu = nil
         }
@@ -271,9 +276,13 @@ final class VPhoneLaunchpadCreationPipeline {
         let log = log
         let output: @Sendable (String) -> Void = { line in log.write(line) }
 
-        func run(_ arguments: [String], onLine: @escaping @Sendable (String) -> Void = output) async throws {
+        func run(
+            _ arguments: [String],
+            onLine: @escaping @Sendable (String) -> Void = output,
+            onProgress: (@Sendable (Double) -> Void)? = nil,
+        ) async throws {
             onLine("$ \(VPhoneLaunchpadCommandLine.display(arguments))")
-            try await commandLine.runChecked(arguments, onLine: onLine)
+            try await commandLine.runChecked(arguments, onLine: onLine, onProgress: onProgress)
         }
 
         switch step {
@@ -296,8 +305,18 @@ final class VPhoneLaunchpadCreationPipeline {
             await self.library?.refresh()
 
         case .prepare:
+            // Progress arrives on the reader thread and may land after the
+            // step has moved on, so only the firmware step takes it. A finished
+            // download clears it: extraction follows with no progress of its own.
+            defer { downloadFraction = nil }
             try await run(["fw", "prepare", name, "--iphone-source", options.iphoneSource,
-                           "--cloudos-source", options.cloudOSSource] + deviceArguments + library)
+                           "--cloudos-source", options.cloudOSSource] + deviceArguments + library,
+                onProgress: { [weak self] fraction in
+                    Task { @MainActor in
+                        guard let self, self.current == .prepare else { return }
+                        self.downloadFraction = fraction < 1 ? fraction : nil
+                    }
+                })
 
         case .patch:
             // The preset rides on `fw patch` itself; per-patch overrides are
@@ -527,10 +546,21 @@ final class VPhoneLaunchpadCreationPipeline {
 
 #if DEBUG
     extension VPhoneLaunchpadCreationPipeline {
-        /// Running the restore, or failed while preparing firmware.
-        func applyPreview(failed: Bool = false) {
+        /// Running the restore, failed while preparing firmware, or partway
+        /// through downloading an IPSW.
+        func applyPreview(failed: Bool = false, downloading: Double? = nil) {
             statuses = [:]
             durations = [:]
+            downloadFraction = nil
+            if let downloading {
+                statuses[.create] = .passed
+                durations[.create] = 1
+                statuses[.prepare] = .running
+                downloadFraction = downloading
+                current = .prepare
+                isRunning = true
+                return
+            }
             if failed {
                 statuses[.create] = .passed
                 durations[.create] = 0

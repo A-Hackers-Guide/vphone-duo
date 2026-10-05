@@ -9,7 +9,12 @@ import Foundation
 /// A caller that reads the output through a pipe, such as vphone-launchpad,
 /// sets `VPHONE_PROGRESS=lines` to get `progress <done> <total>` lines on
 /// stderr instead, at most a few per second.
-final class VPhoneProgressBar {
+///
+/// Unchecked Sendable so a transfer's callback can drive it from another
+/// thread: every caller reports serially (URLSession calls one task's
+/// delegate one at a time) and calls `finish()` only after the transfer has
+/// returned.
+final class VPhoneProgressBar: @unchecked Sendable {
     private enum Mode {
         case off, bar, lines
     }
@@ -20,6 +25,7 @@ final class VPhoneProgressBar {
     private let width = 28
     private var lastRender = Date.distantPast
     private var total: Int64 = 0
+    private var updated = false
 
     init(label: String) {
         self.label = label
@@ -35,6 +41,7 @@ final class VPhoneProgressBar {
     func update(done: Int64, total: Int64) {
         guard mode != .off else { return }
         self.total = total
+        updated = true
         let now = Date()
         let interval = mode == .bar ? 0.066 : 0.25 // ~15 fps, or 4 lines a second
         if done < total, now.timeIntervalSince(lastRender) < interval {
@@ -44,7 +51,10 @@ final class VPhoneProgressBar {
         render(done: done, now: now)
     }
 
+    /// Draws the final state. Draws nothing when no update came, such as for
+    /// a download the cache already held.
     func finish() {
+        guard updated else { return }
         switch mode {
         case .off:
             return

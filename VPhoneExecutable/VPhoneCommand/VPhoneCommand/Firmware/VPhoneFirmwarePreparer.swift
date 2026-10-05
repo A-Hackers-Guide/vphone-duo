@@ -66,13 +66,9 @@ enum VPhoneFirmwarePreparer {
         // inside the machine downloaded both again for each new one (#513).
         // Local IPSWs are read in place and are never copied into the cache.
         print("[*] Resolving iPhone IPSW...")
-        let phone = try vphoneRunBlocking {
-            try await VPhoneIPSWCache.resolve(iPhoneSource, in: ipswCacheDirectory)
-        }
+        let phone = try resolve(iPhoneSource, in: ipswCacheDirectory, label: "downloading iPhone IPSW")
         print("[*] Resolving cloudOS IPSW...")
-        let cloud = try vphoneRunBlocking {
-            try await VPhoneIPSWCache.resolve(cloudOSSource, in: ipswCacheDirectory)
-        }
+        let cloud = try resolve(cloudOSSource, in: ipswCacheDirectory, label: "downloading cloudOS IPSW")
         try VPhoneIPSWCache.checkPair(iPhone: phone, cloudOS: cloud)
         let device = VPhoneIPSWCache.guestDevice(for: phone, preferring: productType) ?? .default
         if let productType, VPhoneGuestDevice.named(productType) != device {
@@ -154,6 +150,20 @@ enum VPhoneFirmwarePreparer {
         try fm.moveItem(at: phoneTree, to: destination)
         print("[+] Restore tree ready: \(destination.path)")
         try recordGuestDevice(device, in: bundle)
+    }
+
+    /// Resolves one source, with a progress bar while it downloads. Launchpad
+    /// reads the bar as `progress` lines and shows the percentage on its
+    /// firmware step (#590).
+    private static func resolve(_ source: String, in cacheDirectory: URL, label: String) throws -> VPhoneIPSWCache.Archive {
+        let bar = VPhoneProgressBar(label: label)
+        let archive = try vphoneRunBlocking {
+            try await VPhoneIPSWCache.resolve(source, in: cacheDirectory) { done, total in
+                bar.update(done: done, total: total)
+            }
+        }
+        bar.finish()
+        return archive
     }
 
     /// Records which device's OS the VM runs, and gives it that device's
