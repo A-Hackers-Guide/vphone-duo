@@ -4,6 +4,10 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<!-- These two stay the file name, vphone-launchpad.app: Finder and the
+	     Dock show the localized name only while the file name matches
+	     CFBundleDisplayName here. VPhoneLaunchpad/InfoPlist.xcstrings gives
+	     both as "VPhone Launchpad" in every language. -->
 	<key>CFBundleDisplayName</key>
 	<string>vphone-launchpad</string>
 	<key>CFBundleExecutable</key>
