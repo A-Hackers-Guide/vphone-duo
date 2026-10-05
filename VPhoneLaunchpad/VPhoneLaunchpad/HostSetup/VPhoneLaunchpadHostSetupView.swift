@@ -144,7 +144,10 @@ struct VPhoneLaunchpadHostSetupView: View {
                 }
                 if host.needsRelaunch {
                     Button("Reopen") {
-                        host.relaunch()
+                        // The sheet is still attached when its dismiss handler
+                        // runs; relaunch on the turn after it has gone.
+                        model.afterSheetDismissed { host.relaunch() }
+                        dismiss()
                     }
                 }
             }
