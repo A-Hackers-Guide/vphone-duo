@@ -155,6 +155,34 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         }
     }
 
+    /// The Preboot kernelcache IMG4 with its IM4P replaced by the patched
+    /// kernelcache's IM4P, keeping the IM4M; nil when they already match.
+    ///
+    /// `prebootIMG4` must be an IMG4 (IM4P + signed IM4M). `patchedKernelcache`
+    /// is the restore tree's `fw patch`ed kernelcache, a bare IM4P (an IMG4 is
+    /// also accepted and its IM4P taken). Both must be `krnl`. The whole IM4P —
+    /// its compression and any PAYP tail included — is carried over verbatim,
+    /// so this assumes nothing about how the payload is stored.
+    public static func kernelcacheReplacingPayload(
+        prebootIMG4: Data,
+        patchedKernelcache: Data,
+    ) throws -> Data? {
+        let container = try Container(prebootIMG4)
+        guard container.isIMG4 else {
+            throw PatcherError.invalidFormat("the Preboot kernelcache is a bare IM4P; expected an IMG4 with a manifest")
+        }
+        let sourceIM4P = try Container(patchedKernelcache).im4pBytes
+        let targetFourcc = try IM4P(container.im4pBytes).fourcc
+        let sourceFourcc = try IM4P(sourceIM4P).fourcc
+        guard targetFourcc == "krnl", sourceFourcc == "krnl" else {
+            throw PatcherError.invalidFormat(
+                "kernelcache fourcc mismatch: Preboot '\(targetFourcc)', source '\(sourceFourcc)' — expected 'krnl'",
+            )
+        }
+        guard container.im4pBytes != sourceIM4P else { return nil }
+        return try container.rebuilt(im4pBytes: sourceIM4P)
+    }
+
     /// The container, payload and flat tree of a device tree file. Refuses a
     /// payload that is not a device tree, is encrypted, or came back still
     /// compressed.

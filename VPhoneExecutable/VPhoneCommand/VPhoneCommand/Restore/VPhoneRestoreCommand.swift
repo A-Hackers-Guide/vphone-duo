@@ -65,7 +65,7 @@ struct VPhoneRestoreCommand: ParsableCommand {
     func validate() throws {
         if noErase {
             throw ValidationError(
-                "An in-place restore cannot keep this guest's data: the cloudOS restore ramdisk a vphone guest restores with only erases. Restore without --no-erase.",
+                "An in-place restore cannot keep this guest's data: restored in the cloudOS restore ramdisk recreates the partition map whatever the host asks. To change the kernel on an installed VM without erasing it, use `cfw update-kernel`.",
             )
         }
     }
@@ -231,6 +231,7 @@ struct VPhoneCustomFirmwareCommand: ParsableCommand {
         abstract: "Custom-firmware install (host-mount; VM must be off)",
         subcommands: [
             VPhoneCustomFirmwareInstallCommand.self,
+            VPhoneCustomFirmwareUpdateKernelCommand.self,
             VPhoneCustomFirmwareInstallRootCommand.self,
             VPhoneCustomFirmwareUpdateEnvironmentCommand.self,
             VPhoneCustomFirmwareFlipSnapshotCommand.self,
@@ -375,6 +376,41 @@ struct VPhoneCustomFirmwareInstallCommand: ParsableCommand {
 /// the restore tree, the cryptex copy and the GPU bundle, are skipped (an
 /// installed guest already carries both); the recorded `jb` variant is left
 /// alone. A VM that was never installed is refused rather than half-filled.
+struct VPhoneCustomFirmwareUpdateKernelCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "update-kernel",
+        abstract: "Replace an installed VM's Preboot kernelcache without erasing its data (VM must be off)",
+        discussion: """
+        Swaps the kernel the guest boots for the one `fw patch` built, keeping
+        every volume. The booting kernelcache lives in Preboot as an IMG4;
+        iBoot accepts a modified IM4P under the original signed IM4M — the same
+        image4 bypass that lets `cfw install` rewrite the Preboot device tree —
+        so this replaces the kernelcache's payload and nothing else. No volume
+        is reformatted, so the guest's data survives. It is the one boot-chain
+        change that reaches an installed guest without a restore, which always
+        erases (see `restore --no-erase`).
+
+        It needs the patched kernelcache from the restore tree, so run
+        `fw set-patches` then `fw patch` first, with the restore tree kept
+        (`--keep-artifacts`). Needs root, and the VM must be powered off.
+        """,
+    )
+
+    @OptionGroup var lib: VPhoneLibraryOption
+    @Argument(help: "VM name") var name: String?
+
+    func run() throws {
+        let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
+        let bundle = try lib.library.bundle(named: name)
+        let code = try VPhoneCustomFirmwareInstaller.elevate(
+            bundle: bundle.url,
+            resources: VPhoneResources.resolve(),
+            mode: .kernelUpdate,
+        )
+        throw ExitCode(code)
+    }
+}
+
 struct VPhoneCustomFirmwareUpdateEnvironmentCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "update-environment",

@@ -46,11 +46,21 @@ struct VPhoneCustomFirmwareInstaller {
         /// Refuses a VM that has never had a full install: with nothing to put
         /// files back *over*, this would be laying down half an install.
         case environmentOnly
+        /// Only the Preboot kernelcache: replace its IM4P with the one
+        /// `fw patch` built in the restore tree, keeping the original IM4M, so
+        /// iBoot boots a re-patched kernel (the image4 bypass accepts a
+        /// modified payload under the signed manifest, as it does for the
+        /// Preboot device tree). No volume is reformatted and the Data volume
+        /// is untouched — the one boot-chain change that reaches an installed
+        /// guest without the erasing restore. Needs the restore tree for the
+        /// patched kernelcache, so `fw patch` must have run (`--keep-artifacts`).
+        case kernelUpdate
 
         var summary: String {
             switch self {
             case .full: "CFW system install"
             case .environmentOnly: "guest environment update"
+            case .kernelUpdate: "guest kernel update"
             }
         }
     }
@@ -133,6 +143,10 @@ struct VPhoneCustomFirmwareInstaller {
         // at a time, as in a terminal.
         fflush(stdout)
         setvbuf(stdout, nil, _IOLBF, 0)
+        if mode == .kernelUpdate {
+            try runKernelUpdate()
+            return
+        }
         // Ownership checks apply when the caller is known (SUDO_UID, which
         // the Launchpad helper also sets). Plain root trusts its own files.
         let invokingUser = VPhoneInvokingUser.current
@@ -312,6 +326,8 @@ struct VPhoneCustomFirmwareInstaller {
             let wasInstalled = (try? systemRoot.exists("System/Library/xpc/launchd.plist.bak")) ?? false
             priorGuest = receiptGuest ?? (wasInstalled ? priorFallback : [])
             switch mode {
+            case .kernelUpdate:
+                break  // handled by runKernelUpdate, never reached here
             case .full:
                 guard let restore else {
                     throw ValidationError("A full CFW install needs a prepared restore tree.")
@@ -429,6 +445,206 @@ struct VPhoneCustomFirmwareInstaller {
             print("[+] CFW system install complete; vphoned is installed, no package bootstrap was staged")
         case .environmentOnly:
             print("[+] Guest environment updated; start the VM to pick it up")
+        case .kernelUpdate:
+            break  // handled by runKernelUpdate
+        }
+    }
+
+    /// Replace only the Preboot kernelcache, keeping every volume.
+    ///
+    /// The booting kernel lives in Preboot as an IMG4. `fw patch` has already
+    /// rebuilt `kernelcache.research.vphone600` in the restore tree with the
+    /// current selection; this swaps that IM4P into the Preboot IMG4 under its
+    /// signed IM4M (the image4 bypass accepts it, as for the device tree) and
+    /// nothing else. No volume is reformatted, so the guest's data survives —
+    /// the one boot-chain change that reaches an installed guest without the
+    /// erasing restore.
+    ///
+    /// The disk plumbing (clone, attach, find the container, swap the clone
+    /// back) mirrors `run()`; it is kept separate so this cannot affect the
+    /// full install or the environment update, and does not mount the System or
+    /// xART volumes or touch the root snapshot — iBoot reads the kernelcache
+    /// from Preboot directly.
+    private func runKernelUpdate() throws {
+        let invokingUser = VPhoneInvokingUser.current
+        let callerUID = invokingUser?.uid
+        let bundleDirectory = try pinBundle(owner: callerUID)
+        let bundlePath = try bundleDirectory.path
+
+        let disk = try openDiskImage(in: bundleDirectory, path: bundlePath, owner: callerUID)
+        let diskPath = (bundlePath as NSString).appendingPathComponent("Disk.img")
+        let busy = try VPhoneProcessRunner.runCapturing(
+            URL(fileURLWithPath: "/usr/sbin/lsof"), ["-t", "--", diskPath],
+        )
+        guard !VPhoneLsof.parsePIDs(busy.stdout).contains(where: { $0 != getpid() }) else {
+            throw ValidationError("The VM disk is in use. Stop the VM, then run the kernel update again.")
+        }
+
+        // The patched kernelcache comes from the restore tree `fw patch` wrote.
+        // Without it there is nothing to install, so this needs the tree kept
+        // (`--keep-artifacts`) and `fw patch` run.
+        let restore = try restoreTree(in: bundleDirectory, path: bundlePath, owner: callerUID)
+        let patched: Data
+        do {
+            patched = try restore.readData("kernelcache.research.vphone600")
+        } catch {
+            throw ValidationError(
+                "No patched kernelcache in the restore tree. Run `vphone-cli fw patch` first (the VM needs its restore tree kept with --keep-artifacts).",
+            )
+        }
+
+        let work = try makeWorkDirectory()
+        defer {
+            do { try removeWorkDirectory(work) } catch {
+                fputs("warning: left CFW work directory at \(work.url.path): \(error)\n", stderr)
+            }
+        }
+        try requireFreeSpace(at: [bundlePath, work.url.path])
+
+        let image: URL
+        let cloned = try work.directory.clone(disk, to: "Disk.img")
+        if cloned {
+            image = work.file("Disk.img")
+        } else {
+            guard try bundleDirectory.refersTo("Disk.img", file: disk) else {
+                throw ValidationError("The VM disk image changed during the kernel update. Try again.")
+            }
+            image = try URL(fileURLWithPath: bundleDirectory.path).appendingPathComponent("Disk.img")
+        }
+
+        let attached = try tool(
+            "/usr/bin/hdiutil",
+            ["attach", "-nomount", "-imagekey", "diskimage-class=CRawDiskImage", image.path],
+        )
+        let devices = attached.split(whereSeparator: \.isNewline).compactMap { line -> (device: String, type: String)? in
+            let fields = line.split(whereSeparator: \.isWhitespace)
+            guard fields.count >= 2, fields[0].hasPrefix("/dev/disk") else { return nil }
+            return (String(fields[0]), String(fields[1]))
+        }
+        let store = devices.first(where: { $0.type == "Apple_APFS" })?.device
+        let wholeDisk = devices.first(where: { $0.type == "GUID_partition_scheme" })?.device
+        let baseDisk = store.flatMap { device in
+            device.range(of: "s", options: .backwards).map { String(device[..<$0.lowerBound]) }
+        } ?? wholeDisk ?? devices.first?.device
+        guard let baseDisk, baseDisk.hasPrefix("/dev/disk") else {
+            if let range = attached.range(of: #"/dev/disk[0-9]+"#, options: .regularExpression) {
+                _ = try? tool("/usr/bin/hdiutil", ["detach", "-force", String(attached[range])], quiet: true)
+            }
+            throw ValidationError("Unable to attach the VM disk image. Try again.")
+        }
+        var diskAttached = true
+        defer {
+            if diskAttached,
+               (try? tool("/usr/bin/hdiutil", ["detach", baseDisk], quiet: true)) == nil
+            {
+                _ = try? tool("/usr/bin/hdiutil", ["detach", "-force", baseDisk], quiet: true)
+            }
+        }
+
+        let info = try tool("/usr/sbin/diskutil", ["info", "-plist", "\(baseDisk)s1"], quiet: true)
+        guard
+            let plist = try PropertyListSerialization.propertyList(from: Data(info.utf8), format: nil) as? [String: Any],
+            let container = plist["APFSContainerReference"] as? String,
+            container.hasPrefix("disk")
+        else {
+            throw ValidationError("Unable to read the VM disk image. Try again.")
+        }
+        let volumes = try containerVolumes(container, physicalStore: "\(baseDisk.dropFirst("/dev/".count))s1")
+        guard
+            let preboot = volumes.first(where: { ($0["Roles"] as? [String])?.contains("Preboot") == true }),
+            let device = preboot["DeviceIdentifier"] as? String
+        else {
+            throw ValidationError("Unable to find the VM's Preboot volume. Restore the VM, then install CFW again.")
+        }
+
+        print("[*] \(mode.summary.capitalized): \(bundle.lastPathComponent)")
+        let mount = work.file("preboot")
+        _ = try work.directory.directory("preboot", create: true, mode: 0o700)
+        var prebootMounted = false
+        defer {
+            if prebootMounted,
+               (try? tool("/sbin/umount", [mount.path], quiet: true)) == nil
+            {
+                _ = try? tool("/sbin/umount", ["-f", mount.path], quiet: true)
+            }
+        }
+        prebootMounted = true
+        try mountGuestVolume(device, at: mount)
+        let changed: Bool = try {
+            let root = try openGuestVolume("preboot", device: device, in: work)
+            // The one kernelcache, reached without a link anywhere on the way.
+            let candidates = try root.entries().compactMap { name -> String? in
+                let path = "\(name)/System/Library/Caches/com.apple.kernelcaches/kernelcache"
+                guard (try? root.isDirectory(name)) == true, (try? root.isRegularFile(path)) == true else {
+                    return nil
+                }
+                return path
+            }
+            guard candidates.count == 1, let kernelcache = candidates.first else {
+                throw ValidationError("Expected one kernelcache in the Preboot volume but found \(candidates.count). Restore the VM, then install CFW again.")
+            }
+            guard let meta = try root.status(kernelcache), meta.st_mode & S_IFMT == S_IFREG else {
+                throw ValidationError("The Preboot kernelcache is missing or not a regular file. Restore the VM again.")
+            }
+            let current = try root.readData(kernelcache)
+            guard let newBytes = try CustomFirmwarePostRestoreDeviceTree.kernelcacheReplacingPayload(
+                prebootIMG4: current, patchedKernelcache: patched,
+            ) else {
+                print("  [.] Preboot kernelcache already matches the patched one — no change")
+                return false
+            }
+            let staged = work.file("kernelcache.new")
+            try newBytes.write(to: staged)
+            try root.replaceFile(kernelcache, fromFileAt: staged, mode: meta.st_mode & 0o7777, owner: (meta.st_uid, meta.st_gid))
+            print("  [+] Preboot kernelcache replaced (\(current.count) -> \(newBytes.count) bytes), manifest kept")
+            return true
+        }()
+
+        _ = try tool("/sbin/umount", [mount.path])
+        prebootMounted = false
+        _ = try tool("/usr/bin/hdiutil", ["detach", baseDisk], quiet: true)
+        diskAttached = false
+        // No snapshot rename: the kernelcache is read from Preboot, not from the
+        // System volume's root snapshot, so nothing on System changed.
+        if cloned, changed {
+            try work.directory.setOwner("Disk.img", uid: disk.owner, gid: disk.group)
+            try work.directory.setMode("Disk.img", disk.mode & 0o777)
+            try work.directory.rename("Disk.img", to: "Disk.img", in: bundleDirectory)
+        }
+        if changed {
+            recordKernelcacheReceipt(in: bundleDirectory, owner: invokingUser.map { ($0.uid, $0.gid) })
+        }
+        print("[+] Guest kernel updated; start the VM to boot the re-patched kernelcache")
+    }
+
+    /// Record the kernelcache part of the receipt with the kernel patches the
+    /// plan `fw patch` resolved. Best-effort, like `recordGuestReceipt`.
+    private func recordKernelcacheReceipt(
+        in bundleDirectory: VPhoneConfinedDirectory,
+        owner: (uid: uid_t, gid: gid_t)?,
+    ) {
+        let enabled = Set(readPatchPlan(in: bundleDirectory)?.enabledPatches ?? [])
+        let kernelPatches = FirmwarePatchSetCatalog.allDeclarations
+            .filter { $0.target == .firmware(.kernelcache) && enabled.contains($0.identifier) }
+            .map(\.identifier)
+        do {
+            var receipt = (try? bundleDirectory.readData(VPhonePatchPresetStore.receiptFileName))
+                .flatMap { try? VPhoneVirtualMachinePatchReceipt.decode($0) }
+                ?? VPhoneVirtualMachinePatchReceipt()
+            receipt.record(
+                VPhoneFirmwareComponent.kernelcache.rawValue,
+                patches: kernelPatches,
+                writer: "cfw update-kernel",
+                bundleVersion: bundleVersion,
+            )
+            try bundleDirectory.writeFile(
+                VPhonePatchPresetStore.receiptFileName,
+                contents: receipt.encoded(),
+                mode: 0o777,
+                owner: owner,
+            )
+        } catch {
+            fputs("warning: could not record the kernelcache receipt: \(error)\n", stderr)
         }
     }
 

@@ -13199,13 +13199,13 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机已包含为此虚拟机设定的全部补丁。" } }
       }
     },
-    "Boot chain: ^[%lld patch](inflect: true), applied only by restoring the machine, which erases its data." : {
+    "Boot chain: ^[%lld patch](inflect: true) not applied. A kernel patch applies with `cfw update-kernel` and keeps the data; the rest need a restore, which erases. Run `vphone-cli fw patches %@` for each." : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Boot chain: ^[%lld patch](inflect: true), applied only by restoring the machine, which erases its data." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "起動チェーン：%lld 件のパッチ。マシンを復元した場合にのみ反映され、復元するとデータは消去されます。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "부트 체인: 패치 %lld개. 머신을 복원해야만 반영되며, 복원하면 데이터가 지워집니다." } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chuỗi khởi động: %lld bản vá, chỉ được áp dụng khi khôi phục máy, việc này sẽ xoá dữ liệu của máy." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动链：%lld 个补丁，只有重新恢复虚拟机才会生效，而恢复会清除其数据。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Boot chain: ^[%lld patch](inflect: true) not applied. A kernel patch applies with `cfw update-kernel` and keeps the data; the rest need a restore, which erases. Run `vphone-cli fw patches %@` for each." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "起動チェーン：未反映 %1$lld 件。カーネルのパッチは `cfw update-kernel` で反映でき、データは保持されます。それ以外は復元が必要で、復元するとデータは消去されます。各手順は `vphone-cli fw patches %2$@` で確認してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "부트 체인: 미반영 %1$lld개. 커널 패치는 `cfw update-kernel`로 반영되며 데이터가 유지됩니다. 나머지는 복원이 필요하고 복원하면 데이터가 지워집니다. 각 단계는 `vphone-cli fw patches %2$@`로 확인하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chuỗi khởi động: %1$lld bản vá chưa áp dụng. Bản vá kernel áp dụng bằng `cfw update-kernel` và giữ nguyên dữ liệu; phần còn lại cần khôi phục, việc này sẽ xoá dữ liệu. Chạy `vphone-cli fw patches %2$@` để xem từng bước." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动链：%1$lld 个补丁未应用。内核补丁可用 `cfw update-kernel` 应用并保留数据；其余需要重新恢复，恢复会清除数据。运行 `vphone-cli fw patches %2$@` 查看各自步骤。" } }
       }
     },
     "Apply to Guest" : {

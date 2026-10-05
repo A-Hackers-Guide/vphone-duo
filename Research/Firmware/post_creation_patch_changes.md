@@ -52,7 +52,8 @@ Counts are declarations in `FirmwarePatcher/PatchSets/*.swift`.
 | AVPBooter | 1 | VM root, `romImages.avpBooter`, read every boot | `fw patch` itself | works, but `fw patch` refuses without a restore tree |
 | iBSS, iBEC | 7 | restore tree only | DFU during a restore | irrelevant to an installed guest; only the next restore uses them |
 | LLB | 6 | NOR (personalized by idevicerestore, `LlbImageData`) | restore | needs a restore, which erases the guest: an in-place one cannot keep its data (`native_restore_architecture.md`, 2026-10-05) |
-| kernelcache, DeviceTree, TXM | 54 + 30 + 6 | Preboot (personalized) | restore | Preboot can be rewritten by a host mount — `cfw install` already edits `devicetree.img4` there; nothing does it for the kernelcache or TXM |
+| kernelcache | 54 | Preboot (personalized) | `cfw update-kernel` | Host-mounts Preboot and swaps the kernelcache IM4P under the original IM4M (the image4 bypass), data-preserving, no restore |
+| DeviceTree, TXM | 30 + 6 | Preboot (personalized) | restore | Preboot can be rewritten by a host mount (as the kernelcache now is); not yet wired for these two |
 | Guest (dyld cache, Mach-O, files, entitlements, Preboot DT) | 34 | System / Preboot volumes of `Disk.img` | `cfw install`, partly `cfw update-environment` | turning on works by re-running; turning off does nothing |
 
 Why turning a guest patch off does nothing today:
@@ -142,14 +143,23 @@ is off:
 "Prior live" is the receipt's `Guest` part; for a VM with none, the plan's guest
 patches plus the late ones the old installer added.
 
-**Not built: the boot chain without a restore.** Writing a re-patched
-kernelcache, TXM or DeviceTree into Preboot was dropped before implementation;
-those three, LLB, iBSS and iBEC change only through a restore, and AVPBooter only
-through `fw patch`, which needs the restore tree (`--keep-artifacts`).
-A restore always erases the guest: `restore --no-erase` was tried on a test VM
-on 2026-10-05 and replaces the kernel but erases the Data volume as well,
-so it now refuses (row 4 and "An in-place restore cannot keep a guest's data"
-in `Research/Restore/native_restore_architecture.md`).
+**The kernel reaches an installed guest without a restore.** `cfw update-kernel`
+host-mounts Preboot and swaps the kernelcache's IM4P for the one `fw patch`
+built, keeping the original signed IM4M — iBoot accepts it, the same image4
+bypass that lets `cfw install` rewrite `devicetree.img4` there — so no volume is
+reformatted and the data survives (proven on a test VM 2026-10-05:
+`fw set-patches` + `fw patch` + `cfw update-kernel`, guest booted the re-patched
+kernel with its `/var/mobile/Documents` marker intact). It needs the restore
+tree for the patched kernelcache (`fw patch`, `--keep-artifacts`). TXM and
+DeviceTree live in Preboot too and could follow; the kernelcache was done first
+because a kernel patch is the common reason to change the boot chain.
+
+**A restore still erases, so the rest of the boot chain needs one.** TXM,
+DeviceTree, LLB, iBSS and iBEC change only through a restore, and AVPBooter only
+through `fw patch`. `restore --no-erase` cannot keep data: tried on a test VM on
+2026-10-05, restored in the cloudOS ramdisk repartitions whatever the host
+sends, so it now refuses (row 4 and "An in-place restore cannot keep a guest's
+data" in `Research/Restore/native_restore_architecture.md`).
 
 **Paired DeviceTree patches.** `devicetree-cfw-ipad_audio`,
 `devicetree-cfw-product_haptics_node` and
@@ -160,7 +170,7 @@ before them. `FirmwareGuestSystemPatchSet.prebootRepairs` names the pairs, and
 the drift report reads the tree patch as applied when its Preboot repair is
 live, so a VM restored before the tree patches no longer shows them as needing
 a restore. The Launchpad inspector says in the open how many boot-chain patches
-are pending and that only a restore, which erases the guest, applies them.
+are pending and that a kernel patch applies with `cfw update-kernel` (keeping the data) while the rest need a restore that erases.
 
 ## Validation (2026-10-04)
 

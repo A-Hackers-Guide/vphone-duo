@@ -466,10 +466,11 @@ struct VPhoneFirmwareSetPatchesCommand: ParsableCommand {
 
           AVPBooter                     `fw patch`; read at the next boot. Needs
                                         the restore tree (`--keep-artifacts`).
+          kernelcache                   `fw patch`, then `cfw update-kernel`
+                                        (root), which keeps the guest's data.
           Guest (system, dyld cache,    `cfw update-environment` (root), which
           Preboot device tree)          applies this choice both on and off.
-          LLB, kernelcache, TXM,        only a restore, which erases the guest's data.
-          DeviceTree
+          LLB, TXM, DeviceTree          only a restore, which erases the guest's data.
           iBSS, iBEC                    used only while restoring.
 
         `fw patches <vm>` shows the same comparison at any time.

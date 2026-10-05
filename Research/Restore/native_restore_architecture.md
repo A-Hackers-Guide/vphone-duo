@@ -151,7 +151,7 @@ it is not checked and needs a phone or VM in DFU.
 | 1 | `restore` (online, default) | `pmd3 restore-update` | `erase=true, ticket_path=NULL` | VM boots | **device**, but both halves are now proven separately: the online TSS fetch by row 2 and the erase-and-flash by row 3. What has not been run is the two in one invocation. Options mapping is `unit`: `RestoreOptionsTests.defaultsAreAnOnlineEraseRestore` |
 | 2 | `restore --get-shsh` | `pmd3 restore-get-shsh` | `shsh_only=true` | `.shsh` semantically equal to the Python's, same filename | ✅ **DONE 2026-09-23.** Real TSS round trip against a DFU-booted `dfu-spike`: ApNonce and SepNonce read from the device, `Received SHSH blobs`, saved as `206C763772858301.shsh` — the `%016X` name `VPhoneRestoreLayout.shshOutput` promises. The blob is a TSS response (`@ServerVersion 2.1.0`, 5,803-byte `ApImg4Ticket`), binary plist where the Python wrote XML — a serialization difference, not a semantic one |
 | 3 | `restore --offline` | AEA decrypt in place → `--tss <first .shsh>` | AEA decrypt in place → `ticket_path=<same file>` | ① `noSHSH` with no blob ② `noRestoreDir` with no tree ③ multiple `.shsh` → sorted first ④ VM boots | ✅ **DONE 2026-09-23.** ①②③ `unit` and also run through the CLI (see below); ④ a full flash of `dfu-spike` from the 26.1/23B85 tree with the cached ticket: four `.dmg.aea` decrypted in place, filesystem sent, system volume sealed, `Status: Restore Finished`, exit 0, and the device left DFU |
-| 4 | `restore --no-erase` | `Behavior.Update` | `erase=false` | user data survives | ❌ **Not possible (2026-10-05), and the flag now refuses.** Run on a test VM, an in-place restore replaces the kernel but erases the Data volume — see "An in-place restore cannot keep a guest's data" below. The library mapping is still `unit`: `RestoreOptionsTests.updateInPlaceClearsErase` |
+| 4 | `restore --no-erase` | `Behavior.Update` | `erase=false` | user data survives | ❌ **Not possible (2026-10-05); the flag refuses.** restored in the cloudOS ramdisk repartitions whatever the host sends, so an in-place restore erases the Data volume — see "An in-place restore cannot keep a guest's data" below. A kernel patch instead reaches an installed guest data-preserving through `cfw update-kernel` (no restore). Library mapping still `unit`: `RestoreOptionsTests.updateInPlaceClearsErase` |
 | 5 | metadata on success | writes `restore-info.json` | same | contents identical | ✅ **DONE 2026-09-23.** Written only after the restore returned: `{"ios":{"version":"26.1","build":"23B85"},"cloudOS":{"version":"26.1","build":"23B85"}}` |
 | 6 | failure | no `restore-info.json`, exit code passed through | same | exit codes match | **device.** The bridge's own rejections are `unit` (`RestoreRunnerTests`); a failure from inside idevicerestore is not |
 | 7 | verbosity | `-v` → one, `-vv`/`-vvv` → two `-v` | `debug_level` | logs comparably detailed | **device.** The level enum matches upstream's one for one and that is `unit` (`RestoreEventTests.levelsMatchIdevicerestoresEnum`) |
@@ -299,14 +299,35 @@ then `vm launch --dfu`, `restore --no-erase`, `cfw install` and a boot.
    installed system would without the dyld cache patches `cfw install` applies,
    which a ramdisk does not get.
 
-So a restore always erases a vphone guest. `restore --no-erase` now refuses
-with that reason instead of re-imaging the system volume and failing (it stays
-as a hidden flag so a script gets the reason rather than a usage error), and
-`fw set-patches`, `fw patches` and the Launchpad inspector say that a
-boot-chain change reaches an existing guest only through a restore that erases
-it. Making it possible would mean an update ramdisk that boots on the cloudOS
-restore kernel — patching the iPhone's, as the installed system is patched —
-which was not attempted.
+4. **The erase is `restored`'s, not the host's.** A fourth round cleared the
+   one host option that directly orders a reformat — `CreateFilesystemPartitions`,
+   which `restore.c` hardcodes to 1 — *and* handed restored the Update identity.
+   restored still ran `Creating partition map` / `filesystem` / `system key bag`
+   and the marker was gone. So restored in the cloudOS (erase) ramdisk
+   repartitions whatever the host sends; no host-side change reaches it.
+
+So a restore always erases a vphone guest, and that is restored's decision in
+the ramdisk, not a host flag. `restore --no-erase` refuses with that reason
+instead of re-imaging the system volume and failing (a hidden flag, so a script
+gets the reason rather than a usage error). Making a restore itself keep data
+would mean an update ramdisk that boots on the cloudOS restore kernel — patching
+the iPhone's, as the installed system is patched — which was not attempted.
+
+**But the kernel can be changed without a restore.** The one boot-chain change
+that matters for a patch toggle is the kernelcache, and it does not need a
+restore at all: the booting kernel lives in Preboot as an IMG4, and iBoot
+accepts a modified IM4P under the original signed IM4M — the same image4 bypass
+that lets `cfw install` rewrite `devicetree.img4` there. `cfw update-kernel`
+(`VPhoneCustomFirmwareInstaller` mode `.kernelUpdate`) host-mounts Preboot on a
+clone and swaps the kernelcache's IM4P for the one `fw patch` built, keeping
+every volume. Proven on the test VM 2026-10-05: `fw set-patches` to drop a
+kernel patch, `fw patch`, `cfw update-kernel`, boot — the guest booted the
+re-patched kernel and the `/var/mobile/Documents` marker survived. So
+`fw set-patches`, `fw patches` and the Launchpad inspector now send a kernel
+patch through `cfw update-kernel` (data-preserving) and only TXM, DeviceTree,
+LLB, iBSS and iBEC through the erasing restore. TXM and DeviceTree live in
+Preboot too and could follow the same path later; the kernelcache was done
+first because a kernel patch is the common reason to change the boot chain.
 
 **The exit-status bug.** `restore_device` in `Transfer/restore.c` sets
 `FLAG_QUIT` on the first handler error, reads one more message, and that

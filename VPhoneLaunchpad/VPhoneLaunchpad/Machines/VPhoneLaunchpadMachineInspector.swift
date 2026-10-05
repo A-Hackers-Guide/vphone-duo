@@ -296,7 +296,7 @@ struct VPhoneLaunchpadMachineInspector: View {
                         // nothing in this section applies a boot-chain patch,
                         // so a count with no button would read as a dead end.
                         if catalog.pendingBootChainPatches > 0 {
-                            Text("Boot chain: ^[\(catalog.pendingBootChainPatches) patch](inflect: true), applied only by restoring the machine, which erases its data.")
+                            Text("Boot chain: ^[\(catalog.pendingBootChainPatches) patch](inflect: true) not applied. A kernel patch applies with `cfw update-kernel` and keeps the data; the rest need a restore, which erases. Run `vphone-cli fw patches \(machine.name)` for each.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)

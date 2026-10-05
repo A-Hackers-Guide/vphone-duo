@@ -37,7 +37,7 @@ each from a bundle at a different time:
 | --- | --- | --- |
 | Host Programs | `vphone-cli`, `vphone-vm` | The bound bundle, on every command. A new binding applies at the next start. |
 | Guest Environment | vphoned and the hook dylibs | `cfw install` at creation, and `cfw update-environment` (stopped machine) later. |
-| Boot Chain | Patched firmware, restore, CFW patches | `fw patch`, `restore` and `cfw install` at creation. After that, `vphone-cli fw set-patches` changes the choice and `vphone-cli fw patches <vm>` lists what has not reached the guest: guest patches apply at the next `cfw update-environment`, AVPBooter at the next `fw patch` while the restore tree is kept, and the rest of the boot chain only with a restore, which erases the guest (an in-place restore cannot keep its data). Launchpad shows the count in the inspector. |
+| Boot Chain | Patched firmware, restore, CFW patches | `fw patch`, `restore` and `cfw install` at creation. After that, `vphone-cli fw set-patches` changes the choice and `vphone-cli fw patches <vm>` lists what has not reached the guest: guest patches apply at the next `cfw update-environment`, AVPBooter at the next `fw patch`, a kernel patch with `cfw update-kernel` (data-preserving, needs the restore tree), and the rest of the boot chain (TXM, DeviceTree, LLB) only with a restore, which erases the guest. Launchpad shows the count in the inspector. |
 
 The **default** bundle (formerly "active") decides only the version
 `vm create` binds when `--bundle` is not given, and what `exec` and
@@ -118,6 +118,7 @@ version while a machine is bound to it; rebind or delete those machines first.
 | `vm leases [--release]` | DHCP leases on the shared NAT network and the machine that owns each. `--release` frees the ones no machine in any library uses, through the helper (see [Networking](networking.md#addresses-held-by-old-macs)) |
 | `cfw install <name>` | Install CFW into a stopped machine with its own bundle, through the helper |
 | `cfw update-environment <name>` | Redeploy the machine's own bundle's guest resources (vphoned, hook dylibs) into it while stopped, through the helper; nothing else changes |
+| `cfw update-kernel <name>` | Swap the Preboot kernelcache for the `fw patch`ed one, keeping the data (VM off); the data-preserving way to change a kernel patch on an installed VM |
 | `guest send <name> <json>` | One raw `vphone.sock` request (tap, swipe, key, screenshot) |
 | `guest rpc <name> <method> [params]` | Any vphoned method, see `Research/vphoned_http_api.md` |
 | `guest unlock <name> [--passcode <code>] [--timeout <seconds>]` | Turn the screen on and unlock the guest, whatever state it was in (vphoned `screen.unlock`). `--passcode` is needed only when the guest has one |
