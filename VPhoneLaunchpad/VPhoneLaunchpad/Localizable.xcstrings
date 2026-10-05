@@ -13199,13 +13199,67 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机已包含为此虚拟机设定的全部补丁。" } }
       }
     },
-    "Boot chain: ^[%lld patch](inflect: true) not applied. A kernel patch applies with `cfw update-kernel` and keeps the data; the rest need a restore, which erases. Run `vphone-cli fw patches %@` for each." : {
+    "Boot chain: ^[%lld patch](inflect: true) (TXM, device tree, LLB) not applied; only a restore applies them, which erases the data. Run `vphone-cli fw patches %@` for each." : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Boot chain: ^[%lld patch](inflect: true) not applied. A kernel patch applies with `cfw update-kernel` and keeps the data; the rest need a restore, which erases. Run `vphone-cli fw patches %@` for each." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "起動チェーン：未反映 %1$lld 件。カーネルのパッチは `cfw update-kernel` で反映でき、データは保持されます。それ以外は復元が必要で、復元するとデータは消去されます。各手順は `vphone-cli fw patches %2$@` で確認してください。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "부트 체인: 미반영 %1$lld개. 커널 패치는 `cfw update-kernel`로 반영되며 데이터가 유지됩니다. 나머지는 복원이 필요하고 복원하면 데이터가 지워집니다. 각 단계는 `vphone-cli fw patches %2$@`로 확인하세요." } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chuỗi khởi động: %1$lld bản vá chưa áp dụng. Bản vá kernel áp dụng bằng `cfw update-kernel` và giữ nguyên dữ liệu; phần còn lại cần khôi phục, việc này sẽ xoá dữ liệu. Chạy `vphone-cli fw patches %2$@` để xem từng bước." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动链：%1$lld 个补丁未应用。内核补丁可用 `cfw update-kernel` 应用并保留数据；其余需要重新恢复，恢复会清除数据。运行 `vphone-cli fw patches %2$@` 查看各自步骤。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Boot chain: ^[%lld patch](inflect: true) (TXM, device tree, LLB) not applied; only a restore applies them, which erases the data. Run `vphone-cli fw patches %@` for each." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "起動チェーン：未反映 %lld 件（TXM・デバイスツリー・LLB）。復元でのみ反映され、復元するとデータは消去されます。各手順は `vphone-cli fw patches %@` で確認してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "부트 체인: 미반영 %lld개(TXM, 디바이스 트리, LLB). 복원으로만 반영되며 복원하면 데이터가 지워집니다. 각 단계는 `vphone-cli fw patches %@`로 확인하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chuỗi khởi động: %lld bản vá (TXM, cây thiết bị, LLB) chưa áp dụng; chỉ khôi phục mới áp dụng, việc này xoá dữ liệu. Chạy `vphone-cli fw patches %@` để xem từng bước." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动链：%lld 个补丁（TXM、设备树、LLB）未应用；只有重新恢复才会生效，而恢复会清除数据。运行 `vphone-cli fw patches %@` 查看各自步骤。" } }
+      }
+    },
+    "Update Kernel" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Update Kernel" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カーネルを更新" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "커널 업데이트" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Cập nhật kernel" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新内核" } }
+      }
+    },
+    "Updating kernel…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Updating kernel…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カーネルを更新中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "커널 업데이트 중…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang cập nhật kernel…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在更新内核…" } }
+      }
+    },
+    "Unable to update the kernel." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to update the kernel." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カーネルを更新できません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "커널을 업데이트할 수 없습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không thể cập nhật kernel." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法更新内核。" } }
+      }
+    },
+    "Swaps the Preboot kernelcache for the one this machine's patches resolve to, keeping the data (no restore)." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Swaps the Preboot kernelcache for the one this machine's patches resolve to, keeping the data (no restore)." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Preboot のカーネルキャッシュをこのマシンのパッチ選択に合うものに入れ替えます。データは保持され、復元は不要です。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Preboot 커널 캐시를 이 머신의 패치 선택에 맞는 것으로 교체합니다. 데이터는 유지되며 복원이 필요 없습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Thay kernelcache trong Preboot bằng bản khớp với lựa chọn bản vá của máy này, giữ nguyên dữ liệu (không khôi phục)." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "把 Preboot 的内核缓存换成与此虚拟机补丁选择匹配的版本，保留数据（无需恢复）。" } }
+      }
+    },
+    "Stop the machine to update its kernel." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Stop the machine to update its kernel." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カーネルを更新するにはマシンを停止してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "커널을 업데이트하려면 머신을 중지하십시오." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hãy dừng máy để cập nhật kernel." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "停止虚拟机后才能更新其内核。" } }
+      }
+    },
+    "^[%lld kernel patch](inflect: true) to apply with Update Kernel (keeps the data)." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "^[%lld kernel patch](inflect: true) to apply with Update Kernel (keeps the data)." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "「カーネルを更新」で反映するカーネルのパッチ：%lld 件（データは保持）。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "‘커널 업데이트’로 반영할 커널 패치 %lld개(데이터 유지)." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%lld bản vá kernel sẽ áp dụng bằng Cập nhật kernel (giữ dữ liệu)." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 个内核补丁可用“更新内核”生效（保留数据）。" } }
       }
     },
     "Apply to Guest" : {

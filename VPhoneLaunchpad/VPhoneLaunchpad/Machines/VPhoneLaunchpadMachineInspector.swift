@@ -292,11 +292,10 @@ struct VPhoneLaunchpadMachineInspector: View {
                             }
                             .help(pendingHelp(catalog, pending: pending))
                         }
-                        // Said in the open rather than only in the tooltip:
-                        // nothing in this section applies a boot-chain patch,
-                        // so a count with no button would read as a dead end.
-                        if catalog.pendingBootChainPatches > 0 {
-                            Text("Boot chain: ^[\(catalog.pendingBootChainPatches) patch](inflect: true) not applied. A kernel patch applies with `cfw update-kernel` and keeps the data; the rest need a restore, which erases. Run `vphone-cli fw patches \(machine.name)` for each.")
+                        // The kernelcache has its own button below; only the
+                        // restore-only patches need this spelled-out dead-end.
+                        if catalog.pendingRestorePatches > 0 {
+                            Text("Boot chain: ^[\(catalog.pendingRestorePatches) patch](inflect: true) (TXM, device tree, LLB) not applied; only a restore applies them, which erases the data. Run `vphone-cli fw patches \(machine.name)` for each.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -304,6 +303,18 @@ struct VPhoneLaunchpadMachineInspector: View {
                     }
                     HStack {
                         Spacer()
+                        if catalog.installed == true, catalog.pendingKernelPatches > 0 {
+                            Button("Update Kernel") {
+                                Task {
+                                    await library.updateKernel(machine.path)
+                                    patchRevision += 1
+                                }
+                            }
+                            .disabled(library.state(of: machine.path) != .stopped)
+                            .help(library.state(of: machine.path) == .stopped
+                                ? String(localized: "Swaps the Preboot kernelcache for the one this machine's patches resolve to, keeping the data (no restore).")
+                                : String(localized: "Stop the machine to update its kernel."))
+                        }
                         if catalog.installed == true, catalog.pendingGuestPatches > 0 {
                             Button("Apply to Guest") {
                                 Task {
@@ -339,8 +350,11 @@ struct VPhoneLaunchpadMachineInspector: View {
         if catalog.pendingGuestPatches > 0 {
             lines.append(String(localized: "^[\(catalog.pendingGuestPatches) guest patch](inflect: true) to apply with Apply to Guest."))
         }
-        if catalog.pendingBootChainPatches > 0 {
-            lines.append(String(localized: "^[\(catalog.pendingBootChainPatches) boot chain patch](inflect: true) that only a restore applies."))
+        if catalog.pendingKernelPatches > 0 {
+            lines.append(String(localized: "^[\(catalog.pendingKernelPatches) kernel patch](inflect: true) to apply with Update Kernel (keeps the data)."))
+        }
+        if catalog.pendingRestorePatches > 0 {
+            lines.append(String(localized: "^[\(catalog.pendingRestorePatches) boot chain patch](inflect: true) that only a restore applies."))
         }
         lines.append(String(localized: "vphone-cli fw patches \(machine.name) lists each one."))
         return lines.joined(separator: "\n")

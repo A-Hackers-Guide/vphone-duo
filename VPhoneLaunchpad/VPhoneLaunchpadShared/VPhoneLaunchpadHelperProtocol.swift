@@ -70,6 +70,18 @@ nonisolated protocol VPhoneLaunchpadHelperProtocol {
         reply: @escaping @Sendable (Int32, String?) -> Void,
     )
 
+    /// Runs `vphone-cli cfw update-kernel` from a store bundle as root: swaps
+    /// the Preboot kernelcache for the re-patched one and nothing else, keeping
+    /// the guest's data. Same output channel and reply as `installCustomFirmware`,
+    /// and `cancelCustomFirmware` stops it.
+    func updateKernel(
+        authorization: Data,
+        bundleVersion: String,
+        machineName: String,
+        libraryRoot: String,
+        reply: @escaping @Sendable (Int32, String?) -> Void,
+    )
+
     /// Runs `vphone-cli vm leases --release-orphans --json` from a store
     /// bundle as root, against the machines of `libraryRoots`, each of which
     /// the caller must own. It removes the DHCP leases on the shared NAT

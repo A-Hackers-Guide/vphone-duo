@@ -60,6 +60,7 @@ struct VPhoneLaunchpadControlCommands {
         case "vm.leases": return try await leases(request)
         case "cfw.install": return try await installCustomFirmware(request, emit: emit)
         case "cfw.update-environment": return try await updateGuestEnvironment(request, emit: emit)
+        case "cfw.update-kernel": return try await updateKernelControl(request, emit: emit)
         case "guest.send": return try await sendToGuest(request)
         case "guest.rpc": return try await callGuest(request)
         case "guest.unlock": return try await unlockGuest(request)
@@ -694,6 +695,24 @@ struct VPhoneLaunchpadControlCommands {
             throw VPhoneLaunchpadError("Unable to update the guest environment. Check the log for details.")
         }
         library.recordGuestEnvironment(machine, version)
+        return ["name": machine.name, "bundle": version, "status": status]
+    }
+
+    private func updateKernelControl(_ request: VPhoneLaunchpadControlRequest, emit: @escaping Emit) async throws -> Any {
+        let machine = try await machine(request)
+        let version = try bundleVersion(of: machine)
+        guard library.state(of: machine) == .stopped else {
+            throw VPhoneLaunchpadError("Stop \(machine.name) before updating its kernel.")
+        }
+        let status = try await model.helper.updateKernel(
+            bundleVersion: version,
+            machineName: machine.name,
+            libraryRoot: machine.libraryRoot,
+            onLine: emit,
+        )
+        guard status == 0 else {
+            throw VPhoneLaunchpadError("Unable to update the kernel. Check the log for details.")
+        }
         return ["name": machine.name, "bundle": version, "status": status]
     }
 

@@ -11,6 +11,8 @@ struct VPhoneLaunchpadHelperFirmwareRequest {
         /// Redeploys the bundle's guest resources into a stopped machine and
         /// nothing else.
         case updateEnvironment
+        /// Swaps the Preboot kernelcache for the re-patched one, keeping data.
+        case updateKernel
     }
 
     let executable: URL
@@ -56,6 +58,8 @@ struct VPhoneLaunchpadHelperFirmwareRequest {
             }
         case .updateEnvironment:
             arguments = ["cfw", "update-environment", machineName, "--library-root", libraryRoot]
+        case .updateKernel:
+            arguments = ["cfw", "update-kernel", machineName, "--library-root", libraryRoot]
         }
 
         self.executable = executable

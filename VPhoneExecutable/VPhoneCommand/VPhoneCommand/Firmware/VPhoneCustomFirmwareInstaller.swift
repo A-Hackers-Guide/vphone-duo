@@ -46,14 +46,14 @@ struct VPhoneCustomFirmwareInstaller {
         /// Refuses a VM that has never had a full install: with nothing to put
         /// files back *over*, this would be laying down half an install.
         case environmentOnly
-        /// Only the Preboot kernelcache: replace its IM4P with the one
-        /// `fw patch` built in the restore tree, keeping the original IM4M, so
-        /// iBoot boots a re-patched kernel (the image4 bypass accepts a
-        /// modified payload under the signed manifest, as it does for the
-        /// Preboot device tree). No volume is reformatted and the Data volume
-        /// is untouched — the one boot-chain change that reaches an installed
-        /// guest without the erasing restore. Needs the restore tree for the
-        /// patched kernelcache, so `fw patch` must have run (`--keep-artifacts`).
+        /// Only the Preboot kernelcache: replace its IM4P with one re-patched
+        /// from the VM's selection, keeping the original IM4M, so iBoot boots a
+        /// re-patched kernel (the image4 bypass accepts a modified payload under
+        /// the signed manifest, as it does for the Preboot device tree). No
+        /// volume is reformatted and the Data volume is untouched — the one
+        /// boot-chain change that reaches an installed guest without the erasing
+        /// restore. The kernelcache is re-patched from the pristine copy in
+        /// FirmwareOriginals, so no restore tree or prior `fw patch` is needed.
         case kernelUpdate
 
         var summary: String {
@@ -480,19 +480,6 @@ struct VPhoneCustomFirmwareInstaller {
             throw ValidationError("The VM disk is in use. Stop the VM, then run the kernel update again.")
         }
 
-        // The patched kernelcache comes from the restore tree `fw patch` wrote.
-        // Without it there is nothing to install, so this needs the tree kept
-        // (`--keep-artifacts`) and `fw patch` run.
-        let restore = try restoreTree(in: bundleDirectory, path: bundlePath, owner: callerUID)
-        let patched: Data
-        do {
-            patched = try restore.readData("kernelcache.research.vphone600")
-        } catch {
-            throw ValidationError(
-                "No patched kernelcache in the restore tree. Run `vphone-cli fw patch` first (the VM needs its restore tree kept with --keep-artifacts).",
-            )
-        }
-
         let work = try makeWorkDirectory()
         defer {
             do { try removeWorkDirectory(work) } catch {
@@ -500,6 +487,10 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
         try requireFreeSpace(at: [bundlePath, work.url.path])
+
+        let (patched, enabledKernelPatches) = try patchedKernelcacheForUpdate(
+            in: bundleDirectory, path: bundlePath, owner: callerUID, work: work,
+        )
 
         let image: URL
         let cloned = try work.directory.clone(disk, to: "Disk.img")
@@ -612,18 +603,96 @@ struct VPhoneCustomFirmwareInstaller {
             try work.directory.rename("Disk.img", to: "Disk.img", in: bundleDirectory)
         }
         if changed {
-            recordKernelcacheReceipt(in: bundleDirectory, owner: invokingUser.map { ($0.uid, $0.gid) })
+            recordKernelcacheReceipt(enabled: enabledKernelPatches, in: bundleDirectory, owner: invokingUser.map { ($0.uid, $0.gid) })
         }
         print("[+] Guest kernel updated; start the VM to boot the re-patched kernelcache")
+    }
+
+    /// The patched kernelcache (a bare IM4P) to install into Preboot, for the
+    /// VM's current selection.
+    ///
+    /// Preferred source: the pristine kernelcache in `FirmwareOriginals`,
+    /// re-patched here with the selection. This needs no restore tree, so it
+    /// works on a VM in normal use, and reflects a `fw set-patches` made since
+    /// the last `fw patch`. Root re-patches only for a bundled preset; a preset
+    /// naming an external `.vphonepatchset` is not loaded here (root loads no
+    /// external set), and falls back to the restore tree `fw patch` wrote as the
+    /// user. A VM with neither is refused.
+    private func patchedKernelcacheForUpdate(
+        in bundleDirectory: VPhoneConfinedDirectory,
+        path bundlePath: String,
+        owner: uid_t?,
+        work: WorkDirectory,
+    ) throws -> (payload: Data, enabledKernelPatches: Set<String>) {
+        let selection = (try? bundleDirectory.readData(VPhonePatchPresetStore.selectionFileName))
+            .flatMap { try? PropertyListDecoder().decode(VPhoneVirtualMachinePatchSelection.self, from: $0) }
+            ?? VPhoneVirtualMachinePatchSelection()
+        let plan = readPatchPlan(in: bundleDirectory)
+        if let pristine = try firmwareOriginalsKernelcache(in: bundleDirectory),
+           let preset = VPhonePatchPresetStore.preset(named: selection.presetIdentifier),
+           !preset.patchSets.contains(where: { if case .external = $0 { true } else { false } })
+        {
+            try pristine.directory.copyFile(from: pristine.name, to: "kernelcache.im4p", in: work.directory)
+            let copy = work.file("kernelcache.im4p")
+            let pipeline = FirmwarePipeline(
+                vmDirectory: URL(fileURLWithPath: bundlePath, isDirectory: true),
+                // The public firmware mode is JB; .regular would leave out the
+                // AMFI and other custom-firmware kernel patches and CS_KILL launchd.
+                variant: .jb,
+                verbose: true,
+                preset: preset,
+                blockedPatches: Set(selection.blockedPatches),
+                allowedPatches: Set(selection.allowedPatches),
+            )
+            let changed = try pipeline.patchKernelcacheFile(
+                at: copy,
+                iOSBase: plan?.iOSBaseVersion.flatMap(VPhoneVersion.init),
+                cloudOS: plan?.cloudOSVersion.flatMap(VPhoneVersion.init),
+            )
+            print("  [*] kernelcache re-patched from \(VPhoneBundleOperations.firmwareOriginalsDirectoryName)"
+                + (changed ? "" : " (preset leaves every kernel patch off)"))
+            return (try Data(contentsOf: copy), Set(pipeline.resolvedPlan?.enabled ?? []))
+        }
+        // No originals, or an external-set preset: the restore tree's kernelcache
+        // was patched by `fw patch` running as the user.
+        if let restore = try? restoreTree(in: bundleDirectory, path: bundlePath, owner: owner),
+           let data = try? restore.readData("kernelcache.research.vphone600")
+        {
+            print("  [*] kernelcache taken from the restore tree")
+            return (data, Set(plan?.enabledPatches ?? []))
+        }
+        throw ValidationError(
+            "No kernelcache to install: this VM has no \(VPhoneBundleOperations.firmwareOriginalsDirectoryName) and no restore tree. Remove the restore tree and run `fw prepare` + `fw patch`, or recreate the VM.",
+        )
+    }
+
+    /// The pristine kernelcache kept in `FirmwareOriginals/<tree>/`, or nil when
+    /// the VM was patched by a build that kept no originals. Reached without a
+    /// link anywhere on the way.
+    private func firmwareOriginalsKernelcache(
+        in bundleDirectory: VPhoneConfinedDirectory,
+    ) throws -> (directory: VPhoneConfinedDirectory, name: String)? {
+        let originalsName = VPhoneBundleOperations.firmwareOriginalsDirectoryName
+        guard (try? bundleDirectory.isDirectory(originalsName)) == true,
+              let originals = try? bundleDirectory.directory(originalsName)
+        else { return nil }
+        for tree in (try? originals.entries()) ?? [] {
+            guard (try? originals.isDirectory(tree)) == true,
+                  let treeDir = try? originals.directory(tree),
+                  (try? treeDir.isRegularFile("kernelcache.research.vphone600")) == true
+            else { continue }
+            return (treeDir, "kernelcache.research.vphone600")
+        }
+        return nil
     }
 
     /// Record the kernelcache part of the receipt with the kernel patches the
     /// plan `fw patch` resolved. Best-effort, like `recordGuestReceipt`.
     private func recordKernelcacheReceipt(
+        enabled: Set<String>,
         in bundleDirectory: VPhoneConfinedDirectory,
         owner: (uid: uid_t, gid: gid_t)?,
     ) {
-        let enabled = Set(readPatchPlan(in: bundleDirectory)?.enabledPatches ?? [])
         let kernelPatches = FirmwarePatchSetCatalog.allDeclarations
             .filter { $0.target == .firmware(.kernelcache) && enabled.contains($0.identifier) }
             .map(\.identifier)

@@ -527,6 +527,40 @@ final class VPhoneLaunchpadMachineLibrary {
         await refresh()
     }
 
+    /// Replaces the machine's Preboot kernelcache with the one its current
+    /// patch selection resolves to, keeping the guest's data (no restore). The
+    /// data-preserving way to apply a kernel patch change to an installed VM.
+    func updateKernel(_ machine: Path) async {
+        guard let version = bundleVersion(for: machine) else {
+            actionError = VPhoneLaunchpadError(String(localized: "No Core Bundle version is installed. Install one in Core Bundle."))
+            return
+        }
+        activities[machine] = String(localized: "Updating kernel…")
+        defer { activities[machine] = nil }
+        appendConsoleLog(machine, "$ vphone-cli cfw update-kernel \(machine.name)")
+        let log = Self.consoleLog(machine)
+        do {
+            let status = try await helper.updateKernel(
+                bundleVersion: version,
+                machineName: machine.name,
+                libraryRoot: machine.libraryRoot,
+                onLine: { line in Self.append(line, to: log) },
+            )
+            if status != 0 {
+                actionError = VPhoneLaunchpadError(
+                    String(localized: "Unable to update the kernel."),
+                    detail: String(localized: "Choose Show Console Log for the full output."),
+                )
+            }
+        } catch {
+            if !(error is CancellationError) {
+                actionError = error as? VPhoneLaunchpadError
+                    ?? VPhoneLaunchpadError(String(localized: "Unable to update the kernel."), detail: error.localizedDescription)
+            }
+        }
+        await refresh()
+    }
+
     /// Stops a machine. The guest is asked to shut down first, so it quits its
     /// apps and unmounts its volumes. `vm stop`, which ends the virtual
     /// machine the way cutting the power would, follows only when the guest

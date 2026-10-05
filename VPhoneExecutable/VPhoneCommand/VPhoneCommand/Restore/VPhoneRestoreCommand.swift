@@ -381,18 +381,19 @@ struct VPhoneCustomFirmwareUpdateKernelCommand: ParsableCommand {
         commandName: "update-kernel",
         abstract: "Replace an installed VM's Preboot kernelcache without erasing its data (VM must be off)",
         discussion: """
-        Swaps the kernel the guest boots for the one `fw patch` built, keeping
-        every volume. The booting kernelcache lives in Preboot as an IMG4;
-        iBoot accepts a modified IM4P under the original signed IM4M — the same
-        image4 bypass that lets `cfw install` rewrite the Preboot device tree —
-        so this replaces the kernelcache's payload and nothing else. No volume
-        is reformatted, so the guest's data survives. It is the one boot-chain
-        change that reaches an installed guest without a restore, which always
-        erases (see `restore --no-erase`).
+        Replaces the kernel the guest boots with one re-patched from the VM's
+        current selection, keeping every volume. The booting kernelcache lives
+        in Preboot as an IMG4; iBoot accepts a modified IM4P under the original
+        signed IM4M — the same image4 bypass that lets `cfw install` rewrite the
+        Preboot device tree — so this replaces the kernelcache's payload and
+        nothing else. No volume is reformatted, so the guest's data survives. It
+        is the one boot-chain change that reaches an installed guest without a
+        restore, which always erases (see `restore --no-erase`).
 
-        It needs the patched kernelcache from the restore tree, so run
-        `fw set-patches` then `fw patch` first, with the restore tree kept
-        (`--keep-artifacts`). Needs root, and the VM must be powered off.
+        The kernelcache is re-patched from the pristine copy kept in
+        FirmwareOriginals, so no restore tree and no prior `fw patch` is needed:
+        change the selection with `fw set-patches` (or the Launchpad patch
+        editor), then run this. Needs root, and the VM must be powered off.
         """,
     )
 

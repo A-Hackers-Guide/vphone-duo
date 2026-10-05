@@ -56,6 +56,13 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
         /// Where the patch lives in a machine: a boot-chain component's name,
         /// or `Guest`. Reported only for a named machine; nil otherwise.
         let part: String?
+        /// The step that delivers this patch to an installed guest, reported by
+        /// the machine's own bundle only for a pending patch:
+        /// `update-environment`, `update-kernel`, `fw-patch` or
+        /// `restore`. A bundle without `cfw update-kernel` never reports
+        /// `update-kernel`, so the kernel button keyed on it simply
+        /// does not appear there. Nil when not pending or not reported.
+        let delivery: String?
 
         var id: String {
             identifier
@@ -67,6 +74,11 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
         /// way for a boot-chain patch.
         var isBootChain: Bool {
             Self.bootChainParts.contains(part ?? target)
+        }
+
+        /// The kernelcache, which `cfw update-kernel` changes without a restore.
+        var isKernel: Bool {
+            (part ?? target) == "kernelcache"
         }
 
         private static let bootChainParts: Set<String> = [
@@ -149,14 +161,23 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
         )
     }
 
-    /// Pending patches a guest environment update brings in line.
+    /// Pending patches `cfw update-environment` brings in line (the bundle's
+    /// own classification; falls back to the part for a bundle that does not
+    /// report delivery).
     var pendingGuestPatches: Int {
-        patches.count { $0.pending == true && !$0.isBootChain }
+        patches.count { $0.pending == true && ($0.delivery ?? (!$0.isBootChain ? "update-environment" : "")) == "update-environment" }
     }
 
-    /// Pending patches only a restore brings in line.
-    var pendingBootChainPatches: Int {
-        patches.count { $0.pending == true && $0.isBootChain }
+    /// Pending kernelcache patches `cfw update-kernel` applies without a
+    /// restore. Keyed on the delivery the machine's bundle reports, so a bundle
+    /// without the verb never counts any here and the button stays hidden.
+    var pendingKernelPatches: Int {
+        patches.count { $0.pending == true && $0.delivery == "update-kernel" }
+    }
+
+    /// Pending boot-chain patches that only an erasing restore applies.
+    var pendingRestorePatches: Int {
+        patches.count { $0.pending == true && ($0.delivery ?? (($0.isBootChain && !$0.isKernel) ? "restore" : "")) == "restore" }
     }
 
     func preset(_ identifier: String) -> Preset? {

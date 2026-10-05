@@ -147,7 +147,7 @@ struct FirmwarePatchDriftTests {
         // kernel-b was turned off after the restore put it in.
         #expect(result["kernel-b"]?.applied == true)
         #expect(result["kernel-b"]?.isPending == true)
-#expect(result["kernel-b"]?.delivery == .firmwarePatchThenUpdateKernel)
+#expect(result["kernel-b"]?.delivery == .updateKernel)
         #expect(result["kernel-a"]?.isPending == false)
         #expect(result["avp"]?.isPending == false)
         // No Guest part in the receipt: the plan says what the install wrote.
@@ -218,7 +218,7 @@ struct FirmwarePatchDriftTests {
     @Test
     func `Each target is delivered by the step that owns its bytes`() {
         #expect(FirmwarePatchDelivery(target: .firmware(.avpBooter)) == .firmwarePatch)
-        #expect(FirmwarePatchDelivery(target: .firmware(.kernelcache)) == .firmwarePatchThenUpdateKernel)
+        #expect(FirmwarePatchDelivery(target: .firmware(.kernelcache)) == .updateKernel)
         for component in [VPhoneFirmwareComponent.iBSS, .iBEC, .llb, .txm, .deviceTree] {
             #expect(FirmwarePatchDelivery(target: .firmware(component)) == .restore)
         }

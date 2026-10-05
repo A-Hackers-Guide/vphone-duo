@@ -319,10 +319,14 @@ restore at all: the booting kernel lives in Preboot as an IMG4, and iBoot
 accepts a modified IM4P under the original signed IM4M — the same image4 bypass
 that lets `cfw install` rewrite `devicetree.img4` there. `cfw update-kernel`
 (`VPhoneCustomFirmwareInstaller` mode `.kernelUpdate`) host-mounts Preboot on a
-clone and swaps the kernelcache's IM4P for the one `fw patch` built, keeping
-every volume. Proven on the test VM 2026-10-05: `fw set-patches` to drop a
-kernel patch, `fw patch`, `cfw update-kernel`, boot — the guest booted the
-re-patched kernel and the `/var/mobile/Documents` marker survived. So
+clone and swaps in a re-patched kernelcache, keeping every volume. It re-patches
+the pristine kernelcache kept in `FirmwareOriginals` with the VM's current
+selection (`FirmwarePipeline.patchKernelcacheFile`, in the `.jb` variant), so it
+needs no restore tree and no prior `fw patch` — a VM in normal use has its
+restore tree deleted but keeps `FirmwareOriginals`. Proven on test VMs
+2026-10-05: with a kernel patch toggled by `fw set-patches` and no restore tree,
+`cfw update-kernel` booted the re-patched kernel and the `/var/mobile/Documents`
+marker survived. So
 `fw set-patches`, `fw patches` and the Launchpad inspector now send a kernel
 patch through `cfw update-kernel` (data-preserving) and only TXM, DeviceTree,
 LLB, iBSS and iBEC through the erasing restore. TXM and DeviceTree live in

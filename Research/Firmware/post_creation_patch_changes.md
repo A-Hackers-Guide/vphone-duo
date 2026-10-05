@@ -144,13 +144,15 @@ is off:
 patches plus the late ones the old installer added.
 
 **The kernel reaches an installed guest without a restore.** `cfw update-kernel`
-host-mounts Preboot and swaps the kernelcache's IM4P for the one `fw patch`
-built, keeping the original signed IM4M — iBoot accepts it, the same image4
-bypass that lets `cfw install` rewrite `devicetree.img4` there — so no volume is
-reformatted and the data survives (proven on a test VM 2026-10-05:
-`fw set-patches` + `fw patch` + `cfw update-kernel`, guest booted the re-patched
-kernel with its `/var/mobile/Documents` marker intact). It needs the restore
-tree for the patched kernelcache (`fw patch`, `--keep-artifacts`). TXM and
+host-mounts Preboot and swaps in a re-patched kernelcache under the original
+signed IM4M — iBoot accepts it, the same image4 bypass that lets `cfw install`
+rewrite `devicetree.img4` there — so no volume is reformatted and the data
+survives. It re-patches the pristine kernelcache kept in `FirmwareOriginals`
+with the VM's current selection, so it needs no restore tree and no prior
+`fw patch`: flow is `fw set-patches` (or the Launchpad patch editor) then
+`cfw update-kernel` (proven on test VMs 2026-10-05, including a VM with no
+restore tree — guest booted the re-patched kernel with its
+`/var/mobile/Documents` marker intact). TXM and
 DeviceTree live in Preboot too and could follow; the kernelcache was done first
 because a kernel patch is the common reason to change the boot chain.
 

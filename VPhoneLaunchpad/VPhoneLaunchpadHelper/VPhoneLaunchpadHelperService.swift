@@ -108,6 +108,23 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
         )
     }
 
+    func updateKernel(
+        authorization: Data,
+        bundleVersion: String,
+        machineName: String,
+        libraryRoot: String,
+        reply: @escaping @Sendable (Int32, String?) -> Void,
+    ) {
+        runFirmware(
+            .updateKernel,
+            authorization: authorization,
+            bundleVersion: bundleVersion,
+            machineName: machineName,
+            libraryRoot: libraryRoot,
+            reply: reply,
+        )
+    }
+
     /// Both operations share one slot, so an install and an environment
     /// update never write the same machine at once, and one cancel stops
     /// either.

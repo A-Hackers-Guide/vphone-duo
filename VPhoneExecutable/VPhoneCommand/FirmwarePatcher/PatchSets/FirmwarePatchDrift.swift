@@ -22,10 +22,10 @@ public enum FirmwarePatchDelivery: String, Sendable, Hashable, CaseIterable, Cod
     /// `fw patch` alone delivers it. `fw patch` still needs the VM's restore
     /// tree, which is kept only with `--keep-artifacts`.
     case firmwarePatch = "fw-patch"
-    /// The kernelcache lives in Preboot as an IMG4; `fw patch` rebuilds it and
-    /// `cfw update-kernel` swaps its IM4P into Preboot under the signed
-    /// manifest, with no restore and no erase.
-    case firmwarePatchThenUpdateKernel = "fw-patch+update-kernel"
+    /// The kernelcache lives in Preboot as an IMG4; `cfw update-kernel`
+    /// re-patches it from the VM's FirmwareOriginals and swaps its IM4P into
+    /// Preboot under the signed manifest, with no restore and no erase.
+    case updateKernel = "update-kernel"
     /// iBSS and iBEC are used only while restoring, LLB lives in NOR, and TXM
     /// and DeviceTree are personalized into Preboot by the restore, which
     /// erases. Nothing else writes them.
@@ -38,7 +38,7 @@ public enum FirmwarePatchDelivery: String, Sendable, Hashable, CaseIterable, Cod
         case .firmware(.avpBooter):
             self = .firmwarePatch
         case .firmware(.kernelcache):
-            self = .firmwarePatchThenUpdateKernel
+            self = .updateKernel
         case .firmware:
             // iBSS, iBEC, LLB, TXM, DeviceTree, and the restore-only
             // Filesystem/Manifest.
