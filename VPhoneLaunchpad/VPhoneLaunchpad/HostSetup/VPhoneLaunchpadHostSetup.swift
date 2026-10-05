@@ -199,6 +199,11 @@ final class VPhoneLaunchpadHostSetup {
     /// Quits and opens Launchpad again so a new Developer Tools grant
     /// applies. A detached waiter opens the app once this process has exited.
     /// No machine can be in creation here: Core Bundle needs this access.
+    ///
+    /// Call this only after the sheet that triggered it has closed.
+    /// Terminating while a sheet is still attached makes SwiftUI answer
+    /// `.terminateLater` and never reply, so the quit stalls and every later
+    /// attempt is ignored.
     func relaunch() {
         let waiter = Process()
         waiter.executableURL = URL(fileURLWithPath: "/bin/sh")
