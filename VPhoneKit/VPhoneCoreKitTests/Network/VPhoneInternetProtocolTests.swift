@@ -15,7 +15,7 @@ struct VPhoneInternetProtocolTests {
     /// plus the headers came to 1308. Sending it whole got it dropped, silently,
     /// once per datagram. UDP has no layer above it to chop anything up, so the
     /// splitting has to happen here.
-    @Test func `an oversized packet is fragmented rather than dropped`() {
+    @Test func `an oversized packet is fragmented rather than dropped`() throws {
         let payload = [UInt8](repeating: 0x5A, count: 3000)
         let packet = VPhoneIPv4Packet(
             source: VPhoneIPv4Address(192, 168, 127, 1),
@@ -29,8 +29,8 @@ struct VPhoneInternetProtocolTests {
 
         for fragment in fragments {
             #expect(fragment.count <= 1500, "a fragment is \(fragment.count)B, over the MTU")
-            let parsed = try? #require(VPhoneIPv4Packet(bytes: fragment))
-            #expect(parsed?.isFragment == true)
+            let parsed = try #require(VPhoneIPv4Packet(bytes: fragment))
+            #expect(parsed.isFragment)
         }
 
         // Every fragment but the last says more are coming, and the offsets walk
@@ -102,7 +102,7 @@ struct VPhoneInternetProtocolTests {
 
     /// Window scaling has to survive the option encoding, and the option list has
     /// to pad to a 32-bit boundary or the data offset is wrong.
-    @Test func `TCP options round trip and pad to a word boundary`() {
+    @Test func `TCP options round trip and pad to a word boundary`() throws {
         let segment = VPhoneTCPSegment(
             sourcePort: 1,
             destinationPort: 2,
@@ -116,8 +116,8 @@ struct VPhoneInternetProtocolTests {
         let bytes = segment.bytes(source: .any, destination: .any)
         #expect(bytes[12] >> 4 == 7, "the header should be 28 bytes, i.e. 7 words")
 
-        let parsed = try? #require(VPhoneTCPSegment(bytes: bytes))
-        #expect(parsed?.maximumSegmentSize == 1460)
-        #expect(parsed?.windowScale == 7)
+        let parsed = try #require(VPhoneTCPSegment(bytes: bytes))
+        #expect(parsed.maximumSegmentSize == 1460)
+        #expect(parsed.windowScale == 7)
     }
 }

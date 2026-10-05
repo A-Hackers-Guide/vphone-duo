@@ -290,7 +290,7 @@ public enum VPhoneDHCPLeaseRelease {
             guard pid > 0 else { return false }
             var buffer = [CChar](repeating: 0, count: 256)
             guard proc_name(pid, &buffer, UInt32(buffer.count)) > 0 else { return false }
-            return String(cString: buffer) == name
+            return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self) == name
         }
     }
 

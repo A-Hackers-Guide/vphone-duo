@@ -306,7 +306,7 @@ struct VPhoneTCPForwarderTests {
                 }
                 sent += written
             }
-            _ = server.drain(client)
+            server.drain(client)
         }
         defer { server.stop() }
 
@@ -451,7 +451,7 @@ struct VPhoneTCPForwarderTests {
                 }
                 sent += written
             }
-            _ = server.drain(client)
+            server.drain(client)
         }
         defer { server.stop() }
 
@@ -495,7 +495,7 @@ struct VPhoneTCPForwarderTests {
             var buffer = [UInt8](repeating: 0, count: 4096)
             _ = recv(client, &buffer, buffer.count, 0)
             _ = payload.withUnsafeBytes { send(client, $0.baseAddress, $0.count, 0) }
-            _ = server.drain(client)
+            server.drain(client)
         }
         defer { server.stop() }
 
@@ -537,7 +537,7 @@ struct VPhoneTCPForwarderTests {
                 }
                 sent += written
             }
-            _ = server.drain(client, until: total)
+            server.drain(client, until: total)
         }
         defer { server.stop() }
 

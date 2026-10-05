@@ -767,10 +767,6 @@
 				ARCHS = arm64;
 				CODE_SIGNING_ALLOWED = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/VPhoneSignTests/Fixtures",
-				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vphone.sign.tests;
 				PRODUCT_NAME = VPhoneSignTests;
@@ -785,10 +781,6 @@
 				ARCHS = arm64;
 				CODE_SIGNING_ALLOWED = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/VPhoneSignTests/Fixtures",
-				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vphone.sign.tests;
 				PRODUCT_NAME = VPhoneSignTests;

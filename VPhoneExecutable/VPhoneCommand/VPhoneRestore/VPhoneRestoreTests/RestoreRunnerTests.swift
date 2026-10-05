@@ -56,6 +56,7 @@ struct RestoreRunnerTests {
         }
     }
 
+    @discardableResult
     private func withTemporaryDirectory<R>(_ body: (URL) throws -> R) throws -> R {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("vphone-runner-\(UUID().uuidString)", isDirectory: true)
