@@ -40,7 +40,7 @@ tccutil reset DeveloperTool com.vphone.launchpad
 ```
 
 then open Launchpad, choose **Open Settings**, turn the switch on for
-vphone-launchpad, and reopen Launchpad (the app does not close itself).
+vphone-launchpad, and switch back to Launchpad; Host Setup checks again.
 Prevent a repeat by installing only the `-notarized` zip. Mixing the plain and
 the notarized zip, or a local build and a release, recreates the problem. A
 user on an ad hoc build must reset after every switch. `status` →

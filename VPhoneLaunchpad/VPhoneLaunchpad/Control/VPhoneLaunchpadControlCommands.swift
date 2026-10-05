@@ -72,6 +72,8 @@ struct VPhoneLaunchpadControlCommands {
     // MARK: - Status
 
     private func status() -> [String: Any] {
+        // A grant made in Settings while the app stayed in the background.
+        model.host.refreshDeveloperTools()
         let helper = switch model.helper.state {
         case .unknown: "unknown"
         case .notInstalled: "not installed"
@@ -129,6 +131,7 @@ struct VPhoneLaunchpadControlCommands {
     }
 
     private func requireInstallable() throws {
+        model.host.refreshDeveloperTools()
         guard !model.canInstallBundles else {
             return
         }
@@ -138,7 +141,7 @@ struct VPhoneLaunchpadControlCommands {
         guard case .ready = model.helper.state else {
             throw VPhoneLaunchpadError("The helper is not installed or is outdated. Install it in Host Setup.")
         }
-        throw VPhoneLaunchpadError("Launchpad does not have Developer Tools access. Allow it in Host Setup, then relaunch Launchpad.")
+        throw VPhoneLaunchpadError("Launchpad does not have Developer Tools access. Allow it in Host Setup.")
     }
 
     private func installLocal(_ request: VPhoneLaunchpadControlRequest, emit: @escaping Emit) async throws -> Any {

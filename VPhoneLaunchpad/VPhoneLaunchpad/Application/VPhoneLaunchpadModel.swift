@@ -37,8 +37,6 @@ final class VPhoneLaunchpadModel {
     var panel: Panel?
     /// The panel to open once the sheet on screen has closed.
     private var queuedPanel: Panel?
-    /// Runs once the sheet on screen has finished closing.
-    private var pendingAfterDismiss: (() -> Void)?
     private(set) var isStarted = false
 
     init() {
@@ -68,23 +66,11 @@ final class VPhoneLaunchpadModel {
     /// `next` here would swap it into the closing sheet. The next turn of the
     /// main actor runs after the sheet has gone.
     func panelDidDismiss() {
-        let next = queuedPanel
-        let pending = pendingAfterDismiss
-        queuedPanel = nil
-        pendingAfterDismiss = nil
-        guard next != nil || pending != nil else { return }
-        Task {
-            if let next {
-                panel = next
-            }
-            pending?()
+        guard let next = queuedPanel else {
+            return
         }
-    }
-
-    /// Runs `action` on the next turn after the sheet on screen has closed.
-    /// The sheet is still attached when its dismiss handler runs.
-    func afterSheetDismissed(_ action: @escaping () -> Void) {
-        pendingAfterDismiss = action
+        queuedPanel = nil
+        Task { panel = next }
     }
 
     // MARK: - Attention
