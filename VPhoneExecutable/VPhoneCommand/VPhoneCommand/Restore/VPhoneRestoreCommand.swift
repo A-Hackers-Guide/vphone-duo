@@ -40,11 +40,19 @@ struct VPhoneRestoreCommand: ParsableCommand {
     @Option(name: .shortAndLong, help: "Device UDID (optional)") var udid: String?
     @Option(name: .shortAndLong, help: "Device ECID (default: read from the bundle's udid-prediction.txt)")
     var ecid: String?
-    /// The Python exposed this as `--erase/--no-erase`, defaulting to erase, and
-    /// `VPhoneRestoreOptions.erase` has carried it since the port. Only the flag
-    /// was missing, which left `Behavior.Update` reachable from the library and
-    /// its unit test but not from the command line.
-    @Flag(name: .customLong("no-erase"), help: "Update in place instead of erasing (upstream's Behavior.Update)")
+    /// Refused: an in-place restore cannot keep a vphone guest's data. Tried on
+    /// a test VM (iPhone 27.0 24A435 + cloudOS 26.4, 2026-10-05), it fails
+    /// three ways, see `Research/Restore/native_restore_architecture.md`: the
+    /// hybrid manifest has no Upgrade identity, so restored fails after the
+    /// system volume is written; with one, the cloudOS restore ramdisk, the
+    /// only one a vphone guest boots, still creates the partition map and a
+    /// new system key bag, which erases the Data volume; and the iPhone's
+    /// update ramdisk panics (initproc exits) on the cloudOS restore kernel.
+    /// The flag stays so a script using it gets this reason, not a usage error.
+    @Flag(name: .customLong("no-erase"), help: ArgumentHelp(
+        "Not supported: an in-place restore erases a vphone guest's data anyway",
+        visibility: .hidden,
+    ))
     var noErase = false
     @Flag(name: .customShort("v"), help: "Increase verbosity: -v tool detail, -vv guest serial, -vvv internal trace")
     var verboseCount: Int
@@ -54,6 +62,14 @@ struct VPhoneRestoreCommand: ParsableCommand {
     /// used to be. A failure therefore throws instead of returning an exit
     /// code — which keeps the two halves that mattered, the non-zero exit and
     /// `restore-info.json` staying unwritten.
+    func validate() throws {
+        if noErase {
+            throw ValidationError(
+                "An in-place restore cannot keep this guest's data: the cloudOS restore ramdisk a vphone guest restores with only erases. Restore without --no-erase.",
+            )
+        }
+    }
+
     func run() throws {
         let v = max(VPhoneVerbosity.info, VPhoneVerbosity(count: verboseCount))
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
@@ -107,7 +123,7 @@ struct VPhoneRestoreCommand: ParsableCommand {
             vmDir: bundle.url,
             ecid: ecidValue,
             udid: udid,
-            erase: !noErase,
+            erase: true,
             ticketPath: ticket,
             debugLevel: v.restoreDebugLevel,
             onEvent: onEvent,

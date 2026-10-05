@@ -396,6 +396,17 @@ public enum FirmwareGuestSystemPatchSet {
     /// guest's tree.
     public static let prebootMicrophoneArray = "preboot-cfw-devicetree_microphone_array"
 
+    /// The boot-chain DeviceTree patch each Preboot repair stands in for.
+    /// `fw patch` writes the first into the tree a restore installs; the
+    /// repair writes the same change into the tree a VM restored before that
+    /// patch existed already has. Either one puts the change in the guest, so
+    /// the drift report counts the pair as one.
+    public static let prebootRepairs: [String: String] = [
+        "devicetree-cfw-ipad_audio": prebootBoardAudio,
+        "devicetree-cfw-product_haptics_node": prebootHaptics,
+        "devicetree-cfw-product_audio_microphone_array": prebootMicrophoneArray,
+    ]
+
     /// The preset parameter `system-systemversion-cfw-build_version` reads.
     public static let buildVersionParameter = "BuildVersion"
 }
