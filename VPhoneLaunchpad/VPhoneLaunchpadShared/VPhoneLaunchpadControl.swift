@@ -180,6 +180,9 @@ nonisolated struct VPhoneLaunchpadControlCommand: Sendable {
         Self(name: "cfw.update-environment", arguments: ["name"], options: ["root"], flags: [],
              summary: "Redeploy the machine's own bundle's guest resources (vphoned and hook dylibs) into it while stopped, and nothing else."),
 
+        Self(name: "cfw.update-kernel", arguments: ["name"], options: ["root"], flags: [],
+             summary: "Swap the stopped machine's Preboot kernelcache for the one its patches resolve to, keeping the data (no restore)."),
+
         Self(name: "guest.send", arguments: ["name", "json"], options: ["root"], flags: [],
              summary: "Send one raw vphone.sock request, such as {\"t\":\"tap\",\"x\":645,\"y\":1398}."),
         Self(name: "guest.rpc", arguments: ["name", "method", "params..."], options: ["root"], flags: ["screen"],

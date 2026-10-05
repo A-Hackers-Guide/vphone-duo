@@ -2749,3 +2749,35 @@ Action Button's long press (HID 0x0B/0x2D) runs Flashlight and Camera with the
 Dynamic Island, with no tweak; the search field gains dictation. The guest boots
 normally. Not yet measured: the change on a VM without the identity patches, on
 iOS 18.x, and a Camera Control press.
+
+## The kernelcache reaches an installed guest without a restore (2026-10-05)
+
+No new Apple binary patch. This adds a way to deliver the existing kernelcache
+patches to a VM that is already installed, so it is recorded here.
+
+A kernel patch toggled with `fw set-patches` could only reach an installed guest
+through a restore, and a restore erases it (restored in the cloudOS ramdisk
+repartitions whatever the host asks — `restore --no-erase` refuses; see
+`Research/Restore/native_restore_architecture.md`). But the booting kernel lives
+in Preboot as an IMG4, and iBoot accepts a modified IM4P under the original
+signed IM4M — the same image4 bypass that lets `cfw install` rewrite
+`devicetree.img4` there. `cfw update-kernel` (`VPhoneCustomFirmwareInstaller`
+mode `.kernelUpdate`) host-mounts Preboot on a clone and swaps in a re-patched
+kernelcache, keeping every volume. It re-patches the pristine kernelcache kept in
+`FirmwareOriginals` with the VM's current selection
+(`FirmwarePipeline.patchKernelcacheFile`, in the `.jb` variant — `.regular`
+omits the AMFI/JB kernel patches and CS_KILLs launchd), so it needs no restore
+tree and no prior `fw patch`. The splice is
+`CustomFirmwarePostRestoreDeviceTree.kernelcacheReplacingPayload`, which carries
+the whole IM4P (compression and any PAYP tail) verbatim and keeps the IMG4's
+manifest.
+
+Proven on test VMs (iPhone 27.0 24A435 + cloudOS 26.4) 2026-10-05, including a VM
+with no restore tree, through the Launchpad helper: a marker in
+`/var/mobile/Documents`, `kernel-exp-display_refresh_120hz` toggled with
+`fw set-patches`, `cfw update-kernel`, then boot — the guest booted the
+re-patched kernelcache and the marker survived. Flow: `fw set-patches` →
+`cfw update-kernel`. `fw set-patches`, `fw patches` and the Launchpad inspector
+route a kernel patch through `cfw update-kernel` and the rest of the boot chain
+(TXM, DeviceTree, LLB, iBSS, iBEC) through the erasing restore. TXM and
+DeviceTree are also in Preboot and could follow the same path later.

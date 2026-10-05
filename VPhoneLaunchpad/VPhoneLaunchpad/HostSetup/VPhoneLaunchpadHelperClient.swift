@@ -312,6 +312,39 @@ final class VPhoneLaunchpadHelperClient {
         }
     }
 
+    /// Runs `cfw update-kernel` as root: swaps the Preboot kernelcache for the
+    /// re-patched one, keeping the guest's data. Output lines go to `onLine`.
+    func updateKernel(
+        bundleVersion: String,
+        machineName: String,
+        libraryRoot: String,
+        onLine: @escaping @Sendable (String) -> Void,
+    ) async throws -> Int32 {
+        let authorization = try await authorizationSession.externalForm()
+        guard receiver.claim(onLine) else {
+            throw Self.firmwareBusy
+        }
+        defer { receiver.release() }
+        return try await withTaskCancellationHandler {
+            try await request { proxy, done in
+                proxy.updateKernel(
+                    authorization: authorization,
+                    bundleVersion: bundleVersion,
+                    machineName: machineName,
+                    libraryRoot: libraryRoot,
+                ) { status, message in
+                    if let message {
+                        done(.failure(VPhoneLaunchpadError(message)))
+                    } else {
+                        done(.success(status))
+                    }
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in self.cancelCustomFirmware() }
+        }
+    }
+
     /// Runs `vm leases --release-orphans --json` as root against the machines
     /// of `libraryRoots`, and returns the command's JSON output.
     func releaseOrphanedLeases(bundleVersion: String, libraryRoots: [String]) async throws -> Data {

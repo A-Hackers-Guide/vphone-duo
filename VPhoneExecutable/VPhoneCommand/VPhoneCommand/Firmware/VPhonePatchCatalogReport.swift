@@ -405,6 +405,9 @@ public struct VPhonePatchCatalogReport: Sendable {
             case .firmwarePatch:
                 "run `vphone-cli fw patch \(vm)`; it takes effect at the next boot."
                     + " It needs the VM's restore tree (kept with `--keep-artifacts`)."
+            case .updateKernel:
+                "run `sudo vphone-cli cfw update-kernel \(vm)` with the machine off;"
+                    + " it re-patches the kernelcache and keeps the guest's data (no restore)."
             case .restore where part == VPhoneFirmwareComponent.iBSS.rawValue
                 || part == VPhoneFirmwareComponent.iBEC.rawValue:
                 "used only while restoring, so the change matters at the next restore and not to this guest."

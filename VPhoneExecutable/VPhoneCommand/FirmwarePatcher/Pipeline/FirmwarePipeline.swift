@@ -213,6 +213,46 @@ public final class FirmwarePipeline {
         return allRecords
     }
 
+    /// Patch a kernelcache file in place with this VM's selection, without a
+    /// restore tree. For `cfw update-kernel`: the pristine kernelcache is kept
+    /// in `FirmwareOriginals`, and only the Preboot copy needs replacing, so the
+    /// full restore-tree pipeline is not run — just the kernelcache component's
+    /// patchers, resolved and gated exactly as `patchAll` would, over the one
+    /// file. `url` is a writable copy of the pristine kernelcache (a bare IM4P);
+    /// it is left patched and re-wrapped in its own container. The versions come
+    /// from the plan `fw patch` recorded, since the live BuildManifest reads the
+    /// cloudOS version, not the iOS base. Returns whether any patch applied.
+    @discardableResult
+    public func patchKernelcacheFile(at url: URL, iOSBase: VPhoneVersion?, cloudOS: VPhoneVersion?) throws -> Bool {
+        baseProductVersion = iOSBase
+        cloudOSProductVersion = cloudOS
+        let plan = try resolvePlan(iOSBase: iOSBase, cloudOS: cloudOS)
+        resolvedPlan = plan
+        let gate = plan.map { VPhonePatchGate(plan: $0) } ?? .unrestricted
+        // restoreDir is unused when building the kernelcache component's
+        // patchers (they take the gate and versions, not files), so the VM
+        // directory stands in for the parameter.
+        let components = buildComponentList(restoreDir: vmDirectory, iOSBase: iOSBase, plan: plan, gate: gate)
+        guard let kernel = components.first(where: { $0.name == "kernelcache" }) else {
+            throw PatcherError.invalidFormat("this build has no kernelcache component to patch")
+        }
+        guard !kernel.patcherFactories.isEmpty else {
+            // The preset turns every kernel patch off: the pristine kernelcache
+            // is already the wanted one.
+            return false
+        }
+        let payload = try loader.load(from: url)
+        let (patched, records) = try patchData(
+            payload,
+            componentName: "kernelcache",
+            patcherFactories: kernel.patcherFactories,
+            expectsPatches: expectsPatches(for: "kernelcache", plan: plan),
+        )
+        guard !records.isEmpty else { return false }
+        try loader.save(patched, to: url)
+        return true
+    }
+
     /// Patch every component in order, against the files under `restoreDir` and the
     /// VM directory root.
     ///
