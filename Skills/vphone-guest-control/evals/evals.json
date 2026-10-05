@@ -22,7 +22,7 @@
     {
       "id": 4,
       "prompt": "I want ssh into myphone and a debuggable test IPA installed. It was just created. How do you do that, and where do I put the IPA so vphoned can read it?",
-      "expected_output": "Notes a fresh guest has no sshd; installs the roothide bootstrap (bootstrap.install or Apps > Install Bootstrap), then installs apt, bash, uikittools, launchctl, openssh-server together via Irisin Bootstrap Install; iproxy + ssh mobile; ssh lands in the jbroot, real root is /rootfs; scp to /tmp then mv to /rootfs/private/var/tmp and apps.install with /private/var/tmp/<file>; warns apps.install deletes the file.",
+      "expected_output": "Notes a fresh guest has no sshd; installs the roothide bootstrap (bootstrap.install or Apps > Install Bootstrap), then installs owngoal-bootstrap-vphone (which pulls in apt, openssh-server, uikittools, launchctl) via Irisin Bootstrap Install; iproxy + ssh mobile; ssh lands in the jbroot, real root is /rootfs; scp to /tmp then mv to /rootfs/private/var/tmp and apps.install with /private/var/tmp/<file>; warns apps.install deletes the file.",
       "files": []
     }
   ]

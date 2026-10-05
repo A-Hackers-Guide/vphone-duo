@@ -62,15 +62,9 @@ boot-args 등 호스트 보안 설정은 변경하지 말고, 펌웨어와 여�
 가상 머신에는 기본적으로 패키지 관리자가 없습니다. 설치 방법은 다음과 같습니다.
 
 1. 메뉴 막대에서 **Apps > Install Bootstrap…**을 선택하고 레이아웃으로 **roothide**를 선택합니다(**rootless**는 더 이상 권장되지 않습니다). 가상 머신에 Irisin이 설치됩니다.
-2. 처음 부트스트랩 설치를 할 때는 Irisin에서 다음 패키지를 한 번에 모두 선택하고 설치 버튼을 길게 누른 뒤 **Bootstrap Install**을 선택합니다.
+2. Irisin에서 **OwnGoal Packages** 저장소를 열고 **OwnGoal Bootstrap for vphone**(`owngoal-bootstrap-vphone`)을 **Bootstrap Install**로 설치합니다.
 
-   - `apt`
-   - `bash`
-   - `uikittools`
-   - `launchctl`
-   - `openssh-server`
-
-   이 패키지들은 한 번의 부트스트랩 설치로 함께 설치하는 것을 권장합니다. 일부 패키지는 서로 의존하며(예: `bash`와 `debianutils`), 특히 `openssh-server`는 순환하거나 부정확한 의존성 선언을 포함하고 있어 일반 설치로 하나씩 설치하면 도중에 실패할 수 있습니다.
+   이 패키지 하나로 가상 머신에 필요한 것이 한 번에 설치됩니다: `apt`와 `dpkg`, `bash`, `zsh`와 `dash`, `sudo`, 기본 명령줄 도구, `openssh-server`, `curl`, `wget`, `vim`, `git`, `uikittools`, `launchctl`, 그리고 OwnGoal 앱. 이 패키지들을 하나씩 설치하지 마십시오. 일부 패키지는 서로 의존하며, `openssh-server`는 순환하는 의존성 선언을 포함하고 있어 따로 설치하면 도중에 실패할 수 있습니다.
 3. 처음 설치를 마친 뒤에는 다른 패키지를 일반 설치로 설치하면 됩니다.
 
 처음 설치에 실패했거나 설치 후 환경이 비정상적인 상태가 되었다면 그 자리에서 복구하려 하지 말고, **Apps > Uninstall Bootstrap…**으로 환경을 삭제한 뒤 1단계부터 다시 설치하십시오.
