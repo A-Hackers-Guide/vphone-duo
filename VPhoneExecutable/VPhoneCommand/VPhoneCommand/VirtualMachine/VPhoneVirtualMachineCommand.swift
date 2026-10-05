@@ -158,6 +158,7 @@ struct VPhoneVirtualMachineInfoCommand: ParsableCommand {
             print("mem:   \(report.memoryMB) MB")
             print("disk:  \(report.diskSizeBytes) bytes")
             print("net:   \(describeNetwork(report.network))")
+            print("unlock: \(report.unlocksAtStartup ? "on" : "off")")
             if let udid = report.udid {
                 print("udid:  \(udid)")
             }
@@ -207,7 +208,7 @@ struct VPhoneVirtualMachineNewCommand: ParsableCommand {
 struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "config",
-        abstract: "Edit VM manifest fields (cpu/memory/network)",
+        abstract: "Edit VM manifest fields (cpu/memory/network/startup)",
         discussion: """
         Network settings are read when the VM starts, so a change applies from the next launch.
 
@@ -228,6 +229,10 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
         address, usually 192.168.64.1; tunnel: the gateway, which leads to the Mac's loopback; \
         bridged: the Mac's address on that interface), instead of racing mDNS answers. \
         --mac-name off withdraws it. Applied each time vphone-vm connects to the guest.
+
+        --unlock-at-startup on has vphone-vm wake the guest and dismiss its Lock Screen each time \
+        vphoned starts in it: after the VM starts and after the guest reboots. Applies from the \
+        next connect.
         """,
     )
 
@@ -256,16 +261,20 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
     var mdns: String?
     @Option(name: .long, help: "Have the guest resolve this Mac's .local name locally: on (default) | off")
     var macName: String?
+    @Option(name: .long, help: "Unlock the guest when it starts: on | off (default)")
+    var unlockAtStartup: String?
 
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
         let edit = try networkEdit(vmName: name)
+        let unlocks = try unlockAtStartup.map { try Self.parseSwitch($0, option: "--unlock-at-startup") }
         let updated = try VPhoneBundleOperations.updateConfig(
             bundleNamed: name,
             in: lib.library,
             cpuCount: cpu,
             memoryMB: memory,
             networkEdit: edit,
+            unlocksAtStartup: unlocks,
         )
         let m = updated.manifest
         print(
@@ -319,6 +328,14 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
         default: edit.localHostName = .some(mdns)
         }
         return edit
+    }
+
+    private static func parseSwitch(_ value: String, option: String) throws -> Bool {
+        switch value.lowercased() {
+        case "on": return true
+        case "off": return false
+        default: throw ValidationError("\(option) takes on or off.")
+        }
     }
 
     private static func parseMode(_ s: String)

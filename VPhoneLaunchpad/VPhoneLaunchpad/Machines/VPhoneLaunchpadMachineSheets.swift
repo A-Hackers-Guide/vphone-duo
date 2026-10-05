@@ -3,14 +3,14 @@ import SwiftUI
 
 // MARK: - Settings
 
-/// Hardware and network for one machine, or for several at once. The fields
-/// start from the first machine; only the ones edited are written, to every
-/// machine, so values the machines do not share are left alone. A fixed
+/// Hardware, network and startup for one machine, or for several at once. The
+/// fields start from the first machine; only the ones edited are written, to
+/// every machine, so values the machines do not share are left alone. A fixed
 /// address, a MAC and forwarded ports belong to one machine, so they are only
 /// offered when one is selected.
 struct VPhoneLaunchpadMachineSettingsView: View {
     private enum Field {
-        case cpu, memory, network, address, mac, forwards, mdns, macName
+        case cpu, memory, network, address, mac, forwards, mdns, macName, unlock
     }
 
     let machines: [VPhoneLaunchpadMachine]
@@ -28,6 +28,7 @@ struct VPhoneLaunchpadMachineSettingsView: View {
     @State private var forwards: [String]
     @State private var advertisesName: Bool
     @State private var resolvesMacName: Bool
+    @State private var unlocksAtStartup: Bool
     @State private var newTransport = "tcp"
     @State private var newHostPort = ""
     @State private var newGuestPort = ""
@@ -50,6 +51,7 @@ struct VPhoneLaunchpadMachineSettingsView: View {
         _forwards = State(initialValue: first?.network.portForwards?.map(\.argument) ?? [])
         _advertisesName = State(initialValue: first?.network.localHostName != nil)
         _resolvesMacName = State(initialValue: first?.network.resolvesMacName != false)
+        _unlocksAtStartup = State(initialValue: first?.unlocksAtStartup == true)
     }
 
     private var title: Text {
@@ -141,6 +143,14 @@ struct VPhoneLaunchpadMachineSettingsView: View {
                 if single, forwardsSupported {
                     forwardsSection
                 }
+                Section {
+                    Toggle("Unlock at startup", isOn: $unlocksAtStartup)
+                } header: {
+                    Text("Startup")
+                } footer: {
+                    Text("Each time the guest starts, its screen is turned on and the Lock Screen dismissed.")
+                        .foregroundStyle(.secondary)
+                }
             }
             .formStyle(.grouped)
         } actions: {
@@ -164,6 +174,7 @@ struct VPhoneLaunchpadMachineSettingsView: View {
         .onChange(of: forwards) { edited.insert(.forwards) }
         .onChange(of: advertisesName) { edited.insert(.mdns) }
         .onChange(of: resolvesMacName) { edited.insert(.macName) }
+        .onChange(of: unlocksAtStartup) { edited.insert(.unlock) }
     }
 
     private var addressSection: some View {
@@ -271,6 +282,7 @@ struct VPhoneLaunchpadMachineSettingsView: View {
         let memoryMB = edited.contains(.memory) ? memoryMB : nil
         let network = edited.contains(.network) ? network : nil
         let bridgeInterface = network == "bridged" ? bridgeInterface : nil
+        let unlocksAtStartup = edited.contains(.unlock) ? unlocksAtStartup : nil
         var networkArguments: [String] = []
         if single {
             if edited.contains(.address) {
@@ -313,6 +325,7 @@ struct VPhoneLaunchpadMachineSettingsView: View {
                     network: network,
                     bridgeInterface: bridgeInterface,
                     networkArguments: networkArguments,
+                    unlocksAtStartup: unlocksAtStartup,
                 )
             }
         }

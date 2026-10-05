@@ -302,6 +302,7 @@ struct VPhoneLaunchpadControlCommands {
         if let udid = machine.udid {
             report["udid"] = udid
         }
+        report["unlocksAtStartup"] = machine.unlocksAtStartup ?? false
         if let info = machine.restoreInfo {
             report["ios"] = "\(info.ios.version) (\(info.ios.build))"
             report["cloudOS"] = "\(info.cloudOS.version) (\(info.cloudOS.build))"

@@ -134,6 +134,9 @@ struct VPhoneLaunchpadMachineInspector: View {
                 ForEach(machine.network.portForwards ?? [], id: \.self) { forward in
                     LabeledContent("Port Forward", value: "\(forward.transport.uppercased()) \(forward.hostAddress ?? "127.0.0.1"):\(forward.hostPort) → \(forward.guestPort)")
                 }
+                if machine.unlocksAtStartup == true {
+                    LabeledContent("Unlock at Startup", value: String(localized: "On"))
+                }
             }
 
             Section("Identity") {

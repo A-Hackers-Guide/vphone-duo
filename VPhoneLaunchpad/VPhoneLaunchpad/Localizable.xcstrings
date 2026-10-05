@@ -13024,6 +13024,42 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在客户机内解析这台 Mac 的名称" } }
       }
     },
+    "Startup" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Startup" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "起動" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "시작" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Khởi động" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动" } }
+      }
+    },
+    "Unlock at startup" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unlock at startup" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "起動時にロックを解除" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "시작 시 잠금 해제" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Mở khóa khi khởi động" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动时解锁" } }
+      }
+    },
+    "Unlock at Startup" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unlock at Startup" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "起動時にロックを解除" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "시작 시 잠금 해제" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Mở khóa khi khởi động" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动时解锁" } }
+      }
+    },
+    "Each time the guest starts, its screen is turned on and the Lock Screen dismissed." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Each time the guest starts, its screen is turned on and the Lock Screen dismissed." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲストが起動するたびに画面をオンにし、ロック画面を閉じます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트가 시작될 때마다 화면을 켜고 잠금 화면을 닫습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Mỗi khi máy khách khởi động, màn hình được bật và Màn hình khóa được đóng." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机每次启动时点亮屏幕并关闭锁定屏幕。" } }
+      }
+    },
     "%@ (Default)" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ (Default)" } },
