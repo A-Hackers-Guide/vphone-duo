@@ -9,6 +9,7 @@ tweak filter plists, and the GPU provenance note:
 | Camera app hook | `camfix/libcamfix.dylib`, `camfix/libcamfix.plist` |
 | Camera daemon hook | `vcamcaptured/libvcamcaptured.dylib`, `vcamcaptured/libvcamcaptured.plist` |
 | Haptics fix | `hapticsfix/libhapticsfix.dylib` |
+| Battery health fix | `batteryhealthfix/libbatteryhealthfix.dylib` |
 | Launchd hook | `launchhook/launchdhook-vphone.dylib` |
 | Process injection bridge | `systemhook/SystemHook-vphone.dylib` |
 | iOS 27 app registrar | `vpregister/vpregister` |
@@ -22,7 +23,12 @@ loads `libvcamcaptured.dylib` into `/usr/libexec/cameracaptured` and
 `libcamfix.dylib` into apps that have AVFoundation loaded; neither camera hook
 needs ElleKit or a bootstrap. It loads `libhapticsfix.dylib` into SpringBoard,
 where UIKit's feedback engine would otherwise die on the haptics hardware no
-VM has. After a bootstrap installs ElleKit, the launchd hook
+VM has. Both spawn hooks insert `libbatteryhealthfix.dylib` into Settings beside
+SystemHook; it completes the internal battery's power source description with
+the health keys a real battery has and answers the two questions only battery
+hardware can, so Battery Health shows a healthy battery instead of loading
+forever.
+After a bootstrap installs ElleKit, the launchd hook
 inserts SystemHook into `xpcproxy`, bootstrap executables, and apps started
 directly by launchd. Inside `xpcproxy`, SystemHook carries itself into the
 final executable through `posix_spawnp`. Injected App and bootstrap processes
