@@ -61,6 +61,32 @@ static const char *vpMISFixFor(const char *path) {
     return vpIsMISFixTarget(path) && access(VP_MIS_FIX, R_OK) == 0 ? VP_MIS_FIX : NULL;
 }
 
+// The battery health hook, which fills in the health half of the internal
+// battery's power source description; see
+// BatteryHealthFix/libbatteryhealthfix.c. Inserted rather than loaded by
+// SystemHook because it interposes: the table has to be in place before
+// BatteryUsageUI.bundle is bound.
+#define VP_BATTERY_HEALTH_FIX "/usr/lib/libbatteryhealthfix.dylib"
+
+// Settings, the one process that shows Battery Health. Asked by both spawn
+// hooks, like the MIS targets, so it holds whichever of them starts the app.
+static int vpIsBatteryHealthFixTarget(const char *path) {
+    return path && vpPathHasSuffix(path, "/Preferences.app/Preferences");
+}
+
+static const char *vpBatteryHealthFixFor(const char *path) {
+    return vpIsBatteryHealthFixTarget(path) && access(VP_BATTERY_HEALTH_FIX, R_OK) == 0
+               ? VP_BATTERY_HEALTH_FIX
+               : NULL;
+}
+
+// The one library, if any, the spawn hooks insert beside SystemHook for
+// `path`. The MIS and battery health targets do not overlap.
+static const char *vpInsertedLibraryFor(const char *path) {
+    const char *library = vpMISFixFor(path);
+    return library ? library : vpBatteryHealthFixFor(path);
+}
+
 typedef struct {
     char **values;
     char *hook;
