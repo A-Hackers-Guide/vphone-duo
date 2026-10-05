@@ -31,6 +31,14 @@ The cloudOS 26.4 beta image (`26.4-23E5207q`) is the newest one that contains `v
 
 Use `vphone-cli fw catalog` to inspect the current catalogue. Other iPhone and iPad versions may work with `26.4-23E5207q`, but they have not passed this same end-to-end check.
 
+## Other iPhone models
+
+See [Other iPhone models](iphone-models.md).
+
+| Host | iPhone restore IPSW | PCC/cloudOS IPSW | Observed result |
+| --- | --- | --- | --- |
+| Mac17,9 (M5 Pro) 27.0.1 | `18,1_26.6.2_23G90` (iPhone 17 Pro) | `26.4-23E5207q` | Launchpad `vm create` (2.5.1 local bundle): prepare, patch, restore, CFW, boot to the home screen at 402x874 pt @3x, `model` iPhone18,1, vphoned ping |
+
 ## iPadOS
 
 See [iPadOS guests](ipados.md).

@@ -9,6 +9,7 @@ Start with the [Launchpad quick start](../README.md#get-started). For terminal u
 | [Create and Run](Guides/create-and-run.md) | Firmware inputs, full or manual pipeline, vphoned, storage and backups |
 | [Compatibility](Guides/compatibility.md) | Verified firmware pairs and what the checks prove |
 | [iPadOS Guests](Guides/ipados.md) | Running iPadOS from an iPad restore IPSW instead of iOS |
+| [Other iPhone Models](Guides/iphone-models.md) | Running iOS from an iPhone 16 Pro, 17, 17 Pro, Air or other model's IPSW |
 | [Package Environment](Guides/package-environment.md) | Installing and removing a package manager in the VM |
 | [Troubleshooting](Guides/troubleshooting.md) | Launch refusals, restore failures, Home key and app problems |
 | [Launchpad Command Line](Guides/launchpad-cli.md) | Installing and testing a local build with `vphone-launchpad-cli` |

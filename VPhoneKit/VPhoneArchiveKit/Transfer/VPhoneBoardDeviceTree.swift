@@ -98,7 +98,7 @@ public enum VPhoneBoardDeviceTree {
 
     /// What a run has to do about a VM's board tree.
     public enum Need: Equatable {
-        /// An iPhone guest, which has no board tree.
+        /// An iPhone17,3 guest, which has no board tree.
         case none
         /// `FirmwareOriginals` already holds one, or several, which staging
         /// refuses to choose between.
@@ -118,7 +118,7 @@ public enum VPhoneBoardDeviceTree {
         in vm: VPhoneConfinedDirectory,
         recorded: VPhoneRestoreInfo.OSVersion?,
     ) throws -> Need {
-        guard device.isPad else { return .none }
+        guard device.presentsBoard else { return .none }
         guard try kept(in: vm).isEmpty else { return .kept }
         var trees: [String] = []
         if try vm.isDirectory(originalsName) {

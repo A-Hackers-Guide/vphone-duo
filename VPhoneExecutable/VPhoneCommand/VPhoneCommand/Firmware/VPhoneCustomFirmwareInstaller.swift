@@ -1204,7 +1204,8 @@ struct VPhoneCustomFirmwareInstaller {
         boardDeviceTree: URL?,
     ) throws {
         /// Like every guest patch, a VM with no plan still gets it — except the
-        /// identity rewrite on an iPad guest, whose installed tree already
+        /// identity rewrite on a guest that presents its board (an iPad, or an
+        /// iPhone other than the iPhone17,3), whose installed tree already
         /// carries its own identity from `fw patch`; the rewrite would turn it
         /// back into an iPhone17,3.
         func on(_ identifier: String) -> Bool {
@@ -1217,7 +1218,7 @@ struct VPhoneCustomFirmwareInstaller {
         let identity = FirmwareGuestIdentityPatchSet.prebootDeviceTreeIdentity
         var rewriteIdentity = false
         if includeIdentity {
-            if guestDevice.isPad {
+            if guestDevice.presentsBoard {
                 print("  [·] \(identity): skipped, the device tree already presents \(guestDevice.productType)")
             } else {
                 rewriteIdentity = on(identity)

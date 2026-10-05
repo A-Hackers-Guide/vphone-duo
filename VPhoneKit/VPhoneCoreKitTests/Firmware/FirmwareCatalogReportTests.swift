@@ -21,7 +21,7 @@ struct FirmwareCatalogReportTests {
         #expect(report.devices.map(\.productType) == VPhoneGuestDevice.known.map(\.productType))
         #expect(report.devices.first?.pairings == report.pairings)
         for device in report.devices.dropFirst() {
-            #expect(device.family == "iPad")
+            #expect(device.family == VPhoneGuestDevice.named(device.productType)?.family.rawValue)
             #expect(!device.pairings.isEmpty)
             #expect(device.name == VPhoneGuestDevice.named(device.productType)?.productName)
         }
@@ -43,6 +43,23 @@ struct FirmwareCatalogReportTests {
                 #expect(name.contains("_\(p.iosName.dropFirst("iPadOS ".count))_"))
             }
         }
+    }
+
+    @Test func `other i phones have pairings of their own`() {
+        for guest in VPhoneGuestDevice.known where guest.family == .iPhone && guest.presentsBoard {
+            let pairings = VPhoneFirmwareCatalog.pairings(for: guest.productType)
+            #expect(pairings.map(\.iosName).first == (guest.productType == "iPhone18,5" ? "iOS 26.3.1" : "iOS 26.0"))
+            #expect(pairings.map(\.iosName).last == "iOS 27.0.1")
+            for p in pairings {
+                #expect(p.device == guest.productType)
+                #expect(p.iosURL.hasPrefix("https://updates.cdn-apple.com/"))
+                let name = (p.iosURL as NSString).lastPathComponent
+                #expect(name.hasPrefix("\(guest.productType)_\(p.iosName.dropFirst("iOS ".count))_"))
+                #expect(name.hasSuffix("_Restore.ipsw"))
+                #expect(p.cloudosURL == VPhoneFirmwareCatalog.recommendedCloudOS(forVersion: String(p.iosName.dropFirst("iOS ".count))).url)
+            }
+        }
+        #expect(VPhoneFirmwareCatalog.pairings(for: "iPhone18,1") != VPhoneFirmwareCatalog.pairings)
     }
 
     @Test func `cellular i pad gets its wi fi model's pairings`() {

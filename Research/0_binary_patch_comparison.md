@@ -68,6 +68,24 @@
 >
 > See `Documents/Guides/ipados.md`.
 >
+> **Other iPhone models (2026-10-05, issue #576):** the four
+> `devicetree-cfw-ipad_*` presentation patches and `devicetree-cfw-ipad_audio`
+> now apply to every guest device except the iPhone17,3
+> (`VPhoneGuestDevice.presentsBoard`): the iPhone 16 Plus, 16 Pro, 16 Pro Max
+> and 16e (iPhone17,4/1/2/5) and the iPhone 17, Air, 17 Pro, 17 Pro Max and 17e
+> (iPhone18,3/4/1/2/5). No patch is new and the IDs keep their `ipad_` names,
+> which presets list. Such a guest gets the separate installed tree, the board's
+> identity, `/product` and audio node, and skips
+> `preboot-exp-devicetree_identity`, as an iPad does. The phone properties
+> (`island-notch-location`, `ui-reachability`, `oled-display`, volume-button
+> geometry, `watch-companion`, `carplay-2`) take the board's values instead of
+> being removed. `llb-cfw-display_scale` is emitted only when the guest's scale
+> is not 3x, so it stays iPad-only. Checked on iPhone18,1 (V53AP) 26.6.2
+> (23G90) with cloudOS 26.4 (23E5207q): installed tree `model` iPhone18,1,
+> artwork subtype 2622 at 3x, `/product/audio` acoustic ID 8021 from the board;
+> the guest booted to the home screen at 402x874 points. See
+> `Documents/Guides/iphone-models.md`.
+>
 > **Only the camera remains of EXP by default (2026-09-28).** `standard` is now the
 > JB baseline plus the virtual camera. Off by default, besides the concealment
 > below: `watchdogd.hv_vmm_cache` (moved into
