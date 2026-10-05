@@ -228,6 +228,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 mc?.updateClipboardAvailability(available: caps.contains("clipboard"))
                 mc?.updateSettingsAvailability(available: true)
                 mc?.updateRestartAvailability(available: caps.contains("system_control"))
+                mc?.updateShutDownAvailability(available: caps.contains("system_shutdown"))
                 mc?.updateUDIDAvailability(available: caps.contains("udid_override"))
                 mc?.updatePanelAvailability(capabilities: caps)
                 if caps.contains("location") {
@@ -261,6 +262,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 mc?.updateClipboardAvailability(available: false)
                 mc?.updateSettingsAvailability(available: false)
                 mc?.updateRestartAvailability(available: false)
+                mc?.updateShutDownAvailability(available: false)
                 mc?.updateUDIDAvailability(available: false)
                 mc?.updatePanelAvailability(capabilities: [])
                 provider?.stopReplay()

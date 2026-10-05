@@ -50,6 +50,7 @@ class VPhoneMenuController {
     var settingsGetItem: NSMenuItem?
     var settingsSetItem: NSMenuItem?
     var restartGuestItem: NSMenuItem?
+    var shutDownGuestItem: NSMenuItem?
     var setUDIDItem: NSMenuItem?
     var resetUDIDItem: NSMenuItem?
     var skipSetupAssistantItem: NSMenuItem?

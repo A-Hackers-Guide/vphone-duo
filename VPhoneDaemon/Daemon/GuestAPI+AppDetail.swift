@@ -1,6 +1,7 @@
 import Foundation
 import IcliKit
 import IcliSystem
+import VphonedNative
 
 // MARK: - App Detail and System Control
 
@@ -42,6 +43,9 @@ extension GuestAPI {
             let userspace = bool(params, "userspace")
             try requireForce(params, userspace ? "restart userspace" : "reboot the guest")
             return try requestReboot(userspace: userspace, force: true)
+        case "system.shutdown":
+            try requireForce(params, "shut down the guest")
+            return try requestShutdown()
         default:
             return nil
         }
@@ -76,5 +80,21 @@ extension GuestAPI {
             }
             throw GuestAPIError.operationFailed(sentences.joined(separator: " "))
         }
+    }
+}
+
+// MARK: - Shutdown
+
+extension GuestAPI {
+    /// Asks launchd to shut the guest down. Success means launchd accepted the
+    /// request; the guest then stops, which ends the virtual machine on the
+    /// host, so the caller usually loses the connection before the reply.
+    static func requestShutdown() throws -> [String: Any] {
+        guard geteuid() == 0 else { throw GuestAPIError.operationFailed("shutdown requires root") }
+        let status = vp_system_halt()
+        guard status == 0 else {
+            throw GuestAPIError.operationFailed("shutdown request rejected: \(String(cString: strerror(status)))")
+        }
+        return ["accepted": true, "completion": "the virtual machine stops"]
     }
 }
