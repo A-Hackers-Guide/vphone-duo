@@ -92,6 +92,12 @@ final class VPhoneLaunchpadMachineLibrary {
         Set(machines.map(\.libraryRoot)).count > 1
     }
 
+    /// The bar the state label shows in place of its text: an export's
+    /// progress, or the IPSW download of a creation.
+    func progress(of machine: Path) -> Double? {
+        exports[machine]?.fraction ?? creations[machine]?.downloadFraction
+    }
+
     func state(of machine: Path) -> RunState {
         if let creation = creations[machine], creation.isRunning, let step = creation.current {
             return .busy(String(localized: "Creating: \(step.title)"))

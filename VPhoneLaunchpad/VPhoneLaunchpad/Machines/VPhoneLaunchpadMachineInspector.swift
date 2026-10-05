@@ -6,7 +6,8 @@ import SwiftUI
 /// A machine's run state as the table and the inspector show it.
 struct VPhoneLaunchpadMachineStateLabel: View {
     let state: VPhoneLaunchpadMachineLibrary.RunState
-    /// An export's progress, shown as a bar in place of the activity text.
+    /// An export's or a creation's IPSW download progress, shown as a bar in
+    /// place of the activity text, which becomes its help tag.
     var progress: Double?
 
     var body: some View {
@@ -101,7 +102,7 @@ struct VPhoneLaunchpadMachineInspector: View {
                 LabeledContent("State") {
                     VPhoneLaunchpadMachineStateLabel(
                         state: library.state(of: machine.path),
-                        progress: library.exports[machine.path]?.fraction,
+                        progress: library.progress(of: machine.path),
                     )
                 }
                 if let started = library.startedAt[machine.path] {
