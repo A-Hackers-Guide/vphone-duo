@@ -7,32 +7,32 @@
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "vphone-launchpad"
+            "state" : "translated",
+            "value" : "VPhone Launchpad"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "vphone-launchpad"
+            "value" : "VPhone Launchpad"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "vphone-launchpad"
+            "value" : "VPhone Launchpad"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "vphone-launchpad"
+            "value" : "VPhone Launchpad"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "vphone-launchpad"
+            "value" : "VPhone Launchpad"
           }
         }
       }
@@ -43,32 +43,32 @@
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "vphone-launchpad"
+            "state" : "translated",
+            "value" : "VPhone Launchpad"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "vphone-launchpad"
+            "value" : "VPhone Launchpad"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "vphone-launchpad"
+            "value" : "VPhone Launchpad"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "vphone-launchpad"
+            "value" : "VPhone Launchpad"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "vphone-launchpad"
+            "value" : "VPhone Launchpad"
           }
         }
       }
