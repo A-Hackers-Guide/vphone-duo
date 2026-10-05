@@ -53,10 +53,25 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
         /// guest yet. Reported only for a named machine, by a bundle that
         /// compares its records; nil otherwise.
         let pending: Bool?
+        /// Where the patch lives in a machine: a boot-chain component's name,
+        /// or `Guest`. Reported only for a named machine; nil otherwise.
+        let part: String?
 
         var id: String {
             identifier
         }
+
+        /// Whether the patch is in the boot chain, which only a restore
+        /// changes on a machine that exists. Read from `part` when the bundle
+        /// reports it, else from `target`, which names the component the same
+        /// way for a boot-chain patch.
+        var isBootChain: Bool {
+            Self.bootChainParts.contains(part ?? target)
+        }
+
+        private static let bootChainParts: Set<String> = [
+            "AVPBooter", "iBSS", "iBEC", "LLB", "TXM", "kernelcache", "DeviceTree",
+        ]
 
         /// False when the patch applies to every version, which is not worth a
         /// column entry.
@@ -125,6 +140,25 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
         blockedPatches.count + allowedPatches.count
     }
 
+    /// The machine's own choice, as the editor starts from it.
+    var selection: VPhoneLaunchpadPatchSelection {
+        VPhoneLaunchpadPatchSelection(
+            preset: activePreset,
+            blocked: Set(blockedPatches),
+            allowed: Set(allowedPatches),
+        )
+    }
+
+    /// Pending patches a guest environment update brings in line.
+    var pendingGuestPatches: Int {
+        patches.count { $0.pending == true && !$0.isBootChain }
+    }
+
+    /// Pending patches only a restore brings in line.
+    var pendingBootChainPatches: Int {
+        patches.count { $0.pending == true && $0.isBootChain }
+    }
+
     func preset(_ identifier: String) -> Preset? {
         presets.first { $0.identifier == identifier }
     }
@@ -165,7 +199,7 @@ extension VPhoneLaunchpadPatchCatalog {
     ) async throws -> VPhoneLaunchpadPatchCatalog {
         #if DEBUG
             if VPhoneLaunchpadPreview.isActive {
-                guard let catalog = VPhoneLaunchpadPreview.patchCatalog(preset: preset) else {
+                guard let catalog = VPhoneLaunchpadPreview.patchCatalog(preset: preset, machine: machine != nil) else {
                     throw VPhoneLaunchpadError(String(localized: "Unable to list the bundle's patches."))
                 }
                 return catalog
@@ -269,5 +303,12 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
     /// The boot-essential patches this choice turns off, in catalogue order.
     func bootEssentialOff(in catalog: VPhoneLaunchpadPatchCatalog) -> [VPhoneLaunchpadPatchCatalog.Patch] {
         catalog.patches.filter { $0.bootEssential && !isOn($0) }
+    }
+}
+
+/// So the inspector can present the editor with the choice it opens on.
+extension VPhoneLaunchpadPatchSelection: Identifiable {
+    var id: Self {
+        self
     }
 }

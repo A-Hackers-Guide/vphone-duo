@@ -1,10 +1,13 @@
 import SwiftUI
 
-/// The patch editor New Machine opens: a preset, and a checkmark for every
-/// patch the bundle declares.
+/// The patch editor: a preset, and a checkmark for every patch the bundle
+/// declares. New Machine opens it for a machine that does not exist yet, and
+/// the inspector for one that does.
 ///
-/// Only a machine that does not exist yet has one. Once installed, its
-/// firmware is patched and the choice is fixed.
+/// For an existing machine the choice is read from and saved to that machine
+/// (`fw patches <vm>`, `fw set-patches <vm>`) with its own Core Bundle, and
+/// the status line says how each change reaches it: guest patches at the next
+/// guest environment update, the boot chain only with a restore.
 ///
 /// The list is never a copy of the catalogue — it is whatever
 /// `vphone-cli fw patches --json` reports, so a patch set added to the bundle
@@ -19,7 +22,10 @@ struct VPhoneLaunchpadPatchSettingsView: View {
     /// The Core Bundle New Machine creates with; its `vphone-cli` lists the
     /// patches. Nil reads the default version's.
     let bundleVersion: String?
-    /// Hands the edited choice back; New Machine holds it until the VM exists.
+    /// The existing machine being edited, or nil in New Machine.
+    let machine: VPhoneLaunchpadMachinePath?
+    /// Hands the edited choice back; New Machine holds it until the VM exists,
+    /// the inspector saves it to the machine.
     let onSave: (VPhoneLaunchpadPatchSelection) -> Void
 
     @Environment(VPhoneLaunchpadModel.self) private var model
@@ -36,14 +42,19 @@ struct VPhoneLaunchpadPatchSettingsView: View {
     /// The row whose summary the detail pane reads.
     @State private var highlighted: String?
     @State private var confirmsBootEssential = false
+    /// What was on when the editor opened, so the status line can count what
+    /// an edit to an existing machine changes. Taken from the first read.
+    @State private var initiallyOn: Set<String>?
 
     init(
         initial: VPhoneLaunchpadPatchSelection,
         bundleVersion: String? = nil,
+        machine: VPhoneLaunchpadMachinePath? = nil,
         onSave: @escaping (VPhoneLaunchpadPatchSelection) -> Void,
     ) {
         self.initial = initial
         self.bundleVersion = bundleVersion
+        self.machine = machine
         self.onSave = onSave
         _selection = State(initialValue: initial)
     }
@@ -288,7 +299,22 @@ struct VPhoneLaunchpadPatchSettingsView: View {
         if selection.hasOverrides {
             parts.append(String(localized: "\(selection.blocked.count) turned off, \(selection.allowed.count) turned on from the preset"))
         }
-        parts.append(String(localized: "Applied when the machine is installed"))
+        if machine == nil {
+            parts.append(String(localized: "Applied when the machine is installed"))
+        } else if let initiallyOn {
+            let changed = catalog.patches.filter { selection.isOn($0) != initiallyOn.contains($0.identifier) }
+            let bootChain = changed.count(where: \.isBootChain)
+            let guest = changed.count - bootChain
+            if changed.isEmpty {
+                parts.append(String(localized: "No change"))
+            }
+            if guest > 0 {
+                parts.append(String(localized: "^[\(guest) guest patch](inflect: true) to apply with a guest environment update"))
+            }
+            if bootChain > 0 {
+                parts.append(String(localized: "^[\(bootChain) boot chain patch](inflect: true) that only a restore applies"))
+            }
+        }
         return parts.joined(separator: " · ")
     }
 
@@ -300,7 +326,7 @@ struct VPhoneLaunchpadPatchSettingsView: View {
         do {
             let catalog = try await Catalog.read(
                 using: bundleVersion.map(model.bundles.commandLine(version:)) ?? model.bundles.commandLine(),
-                machine: nil,
+                machine: machine,
                 preset: preset,
             )
             // A second switch of the picker may have overtaken this read.
@@ -309,6 +335,9 @@ struct VPhoneLaunchpadPatchSettingsView: View {
             }
             selection.preset = catalog.activePreset
             selection.normalize(against: catalog)
+            if initiallyOn == nil {
+                initiallyOn = Set(catalog.patches.filter { selection.isOn($0) }.map(\.identifier))
+            }
             self.catalog = catalog
             // The detail pane reserves its space either way, so it starts with
             // something to read rather than a gap.
