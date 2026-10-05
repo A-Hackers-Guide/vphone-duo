@@ -38,9 +38,6 @@ struct VPhoneLaunchpadHostSetupView: View {
         .sheet(isPresented: $showsSkillInstall) {
             VPhoneLaunchpadSkillInstallView()
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            host.refreshDeveloperTools()
-        }
         .errorAlert($host.actionError)
         .errorAlert($leases.actionError)
         .task { await model.leases.refresh() }
@@ -73,7 +70,7 @@ struct VPhoneLaunchpadHostSetupView: View {
                 if !host.requiredPassed {
                     VStack(alignment: .leading, spacing: 4) {
                         if host.checks.contains(where: { $0.kind == .developerTools && $0.status != .passed }) {
-                            Text("Allow vphone-launchpad in Privacy & Security → Developer Tools, then click Reopen.")
+                            Text("Allow vphone-launchpad in Privacy & Security → Developer Tools, then come back to Launchpad.")
                         }
                         Text("A Core Bundle can be installed once every required check passes.")
                     }
@@ -136,19 +133,9 @@ struct VPhoneLaunchpadHostSetupView: View {
     private func action(for check: VPhoneLaunchpadHostCheck) -> some View {
         switch check.kind {
         case .developerTools where check.status != .passed:
-            HStack(spacing: 8) {
-                if host.canRequestDeveloperTools {
-                    Button("Open Settings") {
-                        Task { await host.requestDeveloperTools() }
-                    }
-                }
-                if host.needsRelaunch {
-                    Button("Reopen") {
-                        // The sheet is still attached when its dismiss handler
-                        // runs; relaunch on the turn after it has gone.
-                        model.afterSheetDismissed { host.relaunch() }
-                        dismiss()
-                    }
+            if host.canRequestDeveloperTools {
+                Button("Open Settings") {
+                    Task { await host.requestDeveloperTools() }
                 }
             }
         case .helper where check.status == .pending:

@@ -41,7 +41,8 @@ Recovery and are the owner's call. Say which check failed and stop.
    to update, download the new version and replace the app.
 4. Open it once. On first launch the user completes Host Setup: allow
    Developer Tools access, and install the helper (it asks for an administrator
-   password). Developer Tools access takes effect after Launchpad is relaunched.
+   password). Developer Tools access takes effect as soon as the switch is on;
+   Launchpad checks it again when it comes to the front, without a relaunch.
    `canInstallBundles` in `status` turns `true` when both are done.
 
 Which versions are notarized is listed in `Documents/Downloads/README.md`.

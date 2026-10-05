@@ -17,6 +17,10 @@ struct VPhoneLaunchpadRootView: View {
             }
             .navigationTitle("Machines")
             .task { await model.start() }
+            // Coming back from Settings, with or without Host Setup open.
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                host.refreshDeveloperTools()
+            }
             .sheet(item: $model.panel, onDismiss: model.panelDidDismiss) { panel in
                 Group {
                     switch panel {

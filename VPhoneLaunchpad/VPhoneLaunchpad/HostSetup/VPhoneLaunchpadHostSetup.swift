@@ -50,13 +50,9 @@ final class VPhoneLaunchpadHostSetup {
     ]
     private(set) var isChecking = false
     var actionError: VPhoneLaunchpadError?
-    /// Set once Settings was opened for Developer Tools. The status the
-    /// system reports can lag the switch, so Reopen is offered from then on.
+    /// Set once Settings was opened for Developer Tools, so a refusal then
+    /// reads "Not allowed" rather than "Not requested".
     private(set) var didOpenDeveloperTools = false
-
-    /// Developer Tools access applies to processes launched after it is
-    /// granted. This process keeps the access it started with.
-    @ObservationIgnored private let launchDeveloperToolStatus = EPDeveloperTool().authorizationStatus
 
     let helper: VPhoneLaunchpadHelperClient
     let libraryRoot: URL
@@ -117,24 +113,15 @@ final class VPhoneLaunchpadHostSetup {
         UserDefaults.standard.set(skipped.map(\.rawValue).sorted(), forKey: Self.skippedKey)
     }
 
+    /// The Developer Tools row as last checked. `refreshDeveloperTools()`
+    /// checks again; the app does so whenever it becomes active.
     var isDeveloperToolAuthorized: Bool {
-        #if DEBUG
-            if VPhoneLaunchpadPreview.isActive {
-                return checks.first { $0.kind == .developerTools }?.status == .passed
-            }
-        #endif
-        return launchDeveloperToolStatus == .authorized && EPDeveloperTool().authorizationStatus == .authorized
+        checks.first { $0.kind == .developerTools }?.status == .passed
     }
 
-    /// False once the system reports the grant, even before a relaunch.
+    /// Settings cannot lift a restriction set by the system or a profile.
     var canRequestDeveloperTools: Bool {
-        EPDeveloperTool().authorizationStatus != .authorized
-    }
-
-    /// True when a grant made after launch needs a relaunch to apply.
-    var needsRelaunch: Bool {
-        launchDeveloperToolStatus != .authorized
-            && (didOpenDeveloperTools || EPDeveloperTool().authorizationStatus == .authorized)
+        EPDeveloperTool().authorizationStatus != .restricted
     }
 
     // MARK: - Checking
@@ -196,33 +183,6 @@ final class VPhoneLaunchpadHostSetup {
         NSWorkspace.shared.open(Self.developerToolsSettings)
     }
 
-    /// Quits and opens Launchpad again so a new Developer Tools grant
-    /// applies. A detached waiter opens the app once this process has exited.
-    /// No machine can be in creation here: Core Bundle needs this access.
-    ///
-    /// Call this only after the sheet that triggered it has closed.
-    /// Terminating while a sheet is still attached makes SwiftUI answer
-    /// `.terminateLater` and never reply, so the quit stalls and every later
-    /// attempt is ignored.
-    func relaunch() {
-        let waiter = Process()
-        waiter.executableURL = URL(fileURLWithPath: "/bin/sh")
-        waiter.arguments = [
-            "-c",
-            "while /bin/kill -0 \"$1\" 2>/dev/null; do /bin/sleep 0.2; done; /usr/bin/open \"$2\"",
-            "sh",
-            String(getpid()),
-            Bundle.main.bundlePath,
-        ]
-        do {
-            try waiter.run()
-        } catch {
-            actionError = VPhoneLaunchpadError(String(localized: "Unable to Reopen"), detail: String(localized: "Quit vphone-launchpad and open it again."))
-            return
-        }
-        NSApp.terminate(nil)
-    }
-
     private static let developerToolsSettings = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_DevTools",
     )!
@@ -240,18 +200,48 @@ final class VPhoneLaunchpadHostSetup {
         update(.helper, helperStatus())
     }
 
+    /// `EPDeveloperTool.authorizationStatus` keeps the answer this process
+    /// launched with: a grant or a revocation in Settings does not reach it
+    /// until a relaunch. syspolicyd checks the grant itself on every exception
+    /// request, so that request is what decides; the reported status only
+    /// names a refusal, or answers when syspolicyd could not be asked.
     private func developerTools() -> (VPhoneLaunchpadStatus, String) {
-        switch EPDeveloperTool().authorizationStatus {
-        case .authorized where launchDeveloperToolStatus == .authorized:
-            (.passed, String(localized: "Allowed"))
-        case .authorized:
-            (.pending, String(localized: "Reopen to apply"))
-        case .denied:
-            (.failed, String(localized: "Not allowed"))
-        case .restricted:
-            (.failed, String(localized: "Restricted by the system"))
-        default:
-            (.pending, String(localized: "Not requested"))
+        let reported = EPDeveloperTool().authorizationStatus
+        switch Self.developerToolGrant() {
+        case true?:
+            return (.passed, String(localized: "Allowed"))
+        case false? where reported == .restricted:
+            return (.failed, String(localized: "Restricted by the system"))
+        case false? where reported == .notDetermined && !didOpenDeveloperTools:
+            return (.pending, String(localized: "Not requested"))
+        case false?:
+            return (.failed, String(localized: "Not allowed"))
+        case nil:
+            switch reported {
+            case .authorized: return (.passed, String(localized: "Allowed"))
+            case .denied: return (.failed, String(localized: "Not allowed"))
+            case .restricted: return (.failed, String(localized: "Restricted by the system"))
+            default: return (.pending, String(localized: "Not requested"))
+            }
+        }
+    }
+
+    /// Whether syspolicyd takes this process for a developer tool now: it
+    /// refuses an execution policy exception to any other caller. The
+    /// exception asked for is for Launchpad's own running executable, which
+    /// it already lets run, so granting it changes nothing. Nil when the
+    /// request failed for another reason.
+    private nonisolated static func developerToolGrant() -> Bool? {
+        guard let executable = Bundle.main.executableURL else {
+            return nil
+        }
+        do {
+            try EPExecutionPolicy().addException(for: executable)
+            return true
+        } catch let error as EPError where error.code == .notADeveloperTool {
+            return false
+        } catch {
+            return nil
         }
     }
 
