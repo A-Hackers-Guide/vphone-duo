@@ -97,6 +97,11 @@ its choosing. Three findings:
    `192.168.72.0/24` was refused straight after one stop too. Only
    `/usr/libexec/InternetSharing` (root) was involved; nothing in `vphone-vm`
    was still alive.
+   (2026-10-05: the unexpected stop came from `vm stop` sending SIGINT to
+   Virtualization's service, the process holding the disk, rather than to
+   `vphone-vm`. `vm stop` now finds `vphone-vm` by its `--config` and stops
+   it, and the VM exits with status 0. Whether a subnet stays reserved after
+   such a stop has not been tested again.)
 
 A fixed address that works for one launch is not a fixed address, so nat
 accepts addresses on the shared network only (`Shared_Net_Address` and
