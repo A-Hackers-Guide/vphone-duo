@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// New Machine's second page: network, patches and restore options. It edits
-/// New Machine's own state, so Done only closes it.
+/// New Machine's Advanced page: network, patches and restore options, as
+/// sections of New Machine's form. It edits New Machine's own state.
 struct VPhoneLaunchpadNewMachineAdvancedView: View {
     @Binding var network: String
     @Binding var patches: VPhoneLaunchpadPatchSelection
@@ -15,53 +15,26 @@ struct VPhoneLaunchpadNewMachineAdvancedView: View {
     var bundleVersion: String?
 
     @Environment(VPhoneLaunchpadModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
     @State private var showsPatchSettings = false
 
-    static func networkTitle(_ mode: String) -> String {
-        switch mode {
-        case "bridged": String(localized: "Bridged")
-        case "tunnel": String(localized: "Tunnel")
-        case "none": String(localized: "None")
-        default: String(localized: "NAT")
-        }
-    }
-
     var body: some View {
-        VPhoneLaunchpadSheet(Text("Advanced Options")) {
-            Form {
-                Section("Network") {
-                    Picker("Mode", selection: $network) {
-                        Text("NAT").tag("nat")
-                        Text("Bridged").tag("bridged")
-                        Text("Tunnel").tag("tunnel")
-                        Text("None").tag("none")
-                    }
-                    if network == "tunnel" {
-                        Text("Traffic leaves through this Mac's own connections, so it follows the Mac's VPN.")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                patchSection
-
-                Section("Options") {
-                    Toggle("Keep prepared restore files", isOn: $keepArtifacts)
-                }
+        Section("Network") {
+            Picker("Mode", selection: $network) {
+                Text("NAT").tag("nat")
+                Text("Bridged").tag("bridged")
+                Text("Tunnel").tag("tunnel")
+                Text("None").tag("none")
             }
-            .formStyle(.grouped)
-        } actions: {
-            Button("Done") { dismiss() }
-                .keyboardShortcut(.defaultAction)
+            if network == "tunnel" {
+                Text("Traffic leaves through this Mac's own connections, so it follows the Mac's VPN.")
+                    .foregroundStyle(.secondary)
+            }
         }
-        .frame(width: 520)
-        .fixedSize(horizontal: false, vertical: true)
-        .sheet(isPresented: $showsPatchSettings) {
-            VPhoneLaunchpadPatchSettingsView(initial: patches, bundleVersion: bundleVersion) { selection in
-                patches = selection
-                reloadPatches()
-            }
-            .environment(model)
+
+        patchSection
+
+        Section("Options") {
+            Toggle("Keep prepared restore files", isOn: $keepArtifacts)
         }
     }
 
@@ -77,6 +50,13 @@ struct VPhoneLaunchpadNewMachineAdvancedView: View {
                 }
                 LabeledContent("Patches") {
                     Button("Patch Settings…") { showsPatchSettings = true }
+                        .sheet(isPresented: $showsPatchSettings) {
+                            VPhoneLaunchpadPatchSettingsView(initial: patches, bundleVersion: bundleVersion) { selection in
+                                patches = selection
+                                reloadPatches()
+                            }
+                            .environment(model)
+                        }
                 }
             } else if let patchCatalogError {
                 Label(patchCatalogError, systemImage: "exclamationmark.triangle")
