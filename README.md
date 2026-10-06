@@ -76,6 +76,7 @@ To turn on the automation API, add `--api-listen 127.0.0.1:8765` at launch and u
 | [Downloads](Documents/Downloads/README.md) | Notarized Launchpad versions and matching `VPhone.bundle` versions |
 | [Host Setup](Documents/Guides/host-setup.md) | SIP and AMFI settings, building from source, environment checks |
 | [Create and Run](Documents/Guides/create-and-run.md) | Firmware sources, the creation process, storage and backups |
+| [Snapshots](Documents/Guides/snapshots.md) | Save a stopped VM's disk state and revert to it |
 | [Compatibility](Documents/Guides/compatibility.md) | Verified firmware pairings |
 | [iPadOS Guests](Documents/Guides/ipados.md) | Run iPadOS (iPad mini A17 Pro) instead of iOS |
 | [Package Environment](Documents/Guides/package-environment.md) | Installing and removing a package manager in the VM |
