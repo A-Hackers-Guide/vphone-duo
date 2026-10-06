@@ -168,9 +168,13 @@ struct VPhoneCustomFirmwareInstaller {
         // `withLateGuestPatches` added from the current selection. A VM that was
         // never installed has an empty prior set (its guest is pristine); that
         // is decided below, where the mounted volume says whether it was.
-        let receiptGuest = (try? bundleDirectory.readData(VPhonePatchPresetStore.receiptFileName))
-            .flatMap { try? VPhoneVirtualMachinePatchReceipt.decode($0) }?
-            .parts[VPhoneVirtualMachinePatchReceipt.guestPart]
+        let receipt = (try? bundleDirectory.readData(VPhonePatchPresetStore.receiptFileName))
+            .flatMap { try? VPhoneVirtualMachinePatchReceipt.decode($0) }
+        let receiptGuest = receipt?.parts[VPhoneVirtualMachinePatchReceipt.guestPart]
+            .map { Set($0.patches) }
+        // The kernel patches the restore or the last `cfw update-kernel` put in
+        // this VM's kernelcache, which decide the shared region size below.
+        let receiptKernel = receipt?.parts[VPhoneVirtualMachinePatchReceipt.part(for: .firmware(.kernelcache))]
             .map { Set($0.patches) }
         let guestTargets = FirmwareGuestPatchResolution.guestTargetIdentifiers
         let effectiveEnabled = Set(plan?.enabledPatches ?? [])
@@ -340,6 +344,7 @@ struct VPhoneCustomFirmwareInstaller {
                     owner: callerUID,
                     plan: plan,
                     priorGuest: priorGuest,
+                    kernelPatches: receiptKernel,
                     environmentOnly: false,
                 )
             case .environmentOnly:
@@ -357,6 +362,7 @@ struct VPhoneCustomFirmwareInstaller {
                     owner: nil,
                     plan: plan,
                     priorGuest: priorGuest,
+                    kernelPatches: receiptKernel,
                     environmentOnly: true,
                 )
             }
@@ -985,6 +991,7 @@ struct VPhoneCustomFirmwareInstaller {
         owner: uid_t?,
         plan: VPhoneVirtualMachinePatchPlan?,
         priorGuest: Set<String>,
+        kernelPatches: Set<String>?,
         environmentOnly: Bool,
     ) throws -> Set<String> {
         var live = Set<String>()
@@ -1059,6 +1066,34 @@ struct VPhoneCustomFirmwareInstaller {
         }
         let version = try productVersion(system: system)
 
+        // 0. A cache whose span alone overruns the guest kernel's shared region
+        //    maps at no slide, and the guest panics on first boot. Refuse before
+        //    the redeploy and the cache patches. A header this check cannot read
+        //    is left to the dyld patches below, as it was before the check.
+        //
+        //    The region is the widened 0x1C0000000 only when this VM's kernel
+        //    carries `kernel-boot-shared_region_size`, as its receipt records:
+        //    a 27.x VM restored by an older bundle, or with the patch unticked,
+        //    still has the stock 6 GiB and must still be refused. A VM with no
+        //    kernelcache receipt falls back to the patch's applicability, the
+        //    27.x base.
+        let dsc = try verifiedDyldCacheDirectory(system: system)
+        let widenedRegion = kernelPatches.map { $0.contains("kernel-boot-shared_region_size") }
+            ?? version.hasPrefix("27.")
+        let kernelRegionSize = widenedRegion
+            ? DyldSharedCacheMaxSlidePatcher.patchedKernelSharedRegionSize
+            : DyldSharedCacheMaxSlidePatcher.kernelSharedRegionSize
+        do {
+            try DyldSharedCacheMaxSlidePatcher.requireFitsAtSlideZero(
+                chunksDirectory: URL(fileURLWithPath: dsc),
+                kernelRegionSize: kernelRegionSize,
+            )
+        } catch let overflow as DyldSharedCacheMaxSlidePatcher.RegionOverflow {
+            throw overflow
+        } catch {
+            print("  [!] shared region check skipped: \(error)")
+        }
+
         // 1. The redeploy first, so no later patch failure can block it. vphoned
         //    and the environment are boot-essential (always on). The environment
         //    keeps its old narrow rule under `environmentOnly`.
@@ -1078,7 +1113,6 @@ struct VPhoneCustomFirmwareInstaller {
         // 2. The dyld shared cache. The version branches and the declarations'
         //    applicability say the same thing; this is what a VM with no plan
         //    still follows.
-        let dsc = try verifiedDyldCacheDirectory(system: system)
         var dyld: [(id: String, verb: String, args: [String])] = []
         if version.hasPrefix("27.") {
             dyld += [

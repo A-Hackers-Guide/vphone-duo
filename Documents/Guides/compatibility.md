@@ -37,8 +37,8 @@ selector-24 pre-check rejects every binary at init and the boot panics with
 `unexpected SIGKILL of init`. The `txm-boot-precheck_admission` patch
 (`Research/Firmware/txm_selector24_cms_gate.md`) fixes it; verified the same
 day: `iPhone17,3 27.0.1 + 26.4-23E5207q` with the patch boots to the guest
-and answers a vphoned `device.info`. Until a bundle release carrying the
-patch ships, treat 27.0.x past 24A435 as needing a current local build.
+and answers a vphoned `device.info`. Bundle 2.6.0 is the first release that
+carries it.
 
 ## Other iPhone models
 
@@ -47,6 +47,26 @@ See [Other iPhone models](iphone-models.md).
 | Host | iPhone restore IPSW | PCC/cloudOS IPSW | Observed result |
 | --- | --- | --- | --- |
 | Mac17,9 (M5 Pro) 27.0.1 | `18,1_26.6.2_23G90` (iPhone 17 Pro) | `26.4-23E5207q` | Launchpad `vm create` (2.5.1 local bundle): prepare, patch, restore, CFW, boot to the home screen at 402x874 pt @3x, `model` iPhone18,1, vphoned ping |
+| Mac17,9 (M5 Pro) 27.0.1 | `18,2_27.0.1_24A446` (iPhone 17 Pro Max) | `26.4-23E5207q` | **boots** with the `kernel-boot-shared_region_size` patch (2026-10-06, bundle 2.6.0-local.0d5e6f90): `dyld cache mapped system-wide`, 0 panics, vphoned answers as 27.0.1, home screen at 440x956 pt @3x |
+
+**iPhone18,1 and iPhone18,2 on iOS 27 need the shared-region patch**
+([issue #596](https://github.com/Lakr233/vphone-cli/issues/596), 27.0 and
+27.0.1). Their dyld shared cache records a `sharedRegionSize` of
+`0x185804000` on 27.0.1, larger than the `0x180000000` shared region of the
+cloudOS 26.4 guest kernel, so it cannot map even with `dyld-boot-maxslide`
+taking its slide away: launchd panics on first boot with `Library not loaded:
+/usr/lib/libSystem.B.dylib`. iPhone17,3's 27.0.1 cache (`0x17D508000`) still
+fits. Since this check, `cfw install` refuses such a cache with that
+explanation instead of leaving a guest that panics.
+
+`kernel-boot-shared_region_size` (on in `standard` for an iOS 27 base since
+2026-10-06) widens the arm64 region to `0x1C0000000` — the largest size that
+stays under the 26.4 kernel's own task-map ceilings — and `cfw install`
+measures the cache against that widened region when the VM's kernel carries
+the patch (its `PatchReceipt.plist` says so), so these devices now install and
+boot; validated on iPhone18,2 27.0.1 as above. Without the patch
+(an older bundle, or the patch unticked) the refusal stands: use iPhone17,3
+for iOS 27, or iOS 26 on these devices.
 
 ## iPadOS
 

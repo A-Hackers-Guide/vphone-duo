@@ -83,6 +83,14 @@ public enum DyldSharedCacheMaxSlidePatcher {
     /// region map ENOMEMs.
     public static let kernelSharedRegionSize: UInt64 = 0x1_8000_0000
 
+    /// The same kernel with the `kernel-boot-shared_region_size` patch applied
+    /// (`KernelCustomFirmwarePatchSharedRegionSize`): the arm64 region grows to
+    /// 0x1C0000000 while the base stays 0x180000000. The region top
+    /// (0x340000000) remains under the kernel's own task map ceilings, so
+    /// nothing else moves with it. `cfw install` checks the cache against this
+    /// size when the VM's kernelcache receipt lists the patch.
+    public static let patchedKernelSharedRegionSize: UInt64 = 0x1_C000_0000
+
     /// Byte offsets of the `dyld_cache_header` fields this patcher reads, from
     /// dyld's `dyld_cache_format.h`. Stable across every iOS this project
     /// targets, and corroborated at run time — see ``readHeader(from:)``.
@@ -169,6 +177,52 @@ public enum DyldSharedCacheMaxSlidePatcher {
         public var didWrite: Bool {
             writtenSpan != nil
         }
+    }
+
+    // MARK: - Region Check
+
+    /// A cache that does not fit the kernel's shared region even at slide 0.
+    ///
+    /// Zeroing `maxSlide` only gives the slide back. When `sharedRegionSize`
+    /// alone is larger than the region, `_shared_region_map_and_slide` still
+    /// returns ENOMEM and launchd panics on first boot with "Library not
+    /// loaded: /usr/lib/libSystem.B.dylib". The iOS 27 caches for iPhone18,1
+    /// and iPhone18,2 are such caches: 0x185804000 on 27.0.1 (24A446), where
+    /// iPhone17,3's 0x17D508000 still fits.
+    public struct RegionOverflow: Error, CustomStringConvertible, Sendable, Equatable {
+        /// `dyld_cache_header.sharedRegionSize`, as found.
+        public let sharedRegionSize: UInt64
+        /// The guest kernel's shared region size it was checked against.
+        public let region: UInt64
+
+        public var description: String {
+            "The dyld shared cache spans \(DyldSharedCacheMaxSlidePatcher.hex(sharedRegionSize)), "
+                + "more than the guest kernel's \(DyldSharedCacheMaxSlidePatcher.hex(region)) shared region "
+                + "even with no slide, so this guest would panic on first boot (launchd cannot load "
+                + "libSystem). Choose a device and iOS version whose cache fits, such as iPhone17,3, "
+                + "or iOS 26 for this device."
+        }
+    }
+
+    /// Throws ``RegionOverflow`` when the cache under `chunksDirectory` cannot
+    /// map at any slide, and returns its `sharedRegionSize` otherwise. Reads
+    /// only; nothing is written.
+    @discardableResult
+    public static func requireFitsAtSlideZero(
+        chunksDirectory: URL,
+        architecture: String = "arm64e",
+        kernelRegionSize: UInt64 = kernelSharedRegionSize,
+    ) throws -> UInt64 {
+        let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory, architecture: architecture)
+        let header = try readHeader(
+            from: chunks,
+            at: headerVMA(of: chunks),
+            chunkName: "dyld_shared_cache_\(architecture)",
+        )
+        guard header.sharedRegionSize <= kernelRegionSize else {
+            throw RegionOverflow(sharedRegionSize: header.sharedRegionSize, region: kernelRegionSize)
+        }
+        return header.sharedRegionSize
     }
 
     // MARK: - Patching

@@ -150,6 +150,19 @@ public enum ARM64Encoder {
         return ARM64.encodeU32(insn)
     }
 
+    /// Encode MOVK Xd, #imm16, LSL #shift (64-bit) — replace one 16-bit lane of
+    /// Xd and keep the others.
+    ///
+    /// Format: `[31] = 1 (sf)`, `[30:29] = 11`, `[28:23] = 100101`,
+    ///         `[22:21] = hw`, `[20:5] = imm16`, `[4:0] = Rd`
+    public static func encodeMovkX(rd: UInt32, imm16: UInt16, shift: UInt32 = 0) -> Data? {
+        guard shift % 16 == 0 else { return nil }
+        let hw = shift / 16
+        guard hw <= 3 else { return nil }
+        let insn: UInt32 = (0b1_1110_0101 << 23) | (hw << 21) | (UInt32(imm16) << 5) | (rd & 0x1F)
+        return ARM64.encodeU32(insn)
+    }
+
     /// Encode `MOV Xd, Xm` (the ORR Xd, XZR, Xm alias). With `rm == 31` (XZR) this
     /// is the canonical "zero a 64-bit register" (`mov xd, xzr`).
     ///
@@ -205,6 +218,33 @@ public enum ARM64Encoder {
         insn |= imm12 << 10
         insn |= rn << 5
         insn |= rt
+        return ARM64.encodeU32(insn)
+    }
+
+    // MARK: - Stores
+
+    /// Encode `STP Xt1, Xt2, [Xn, #offset]` — 64-bit store pair, signed scaled
+    /// offset, no writeback.
+    ///
+    /// Format: `[31:30] = 10 (opc = 64-bit)`, `[29:27] = 101`, `[26] = 0 (V)`,
+    ///         `[25:23] = 010 (signed offset)`, `[22] = 0 (L = store)`,
+    ///         `[21:15] = imm7`, `[14:10] = Rt2`, `[9:5] = Rn`, `[4:0] = Rt1`
+    ///
+    /// `imm7` is scaled by 8, so `offset` must be a multiple of 8 in
+    /// `-512...504`. `rn == 31` means SP.
+    public static func encodeStpX(rt1: UInt32, rt2: UInt32, rn: UInt32, offset: Int32) -> Data? {
+        guard rt1 < 32, rt2 < 32, rn < 32 else { return nil }
+        guard offset % 8 == 0 else { return nil }
+        let imm7 = offset / 8
+        guard imm7 >= -64, imm7 <= 63 else { return nil }
+
+        var insn: UInt32 = 0b10 << 30
+        insn |= 0b101 << 27
+        insn |= 0b010 << 23
+        insn |= (UInt32(bitPattern: imm7) & 0x7F) << 15
+        insn |= rt2 << 10
+        insn |= rn << 5
+        insn |= rt1
         return ARM64.encodeU32(insn)
     }
 

@@ -859,3 +859,68 @@ struct DyldSharedCacheMaxSlideGateTests {
         #expect(untouchedSlide == 0x2000_0000, "the refusal still wrote")
     }
 }
+
+// MARK: - The region check, on synthetic caches
+
+/// `requireFitsAtSlideZero`, which `cfw install` runs before any dyld patch.
+/// Synthetic caches only, so this runs without the real-cache fixture: the
+/// sizes are the iOS 27.0.1 (24A446) headers from issue #596.
+@Suite
+struct DyldSharedCacheRegionCheckTests {
+    private func withCache(
+        regionSize: UInt64,
+        maxSlide: UInt64 = 0x2000_0000,
+        _ body: (URL) throws -> Void,
+    ) throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vphone-dsc-region-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try DyldSharedCacheMaxSlideGateTests.writeCache(
+            into: directory, regionSize: regionSize, maxSlide: maxSlide,
+        )
+        try body(directory)
+    }
+
+    @Test
+    func `An iPhone18,2 27.0.1 cache overruns the region even at slide 0`() throws {
+        try withCache(regionSize: 0x1_8580_4000) { directory in
+            let main = directory.appendingPathComponent(MaxSlideFixture.mainChunkName)
+            let before = try Data(contentsOf: main)
+            #expect(throws: DyldSharedCacheMaxSlidePatcher.RegionOverflow(
+                sharedRegionSize: 0x1_8580_4000,
+                region: DyldSharedCacheMaxSlidePatcher.kernelSharedRegionSize,
+            )) {
+                try DyldSharedCacheMaxSlidePatcher.requireFitsAtSlideZero(chunksDirectory: directory)
+            }
+            #expect(try Data(contentsOf: main) == before, "the check wrote")
+        }
+    }
+
+    @Test
+    func `An iPhone17,3 27.0.1 cache fits once its slide is dropped`() throws {
+        try withCache(regionSize: 0x1_7D50_8000) { directory in
+            let size = try DyldSharedCacheMaxSlidePatcher.requireFitsAtSlideZero(chunksDirectory: directory)
+            #expect(size == 0x1_7D50_8000)
+        }
+    }
+
+    @Test
+    func `A cache exactly the size of the region fits`() throws {
+        let region = DyldSharedCacheMaxSlidePatcher.kernelSharedRegionSize
+        try withCache(regionSize: region, maxSlide: 0) { directory in
+            let size = try DyldSharedCacheMaxSlidePatcher.requireFitsAtSlideZero(chunksDirectory: directory)
+            #expect(size == region)
+        }
+    }
+
+    @Test
+    func `The refusal names both sizes and a way out`() {
+        let message = DyldSharedCacheMaxSlidePatcher.RegionOverflow(
+            sharedRegionSize: 0x1_8580_4000,
+            region: 0x1_8000_0000,
+        ).description
+        #expect(message.contains("0x185804000"))
+        #expect(message.contains("0x180000000"))
+        #expect(message.contains("iPhone17,3"))
+    }
+}
