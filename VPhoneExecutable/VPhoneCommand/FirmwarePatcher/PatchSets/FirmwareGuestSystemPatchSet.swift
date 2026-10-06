@@ -173,8 +173,11 @@ public enum FirmwareGuestSystemPatchSet {
                 and into lockdownd and remoted, which tell the host a configured UDID. It also \
                 ships libhapticsfix.dylib, which SystemHook loads into SpringBoard so UIKit's \
                 feedback engine takes the no-haptics path instead of crashing on the VM's absent \
-                haptic hardware, and libbatteryhealthfix.dylib, inserted into Settings, which gives \
-                the virtual battery the health record Battery Health waits for.
+                haptic hardware, libbatteryhealthfix.dylib, inserted into Settings, which gives \
+                the virtual battery the health record Battery Health waits for, and \
+                libdevicehubfix.dylib, inserted into cryptexd, which then stages the iOS 27 \
+                developer disk image, and into the image's dtremotedisplayd, which then reports \
+                the media stream features Xcode's DeviceHub needs to show the screen.
                 """,
                 target: .guestFile(path: "/Library/LaunchDaemons"),
                 bootEssential: true,
