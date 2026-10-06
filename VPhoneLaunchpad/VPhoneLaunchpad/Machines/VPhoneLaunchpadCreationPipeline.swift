@@ -98,8 +98,6 @@ final class VPhoneLaunchpadCreationPipeline {
     private var dfu: VPhoneLaunchpadChildProcess?
     private var dfuPanicked = false
 
-    nonisolated static let panicPattern = #"(^|[^p])(panic|kernel panic|panic\.apple\.com|stackshot succeeded)"#
-
     init(
         options: Options,
         bundles: VPhoneLaunchpadCoreBundle,
@@ -455,7 +453,7 @@ final class VPhoneLaunchpadCreationPipeline {
     // MARK: - Helpers
 
     nonisolated static func isPanic(_ line: String) -> Bool {
-        line.range(of: panicPattern, options: [.regularExpression, .caseInsensitive]) != nil
+        VPhoneLaunchpadPanicLine.matches(line)
     }
 
     /// The ECID the DFU boot wrote into udid-prediction.txt.
