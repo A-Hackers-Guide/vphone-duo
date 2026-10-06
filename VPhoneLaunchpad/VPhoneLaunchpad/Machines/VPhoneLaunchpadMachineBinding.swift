@@ -50,7 +50,10 @@ nonisolated struct VPhoneLaunchpadMachineBinding: Codable, Equatable, Sendable {
     /// Launchpad wrote. Every version is checked, since the file is in a
     /// folder the user owns and a version becomes a path in the store.
     static func load(_ machine: VPhoneLaunchpadMachinePath) -> VPhoneLaunchpadMachineBinding? {
-        let url = url(for: machine)
+        load(from: url(for: machine))
+    }
+
+    private static func load(from url: URL) -> VPhoneLaunchpadMachineBinding? {
         guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
               values.isRegularFile == true, values.isSymbolicLink != true,
               let data = try? Data(contentsOf: url),
@@ -66,8 +69,67 @@ nonisolated struct VPhoneLaunchpadMachineBinding: Codable, Equatable, Sendable {
     /// Atomic, so a `launchpad.json` that is a symbolic link is replaced
     /// rather than written through.
     func save(to machine: VPhoneLaunchpadMachinePath) throws {
+        try write(to: Self.url(for: machine))
+    }
+
+    private func write(to url: URL) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(self).write(to: Self.url(for: machine), options: .atomic)
+        try encoder.encode(self).write(to: url, options: .atomic)
+    }
+
+    // MARK: - Snapshots
+
+    /// A snapshot (`vm snapshot create`) copies the disk, the SEP storage and
+    /// the NVRAM, and leaves `launchpad.json` alone: vphone-cli never reads
+    /// it. Launchpad keeps a copy of the binding as it was beside the
+    /// snapshot's files, in `Snapshots/<name>/launchpad.json`, which
+    /// vphone-cli keeps with the snapshot and deletes with it.
+    ///
+    /// Nil for a name that is not one path component vphone-cli accepts, or
+    /// when `Snapshots` or the snapshot's folder is anything but a real
+    /// directory, so the copy is never written or read through a link.
+    static func url(for machine: VPhoneLaunchpadMachinePath, snapshot name: String) -> URL? {
+        guard VPhoneLaunchpadNames.isValidMachineName(name) else {
+            return nil
+        }
+        let snapshots = machine.url.appendingPathComponent("Snapshots", isDirectory: true)
+        let folder = snapshots.appendingPathComponent(name, isDirectory: true)
+        for directory in [snapshots, folder] {
+            guard let values = try? directory.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+                  values.isDirectory == true, values.isSymbolicLink != true
+            else {
+                return nil
+            }
+        }
+        return folder.appendingPathComponent(fileName)
+    }
+
+    /// The binding saved with a snapshot, checked as `load` checks a
+    /// machine's own.
+    static func load(_ machine: VPhoneLaunchpadMachinePath, snapshot name: String) -> VPhoneLaunchpadMachineBinding? {
+        url(for: machine, snapshot: name).flatMap(load(from:))
+    }
+
+    func save(to machine: VPhoneLaunchpadMachinePath, snapshot name: String) throws {
+        guard let url = Self.url(for: machine, snapshot: name) else {
+            throw CocoaError(.fileNoSuchFile, userInfo: [
+                NSFilePathErrorKey: machine.url.appendingPathComponent("Snapshots").appendingPathComponent(name).path,
+            ])
+        }
+        try write(to: url)
+    }
+
+    /// This binding after its machine is reverted to a snapshot taken with
+    /// `snapshot` as the binding. The guest environment and the boot chain
+    /// live on the disk and in the NVRAM the revert put back, so they are
+    /// whatever they were when the snapshot was taken. The host programs are
+    /// not part of the machine's files: the bundle stays the one chosen now.
+    func reverted(to snapshot: VPhoneLaunchpadMachineBinding) -> VPhoneLaunchpadMachineBinding {
+        VPhoneLaunchpadMachineBinding(
+            bundle: bundle,
+            bootChain: snapshot.bootChain,
+            guestEnvironment: snapshot.guestEnvironment,
+        )
     }
 }

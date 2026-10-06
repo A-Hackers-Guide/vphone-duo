@@ -77,8 +77,10 @@ nonisolated enum VPhoneLaunchpadNames {
     /// (`--ip`, `--mac`, `--forward`, `--mdns`, `--mac-name`), which a
     /// machine's Settings pass. 2.5.0 added `vm leases`, which Host Setup
     /// lists and the helper runs to release orphaned DHCP leases. 2.6.0 added
-    /// `vm config --unlock-at-startup`, which a machine's Settings pass.
-    private static let minimumBundleComponents = (2, 6, 0)
+    /// `vm config --unlock-at-startup`, which a machine's Settings pass. 2.7.0
+    /// added `vm clone --new-identity`, which Clone passes, and
+    /// `vm snapshot`, which the Snapshots sheet runs.
+    private static let minimumBundleComponents = (2, 7, 0)
     static let minimumBundleVersion =
         "\(minimumBundleComponents.0).\(minimumBundleComponents.1).\(minimumBundleComponents.2)"
 

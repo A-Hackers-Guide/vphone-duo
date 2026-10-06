@@ -12,6 +12,7 @@ struct VPhoneLaunchpadMachinesView: View {
         case rename(MachinePath)
         case clone(MachinePath)
         case export([MachinePath])
+        case snapshots(MachinePath)
         case console(MachinePath)
 
         var id: String {
@@ -23,6 +24,7 @@ struct VPhoneLaunchpadMachinesView: View {
             case let .rename(machine): "rename-\(machine.url.path)"
             case let .clone(machine): "clone-\(machine.url.path)"
             case let .export(machines): "export-\(machines.map(\.url.path).joined(separator: "|"))"
+            case let .snapshots(machine): "snapshots-\(machine.url.path)"
             case let .console(machine): "console-\(machine.url.path)"
             }
         }
@@ -307,6 +309,10 @@ struct VPhoneLaunchpadMachinesView: View {
                 .disabled(!isStopped)
             Button("Export…") { sheet = .export([machine.path]) }
                 .disabled(!isStopped)
+            // Open while the machine runs too, to read the list; taking,
+            // reverting and deleting wait for it to stop.
+            Button("Snapshots…") { sheet = .snapshots(machine.path) }
+                .disabled(library.creations[machine.path]?.isRunning == true)
             Button("Install Custom Firmware") {
                 Task { await library.installCustomFirmware(machine.path) }
             }
@@ -456,16 +462,13 @@ struct VPhoneLaunchpadMachinesView: View {
                 Task { await library.rename(path, to: newName) }
             }
         case let .clone(path):
-            VPhoneLaunchpadNameSheet(
-                title: "Clone \(path.name)",
-                action: "Clone",
-                initial: "\(path.name)-clone",
-                machine: path,
-            ) { newName in
-                Task { await library.clone(path, as: newName) }
+            VPhoneLaunchpadCloneSheet(machine: path) { newName, newIdentity in
+                Task { await library.clone(path, as: newName, newIdentity: newIdentity) }
             }
         case let .export(paths):
             VPhoneLaunchpadExportView(machines: paths)
+        case let .snapshots(path):
+            VPhoneLaunchpadSnapshotsView(machine: path)
         case let .console(path):
             VPhoneLaunchpadConsoleView(title: "\(path.name) Console", url: VPhoneLaunchpadMachineLibrary.consoleLog(path))
         }
