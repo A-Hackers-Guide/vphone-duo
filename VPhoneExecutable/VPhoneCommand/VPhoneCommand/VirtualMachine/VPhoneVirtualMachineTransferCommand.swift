@@ -7,18 +7,44 @@ struct VPhoneVirtualMachineCloneCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "clone",
         abstract: "Copy a VM bundle (using APFS copy-on-write when available)",
-        discussion: "The copy keeps the machine identifier, NVRAM, SEP storage, and SHSH blobs unchanged. Edit the device identity yourself if you need a different one.",
+        discussion: """
+        The source VM must be stopped. Its snapshots are not copied.
+
+        By default the copy keeps the machine identifier (ECID), MAC address, NVRAM, SEP \
+        storage and every setting, so it cannot run beside its source: use it as a backup.
+
+        --new-identity clears the machine identifier and MAC address, so the copy gets new \
+        ones, and with them a new UDID, on its first start. It also clears the fixed IPv4 \
+        address, port forwards and a hand-chosen mDNS name, which would collide with the \
+        source's; a derived mDNS name follows the new name. NVRAM, \
+        SEP storage and the disk image are kept: they were made together by one restore, and \
+        the guest panics if SEP storage is replaced. No restore or re-personalization is \
+        needed. The host must be trusted again in the guest before lockdown tools work.
+        """,
     )
 
     @OptionGroup var lib: VPhoneLibraryOption
     @Argument(help: "source VM name") var name: String?
     @Argument(help: "new VM name") var newName: String?
+    @Flag(help: "give the copy a new machine identifier and MAC address on its first start")
+    var newIdentity = false
 
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
         let newName = try VPhoneVirtualMachineSelection.resolveNewName(newName, prompt: "New VM name:")
-        let clone = try VPhoneBundleOperations.clone(bundleNamed: name, to: newName, in: lib.library)
+        let source = try lib.library.bundle(named: name)
+        let clone = try VPhoneBundleOperations.clone(
+            bundleNamed: name,
+            to: newName,
+            in: lib.library,
+            newIdentity: newIdentity,
+        )
         print("cloned \(name) → \(clone.name)")
+        guard newIdentity else { return }
+        print("new identity: machine identifier and MAC address are generated on first start")
+        for setting in VPhoneBundleOperations.networkSettingsClearedByNewIdentity(source.manifest.networkConfig, sourceName: source.name) {
+            print("cleared \(setting)")
+        }
     }
 }
 

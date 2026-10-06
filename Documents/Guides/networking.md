@@ -104,7 +104,9 @@ vphone-cli vm config <name> --mac auto     # a new one at the next launch
 ```
 
 A cloned machine keeps the MAC of the original, like its machine identifier.
-Give the clone a new one before running both at once.
+Clone with `vm clone --new-identity` to give the copy new ones, or give it a
+new MAC before running both at once. `--new-identity` also clears the copy's
+fixed address, port forwards and mDNS name.
 
 ## Addresses held by old MACs
 

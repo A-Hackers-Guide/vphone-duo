@@ -163,27 +163,122 @@ public enum VPhoneBundleOperations {
     // MARK: - Clone
 
     /// Copy the whole bundle, using APFS copy-on-write when available. The
-    /// machine identifier and boot state remain unchanged in the copy.
+    /// source must be stopped, so its disk image, `SEPStorage` and `nvram.bin`
+    /// are copied from one moment.
+    ///
+    /// Without `newIdentity` the copy keeps the machine identifier, MAC address
+    /// and every other setting, so it cannot run beside its source: it is a
+    /// backup. With `newIdentity` the copy gets a new identity on its first
+    /// start (see `resetIdentity`) and drops the network settings that would
+    /// collide with the source's, listed by `networkSettingsClearedByNewIdentity`.
+    @discardableResult
     public static func clone(
         bundleNamed name: String,
         to newName: String,
         in library: VPhoneLibrary,
+        newIdentity: Bool = false,
     ) throws -> VPhoneBundle {
         try requireValidName(newName)
-        let src = try library.bundle(named: name).url
+        let source = try library.bundle(named: name)
+        let src = source.url
         let dst = library.url(forName: newName)
         let fm = FileManager.default
         if fm.fileExists(atPath: dst.path) {
             throw VPhoneLibraryError.alreadyExists(name: newName)
         }
+        try VPhoneBundleActivity.requireStopped(source)
 
         // APFS CoW clone; fall back to a plain recursive copy off-APFS.
         if clonefile(src.path, dst.path, 0) != 0 {
             try? fm.removeItem(at: dst) // clear any partial clonefile output first
             try fm.copyItem(at: src, to: dst)
         }
-        try VPhoneHostFilePermissions.makeAccessible(at: dst)
-        return try VPhoneBundle.load(at: dst)
+        // Roll back a half-made copy, so a retry with the same name is not
+        // blocked by the alreadyExists check.
+        do {
+            // A clone starts without snapshots: they record the source's
+            // history, not the copy's.
+            try removeIfPresent(dst.appendingPathComponent(VPhoneMachineSnapshots.directoryName))
+            // The source's control socket, stale since it stopped.
+            try removeIfPresent(dst.appendingPathComponent("vphone.sock"))
+            if newIdentity {
+                try resetIdentity(of: VPhoneBundle.load(at: dst), clonedFrom: name)
+            }
+            try VPhoneHostFilePermissions.makeAccessible(at: dst)
+            return try VPhoneBundle.load(at: dst)
+        } catch {
+            try? fm.removeItem(at: dst)
+            throw error
+        }
+    }
+
+    /// The network settings a new-identity clone drops, described for display.
+    /// Each would collide with the source's when both run: a fixed address,
+    /// host ports, and a `.local` name chosen by hand. A name `--mdns on`
+    /// derived from the source's name is not cleared: it follows the new name,
+    /// as it does on rename. The MAC address is not listed; it is always
+    /// regenerated along with the machine identifier.
+    public static func networkSettingsClearedByNewIdentity(
+        _ network: VPhoneVirtualMachineManifest.NetworkConfig,
+        sourceName: String,
+    ) -> [String] {
+        var cleared: [String] = []
+        if let ipv4 = network.ipv4 {
+            cleared.append("fixed IPv4 address \(ipv4.address)/\(ipv4.prefixLength)")
+        }
+        if let forwards = network.portForwards, !forwards.isEmpty {
+            cleared.append("port forwards \(forwards.map(\.description).joined(separator: ", "))")
+        }
+        if let name = network.localHostName, !name.isEmpty,
+           name != VPhoneNetworking.localHostName(forVMName: sourceName)
+        {
+            cleared.append("mDNS name \(name)")
+        }
+        return cleared
+    }
+
+    /// Give a copied bundle a new identity on its next start.
+    ///
+    /// The identity is the ECID, kept in `config.plist` as `machineIdentifier`.
+    /// `vphone-vm` creates a new one, and a new MAC address, when either is
+    /// empty, and the guest derives its UDID, Wi-Fi/Bluetooth MACs and USB
+    /// serial from that ECID at boot. `udid-prediction.txt` only records the
+    /// old one and is rewritten on every start.
+    ///
+    /// `nvram.bin`, `SEPStorage` and the disk image stay exactly as copied.
+    /// The SEP's root secret lives in `SEPStorage`, and the xART gigalocker
+    /// and the Data and User volume keys on the disk were all made from it by
+    /// one restore: a fresh `SEPStorage` panics the SEP in AESS on the next
+    /// boot, and only an erasing restore can make a new matching set.
+    /// `nvram.bin` holds the boot firmware that restore wrote. Neither needs
+    /// the new ECID: the boot chain's patched image4 property callback already
+    /// ignores the ECID in the old tickets, and the SEP ROM accepts them too,
+    /// so no re-personalization is needed. See
+    /// `Research/Host/machine_identity_and_clone.md`.
+    static func resetIdentity(of bundle: VPhoneBundle, clonedFrom sourceName: String) throws {
+        let current = bundle.manifest.networkConfig
+        // A derived mDNS name follows the new machine name; one chosen by hand
+        // would collide with the source's and is dropped.
+        let derived = current.localHostName == VPhoneNetworking.localHostName(forVMName: sourceName)
+        let network = current.with(
+            macAddress: "",
+            ipv4: .some(nil),
+            portForwards: .some(nil),
+            localHostName: .some(derived ? VPhoneNetworking.localHostName(forVMName: bundle.name) : nil),
+        )
+        let updated = bundle.manifest.updating(machineIdentifier: Data(), networkConfig: network)
+        try updated.write(to: bundle.configURL)
+        try removeIfPresent(bundle.url.appendingPathComponent("udid-prediction.txt"))
+    }
+
+    /// Remove a file, directory or link without following it; a missing one
+    /// is fine.
+    private static func removeIfPresent(_ url: URL) throws {
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch CocoaError.fileNoSuchFile {
+            return
+        }
     }
 
     // MARK: - Export
