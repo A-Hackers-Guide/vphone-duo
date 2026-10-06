@@ -83,6 +83,14 @@ public enum DyldSharedCacheMaxSlidePatcher {
     /// region map ENOMEMs.
     public static let kernelSharedRegionSize: UInt64 = 0x1_8000_0000
 
+    /// The same kernel with the `kernel-boot-shared_region_size` patch applied
+    /// (`KernelCustomFirmwarePatchSharedRegionSize`): the arm64 region grows to
+    /// 0x1C0000000 while the base stays 0x180000000. The region top
+    /// (0x340000000) remains under the kernel's own task map ceilings, so
+    /// nothing else moves with it. `cfw install` checks the cache against this
+    /// size when the VM's kernelcache receipt lists the patch.
+    public static let patchedKernelSharedRegionSize: UInt64 = 0x1_C000_0000
+
     /// Byte offsets of the `dyld_cache_header` fields this patcher reads, from
     /// dyld's `dyld_cache_format.h`. Stable across every iOS this project
     /// targets, and corroborated at run time — see ``readHeader(from:)``.

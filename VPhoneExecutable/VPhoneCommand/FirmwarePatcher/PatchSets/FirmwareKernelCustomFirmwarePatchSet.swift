@@ -141,6 +141,14 @@ public enum FirmwareKernelCustomFirmwarePatchSet {
                 target: .firmware(.kernelcache),
                 bootEssential: true,
             ),
+            VPhonePatchDeclaration(
+                identifier: "kernel-boot-shared_region_size",
+                title: "Shared region size",
+                summary: "Widens the arm64 shared region from 6 GiB to 7 GiB so an iOS 27 cache spans it.",
+                target: .firmware(.kernelcache),
+                applicability: ios27,
+                bootEssential: true,
+            ),
 
             // MARK: Filesystem
 

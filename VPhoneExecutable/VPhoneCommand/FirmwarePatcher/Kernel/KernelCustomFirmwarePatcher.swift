@@ -65,9 +65,13 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
         //    RegisterNotificationPort off-by-one, so the personalized DDI attaches
         //    (/System/Developer auto-mount). Pairs with the sandbox ops[124] allow
         //    and the diskimagesiod isMountComplete→YES userland patch (cfw_install).
+        //  - Shared region size: the arm64 region widens from 6 GiB to 7 GiB so a
+        //    27 cache (0x185804000 on 27.0.1 iPhone18,x) maps at all. A 26.x base's
+        //    own cache fits the stock region, so the kernel is left stock there.
         if applyIOS27 {
             patchIoucFailedSandbox()
             patchDiskImages2ClientAbi()
+            patchSharedRegionSize()
         } else if applyParavirtUserClients {
             patchParavirtUserClientsNarrow()
         }

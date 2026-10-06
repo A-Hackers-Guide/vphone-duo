@@ -17,6 +17,13 @@
 // `operandCoverageCases` then exercises the rest of each encoder's operand range
 // (encoding-boundary immediates, backward branches, every shift amount), because
 // the call sites alone leave most fields pinned at one value.
+//
+// `encodeMovkX` and `encodeStpX` came after the Python was gone. Their words
+// are keystone 0.9.2 (Homebrew `keystone`) through a ten-line C driver outside
+// the repository: `ks_asm` on the KS_ARCH_ARM64 / KS_MODE_LITTLE_ENDIAN engine,
+// one instruction per line. The same driver reproduced the kernel's own bytes for
+// `mov x26, #0x180000000`, `dup v0.2d, x22` and `str q0, [sp, #0x70]` before
+// it was trusted with these.
 
 @testable import FirmwarePatcher
 import Foundation
@@ -426,6 +433,62 @@ struct ARM64EncoderKeystoneParityTests {
             encoded: ARM64Encoder.encodeLdrWUnsignedOffset(rt: 30, rn: 29, offset: 0x3FFC),
             origin: "LDR W max imm12",
         ),
+        // --- the shared region size patch, and encodeMovkX's lanes ----------
+        ARM64EncodingCase(
+            source: "movz x22, #0xc000, lsl #16",
+            keystone: 0xD2B8_0016,
+            encoded: ARM64Encoder.encodeMovzX(rd: 22, imm16: 0xC000, shift: 16),
+            origin: "kernel-boot-shared_region_size size movz lo",
+        ),
+        ARM64EncodingCase(
+            source: "movk x22, #0x1, lsl #32",
+            keystone: 0xF2C0_0036,
+            encoded: ARM64Encoder.encodeMovkX(rd: 22, imm16: 0x1, shift: 32),
+            origin: "kernel-boot-shared_region_size size movk hi",
+        ),
+        ARM64EncodingCase(
+            source: "movk x0, #0xffff",
+            keystone: 0xF29F_FFE0,
+            encoded: ARM64Encoder.encodeMovkX(rd: 0, imm16: 0xFFFF, shift: 0),
+            origin: "MOVK X hw=0",
+        ),
+        ARM64EncodingCase(
+            source: "movk x9, #0xbeef, lsl #16",
+            keystone: 0xF2B7_DDE9,
+            encoded: ARM64Encoder.encodeMovkX(rd: 9, imm16: 0xBEEF, shift: 16),
+            origin: "MOVK X hw=1",
+        ),
+        ARM64EncodingCase(
+            source: "movk x30, #0x1234, lsl #48",
+            keystone: 0xF2E2_469E,
+            encoded: ARM64Encoder.encodeMovkX(rd: 30, imm16: 0x1234, shift: 48),
+            origin: "MOVK X hw=3",
+        ),
+        // --- encodeStpX: the patch's store, zero, both imm7 ends ----------
+        ARM64EncodingCase(
+            source: "stp x26, x22, [sp, #0x70]",
+            keystone: 0xA907_5BFA,
+            encoded: ARM64Encoder.encodeStpX(rt1: 26, rt2: 22, rn: 31, offset: 0x70),
+            origin: "kernel-boot-shared_region_size stp",
+        ),
+        ARM64EncodingCase(
+            source: "stp x3, x4, [x5]",
+            keystone: 0xA900_10A3,
+            encoded: ARM64Encoder.encodeStpX(rt1: 3, rt2: 4, rn: 5, offset: 0),
+            origin: "STP X offset 0",
+        ),
+        ARM64EncodingCase(
+            source: "stp x0, x1, [x2, #-0x200]",
+            keystone: 0xA920_0440,
+            encoded: ARM64Encoder.encodeStpX(rt1: 0, rt2: 1, rn: 2, offset: -0x200),
+            origin: "STP X min imm7",
+        ),
+        ARM64EncodingCase(
+            source: "stp x29, x30, [sp, #0x1f8]",
+            keystone: 0xA91F_FBFD,
+            encoded: ARM64Encoder.encodeStpX(rt1: 29, rt2: 30, rn: 31, offset: 0x1F8),
+            origin: "STP X max imm7",
+        ),
     ]
 
     static let allCases: [ARM64EncodingCase] = asmCallSiteCases + operandCoverageCases
@@ -559,6 +622,15 @@ struct ARM64EncoderRangeTests {
     @Test func `movz refuses unrepresentable shift`() {
         #expect(ARM64Encoder.encodeMovzW(rd: 0, imm16: 1, shift: 32) == nil, "W has hw 0..1")
         #expect(ARM64Encoder.encodeMovzX(rd: 0, imm16: 1, shift: 64) == nil, "X has hw 0..3")
+        #expect(ARM64Encoder.encodeMovkX(rd: 0, imm16: 1, shift: 64) == nil, "X has hw 0..3")
+        #expect(ARM64Encoder.encodeMovkX(rd: 0, imm16: 1, shift: 8) == nil, "a lane is 16 bits")
+    }
+
+    @Test func `stp refuses unscalable offsets`() {
+        #expect(ARM64Encoder.encodeStpX(rt1: 0, rt2: 1, rn: 31, offset: 0x74) == nil, "multiple of 8")
+        #expect(ARM64Encoder.encodeStpX(rt1: 0, rt2: 1, rn: 31, offset: 0x200) == nil, "one past imm7")
+        #expect(ARM64Encoder.encodeStpX(rt1: 0, rt2: 1, rn: 31, offset: -0x208) == nil, "one below imm7")
+        #expect(ARM64Encoder.encodeStpX(rt1: 32, rt2: 1, rn: 31, offset: 0) == nil)
     }
 
     // MARK: CSET
