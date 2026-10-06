@@ -1059,6 +1059,19 @@ struct VPhoneCustomFirmwareInstaller {
         }
         let version = try productVersion(system: system)
 
+        // 0. A cache whose span alone overruns the guest kernel's shared region
+        //    maps at no slide, and the guest panics on first boot. Refuse before
+        //    the redeploy and the cache patches. A header this check cannot read
+        //    is left to the dyld patches below, as it was before the check.
+        let dsc = try verifiedDyldCacheDirectory(system: system)
+        do {
+            try DyldSharedCacheMaxSlidePatcher.requireFitsAtSlideZero(chunksDirectory: URL(fileURLWithPath: dsc))
+        } catch let overflow as DyldSharedCacheMaxSlidePatcher.RegionOverflow {
+            throw overflow
+        } catch {
+            print("  [!] shared region check skipped: \(error)")
+        }
+
         // 1. The redeploy first, so no later patch failure can block it. vphoned
         //    and the environment are boot-essential (always on). The environment
         //    keeps its old narrow rule under `environmentOnly`.
@@ -1078,7 +1091,6 @@ struct VPhoneCustomFirmwareInstaller {
         // 2. The dyld shared cache. The version branches and the declarations'
         //    applicability say the same thing; this is what a VM with no plan
         //    still follows.
-        let dsc = try verifiedDyldCacheDirectory(system: system)
         var dyld: [(id: String, verb: String, args: [String])] = []
         if version.hasPrefix("27.") {
             dyld += [
