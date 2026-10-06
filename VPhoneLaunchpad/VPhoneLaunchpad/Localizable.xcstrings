@@ -253,7 +253,7 @@
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "「ホスト設定」で特権ヘルパーをアップデートしてから、もう一度お試しください。" } },
         "ko" : { "stringUnit" : { "state" : "translated", "value" : "호스트 설정에서 권한 있는 도우미를 업데이트한 후 다시 시도하십시오." } },
         "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hãy cập nhật trình trợ giúp đặc quyền trong Thiết lập máy chủ, rồi thử lại." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请在“主机设置”中更新特权辅助工具，然后重试。" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请在“主机设置”中更新特权 Helper，然后重试。" } }
       }
     },
     "" : {
@@ -6033,7 +6033,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安装需要特权辅助工具和开发者工具权限。"
+            "value" : "安装需要特权 Helper 和开发者工具权限。"
           }
         }
       }
@@ -8515,7 +8515,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "特权辅助工具"
+            "value" : "特权 Helper"
           }
         }
       }
@@ -9433,7 +9433,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通过特权辅助工具以 root 身份运行"
+            "value" : "通过特权 Helper 以 root 身份运行"
           }
         }
       }
@@ -10658,7 +10658,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "存放在 %@，由特权辅助工具管理。"
+            "value" : "存放在 %@，由特权 Helper 管理。"
           }
         }
       }
@@ -10693,7 +10693,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "存储在 %@ 中，所有者为 root，仅由辅助工具写入。"
+            "value" : "存储在 %@ 中，所有者为 root，仅由 Helper 写入。"
           }
         }
       }
@@ -10761,7 +10761,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "辅助工具没有响应。"
+            "value" : "Helper 没有响应。"
           }
         }
       }
@@ -10829,7 +10829,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已安装的辅助工具与此应用中的副本不一致。请重试。"
+            "value" : "已安装的 Helper 与此应用中的副本不一致。请重试。"
           }
         }
       }
@@ -11475,7 +11475,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法连接辅助工具。请退出并重新打开应用，然后重试。"
+            "value" : "无法连接 Helper。请退出并重新打开应用，然后重试。"
           }
         }
       }
@@ -11611,7 +11611,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法安装辅助工具"
+            "value" : "无法安装 Helper"
           }
         }
       }
@@ -12019,7 +12019,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请在“主机设置”中更新特权辅助工具，然后再次运行预检。"
+            "value" : "请在“主机设置”中更新特权 Helper，然后再次运行预检。"
           }
         }
       }
