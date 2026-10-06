@@ -103,6 +103,9 @@ nonisolated enum VPhoneLaunchpadLogTail {
             if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
                let number = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value,
                let size = (attributes[.size] as? NSNumber)?.uint64Value,
+               // A quiet log costs one stat a poll: it is opened only once
+               // it has grown or been replaced.
+               file != number || size != offset,
                let handle = try? FileHandle(forReadingFrom: url)
             {
                 // A new run replaces the file. Start the terminal over.
@@ -135,67 +138,5 @@ nonisolated enum VPhoneLaunchpadLogTail {
             }
             try? await Task.sleep(for: .milliseconds(250))
         }
-    }
-}
-
-/// Log files end lines with a bare line feed, which a terminal treats as
-/// "down one row" without returning to the first column.
-nonisolated struct VPhoneLaunchpadNewlineTranslator {
-    private var previous: UInt8 = 0
-
-    mutating func translate(_ data: Data) -> Data {
-        var output = Data(capacity: data.count + data.count / 32)
-        for byte in data {
-            if byte == 0x0A, previous != 0x0D {
-                output.append(0x0D)
-            }
-            output.append(byte)
-            previous = byte
-        }
-        return output
-    }
-}
-
-// MARK: - Writer
-
-/// Appends lines to a log file on a serial queue, so command output is
-/// written from the thread that read it and never waits on the main actor.
-/// Keeps the last few lines for error details.
-final nonisolated class VPhoneLaunchpadLogWriter: @unchecked Sendable {
-    let url: URL
-    private let queue = DispatchQueue(label: "com.vphone.launchpad.log")
-    private let lock = NSLock()
-    private var handle: FileHandle?
-    private var recent: [String] = []
-
-    /// Starts an empty log at `url`, replacing any earlier one.
-    init(url: URL) {
-        self.url = url
-        queue.async { [self] in
-            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            FileManager.default.createFile(atPath: url.path, contents: nil)
-            handle = try? FileHandle(forWritingTo: url)
-        }
-    }
-
-    deinit {
-        try? handle?.close()
-    }
-
-    func write(_ line: String) {
-        lock.withLock {
-            recent.append(line)
-            if recent.count > 12 {
-                recent.removeFirst(recent.count - 12)
-            }
-        }
-        queue.async { [self] in
-            try? handle?.write(contentsOf: Data("\(line)\n".utf8))
-        }
-    }
-
-    /// The last lines written, for an error's detail text.
-    var tail: String {
-        lock.withLock { recent.joined(separator: "\n") }
     }
 }
