@@ -7,8 +7,8 @@ opens a live view of the screen. Before this work the view spun forever on
 every guest, 26.x and 27.x alike.
 
 Measured with Xcode 27.0 (27A266a) and CoreDevice 642.16 on macOS 27.0.1,
-against `iPad16,1 26.6.2 (23G90)` and `iPhone17,3 27.0.1 (24A446)` guests
-over cloudOS 26.4, 2026-10-06 and 2026-10-07.
+against `iPad16,1` 26.6.2 (23G90) and 27.0.1 (24A446) and `iPhone17,3` 26.6.2
+and 27.0.1 guests over cloudOS 26.4, 2026-10-06 and 2026-10-07.
 
 Status: the live view works on iPadOS 26, iOS 26 and iOS 27; iPadOS 27 refuses
 pairing and is untested. Known issue: under load (several VMs streaming, or the
@@ -191,7 +191,7 @@ Interposing works because `cryptexd`, `dtremotedisplayd`, `dtdeviceinfod` and
 `CoreDeviceUtilities` are standalone images, not shared-cache ones, so dyld
 binds their imports through the interposing table. `CoreDeviceUtilities` lives
 on the DDI and not in the SDK, so its two symbols are weak flat-namespace
-imports (`-Wl,-U`) and resolve to nothing in `cryptexd`.
+imports (`-Wl,-U`) and resolve to nothing outside `dtremotedisplayd`.
 
 The library ships with `system-launchdaemons-boot-environment`. An existing
 guest gets it from the environment update when it next starts on a bundle
@@ -277,9 +277,9 @@ showed the guest live, 30–40 ms behind the VZ window.
   and from Xcode alike) without showing a trust alert. That happens before
   any of this code is involved and is left for separate work.
 - **Tests.** `InjectionEnvironmentTests` covers the three targets and their
-  near-miss suffixes. The real-cache force-kern tests cover conditional
-  routing, the preserved null check, symbol discovery, dry run and
-  idempotence. `ARM64CompareBranchTests` pins the new encoder.
+  near-miss suffixes. The seven real-cache force-kern tests (pristine 24A435
+  cache via `VPHONE_DSC_PRISTINE`) cover conditional routing, the preserved
+  null check, symbol discovery, dry run and idempotence, and pass. `ARM64CompareBranchTests` pins the new encoder.
 
 Touch input sent from inside DeviceHub reaches the guest (checked by hand),
 but has no automated check.
@@ -364,7 +364,7 @@ paravirtualized, and the conversion ahead of it goes through
 round trip to the Mac's VideoToolbox and scaler, which every running VM
 shares.
 
-That explains the worst events seen on 2026-10-07: two VMs streaming at once
+That fits the worst events seen on 2026-10-07: two VMs streaming at once
 (26.6.2 iPad and 27.0.1 iPhone) logged `Delay Warning: Encoding time=…` at the
 same second, up to about 1.2 s a frame against about 5 ms normally, and both
 DeviceHub views fell 1.9–2.7 s behind, then recovered within about ten
@@ -385,7 +385,7 @@ The slow growth in a single long session (above) is a different shape: no
 encode warnings, just a lag that ratchets up. A 26.6.2 iPad stream that had
 run for about an hour was measured at 2.1 s on 2026-10-07 as well.
 
-### A single stream on a quiet Mac does not degrade
+### A single stream on a quiet Mac does not ratchet
 
 On 2026-10-07 the 26.6.2 iPad streamed alone for about two hours, with the
 other test VMs stopped and about 20 GB free, the frame-code probe running and
@@ -404,7 +404,7 @@ ratchet or the long encode stalls on their own. Both were only seen while
 several VMs streamed or the Mac was busy restoring and downloading, which fits
 the encode path being a shared paravirtual resource. Two stalls did occur in
 this session (12:13 and 12:15 local, up to 1.4 s a frame) without such load;
-neither profiling attempt (29 spindumps around Home presses) caught one.
+none of the 29 spindumps taken around Home presses caught one.
 
 During stalls `VCScreenCapture` logs `Frame PresentationTime … going backwards
 … Dropping frame`. MediaToolbox's `FigVirtualDisplayProcessor` stamps a
@@ -414,9 +414,10 @@ when the two interleave a real frame can land 1–28 ms behind an idle one and
 is dropped. The offsets do not accumulate, so this costs single frames, not
 seconds.
 
-### Other
+## Other open items
 
 - iPadOS 27 refuses pairing (see Validation), so DeviceHub is untested there.
+- Touch input sent from DeviceHub has no automated check.
 - The `0x14` port offset in the conditional dispatch is fixed, not derived;
   check it on the next 27.x build.
 
