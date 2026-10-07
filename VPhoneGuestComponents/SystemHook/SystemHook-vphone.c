@@ -98,16 +98,16 @@ static void vpPrepareLoaderLink(const char *path) {
 // then skips ElleKit. Only bootstrap, app and camera targets are logged and
 // get their loader links prepared.
 static VPInjectionEnvironment vpPrepareChild(const char *path, char *const envp[], const char *kind) {
-    const int misFix = vpIsMISFixTarget(path);
-    const int batteryHealthFix = vpIsBatteryHealthFixTarget(path);
-    const int deviceHubFix = vpIsDeviceHubFixTarget(path);
-    VPInjectionEnvironment injected = vpInsertHooks(envp, getenv("VPHONE_JB_ROOT"), vpInsertedLibraryFor(path));
-    if (vpIsInjectionTarget(path) || misFix || deviceHubFix) {
+    const VPInsertedLibraries libraries = vpInsertedLibrariesFor(path);
+    VPInjectionEnvironment injected = vpInsertHooksFor(envp, getenv("VPHONE_JB_ROOT"), &libraries);
+    if (vpIsInjectionTarget(path) || vpIsMISFixTarget(path) || vpIsDeviceHubFixTarget(path) ||
+        vpIsDeviceNameTarget(path)) {
         vpPrepareLoaderLink(path);
-        char decision[96];
+        char names[96];
+        vpDescribeInsertedLibraries(&libraries, names, sizeof(names));
+        char decision[160];
         snprintf(decision, sizeof(decision), "%s%s%s%s", kind, !injected.values ? "unchanged" : "inserted",
-                 misFix ? "+misfix" : batteryHealthFix ? "+batteryhealthfix" : deviceHubFix ? "+devicehubfix" : "",
-                 vpInjectionDisabled(envp) ? "-tweaks-disabled" : "");
+                 names, vpInjectionDisabled(envp) ? "-tweaks-disabled" : "");
         vpLogSpawn(path, decision);
     }
     return injected;

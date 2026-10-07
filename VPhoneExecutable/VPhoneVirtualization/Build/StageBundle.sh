@@ -76,6 +76,7 @@ fi
 /bin/cp "$guest_products/hapticsfix/libhapticsfix.dylib" "$guest/libhapticsfix.dylib"
 /bin/cp "$guest_products/batteryhealthfix/libbatteryhealthfix.dylib" "$guest/libbatteryhealthfix.dylib"
 /bin/cp "$guest_products/devicehubfix/libdevicehubfix.dylib" "$guest/libdevicehubfix.dylib"
+/bin/cp "$guest_products/devicename/libdevicename.dylib" "$guest/libdevicename.dylib"
 /bin/cp "$guest_products/gpu/libAppleParavirtCompilerPluginIOGPUFamily.dylib" \
     "$guest/libAppleParavirtCompilerPluginIOGPUFamily.dylib"
 # The HAL plugin is a bundle, signed whole by the Makefile; copied as a tree so
