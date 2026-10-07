@@ -12856,6 +12856,33 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在客户机内解析这台 Mac 的名称" } }
       }
     },
+    "Sync this Mac's location" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sync this Mac's location" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "この Mac の位置情報を同期" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 Mac의 위치 동기화" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đồng bộ vị trí của máy Mac này" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "同步这台 Mac 的位置" } }
+      }
+    },
+    "Sync Host Location" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sync Host Location" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ホストの位置情報を同期" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "호스트 위치 동기화" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đồng bộ vị trí máy chủ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "同步主机位置" } }
+      }
+    },
+    "While the machine runs, the guest gets this Mac's location as a simulated location. macOS asks for permission the first time. Apps in the guest also need Location Services turned on in the guest's Settings." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "While the machine runs, the guest gets this Mac's location as a simulated location. macOS asks for permission the first time. Apps in the guest also need Location Services turned on in the guest's Settings." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "マシンの実行中、ゲストはこの Mac の位置情報をシミュレートされた位置情報として受け取ります。初回は macOS が許可を求めます。ゲストのアプリが位置情報を使うには、ゲストの「設定」で位置情報サービスをオンにする必要もあります。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "머신이 실행되는 동안 게스트는 이 Mac의 위치를 시뮬레이션된 위치로 받습니다. 처음에는 macOS가 권한을 요청합니다. 게스트의 앱이 위치를 사용하려면 게스트의 설정에서 위치 서비스도 켜야 합니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Trong khi máy chạy, máy khách nhận vị trí của máy Mac này dưới dạng vị trí mô phỏng. Lần đầu, macOS sẽ hỏi quyền. Các ứng dụng trên máy khách còn cần bật Dịch vụ định vị trong Cài đặt của máy khách." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "机器运行期间，客户机会以模拟位置的形式收到这台 Mac 的位置。第一次会由 macOS 请求权限。客户机里的 App 还需要在客户机的“设置”中打开定位服务。" } }
+      }
+    },
     "Startup" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Startup" } },

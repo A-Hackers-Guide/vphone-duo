@@ -96,11 +96,15 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
     /// Whether vphone-vm unlocks the guest each time it starts. Nil from a
     /// bundle older than the setting.
     let unlocksAtStartup: Bool?
+    /// Whether vphone-vm forwards the Mac's location to the guest. Nil from a
+    /// bundle older than the setting.
+    let syncsHostLocation: Bool?
     /// The library `vm list` was run on. Not part of the JSON.
     var libraryRoot = ""
 
     private enum CodingKeys: String, CodingKey {
-        case name, cpuCount, memoryMB, diskSizeBytes, network, restoreInfo, customFirmwareInstalled, udid, unlocksAtStartup
+        case name, cpuCount, memoryMB, diskSizeBytes, network, restoreInfo, customFirmwareInstalled, udid, unlocksAtStartup,
+            syncsHostLocation
     }
 
     /// The inspector's firmware line. A restore whose CFW install never

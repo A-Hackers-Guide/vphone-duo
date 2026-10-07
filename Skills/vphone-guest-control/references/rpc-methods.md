@@ -182,7 +182,7 @@ size problem.
 | `settings.set` | `domain`, `key`, `value`, `type?` |
 | `settings.delete` | `domain`, `key` |
 | `clipboard.get` / `set` / `clear` | `set` takes `text` |
-| `location.set` / `clear` / `current` | `set` takes latitude/longitude; read-back can fail on some guests |
+| `location.set` / `clear` / `current` | `set` takes latitude/longitude; `set` and `current` fail with `location_services_off` while the guest's Location Services switch is off (vphoned never turns it on); read-back can fail on some guests |
 | `time.timezone` | none reads `{identifier, automatic, seconds_from_gmt}`; `identifier` (Olson name) pins the zone and turns automatic off; `automatic: true` hands it back to timed. The VM sends the Mac's zone on every connect |
 | `notify.post` / `notify.state` | `name`, `state?` |
 | `keychain.*` | Lists, adds and edits secrets; use only on request and never print values |

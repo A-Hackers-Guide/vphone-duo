@@ -149,6 +149,9 @@ struct VPhoneLaunchpadMachineInspector: View {
                 if machine.unlocksAtStartup == true {
                     LabeledContent("Unlock at Startup", value: String(localized: "On"))
                 }
+                if machine.syncsHostLocation == true {
+                    LabeledContent("Sync Host Location", value: String(localized: "On"))
+                }
             }
 
             Section("Identity") {

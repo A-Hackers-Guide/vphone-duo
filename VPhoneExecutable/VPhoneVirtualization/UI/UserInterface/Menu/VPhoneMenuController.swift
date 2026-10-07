@@ -27,6 +27,8 @@ class VPhoneMenuController {
     /// Saves the unlock-at-startup setting to this machine's config.plist.
     var onUnlockAtStartupChange: ((Bool) throws -> Void)?
     var unlockAtStartupItem: NSMenuItem?
+    /// Saves the Sync Host Location setting to this machine's config.plist.
+    var onHostLocationSyncChange: ((Bool) throws -> Void)?
 
     var onFilesPressed: (() -> Void)?
     var onKeychainPressed: (() -> Void)?

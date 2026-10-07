@@ -110,6 +110,15 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         unlocksAtStartup ?? false
     }
 
+    /// Whether vphone-vm forwards the Mac's location to the guest while it
+    /// runs. Missing in older manifests, which keep the Mac's location to
+    /// itself.
+    public let syncsHostLocation: Bool?
+
+    public var sharesHostLocation: Bool {
+        syncsHostLocation ?? false
+    }
+
     // MARK: - Display
 
     /// Screen configuration
@@ -351,6 +360,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         guestProductType: String? = nil,
         hardwareKeyboardEnabled: Bool? = nil,
         unlocksAtStartup: Bool? = nil,
+        syncsHostLocation: Bool? = nil,
     ) {
         schemaVersion = Self.currentSchemaVersion
         self.platformType = platformType
@@ -367,6 +377,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         self.guestProductType = guestProductType
         self.hardwareKeyboardEnabled = hardwareKeyboardEnabled
         self.unlocksAtStartup = unlocksAtStartup
+        self.syncsHostLocation = syncsHostLocation
     }
 
     // MARK: - Creation
@@ -535,6 +546,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         networkConfig: NetworkConfig? = nil,
         hardwareKeyboardEnabled: Bool? = nil,
         unlocksAtStartup: Bool? = nil,
+        syncsHostLocation: Bool? = nil,
     ) -> VPhoneVirtualMachineManifest {
         VPhoneVirtualMachineManifest(
             platformType: platformType,
@@ -551,6 +563,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
             guestProductType: guestProductType,
             hardwareKeyboardEnabled: hardwareKeyboardEnabled ?? self.hardwareKeyboardEnabled,
             unlocksAtStartup: unlocksAtStartup ?? self.unlocksAtStartup,
+            syncsHostLocation: syncsHostLocation ?? self.syncsHostLocation,
         )
     }
 
@@ -573,6 +586,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
             guestProductType: device == .default ? nil : device.productType,
             hardwareKeyboardEnabled: hardwareKeyboardEnabled,
             unlocksAtStartup: unlocksAtStartup,
+            syncsHostLocation: syncsHostLocation,
         )
     }
 }
