@@ -312,6 +312,41 @@
         }
       }
     },
+    "The guest shuts down, then the virtual machine stops. A guest still running after 15 seconds is turned off, as pulling the power would." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The guest shuts down, then the virtual machine stops. A guest still running after 15 seconds is turned off, as pulling the power would."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストをシステム終了してから仮想マシンを停止します。15 秒たってもゲストが動作している場合は、電源を抜いたときのようにオフになります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트를 종료한 다음 가상 머신을 중지합니다. 15초가 지나도 게스트가 실행 중이면 전원을 뽑은 것처럼 꺼집니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Máy khách sẽ tắt máy, sau đó máy ảo dừng. Nếu sau 15 giây máy khách vẫn chạy, nó sẽ bị tắt như khi rút nguồn."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机先关机，然后虚拟机停止。如果 15 秒后客户机仍在运行，将如同拔掉电源一样关闭它。"
+          }
+        }
+      }
+    },
     "The virtual machine stopped and the keyboard setting was saved. Launch this machine again. Unable to restart: %@" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -26,6 +26,13 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
     /// from `vm stop` or Launchpad, which must not wait for an answer.
     private var stopConfirmed = false
     private var isConfirmingStop = false
+    /// The guest was asked to shut down and the process waits for it to stop.
+    private var isShuttingDownGuest = false
+    /// The next quit ends the process, and the virtual machine with it.
+    private var powersOffOnQuit = false
+    /// How long a quit waits for the guest to shut down before turning it
+    /// off. `vm stop` sends SIGKILL after 20 s by default, so it stays below.
+    private static let guestShutdownTimeout: Duration = .seconds(15)
 
     init(command: VPhoneBootCommand) {
         self.command = command
@@ -51,7 +58,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
             self?.stopConfirmed = true
             if self?.isConfirmingStop == true {
                 // A quit is waiting on the question; this answers it.
-                NSApp.reply(toApplicationShouldTerminate: true)
+                self?.answerStopQuestion()
             } else {
                 NSApp.terminate(nil)
             }
@@ -490,23 +497,87 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         stopControlServices()
     }
 
-    /// Quitting turns the guest off at once, so a quit from the window or ⌘Q
-    /// asks first while the VM runs. A SIGINT stop, a headless VM and a VM
-    /// that never started quit straight away.
+    /// Quitting shuts the guest down first and turns the virtual machine off
+    /// once it has, or when it has not within `guestShutdownTimeout`. A guest
+    /// that cannot be asked (in DFU, still starting up, or a vphoned without
+    /// `system.shutdown`) is turned off at once. A quit from the window or ⌘Q
+    /// asks first while the VM runs; a SIGINT stop and a headless VM do not.
+    /// A second SIGINT while the guest shuts down, as a second Control-C,
+    /// turns it off without waiting.
     func applicationShouldTerminate(_: NSApplication) -> NSApplication.TerminateReply {
-        guard !command.noGraphics, !stopConfirmed, vm != nil else { return .terminateNow }
+        guard !powersOffOnQuit, vm != nil else { return .terminateNow }
+        if isShuttingDownGuest {
+            return stopConfirmed ? .terminateNow : .terminateCancel
+        }
+        guard !command.noGraphics, !stopConfirmed else { return stopGuest() }
         guard !isConfirmingStop else { return .terminateCancel }
         isConfirmingStop = true
         VPhoneAlert.present(
             title: "Stop the Virtual Machine?",
-            message: "Quitting turns the guest off at once, as pulling the power would. Anything not saved in the guest is lost.",
+            message: canShutDownGuest
+                ? "The guest shuts down, then the virtual machine stops. A guest still running after 15 seconds is turned off, as pulling the power would."
+                : "Quitting turns the guest off at once, as pulling the power would. Anything not saved in the guest is lost.",
             style: .warning,
             buttons: ["Stop", "Cancel"],
         ) { [weak self] response in
-            self?.isConfirmingStop = false
-            NSApp.reply(toApplicationShouldTerminate: response == .alertFirstButtonReturn)
+            // A SIGINT that came while the question was up has answered it.
+            guard let self, isConfirmingStop else { return }
+            isConfirmingStop = false
+            guard response == .alertFirstButtonReturn else {
+                NSApp.reply(toApplicationShouldTerminate: false)
+                return
+            }
+            NSApp.reply(toApplicationShouldTerminate: stopGuest() == .terminateNow)
         }
         return .terminateLater
+    }
+
+    /// Answers a quit waiting on the stop question, as a SIGINT does.
+    @MainActor
+    private func answerStopQuestion() {
+        isConfirmingStop = false
+        if let window = VPhoneAlert.hostWindow, let sheet = window.attachedSheet {
+            window.endSheet(sheet)
+        }
+        NSApp.reply(toApplicationShouldTerminate: stopGuest() == .terminateNow)
+    }
+
+    @MainActor
+    private var canShutDownGuest: Bool {
+        guard !command.dfu, let control else { return false }
+        return control.isConnected && control.guestCapabilities.contains("system_shutdown")
+    }
+
+    /// Asks the guest to shut down and cancels the quit, or turns the guest off
+    /// now when it cannot be asked. `guestDidStop` exits the process once the
+    /// guest has stopped.
+    @MainActor
+    private func stopGuest() -> NSApplication.TerminateReply {
+        guard canShutDownGuest, let control else { return .terminateNow }
+        isShuttingDownGuest = true
+        print("[vphone] Asking the guest to shut down")
+        Task { @MainActor [weak self] in
+            do {
+                try await control.shutDownGuest()
+            } catch let VPhoneGuestControl.ControlError.guestError(message) {
+                print("[vphone] Guest refused to shut down: \(message); turning it off")
+                self?.powerOff()
+            } catch {
+                // The guest can stop before it replies, so the connection drops.
+            }
+        }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.guestShutdownTimeout)
+            print("[vphone] Guest still running after \(Self.guestShutdownTimeout); turning it off")
+            self?.powerOff()
+        }
+        return .terminateCancel
+    }
+
+    @MainActor
+    private func powerOff() {
+        powersOffOnQuit = true
+        NSApp.terminate(nil)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
