@@ -126,6 +126,7 @@ enum GuestAPI {
                 "setup_skip",
                 "network_ipv4",
                 "network_hostname",
+                "device_name",
                 "network_static_names",
                 "network_resolve",
                 "timezone",

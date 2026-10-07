@@ -320,3 +320,22 @@ done:
     return result;
 }
 
+
+BOOL vp_preferences_apply(NSString **error) {
+    if (!vp_network_load(error)) return NO;
+    SCPreferencesRef prefs = pCreate(NULL, CFSTR("vphoned"), NULL);
+    if (!prefs) {
+        if (error) *error = vp_sc_error(@"SCPreferencesCreate");
+        return NO;
+    }
+    BOOL applied = NO;
+    if (!pLock(prefs, true)) {
+        if (error) *error = vp_sc_error(@"SCPreferencesLock");
+    } else {
+        applied = pApply(prefs);
+        if (!applied && error) *error = vp_sc_error(@"SCPreferencesApplyChanges");
+        pUnlock(prefs);
+    }
+    CFRelease(prefs);
+    return applied;
+}

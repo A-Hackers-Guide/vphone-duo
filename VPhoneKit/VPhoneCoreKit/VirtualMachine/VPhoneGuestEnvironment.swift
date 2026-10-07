@@ -15,5 +15,6 @@ public enum VPhoneGuestEnvironment {
         "libhapticsfix.dylib",
         "libbatteryhealthfix.dylib",
         "libdevicehubfix.dylib",
+        "libdevicename.dylib",
     ]
 }
