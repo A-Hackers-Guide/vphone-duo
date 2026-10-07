@@ -683,8 +683,16 @@ final class VPhoneLaunchpadMachineLibrary {
         }
     }
 
+    /// Removing the folder needs nothing version-specific, so a machine whose
+    /// own bundle is gone or from an unsupported series is deleted with the
+    /// default one instead of having to be rebound first.
     func delete(_ machine: Path) async {
-        await perform(String(localized: "Deleting…"), on: machine, ["vm", "delete", machine.name, "--force"] + machine.libraryArguments)
+        await perform(
+            String(localized: "Deleting…"),
+            on: machine,
+            ["vm", "delete", machine.name, "--force"] + machine.libraryArguments,
+            anyBundle: true,
+        )
     }
 
     // MARK: - Export
@@ -767,10 +775,11 @@ final class VPhoneLaunchpadMachineLibrary {
         _ activity: String,
         on machine: Path?,
         _ arguments: [String],
+        anyBundle: Bool = false,
         onProgress: (@Sendable (Double) -> Void)? = nil,
     ) async -> Bool {
         do {
-            try await performChecked(activity, on: machine, arguments, onProgress: onProgress)
+            try await performChecked(activity, on: machine, arguments, anyBundle: anyBundle, onProgress: onProgress)
             return true
         } catch {
             if !(error is CancellationError) {
@@ -786,9 +795,17 @@ final class VPhoneLaunchpadMachineLibrary {
         _ activity: String,
         on machine: Path?,
         _ arguments: [String],
+        anyBundle: Bool = false,
         onProgress: (@Sendable (Double) -> Void)? = nil,
     ) async throws {
-        guard let commandLine = machine.map(commandLine(for:)) ?? bundles.commandLine() else {
+        // A machine's commands run with its own bundle; `anyBundle` lets one
+        // that needs no particular version fall back to the default.
+        let commandLine: VPhoneLaunchpadCommandLine? = if let machine {
+            self.commandLine(for: machine) ?? (anyBundle ? bundles.commandLine() : nil)
+        } else {
+            bundles.commandLine()
+        }
+        guard let commandLine else {
             if let machine {
                 throw Self.missingBundle(machine)
             }
