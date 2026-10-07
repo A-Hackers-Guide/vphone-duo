@@ -285,12 +285,12 @@ request carries `"force": true`.
 
 | Area | Methods |
 | --- | --- |
-| Device | `device.snapshot`, `device.info` (snapshot plus network, screen, rotation, brightness, volume, low power, Developer Mode, agent), `device.screen`, `device.network`, `device.ioreg {plane}`, `device.environment`, `device.basebin {archive?}` |
+| Device | `device.snapshot`, `device.info` (snapshot plus network, screen, rotation, brightness, volume, low power, Developer Mode, agent, `device_name` `{name, own_name}`: the pinned name and the guest's own ComputerName), `device.screen`, `device.network`, `device.ioreg {plane}`, `device.environment`, `device.basebin {archive?}` |
 | Display, audio | `display.brightness {value?}`, `display.rotation {orientation?}`, `display.orientation` (`{degrees, source}`: SpringBoard's interface orientation without a screen capture, for polling; capability `display_orientation`), `display.rotation_lock {locked}`, `display.auto_lock` (`{auto_lock_seconds, never, lock_screen_minimum_seconds}`: Auto-Lock and the Lock Screen timeout vphoned keeps in step with it, see below; capability `display_auto_lock`), `screen.unlock {passcode?, timeout?}` (`{locked, screen_off, was_locked, was_screen_off}`: the display on and the Lock Screen passed, see below; capability `screen_unlock`), `audio.volume {value?, category?}`, `audio.state` |
 | Input | `input.touch`, `input.hid`, `input.button {name}`, `input.key {name}`, `input.type {text, delay_ms?}`, `input.paste {text}`, `input.tap`, `input.double_tap`, `input.long_press`, `input.swipe`, `input.drag {points}`, `input.touch_sequence {events}` — gesture coordinates are screen points |
 | UI | `ui.tree` (alias `accessibility.tree`), `ui.element_at`, `ui.tap_element`, `ui.wait`, `ui.wait_gone`, `ui.ocr {languages?, min_confidence?}`, `ui.describe`, `screen.screenshot` |
 | Processes | `processes.list {filter?}`, `processes.kill {pid, signal?}` **force**, `memory.jetsam`, `memory.pressure` (only the three kernel memory sysctls, for polling) |
-| launchd | `services.list`, `status`, `print`, `dump`, `disabled`, `start`, `enable`, `load`; `services.stop`, `disable`, `remove`, `signal`, `unload` **force**; `launchd.getenv`, `setenv`, `unsetenv` |
+| launchd | `services.list`, `status`, `print`, `dump`, `disabled`, `start`, `enable`, `load`, `profile` (see below); `services.stop`, `disable`, `remove`, `signal`, `unload`, `profile.apply {profile, groups?, allow?}` **force**; `launchd.getenv`, `setenv`, `unsetenv` |
 | Logs | `logs.syslog {seconds, process?, level?, max_lines?}` (a bounded capture of at most 60 s), `logs.crashes {bundle_id?}`, `logs.crash {path}` |
 | Darwin notifications | `notify.post {name, state?}` (`postDarwinNotification`; `state` is a UInt64, as a number or a decimal string, stored before the post), `notify.state {name}` (`darwinNotificationState`) |
 | Network, security | `network.capture {seconds, interface?, filter?}` (writes a pcap in the guest scratch directory and returns its path), `network.ipv4.get {interface?}`, `network.ipv4.set {interface?, method, address?, subnet_mask?, router?, dns?}`, `network.hostname.get`, `network.hostname.set {local_host_name?}`, `device.name.get`, `device.name.set {name}` (see below), `network.static_names.get`, `network.static_names.set {entries}`, `network.resolve {host, family?, port?, first_only?, timeout_ms?}` (see below), `security.ssl_killswitch` |
@@ -305,7 +305,7 @@ request carries `"force": true`.
 | Bootstrap | `bootstrap.install {layout}`, `bootstrap.status`, `bootstrap.inspect`, `bootstrap.uninstall {jbroot, force}`, `bootstrap.firmware` (see above) |
 | Environment | `environment.status` (SHA-256 of each vphone library in `/usr/lib`, or null when absent, plus the staging directory), `environment.install {libraries: [{name, sha256}]}` (see below) |
 | Profile UDID | `udid.get`, `udid.set {udid}`, `udid.clear` — each returns `{udid, path}`, the UDID the guest gives its profile checks and the host (null: the guest's own) and the settings file it came from; `set` and `clear` also return `restarted_pids`, `usb_serial` and `usb_reenumerated` (see below) |
-| Setup Assistant | `setup.status` (`{pending, running, pid, setup_done, setup_version, current_version}`), `setup.skip` **force** (sets `SetupDone`, `SetupFinishedAllSteps` and `SetupVersion` in `com.apple.purplebuddy`, restarts SpringBoard, returns the status plus `respring`); `/v1/health` carries `setup_pending` — see `Research/Guest/setup_assistant_skip.md` |
+| Setup Assistant | `setup.status` (`{pending, running, pid, setup_done, setup_version, current_version}`), `setup.skip` **force** (sets `SetupDone`, `SetupFinishedAllSteps` and `SetupVersion` in `com.apple.purplebuddy`, restarts SpringBoard, returns the status plus `respring`); `setup.settle {timeout_s?, poll_s?, stable_polls?}` (read-only wait for first-boot work, see below); `/v1/health` carries `setup_pending` — see `Research/Guest/setup_assistant_skip.md` |
 
 `display.auto_lock` reads Settings' Auto-Lock (`maxInactivity` in profiled's
 `EffectiveUserSettings.plist`) and SpringBoard's `SBMinimumLockscreenIdleTime`.
@@ -425,7 +425,76 @@ change vphoned applies configd's preferences unchanged, so configd publishes
 again and `libdevicename.dylib` pins the new name at once, and posts
 `com.apple.mobile.lockdown.device_name_changed`. The file outlives a reboot.
 `vphone-vm` calls `set` after every connect with the VM's name. See
-`Research/Guest/device_name_pinning.md`.
+`Research/Guest/device_name_pinning.md`. `set` also returns `reboot_required`,
+true after a change: lockdown readers (Finder, `ideviceinfo`, `idevicename`) follow
+at once, but CoreDevice (Xcode, `devicectl`) reads the name once per handshake
+and the DHCP lease keeps the host name it was requested with, so both show the
+new name after the guest restarts. A clone of a template boots with the
+template's pin until `vphone-vm` connects. `device.info` carries
+`device_name: {name, own_name}`: the pinned name (null when none) and the
+guest's own `System/System/ComputerName` in configd's preferences, which a
+clone inherits.
+
+`services.profile` (capability `service_profile`) reports the service profile
+and `services.profile.apply` **force** applies one
+(`VPhoneDaemon/Daemon/GuestAPI+ServiceProfile.swift`, lists in
+`GuestServiceProfile.swift`). A profile is a set of launchd jobs turned off
+with the same override as `services.disable`; launchd honors it from the next
+boot, so the guest has to restart. `apply {profile, groups?, allow?}`:
+
+- `profile: "trimmed"` disables the default groups of the list for the
+  guest's iOS major version (`base`, the 137 labels measured on iOS 27.0;
+  `app_store`, appstored and itunesstored; `signin_followup`, followupd and
+  appleidsetupd), plus the optional groups named in `groups` (`accounts`:
+  akd, amsaccountsd, appleaccountd, after which the guest cannot sign in to an
+  Apple Account), minus the labels in `allow`. Only iOS 27 has a list; on
+  another version it fails with "No trimmed service list for iOS N".
+- `profile: "none"` turns back on only the labels the profile disabled, on any
+  version.
+- A label already disabled by somebody else (the OTA block, a user in the
+  Services panel) is skipped and never recorded, so `none` leaves it disabled.
+  A recorded label the profile no longer selects is turned back on. The jobs
+  in `GuestServiceProfile.neverDisable` (sleepd, CommCenter and its helpers,
+  cloudd, NanoRegistry, mobileassetd, storekitd, vphoned, and what vphone's
+  features use) are refused whatever names them.
+- The labels the profile owns go to `/var/db/vphoned/service-profile.plist`
+  (`Profile`, `ListVersion`, `iOSMajor`, `Groups`, `Allow`, `Labels`,
+  `Updated`). A second apply with the same arguments changes nothing.
+- It returns `{profile, ios_major, list_version, groups, disabled, enabled,
+  kept, skipped: [{label, reason}], allowed, failed: [{label, action, error}],
+  owned, reboot_required}`: `disabled` and `enabled` are what this call
+  changed, `kept` what was already the profile's, `owned` how many labels the
+  record holds. `reboot_required` is true when this call changed something or
+  a label the profile owns is still running. A failure on one label is listed
+  in `failed` and the others still apply.
+
+`services.profile` returns `{profile, ios_major, supported, supported_ios,
+list_version, groups: [{name, default, summary, labels}], never_disable,
+record, disabled, enabled_since, running, reboot_required}`: `disabled` are
+the recorded labels still disabled, `enabled_since` recorded labels somebody
+turned back on, `running` recorded labels still running until the next boot.
+See `Research/Guest/service_trimming.md`.
+
+`setup.settle` (capability `setup_settle`) waits until the guest's first-boot
+work has settled and returns, without changing anything
+(`VPhoneDaemon/Daemon/GuestAPI+FirstBoot.swift`, conditions in
+`GuestFirstBootSettle.swift`). It polls every `poll_s` seconds (default 5,
+1–30) and is settled when, over the last `stable_polls` polls (default 3,
+2–20), `/private/var/staged_system_apps` is empty or absent (installd expands
+the removable system apps from it on the first boot), the number of
+registered apps did not change, and installd used less than 0.2 s of CPU
+between polls or was not running. `timeout_s` defaults to 90 and is capped at
+110, because the host waits at most 120 s for one answer; a caller that needs
+longer calls again. A timeout is not an error: it returns `{settled, elapsed_s,
+polls, timeout_s, poll_s, stable_polls, reasons, signals}` with `settled:
+false` and `reasons` naming the conditions still unmet; `signals` holds
+`staged_system_apps` (entries, null when unreadable), `app_count`,
+`app_counts` (the window), `installd_pid`, `installd_cpu_seconds`,
+`installd_cpu_delta` and `setup_pending`.
+
+`VPhoneDaemon/Tests/run-logic-tests.sh` builds the guest-independent parts of
+these three (the lists and their bookkeeping, the settle verdict, the device
+name rule) for the Mac and checks them; it needs no guest.
 
 `network.static_names.set` replaces the names the guest resolves locally, given
 as `entries: [{address, names}]` (IPv4 only; an empty list withdraws them).
@@ -450,7 +519,7 @@ Account passwords, boot logo rendering and package installation, removal and
 repository changes are deliberately not exposed. `/v1/health` lists the new
 areas in `capabilities` (`device_info`, `display`, `audio`, `input_gestures`,
 `ui_inspection`, `processes`, `services`, `logs`, `network_capture`,
-`app_details`, `system_control`, `system_shutdown`, `file_tools`, `packages`, `environment_update`, `udid_override`, `setup_skip`, `network_ipv4`, `network_hostname`, `device_name`, `network_static_names`, `network_resolve`, `display_auto_lock`, `screen_unlock`) so a host can hide
+`app_details`, `system_control`, `system_shutdown`, `file_tools`, `packages`, `environment_update`, `udid_override`, `setup_skip`, `setup_settle`, `service_profile`, `network_ipv4`, `network_hostname`, `device_name`, `network_static_names`, `network_resolve`, `display_auto_lock`, `screen_unlock`) so a host can hide
 panels an older agent cannot serve. icli failures reach the caller with
 icli's own error `code` (`failed`, `unavailable`, `device_locked`, …) and
 message.

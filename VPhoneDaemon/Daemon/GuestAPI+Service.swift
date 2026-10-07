@@ -28,6 +28,11 @@ extension GuestAPI {
             return try servicesDump()
         case "services.disabled":
             return try disabledServiceOverrides()
+        case "services.profile":
+            return try serviceProfileState()
+        case "services.profile.apply":
+            try requireForce(params, "apply a service profile")
+            return try applyServiceProfile(params)
         case "services.start":
             return try startService(string(params, "label"))
         case "services.enable":

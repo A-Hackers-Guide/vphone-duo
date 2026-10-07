@@ -16,6 +16,7 @@ extension GuestAPI {
             executeEnvironment,
             executeDeviceIdentity,
             executeSetupAssistant,
+            executeFirstBoot,
             executeTimeZone,
             executeAudioLatency,
             executeGyroscope,
