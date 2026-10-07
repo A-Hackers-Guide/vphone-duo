@@ -1,8 +1,9 @@
 // libdevicehubfix.c — let Xcode's DeviceHub show a vphone guest's screen.
 //
 // DeviceHub (Xcode 27) views a device through the developer disk image's
-// dtremotedisplayd. Guest compatibility also requires DDI mounting and display
-// metadata from dtdeviceinfod.
+// dtremotedisplayd. On a vphone guest it needs three fixes, one per process:
+// cryptexd mounts the DDI, dtremotedisplayd reports media stream features,
+// and dtdeviceinfod supplies the framebuffer mask.
 //
 // ## cryptexd: the DDI does not mount on iOS 27
 //
@@ -55,20 +56,22 @@
 //
 // ## dtdeviceinfod: missing framebuffer mask
 //
-// The virtual board reports phone11 chrome with no FramebufferIdentifier.
-// Supply the matching Xcode mask only for that missing answer in dtdeviceinfod,
-// preserving existing answers and MobileGestalt's Copy ownership contract.
+// dtdeviceinfod answers DeviceHub's DisplayInfo from MobileGestalt. The 27.x
+// iPhone guest reports `ChromeIdentifier` phone11 but no `FramebufferIdentifier`,
+// so DeviceHub falls back to a rounded rectangle and draws the screen over the
+// bezel corners. Only that missing answer is filled, with the phone11 mask from
+// Xcode's /Library/Developer/DeviceKit/chrome_map.plist; existing answers and
+// other chromes pass through, and the result keeps the Copy ownership rule.
 //
 // ## Reach
 //
 // The interposes reach their callers because cryptexd, dtremotedisplayd,
-// dtdeviceinfod and
-// CoreDeviceUtilities are standalone images, not shared-cache ones: dyld binds
-// their imports through the interposing table. CoreDeviceUtilities is on the
-// DDI and not in the SDK, so its two symbols are weak flat-namespace imports;
-// in cryptexd they resolve to nothing and dyld skips those entries. The spawn
-// hooks insert this into those three processes only — `vpIsDeviceHubFixTarget`
-// in Shared/InjectionEnvironment.h.
+// dtdeviceinfod and CoreDeviceUtilities are standalone images, not shared-cache
+// ones: dyld binds their imports through the interposing table.
+// CoreDeviceUtilities is on the DDI and not in the SDK, so its two symbols are
+// weak flat-namespace imports; outside dtremotedisplayd they resolve to nothing
+// and dyld skips those entries. The spawn hooks insert this into those three
+// processes only — `vpIsDeviceHubFixTarget` in Shared/InjectionEnvironment.h.
 
 #include <errno.h>
 #include <fcntl.h>
