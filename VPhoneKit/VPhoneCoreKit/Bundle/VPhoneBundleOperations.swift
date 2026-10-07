@@ -186,6 +186,18 @@ public enum VPhoneBundleOperations {
         in library: VPhoneLibrary,
         newIdentity: Bool = false,
     ) throws -> VPhoneBundle {
+        try clone(bundleNamed: name, to: newName, in: library, newIdentity: newIdentity, afterCopy: {})
+    }
+
+    /// `afterCopy` runs between the copy and the second running check, so
+    /// tests can start the source while it is being copied.
+    static func clone(
+        bundleNamed name: String,
+        to newName: String,
+        in library: VPhoneLibrary,
+        newIdentity: Bool,
+        afterCopy: () throws -> Void,
+    ) throws -> VPhoneBundle {
         try requireValidName(newName)
         let source = try library.bundle(named: name)
         let src = source.url
@@ -194,6 +206,10 @@ public enum VPhoneBundleOperations {
         if fm.fileExists(atPath: dst.path) {
             throw VPhoneLibraryError.alreadyExists(name: newName)
         }
+        // Checked before the copy, so a running source is refused without
+        // copying anything, and again after it: the source may have started
+        // while it was copied (off APFS that takes minutes), and the copy may
+        // then hold state files from different moments.
         try VPhoneBundleActivity.requireStopped(source)
 
         // Roll back a half-made copy, so a retry with the same name is not
@@ -213,6 +229,8 @@ public enum VPhoneBundleOperations {
                     try fm.copyItem(at: src.appendingPathComponent(entry), to: dst.appendingPathComponent(entry))
                 }
             }
+            try afterCopy()
+            try VPhoneBundleActivity.requireStopped(source)
             var clone = try VPhoneBundle.load(at: dst)
             if newIdentity {
                 clone = try resetIdentity(of: clone, clonedFrom: name)

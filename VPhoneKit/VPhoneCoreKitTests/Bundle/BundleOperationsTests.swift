@@ -517,6 +517,26 @@ struct BundleOperationsTests {
         }
     }
 
+    @Test func `clone refuses a source that starts while it is copied and leaves no copy`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let lib = VPhoneLibrary(root: root)
+        let src = try makeBootedSource(named: "src", in: lib)
+
+        for name in ["Disk.img", "SEPStorage", "nvram.bin"] {
+            var fd: Int32 = -1
+            defer { if fd >= 0 { close(fd) } }
+            #expect(throws: VPhoneBundleActivityError.running(name: "src", pids: [getpid()])) {
+                try VPhoneBundleOperations.clone(bundleNamed: "src", to: "dst", in: lib, newIdentity: false) {
+                    // The source starts after the first check passed.
+                    fd = open(src.url.appendingPathComponent(name).path, O_RDONLY)
+                }
+            }
+            #expect(fd >= 0)
+            #expect(!FileManager.default.fileExists(atPath: lib.url(forName: "dst").path))
+        }
+    }
+
     @Test func `lists the network settings a new identity clears`() {
         typealias Network = VPhoneVirtualMachineManifest.NetworkConfig
         #expect(VPhoneBundleOperations.networkSettingsClearedByNewIdentity(.default, sourceName: "src").isEmpty)
