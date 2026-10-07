@@ -125,6 +125,7 @@ test-loader-links:
 test-injection-environment:
 	@mkdir -p $(OUT)
 	/usr/bin/clang -Wall -Wextra -Werror -Wno-unused-function -Wno-write-strings \
+		-DVP_TEST_LIBRARY_DIR='"$(OUT)/injection-libraries"' \
 		-o $(OUT)/InjectionEnvironmentTests Tests/InjectionEnvironmentTests.c
 	@$(OUT)/InjectionEnvironmentTests
 
