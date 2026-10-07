@@ -12,8 +12,10 @@ import Foundation
 /// take one at a different moment from the other, and the guest then panics in
 /// the SEP on its next boot. So the check looks for any process holding one of
 /// the three open, by device and inode rather than path. Another user's process
-/// (a VM started under sudo) cannot be inspected without root, so a live
-/// `vphone.sock` counts as running too.
+/// (a VM started under sudo) cannot be inspected without root, so a
+/// `vphone.sock` counts as running too unless it is missing, not a socket, or
+/// refuses the connection as a stale one does. A root-owned socket this user
+/// may not connect to is running.
 public enum VPhoneBundleActivity {
     /// The files a running VM holds open, and the ones a clone, snapshot or
     /// revert must take together, by their names inside the bundle.
@@ -25,7 +27,7 @@ public enum VPhoneBundleActivity {
     public static func requireStopped(_ bundle: VPhoneBundle) throws {
         let urls = stateFileNames(of: bundle).map { bundle.url.appendingPathComponent($0) }
         let pids = processesHolding(urls)
-        if !pids.isEmpty || controlSocketAnswers(bundle.url.appendingPathComponent("vphone.sock")) {
+        if !pids.isEmpty || controlSocketIsLive(bundle.url.appendingPathComponent("vphone.sock")) {
             throw VPhoneBundleActivityError.running(name: bundle.name, pids: pids)
         }
     }
@@ -54,7 +56,8 @@ public enum VPhoneBundleActivity {
 
     private static func holds(pid: pid_t, anyOf targets: Set<FileID>) -> Bool {
         // EPERM for another user's process: it is skipped, and the socket
-        // probe covers the case that matters.
+        // probe covers the case that matters (a VM under sudo, whose socket
+        // refuses this user with EACCES).
         let size = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
         guard size > 0 else { return false }
         let stride = MemoryLayout<proc_fdinfo>.stride
@@ -77,27 +80,43 @@ public enum VPhoneBundleActivity {
 
     // MARK: - Control socket
 
-    /// A stale socket file from a VM that exited refuses the connection.
-    private static func controlSocketAnswers(_ url: URL) -> Bool {
+    /// Whether `vphone.sock` belongs to a live VM. Only two answers mean it
+    /// does not: no socket there (nothing at the path, or something other than
+    /// a socket, judged without following a link), and a socket whose
+    /// `connect` fails with ECONNREFUSED or ENOENT, the file a VM that exited
+    /// leaves behind. Any other failure counts as live: a VM started under
+    /// sudo owns its socket as root with mode 0755, so this user's `connect`
+    /// fails with EACCES while the VM runs, and its processes are hidden from
+    /// `processesHolding` too.
+    private static func controlSocketIsLive(_ url: URL) -> Bool {
         let path = url.path
+        var info = stat()
+        guard lstat(path, &info) == 0, info.st_mode & S_IFMT == S_IFSOCK else { return false }
         var address = sockaddr_un()
         let capacity = MemoryLayout.size(ofValue: address.sun_path)
-        guard path.utf8.count < capacity else { return false }
+        // A path too long for sun_path cannot be probed. A socket is there all
+        // the same, and calling it stale would let a clone or revert copy or
+        // replace the state files of a running guest, so it counts as live;
+        // removing a stale one by hand clears the refusal.
+        guard path.utf8.count < capacity else { return true }
         address.sun_family = sa_family_t(AF_UNIX)
         withUnsafeMutableBytes(of: &address.sun_path) { buffer in
             for (index, byte) in path.utf8.enumerated() {
                 buffer[index] = byte
             }
         }
+        // Without a socket to probe with, the same reasoning applies.
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return false }
+        guard fd >= 0 else { return true }
         defer { close(fd) }
         let result = withUnsafePointer(to: &address) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                 connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
-        return result == 0
+        if result == 0 { return true }
+        let failure = errno
+        return failure != ECONNREFUSED && failure != ENOENT
     }
 }
 

@@ -60,15 +60,14 @@ struct BundleActivityTests {
         }
     }
 
-    @Test func `a listening control socket counts as running and a stale one does not`() throws {
-        let (root, bundle) = try makeBundle()
-        defer { try? FileManager.default.removeItem(at: root) }
+    /// A socket bound and listening at the bundle's `vphone.sock`.
+    private func listenAtControlSocket(of bundle: VPhoneBundle) throws -> (fd: Int32, path: String) {
         let path = bundle.url.appendingPathComponent("vphone.sock").path
         // A socket path must fit sun_path; the temporary directory usually does.
         try #require(path.utf8.count < 104)
 
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        #expect(fd >= 0)
+        try #require(fd >= 0)
         var address = sockaddr_un()
         address.sun_family = sa_family_t(AF_UNIX)
         withUnsafeMutableBytes(of: &address.sun_path) { buffer in
@@ -83,11 +82,40 @@ struct BundleActivityTests {
         }
         #expect(bound == 0)
         #expect(listen(fd, 1) == 0)
+        return (fd, path)
+    }
+
+    @Test func `a listening control socket counts as running and a stale one does not`() throws {
+        let (root, bundle) = try makeBundle()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (fd, path) = try listenAtControlSocket(of: bundle)
         #expect(isRunning(bundle))
 
         // The socket file outlives the listener, as it does after a crash.
         close(fd)
         #expect(FileManager.default.fileExists(atPath: path))
+        #expect(!isRunning(bundle))
+    }
+
+    @Test func `a control socket this user may not connect to counts as running`() throws {
+        let (root, bundle) = try makeBundle()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (fd, path) = try listenAtControlSocket(of: bundle)
+        defer { close(fd) }
+
+        // Like a root-owned socket of a VM started under sudo: connect fails
+        // with EACCES, here even for the owner, while the listener is up.
+        #expect(chmod(path, 0) == 0)
+        defer { chmod(path, 0o755) }
+        #expect(throws: VPhoneBundleActivityError.running(name: "vm", pids: [])) {
+            try VPhoneBundleActivity.requireStopped(bundle)
+        }
+    }
+
+    @Test func `a control socket path that is not a socket counts as stopped`() throws {
+        let (root, bundle) = try makeBundle()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data().write(to: bundle.url.appendingPathComponent("vphone.sock"))
         #expect(!isRunning(bundle))
     }
 }
