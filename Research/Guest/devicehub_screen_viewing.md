@@ -364,6 +364,35 @@ The slow growth in a single long session (above) is a different shape: no
 encode warnings, just a lag that ratchets up. A 26.6.2 iPad stream that had
 run for about an hour was measured at 2.1 s on 2026-10-07 as well.
 
+### A single stream on a quiet Mac does not degrade
+
+On 2026-10-07 the 26.6.2 iPad streamed alone for about two hours, with the
+other test VMs stopped and about 20 GB free, the frame-code probe running and
+the guest's `avconferenced` log captured throughout:
+
+| Condition | Duration | Result |
+| --- | --- | --- |
+| Probe animating, sampled every 5 s | 30 min | 0–70 ms, five-minute means −1 to 13 ms |
+| Home screen idle 60 s, then the probe | 5 rounds | normal on every return |
+| Screen off and locked 90 s, then unlock | 3 rounds | normal on every return |
+| Home / app switch every ~40 s, spindump running | 14 min | no encode warning |
+| Same, no capture vs. capturing the VZ window every 2 s | 6 phases of 6–8 min | 1 phase with 6 warnings (max 584 ms), the repeat 0 |
+
+So neither idling, screen lock, UI transitions nor screen capture produce the
+ratchet or the long encode stalls on their own. Both were only seen while
+several VMs streamed or the Mac was busy restoring and downloading, which fits
+the encode path being a shared paravirtual resource. Two stalls did occur in
+this session (12:13 and 12:15 local, up to 1.4 s a frame) without such load;
+neither profiling attempt (29 spindumps around Home presses) caught one.
+
+During stalls `VCScreenCapture` logs `Frame PresentationTime … going backwards
+… Dropping frame`. MediaToolbox's `FigVirtualDisplayProcessor` stamps a
+submitted frame with the compositor's timestamp and, after `max(2 frame
+intervals, 50 ms)` without one, re-encodes the last frame on its own timer;
+when the two interleave a real frame can land 1–28 ms behind an idle one and
+is dropped. The offsets do not accumulate, so this costs single frames, not
+seconds.
+
 ### Other
 
 - iPadOS 27 refuses pairing (see Validation), so DeviceHub is untested there.
