@@ -82,7 +82,12 @@ The guest links IcliKit directly. App registration refresh is available through
 the bootstrap vphoned installed (vphoned runs from the system volume, so
 IcliKit cannot find the bootstrap itself). `system.uicache` is the same call.
 IcliKit verifies registrations by reading them back; a bundle it could not
-register or verify is named in the error message.
+register or verify is named in the error message. Since icli 0.7.17 a
+registration builds the record uicache builds (entitlements, containerization,
+data and group containers, plug-ins), a refresh registers again any app whose
+record differs from it and leaves a matching one running, and Apple's apps and
+other installers' apps are listed under `skipped`. `apps.register` refuses
+those apps.
 `screen.screenshot` uses IcliKit's native screen capture and returns a base64
 JPEG with `mime_type`, `width`, and `height`; the current VM produces 1290×2796.
 The host's Save/Copy Screenshot menu decodes this guest image. It omits the
