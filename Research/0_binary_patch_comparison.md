@@ -2783,3 +2783,7 @@ re-patched kernelcache and the marker survived. Flow: `fw set-patches` →
 route a kernel patch through `cfw update-kernel` and the rest of the boot chain
 (TXM, DeviceTree, LLB, iBSS, iBEC) through the erasing restore. TXM and
 DeviceTree are also in Preboot and could follow the same path later.
+
+## Optional Settings row hiding (WIP, 2026-10-07)
+
+Two standard-blocked declarations hide Apple Account, Game Center, iCloud and Wallet in Preferences (`system-preferences-exp-root_rows`) and Software Update in GeneralSettingsUI (`dyld-exp-settings_software_update_row`). Native discovery is restricted to reviewed 24A435 inputs. The installer uses pristine executable backups and cache undo records with page re-attestation. All five rows passed guest rollback, reapplication and reboot checks. See [research report](Guest/2026-10-07_reverse-settings-rows-report.md). Broader firmware coverage and bundled deployment remain WIP; no kernel/SEP or runtime hook changes are included.

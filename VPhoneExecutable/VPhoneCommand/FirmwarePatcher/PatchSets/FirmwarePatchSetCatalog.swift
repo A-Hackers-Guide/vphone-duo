@@ -64,7 +64,7 @@ public enum FirmwarePatchSetCatalog {
         Set(FirmwareKernelFridaPatchSet.manifest.patches.map(\.identifier))
             .union(hypervisorConcealmentPatches)
             .union(experimentalIdentityPatches)
-            .union([misTrustAuthPatch, displayRefreshPatch])
+            .union([misTrustAuthPatch, displayRefreshPatch, FirmwareGuestSystemPatchSet.settingsRootRows, FirmwareGuestSystemPatchSet.settingsSoftwareUpdate])
 
     /// The 120 Hz timing for the paravirtual display.
     ///

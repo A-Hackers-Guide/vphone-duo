@@ -121,6 +121,8 @@
 			<string>devicetree-exp-arm_io_soc_generation</string>
 			<string>preboot-exp-devicetree_identity</string>
 			<string>dyld-exp-mis_trust_auth</string>
+			<string>system-preferences-exp-root_rows</string>
+			<string>dyld-exp-settings_software_update_row</string>
 			<string>kernel-exp-display_refresh_120hz</string>
 		</array>
 	</dict>

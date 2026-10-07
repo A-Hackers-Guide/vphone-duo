@@ -223,6 +223,27 @@ public enum ARM64Encoder {
 
     // MARK: - Stores
 
+    /// Encode `STR Xt, [Xn, #offset]` — 64-bit store, unsigned scaled offset.
+    ///
+    /// The unsigned immediate uses `opc = 00`; `imm12` is
+    /// scaled by 8, so `offset` must be a multiple of 8 in `0...32760`.
+    /// `rn == 31` means SP.
+    public static func encodeStrXUnsignedOffset(rt: UInt32, rn: UInt32, offset: UInt32) -> Data? {
+        guard rt < 32, rn < 32 else { return nil }
+        guard offset % 8 == 0 else { return nil }
+        let imm12 = offset / 8
+        guard imm12 < 4096 else { return nil }
+
+        var insn: UInt32 = 0b11 << 30 // size
+        insn |= 0b111 << 27
+        insn |= 0b01 << 24
+        insn |= 0b00 << 22 // opc = STR
+        insn |= imm12 << 10
+        insn |= rn << 5
+        insn |= rt
+        return ARM64.encodeU32(insn)
+    }
+
     /// Encode `STP Xt1, Xt2, [Xn, #offset]` — 64-bit store pair, signed scaled
     /// offset, no writeback.
     ///
