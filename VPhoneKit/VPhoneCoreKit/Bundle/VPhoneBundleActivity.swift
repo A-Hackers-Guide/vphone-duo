@@ -89,34 +89,22 @@ public enum VPhoneBundleActivity {
     /// fails with EACCES while the VM runs, and its processes are hidden from
     /// `processesHolding` too.
     private static func controlSocketIsLive(_ url: URL) -> Bool {
-        let path = url.path
         var info = stat()
-        guard lstat(path, &info) == 0, info.st_mode & S_IFMT == S_IFSOCK else { return false }
-        var address = sockaddr_un()
-        let capacity = MemoryLayout.size(ofValue: address.sun_path)
-        // A path too long for sun_path cannot be probed. A socket is there all
-        // the same, and calling it stale would let a clone or revert copy or
-        // replace the state files of a running guest, so it counts as live;
-        // removing a stale one by hand clears the refusal.
-        guard path.utf8.count < capacity else { return true }
-        address.sun_family = sa_family_t(AF_UNIX)
-        withUnsafeMutableBytes(of: &address.sun_path) { buffer in
-            for (index, byte) in path.utf8.enumerated() {
-                buffer[index] = byte
-            }
+        guard lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFSOCK else { return false }
+        switch VPhoneUnixSocket.connect(to: url.path) {
+        case let .success(fd):
+            close(fd)
+            return true
+        case let .failure(.connect(failure)):
+            return failure != ECONNREFUSED && failure != ENOENT
+        case .failure(.pathTooLong), .failure(.socket):
+            // A socket that cannot be probed (a path too long for sun_path, or
+            // no descriptor to probe with) is there all the same, and calling
+            // it stale would let a clone or revert copy or replace the state
+            // files of a running guest, so it counts as live; removing a stale
+            // one by hand clears the refusal.
+            return true
         }
-        // Without a socket to probe with, the same reasoning applies.
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return true }
-        defer { close(fd) }
-        let result = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        if result == 0 { return true }
-        let failure = errno
-        return failure != ECONNREFUSED && failure != ENOENT
     }
 }
 
