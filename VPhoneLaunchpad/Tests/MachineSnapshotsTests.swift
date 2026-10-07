@@ -25,13 +25,6 @@ struct MachineSnapshotsTests {
         let empty = try VPhoneLaunchpadMachineSnapshot.list(from: Data("[]".utf8))
         precondition(empty.isEmpty, "An empty list decodes")
 
-        // Fractional seconds and offsets are ISO 8601 too.
-        precondition(VPhoneLaunchpadMachineSnapshot.date(from: "2026-10-06T14:30:00.250Z")
-            == Date(timeIntervalSince1970: 1_791_297_000.25), "Fractional seconds")
-        precondition(VPhoneLaunchpadMachineSnapshot.date(from: "2026-10-06T22:30:00+08:00")
-            == Date(timeIntervalSince1970: 1_791_297_000), "A time zone offset")
-        precondition(VPhoneLaunchpadMachineSnapshot.date(from: "yesterday") == nil, "Not a date")
-
         for bad in [
             #"[{"created":"yesterday","name":"x"}]"#,
             #"[{"created":"2026-10-06T14:30:00Z"}]"#,

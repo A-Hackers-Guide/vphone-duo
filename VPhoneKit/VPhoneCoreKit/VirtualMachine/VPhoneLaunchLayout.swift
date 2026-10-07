@@ -117,7 +117,7 @@ public enum VPhoneGuestProcesses {
         return arguments.count == argc ? arguments : nil
     }
 
-    private static func allPIDs() -> [Int32] {
+    static func allPIDs() -> [Int32] {
         let count = proc_listallpids(nil, 0)
         guard count > 0 else { return [] }
         // Room for processes started between the two calls.

@@ -32,11 +32,15 @@ struct VPhoneVirtualMachineSnapshotCommand: ParsableCommand {
     )
 
     /// Local time, to the second: what `list` shows a person.
-    static func describe(_ date: Date) -> String {
+    private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter.string(from: date)
+        return formatter
+    }()
+
+    static func describe(_ date: Date) -> String {
+        dateFormatter.string(from: date)
     }
 
     static func confirm(_ question: String) -> Bool {
@@ -124,10 +128,10 @@ struct VPhoneVirtualMachineSnapshotRevertCommand: ParsableCommand {
 
     func run() throws {
         let bundle = try lib.library.bundle(named: vm)
-        // Refuse before asking, not after.
         let snapshot = try VPhoneMachineSnapshots.snapshot(named: name, of: bundle)
-        try VPhoneBundleActivity.requireStopped(bundle)
         if !force {
+            // Refuse before asking, not after; revert checks again itself.
+            try VPhoneBundleActivity.requireStopped(bundle)
             let taken = VPhoneVirtualMachineSnapshotCommand.describe(snapshot.created)
             guard VPhoneVirtualMachineSnapshotCommand.confirm(
                 "Revert '\(bundle.name)' to snapshot '\(snapshot.name)' from \(taken)? Everything the VM wrote since is lost.",
@@ -156,12 +160,7 @@ struct VPhoneVirtualMachineSnapshotDeleteCommand: ParsableCommand {
 
     func run() throws {
         let bundle = try lib.library.bundle(named: vm)
-        try VPhoneMachineSnapshots.requireValidName(name)
-        guard FileManager.default.fileExists(
-            atPath: VPhoneMachineSnapshots.directory(of: bundle).appendingPathComponent(name).path,
-        ) else {
-            throw VPhoneMachineSnapshotError.notFound(machine: bundle.name, name: name)
-        }
+        _ = try VPhoneMachineSnapshots.folder(named: name, of: bundle)
         if !force {
             guard VPhoneVirtualMachineSnapshotCommand.confirm(
                 "Delete snapshot '\(name)' of '\(bundle.name)'?",

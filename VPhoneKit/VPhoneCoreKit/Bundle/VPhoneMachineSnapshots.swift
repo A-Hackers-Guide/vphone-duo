@@ -7,7 +7,8 @@ import Foundation
 /// `<machine>/Snapshots/<name>/`. Not to be confused with
 /// `VPhoneAPFSSnapshot`, which renames the guest's own APFS root snapshot
 /// inside the disk image.
-public struct VPhoneMachineSnapshot: Codable, Equatable, Sendable {
+public struct VPhoneMachineSnapshot: Equatable, Sendable {
+    /// The snapshot's folder name, which is not stored in its metadata.
     public let name: String
     public let created: Date
     public let note: String?
@@ -20,20 +21,27 @@ public struct VPhoneMachineSnapshot: Codable, Equatable, Sendable {
     /// survive a revert to before it.
     public let absentFiles: [String]
 
-    public init(name: String, created: Date, note: String?, files: [String], absentFiles: [String]) {
-        self.name = name
-        self.created = created
-        self.note = note
-        self.files = files
-        self.absentFiles = absentFiles
+    /// `Snapshot.plist`: everything but the name.
+    fileprivate struct Metadata: Codable {
+        let created: Date
+        let note: String?
+        let files: [String]
+        let absentFiles: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case created = "Created"
+            case note = "Note"
+            case files = "Files"
+            case absentFiles = "AbsentFiles"
+        }
     }
 
-    private enum CodingKeys: String, CodingKey {
-        case name = "Name"
-        case created = "Created"
-        case note = "Note"
-        case files = "Files"
-        case absentFiles = "AbsentFiles"
+    fileprivate init(_ metadata: Metadata, name: String) {
+        self.name = name
+        created = metadata.created
+        note = metadata.note
+        files = metadata.files
+        absentFiles = metadata.absentFiles
     }
 }
 
@@ -64,12 +72,9 @@ public enum VPhoneMachineSnapshots {
 
     // MARK: State files
 
-    /// The files that must be captured, by their names in the machine folder.
-    public static func requiredStateFileNames(of bundle: VPhoneBundle) -> [String] {
-        [bundle.manifest.diskImage, bundle.manifest.sepStorage, bundle.manifest.nvramStorage]
-    }
-
-    /// Captured when present, and recorded as absent otherwise.
+    /// The disk image, `SEPStorage` and `nvram.bin` are always captured:
+    /// `VPhoneBundleActivity.stateFileNames(of:)`. The files below are
+    /// captured when present, and recorded as absent otherwise.
     ///
     /// The set is what changes after creation to describe the guest rather
     /// than the machine:
@@ -101,12 +106,24 @@ public enum VPhoneMachineSnapshots {
 
     // MARK: Names
 
-    /// The same rules as a machine name: not empty, no `/`, not starting
-    /// with `.` (the staging directories are hidden).
+    /// The same rules as a machine name (the staging directories are hidden,
+    /// so a name cannot start with `.`), and one plain path component.
     public static func requireValidName(_ name: String) throws {
-        guard !name.isEmpty, !name.contains("/"), !name.hasPrefix("."), !name.contains("\0") else {
+        guard (try? VPhoneBundleOperations.requireValidName(name)) != nil,
+              VPhoneVirtualMachineManifest.isPlainFileName(name)
+        else {
             throw VPhoneMachineSnapshotError.invalidName(name)
         }
+    }
+
+    /// The folder of an existing snapshot, whether or not its metadata reads.
+    public static func folder(named name: String, of bundle: VPhoneBundle) throws -> URL {
+        try requireValidName(name)
+        let folder = directory(of: bundle).appendingPathComponent(name, isDirectory: true)
+        guard isDirectory(folder) else {
+            throw VPhoneMachineSnapshotError.notFound(machine: bundle.name, name: name)
+        }
+        return folder
     }
 
     // MARK: List
@@ -125,12 +142,8 @@ public enum VPhoneMachineSnapshots {
     }
 
     public static func snapshot(named name: String, of bundle: VPhoneBundle) throws -> VPhoneMachineSnapshot {
-        try requireValidName(name)
-        let root = directory(of: bundle)
-        guard isDirectory(root.appendingPathComponent(name)) else {
-            throw VPhoneMachineSnapshotError.notFound(machine: bundle.name, name: name)
-        }
-        return try readMetadata(named: name, in: root)
+        _ = try folder(named: name, of: bundle)
+        return try readMetadata(named: name, in: directory(of: bundle))
     }
 
     // MARK: Create
@@ -155,7 +168,7 @@ public enum VPhoneMachineSnapshots {
 
         var files: [String] = []
         var absent: [String] = []
-        for file in requiredStateFileNames(of: bundle) {
+        for file in VPhoneBundleActivity.stateFileNames(of: bundle) {
             guard isRegularFile(bundle.url.appendingPathComponent(file)) else {
                 throw VPhoneMachineSnapshotError.missingStateFile(machine: bundle.name, file: file)
             }
@@ -180,8 +193,7 @@ public enum VPhoneMachineSnapshots {
                     to: staging.appendingPathComponent(file),
                 )
             }
-            let snapshot = VPhoneMachineSnapshot(
-                name: name,
+            let metadata = VPhoneMachineSnapshot.Metadata(
                 created: now,
                 note: note.flatMap { $0.isEmpty ? nil : $0 },
                 files: files,
@@ -189,7 +201,7 @@ public enum VPhoneMachineSnapshots {
             )
             let encoder = PropertyListEncoder()
             encoder.outputFormat = .xml
-            try encoder.encode(snapshot).write(to: staging.appendingPathComponent(metadataFileName))
+            try encoder.encode(metadata).write(to: staging.appendingPathComponent(metadataFileName))
             try VPhoneHostFilePermissions.makeAccessible(at: staging)
             // Exclusive: a snapshot of the same name made meanwhile is not replaced.
             guard renamex_np(staging.path, destination.path, UInt32(RENAME_EXCL)) == 0 else {
@@ -199,7 +211,7 @@ public enum VPhoneMachineSnapshots {
                 throw VPhoneMachineSnapshotError.failed(path: destination.path, reason: currentErrorText())
             }
             try VPhoneHostFilePermissions.makeDirectoryAccessible(at: root)
-            return snapshot
+            return VPhoneMachineSnapshot(metadata, name: name)
         } catch {
             try? fm.removeItem(at: staging)
             removeIfEmpty(root)
@@ -265,40 +277,26 @@ public enum VPhoneMachineSnapshots {
     /// Removes the snapshot directory and everything in it. The live state is
     /// not touched, so a running machine does not prevent it.
     public static func delete(_ name: String, of bundle: VPhoneBundle) throws {
-        try requireValidName(name)
-        let root = directory(of: bundle)
-        let target = root.appendingPathComponent(name, isDirectory: true)
-        guard isDirectory(target) else {
-            throw VPhoneMachineSnapshotError.notFound(machine: bundle.name, name: name)
-        }
-        try FileManager.default.removeItem(at: target)
-        removeIfEmpty(root)
+        try FileManager.default.removeItem(at: folder(named: name, of: bundle))
+        removeIfEmpty(directory(of: bundle))
     }
 
     // MARK: - Files
 
     private static func readMetadata(named name: String, in root: URL) throws -> VPhoneMachineSnapshot {
         let url = root.appendingPathComponent(name).appendingPathComponent(metadataFileName)
-        let decoded: VPhoneMachineSnapshot
         do {
-            decoded = try PropertyListDecoder().decode(VPhoneMachineSnapshot.self, from: Data(contentsOf: url))
+            let metadata = try PropertyListDecoder().decode(VPhoneMachineSnapshot.Metadata.self, from: Data(contentsOf: url))
+            return VPhoneMachineSnapshot(metadata, name: name)
         } catch {
             throw VPhoneMachineSnapshotError.damaged(name: name, reason: "\(metadataFileName) is unreadable")
         }
-        // The directory is the snapshot's name; the recorded one is informative.
-        return VPhoneMachineSnapshot(
-            name: name,
-            created: decoded.created,
-            note: decoded.note,
-            files: decoded.files,
-            absentFiles: decoded.absentFiles,
-        )
     }
 
     /// A file named in a snapshot's metadata is written into the machine
     /// folder on revert, so it must be one plain name and never the manifest.
     private static func requireStateFileName(_ file: String, snapshot: String) throws {
-        guard !file.isEmpty, !file.contains("/"), file != ".", file != "..",
+        guard VPhoneVirtualMachineManifest.isPlainFileName(file),
               file != "config.plist", file != metadataFileName, file != directoryName
         else {
             throw VPhoneMachineSnapshotError.damaged(name: snapshot, reason: "it names the file '\(file)'")
@@ -317,8 +315,7 @@ public enum VPhoneMachineSnapshots {
     }
 
     private static func isRegularFile(_ url: URL) -> Bool {
-        var info = stat()
-        return lstat(url.path, &info) == 0 && info.st_mode & S_IFMT == S_IFREG
+        VPhoneVirtualMachineManifest.fileKind(at: url) == .regularFile
     }
 
     private static func isDirectory(_ url: URL) -> Bool {

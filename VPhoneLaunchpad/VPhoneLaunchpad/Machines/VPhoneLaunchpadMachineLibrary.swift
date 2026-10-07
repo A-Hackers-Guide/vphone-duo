@@ -307,6 +307,11 @@ final class VPhoneLaunchpadMachineLibrary {
         machines.filter { bundleVersion(for: $0.path) == version }.map(\.name)
     }
 
+    /// The binding on disk, or the listed copy when the file cannot be read.
+    private func currentBinding(of machine: Path) -> VPhoneLaunchpadMachineBinding? {
+        VPhoneLaunchpadMachineBinding.load(machine) ?? bindings[machine]
+    }
+
     /// Writes a machine's binding and keeps the listed copy in step.
     func bind(_ machine: Path, _ binding: VPhoneLaunchpadMachineBinding) throws {
         try binding.save(to: machine)
@@ -323,8 +328,7 @@ final class VPhoneLaunchpadMachineLibrary {
             return
         }
         for machine in machines {
-            var binding = VPhoneLaunchpadMachineBinding.load(machine)
-                ?? bindings[machine]
+            var binding = currentBinding(of: machine)
                 ?? VPhoneLaunchpadMachineBinding(bundle: version)
             binding.bundle = version
             do {
@@ -770,8 +774,7 @@ final class VPhoneLaunchpadMachineLibrary {
             return true
         } catch {
             if !(error is CancellationError) {
-                actionError = error as? VPhoneLaunchpadError
-                    ?? VPhoneLaunchpadError(String(localized: "Unable to Complete Action"), detail: error.localizedDescription)
+                actionError = VPhoneLaunchpadError(actionFailure: error)
             }
             return false
         }
@@ -848,7 +851,7 @@ final class VPhoneLaunchpadMachineLibrary {
         )
         // The snapshot is taken either way; without the copy a revert only
         // leaves the binding as it is then.
-        if let binding = VPhoneLaunchpadMachineBinding.load(machine) ?? bindings[machine] {
+        if let binding = currentBinding(of: machine) {
             try? binding.save(to: machine, snapshot: name)
         }
     }
@@ -866,7 +869,7 @@ final class VPhoneLaunchpadMachineLibrary {
         // the copy saved with the snapshot. The bundle is not on the disk:
         // the machine keeps running with the one chosen now.
         if let saved = VPhoneLaunchpadMachineBinding.load(machine, snapshot: name),
-           let current = VPhoneLaunchpadMachineBinding.load(machine) ?? bindings[machine]
+           let current = currentBinding(of: machine)
         {
             try? bind(machine, current.reverted(to: saved))
         }

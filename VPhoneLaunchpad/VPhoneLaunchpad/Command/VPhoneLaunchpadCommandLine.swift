@@ -12,6 +12,13 @@ nonisolated struct VPhoneLaunchpadError: LocalizedError {
         self.detail = detail
     }
 
+    /// `error` as an action's failure: itself when it already is one, else
+    /// "Unable to Complete Action" with the error's text under it.
+    init(actionFailure error: any Error) {
+        self = error as? VPhoneLaunchpadError
+            ?? VPhoneLaunchpadError(String(localized: "Unable to Complete Action"), detail: error.localizedDescription)
+    }
+
     var errorDescription: String? {
         message
     }

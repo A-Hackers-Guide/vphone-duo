@@ -143,16 +143,24 @@ public enum VPhoneBundleOperations {
         }
         try FileManager.default.moveItem(at: src, to: dst)
         let renamed = try VPhoneBundle.load(at: dst)
-        // An mDNS name that `--mdns on` derived from the old name follows it;
-        // one chosen by hand stays.
+        // A derived mDNS name follows the machine; one chosen by hand stays.
         let network = renamed.manifest.networkConfig
-        guard network.localHostName == VPhoneNetworking.localHostName(forVMName: name) else { return renamed }
-        let updated = renamed.manifest.updating(
-            networkConfig: network.with(localHostName: .some(VPhoneNetworking.localHostName(forVMName: newName))),
-        )
+        guard let followed = localHostName(following: network.localHostName, from: name, to: newName) else {
+            return renamed
+        }
+        let updated = renamed.manifest.updating(networkConfig: network.with(localHostName: .some(followed)))
         try updated.write(to: renamed.configURL)
         try VPhoneHostFilePermissions.makeAccessible(at: renamed.configURL)
         return VPhoneBundle(url: renamed.url, manifest: updated)
+    }
+
+    /// The mDNS name for a machine renamed or cloned from `oldName` to
+    /// `newName`, when `name` is the one `--mdns on` derived from `oldName`.
+    /// Nil for a name chosen by hand, or none.
+    static func localHostName(following name: String?, from oldName: String, to newName: String) -> String? {
+        name == VPhoneNetworking.localHostName(forVMName: oldName)
+            ? VPhoneNetworking.localHostName(forVMName: newName)
+            : nil
     }
 
     public static func delete(bundleNamed name: String, in library: VPhoneLibrary) throws {
@@ -188,29 +196,38 @@ public enum VPhoneBundleOperations {
         }
         try VPhoneBundleActivity.requireStopped(source)
 
-        // APFS CoW clone; fall back to a plain recursive copy off-APFS.
-        if clonefile(src.path, dst.path, 0) != 0 {
-            try? fm.removeItem(at: dst) // clear any partial clonefile output first
-            try fm.copyItem(at: src, to: dst)
-        }
         // Roll back a half-made copy, so a retry with the same name is not
         // blocked by the alreadyExists check.
         do {
-            // A clone starts without snapshots: they record the source's
-            // history, not the copy's.
-            try removeIfPresent(dst.appendingPathComponent(VPhoneMachineSnapshots.directoryName))
-            // The source's control socket, stale since it stopped.
-            try removeIfPresent(dst.appendingPathComponent("vphone.sock"))
+            // APFS CoW clone of the whole folder, then the entries a clone
+            // drops are removed. Off APFS every byte is copied, so those are
+            // never copied in the first place.
+            if clonefile(src.path, dst.path, 0) == 0 {
+                for entry in droppedFromClone {
+                    try removeIfPresent(dst.appendingPathComponent(entry))
+                }
+            } else {
+                try? fm.removeItem(at: dst) // clear any partial clonefile output first
+                try fm.createDirectory(at: dst, withIntermediateDirectories: false)
+                for entry in try fm.contentsOfDirectory(atPath: src.path) where !droppedFromClone.contains(entry) {
+                    try fm.copyItem(at: src.appendingPathComponent(entry), to: dst.appendingPathComponent(entry))
+                }
+            }
+            var clone = try VPhoneBundle.load(at: dst)
             if newIdentity {
-                try resetIdentity(of: VPhoneBundle.load(at: dst), clonedFrom: name)
+                clone = try resetIdentity(of: clone, clonedFrom: name)
             }
             try VPhoneHostFilePermissions.makeAccessible(at: dst)
-            return try VPhoneBundle.load(at: dst)
+            return clone
         } catch {
             try? fm.removeItem(at: dst)
             throw error
         }
     }
+
+    /// Left out of every clone: snapshots record the source's history, not
+    /// the copy's, and the control socket is the stopped source's.
+    private static let droppedFromClone: Set<String> = [VPhoneMachineSnapshots.directoryName, "vphone.sock"]
 
     /// The network settings a new-identity clone drops, described for display.
     /// Each would collide with the source's when both run: a fixed address,
@@ -222,6 +239,17 @@ public enum VPhoneBundleOperations {
         _ network: VPhoneVirtualMachineManifest.NetworkConfig,
         sourceName: String,
     ) -> [String] {
+        newIdentityNetwork(network, from: sourceName, to: sourceName).cleared
+    }
+
+    /// The network settings of a new-identity clone named `newName`, and a
+    /// description of each one dropped. One rule for both, so what the CLI
+    /// reports is what was written.
+    private static func newIdentityNetwork(
+        _ network: VPhoneVirtualMachineManifest.NetworkConfig,
+        from sourceName: String,
+        to newName: String,
+    ) -> (network: VPhoneVirtualMachineManifest.NetworkConfig, cleared: [String]) {
         var cleared: [String] = []
         if let ipv4 = network.ipv4 {
             cleared.append("fixed IPv4 address \(ipv4.address)/\(ipv4.prefixLength)")
@@ -229,12 +257,17 @@ public enum VPhoneBundleOperations {
         if let forwards = network.portForwards, !forwards.isEmpty {
             cleared.append("port forwards \(forwards.map(\.description).joined(separator: ", "))")
         }
-        if let name = network.localHostName, !name.isEmpty,
-           name != VPhoneNetworking.localHostName(forVMName: sourceName)
-        {
+        let followed = localHostName(following: network.localHostName, from: sourceName, to: newName)
+        if followed == nil, let name = network.localHostName, !name.isEmpty {
             cleared.append("mDNS name \(name)")
         }
-        return cleared
+        let updated = network.with(
+            macAddress: "",
+            ipv4: .some(nil),
+            portForwards: .some(nil),
+            localHostName: .some(followed),
+        )
+        return (updated, cleared)
     }
 
     /// Give a copied bundle a new identity on its next start.
@@ -255,20 +288,12 @@ public enum VPhoneBundleOperations {
     /// ignores the ECID in the old tickets, and the SEP ROM accepts them too,
     /// so no re-personalization is needed. See
     /// `Research/Host/machine_identity_and_clone.md`.
-    static func resetIdentity(of bundle: VPhoneBundle, clonedFrom sourceName: String) throws {
-        let current = bundle.manifest.networkConfig
-        // A derived mDNS name follows the new machine name; one chosen by hand
-        // would collide with the source's and is dropped.
-        let derived = current.localHostName == VPhoneNetworking.localHostName(forVMName: sourceName)
-        let network = current.with(
-            macAddress: "",
-            ipv4: .some(nil),
-            portForwards: .some(nil),
-            localHostName: .some(derived ? VPhoneNetworking.localHostName(forVMName: bundle.name) : nil),
-        )
+    static func resetIdentity(of bundle: VPhoneBundle, clonedFrom sourceName: String) throws -> VPhoneBundle {
+        let network = newIdentityNetwork(bundle.manifest.networkConfig, from: sourceName, to: bundle.name).network
         let updated = bundle.manifest.updating(machineIdentifier: Data(), networkConfig: network)
         try updated.write(to: bundle.configURL)
         try removeIfPresent(bundle.url.appendingPathComponent("udid-prediction.txt"))
+        return VPhoneBundle(url: bundle.url, manifest: updated)
     }
 
     /// Remove a file, directory or link without following it; a missing one

@@ -20,22 +20,26 @@ struct BundleActivityTests {
         return (root, bundle)
     }
 
+    private func isRunning(_ bundle: VPhoneBundle) -> Bool {
+        (try? VPhoneBundleActivity.requireStopped(bundle)) == nil
+    }
+
     @Test func `finds this process holding an open file`() throws {
         let (root, bundle) = try makeBundle()
         defer { try? FileManager.default.removeItem(at: root) }
         let disk = bundle.url.appendingPathComponent("Disk.img")
 
-        #expect(!VPhoneBundleActivity.processesHolding(disk).contains(getpid()))
+        #expect(!VPhoneBundleActivity.processesHolding([disk]).contains(getpid()))
         let fd = open(disk.path, O_RDONLY)
         #expect(fd >= 0)
-        #expect(VPhoneBundleActivity.processesHolding(disk).contains(getpid()))
+        #expect(VPhoneBundleActivity.processesHolding([disk]).contains(getpid()))
         close(fd)
-        #expect(!VPhoneBundleActivity.processesHolding(disk).contains(getpid()))
+        #expect(!VPhoneBundleActivity.processesHolding([disk]).contains(getpid()))
     }
 
     @Test func `a missing file has no holders`() {
         let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        #expect(VPhoneBundleActivity.processesHolding(missing).isEmpty)
+        #expect(VPhoneBundleActivity.processesHolding([missing]).isEmpty)
     }
 
     @Test func `a stopped machine passes and a held state file refuses`() throws {
@@ -43,12 +47,12 @@ struct BundleActivityTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         try VPhoneBundleActivity.requireStopped(bundle)
-        #expect(!VPhoneBundleActivity.isRunning(bundle))
+        #expect(!isRunning(bundle))
 
         for name in ["Disk.img", "SEPStorage", "nvram.bin"] {
             let fd = open(bundle.url.appendingPathComponent(name).path, O_RDONLY)
             #expect(fd >= 0)
-            #expect(VPhoneBundleActivity.isRunning(bundle))
+            #expect(isRunning(bundle))
             #expect(throws: VPhoneBundleActivityError.running(name: "vm", pids: [getpid()])) {
                 try VPhoneBundleActivity.requireStopped(bundle)
             }
@@ -79,11 +83,11 @@ struct BundleActivityTests {
         }
         #expect(bound == 0)
         #expect(listen(fd, 1) == 0)
-        #expect(VPhoneBundleActivity.isRunning(bundle))
+        #expect(isRunning(bundle))
 
         // The socket file outlives the listener, as it does after a crash.
         close(fd)
         #expect(FileManager.default.fileExists(atPath: path))
-        #expect(!VPhoneBundleActivity.isRunning(bundle))
+        #expect(!isRunning(bundle))
     }
 }

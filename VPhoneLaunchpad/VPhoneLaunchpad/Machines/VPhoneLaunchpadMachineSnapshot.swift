@@ -14,24 +14,12 @@ nonisolated struct VPhoneLaunchpadMachineSnapshot: Decodable, Hashable, Identifi
         name
     }
 
-    /// Decodes the array `vm snapshot list --json` prints. `created` is
-    /// ISO 8601, with or without fractional seconds.
+    /// Decodes the array `vm snapshot list --json` prints, whose `created`
+    /// is written with JSONEncoder's `.iso8601`.
     static func list(from data: Data) throws -> [Self] {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom { decoder in
-            let container = try decoder.singleValueContainer()
-            let text = try container.decode(String.self)
-            guard let date = date(from: text) else {
-                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Not an ISO 8601 date: \(text)")
-            }
-            return date
-        }
+        decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode([Self].self, from: data)
-    }
-
-    static func date(from text: String) -> Date? {
-        (try? Date(text, strategy: .iso8601))
-            ?? (try? Date(text, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)))
     }
 
     /// The name Take Snapshot offers: the local date and time to the minute,

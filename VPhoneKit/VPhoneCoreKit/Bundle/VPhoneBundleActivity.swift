@@ -15,30 +15,16 @@ import Foundation
 /// (a VM started under sudo) cannot be inspected without root, so a live
 /// `vphone.sock` counts as running too.
 public enum VPhoneBundleActivity {
-    /// The files a running VM holds open, by their names inside the bundle.
+    /// The files a running VM holds open, and the ones a clone, snapshot or
+    /// revert must take together, by their names inside the bundle.
     public static func stateFileNames(of bundle: VPhoneBundle) -> [String] {
-        [bundle.manifest.diskImage, "SEPStorage", "nvram.bin"]
-    }
-
-    /// The processes of this user that have `url` open. Empty when the file is
-    /// missing or nobody holds it.
-    public static func processesHolding(_ url: URL) -> [pid_t] {
-        var target = stat()
-        guard stat(url.path, &target) == 0 else { return [] }
-        return allProcessIDs().filter { pid in
-            holds(pid: pid, device: target.st_dev, inode: target.st_ino)
-        }
-    }
-
-    /// True when a process holds one of the machine's state files open, or its
-    /// control socket answers.
-    public static func isRunning(_ bundle: VPhoneBundle) -> Bool {
-        !holders(of: bundle).isEmpty || controlSocketAnswers(bundle.url.appendingPathComponent("vphone.sock"))
+        [bundle.manifest.diskImage, bundle.manifest.sepStorage, bundle.manifest.nvramStorage]
     }
 
     /// Throws `VPhoneBundleActivityError.running` unless the machine is stopped.
     public static func requireStopped(_ bundle: VPhoneBundle) throws {
-        let pids = holders(of: bundle)
+        let urls = stateFileNames(of: bundle).map { bundle.url.appendingPathComponent($0) }
+        let pids = processesHolding(urls)
         if !pids.isEmpty || controlSocketAnswers(bundle.url.appendingPathComponent("vphone.sock")) {
             throw VPhoneBundleActivityError.running(name: bundle.name, pids: pids)
         }
@@ -46,27 +32,27 @@ public enum VPhoneBundleActivity {
 
     // MARK: - Processes
 
-    private static func holders(of bundle: VPhoneBundle) -> [pid_t] {
-        var pids = Set<pid_t>()
-        for name in stateFileNames(of: bundle) {
-            pids.formUnion(processesHolding(bundle.url.appendingPathComponent(name)))
+    /// The processes of this user that have any of `urls` open, sorted. One
+    /// pass over the process table, whatever the number of files; a missing
+    /// file is held by nobody.
+    static func processesHolding(_ urls: [URL]) -> [pid_t] {
+        var targets = Set<FileID>()
+        for url in urls {
+            var info = stat()
+            if stat(url.path, &info) == 0 {
+                targets.insert(FileID(device: info.st_dev, inode: info.st_ino))
+            }
         }
-        return pids.sorted()
+        guard !targets.isEmpty else { return [] }
+        return VPhoneGuestProcesses.allPIDs().filter { holds(pid: $0, anyOf: targets) }
     }
 
-    private static func allProcessIDs() -> [pid_t] {
-        let count = proc_listallpids(nil, 0)
-        guard count > 0 else { return [] }
-        // Room for processes started between the two calls.
-        var pids = [pid_t](repeating: 0, count: Int(count) + 64)
-        let filled = pids.withUnsafeMutableBytes { buffer in
-            proc_listallpids(buffer.baseAddress, Int32(buffer.count))
-        }
-        guard filled > 0 else { return [] }
-        return Array(pids.prefix(Int(filled))).filter { $0 > 0 }
+    private struct FileID: Hashable {
+        let device: dev_t
+        let inode: ino_t
     }
 
-    private static func holds(pid: pid_t, device: dev_t, inode: ino_t) -> Bool {
+    private static func holds(pid: pid_t, anyOf targets: Set<FileID>) -> Bool {
         // EPERM for another user's process: it is skipped, and the socket
         // probe covers the case that matters.
         let size = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
@@ -82,7 +68,7 @@ public enum VPhoneBundleActivity {
             let got = proc_pidfdinfo(pid, fd.proc_fd, PROC_PIDFDVNODEINFO, &info, Int32(MemoryLayout<vnode_fdinfo>.size))
             guard got == Int32(MemoryLayout<vnode_fdinfo>.size) else { continue }
             let st = info.pvi.vi_stat
-            if dev_t(st.vst_dev) == device, ino_t(st.vst_ino) == inode {
+            if targets.contains(FileID(device: dev_t(st.vst_dev), inode: ino_t(st.vst_ino))) {
                 return true
             }
         }

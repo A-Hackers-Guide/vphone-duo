@@ -211,8 +211,7 @@ struct VPhoneLaunchpadSnapshotsView: View {
                 try await action()
             } catch is CancellationError {
             } catch {
-                actionError = error as? VPhoneLaunchpadError
-                    ?? VPhoneLaunchpadError(String(localized: "Unable to Complete Action"), detail: error.localizedDescription)
+                actionError = VPhoneLaunchpadError(actionFailure: error)
             }
             await reload()
         }
