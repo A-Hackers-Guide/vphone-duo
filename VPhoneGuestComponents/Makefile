@@ -318,3 +318,10 @@ test-vcam-prewarm:
 		-o $(OUT)/VCamPrewarmScanTests \
 		Tests/VCamPrewarmScanTests.c VCamCaptured/Prewarm/VCamPrewarmScan.c
 	@$(OUT)/VCamPrewarmScanTests
+
+.PHONY: test-installcoordination-persona
+test-installcoordination-persona:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -Wall -Wextra -Werror \
+		-o $(OUT)/InstallCoordinationPersonaTests Tests/InstallCoordinationPersonaTests.c
+	@$(OUT)/InstallCoordinationPersonaTests

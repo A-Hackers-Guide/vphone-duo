@@ -2794,3 +2794,21 @@ Two standard-blocked declarations hide Apple Account, Game Center, iCloud and Wa
 ## Pinned guest device name (2026-10-07)
 
 Row 27. `libdevicename.dylib` makes configd publish the VM's name, which `vphone-vm` hands to vphoned after every connect and vphoned keeps in `/var/db/vphone/devicename.plist`, as the device name, and makes lockdownd refuse every rename; without the file it passes everything through. NVRAM was tried first and does not reach the guest: iBoot drops variables it does not know. It is the first library a process receives beside another: lockdownd already took `libmisfix.dylib`, so `vpInsertedLibrariesFor` in `Shared/InjectionEnvironment.h` now returns every installed library for a path and `vpInsertHookLibraries` adds each one an environment lacks. Single-library targets and their spawn log lines are unchanged. `preferences.plist` is never written: the pin is applied to configd's `SCDynamicStoreSetMultiple` publication, because the `SCPreferencesGetValue(kSCPrefSystem)` it flattens is also read and written back on configd's model-change path. Verified on iOS 27.0 (24A435) on 2026-10-07; iOS 26.x not run yet. See `Research/Guest/device_name_pinning.md` for the flow, the measurements and the verification.
+
+## CoreDevice install proxy persona lookup (2026-10-07)
+
+`system-installcoordination_proxy-cfw-persona_lookup` is an iOS-27 guest
+compatibility patch, enabled in standard. Its root-owned marker
+`/usr/lib/vphone-installcoordination-persona-lookup` enables the existing
+launchd hook to allow only the system `installcoordination_proxy`, verified by
+executable path, signing identifier and kernel-validated audit token, to look
+up `com.apple.mobile.usermanagerd.xpc`. Other requests retain their original
+sandbox check. Disabling the patch removes the marker. Both CFW install and
+environment update reconcile its receipt. No kernel or proxy binary patch is
+needed; an experimental entitlement-only version is restored from backup.
+
+The original failure is a Protobox mach-lookup denial before UserManager's
+persona-fetch authorization. Adding a temporary exception entitlement was
+verified ineffective on the running guest and has been removed. IDA analysis
+of this guest's launchd confirms the bootstrap lookup gate and name filters
+2, 3 and 12. See [evidence, implementation and validation](Guest/ios27_xcode_persona_lookup.md).

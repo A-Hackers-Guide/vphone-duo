@@ -1327,6 +1327,24 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
 
+        let personaPatch = FirmwareGuestSystemPatchSet.installCoordinationPersona
+        let personaMarker = String(FirmwareGuestSystemPatchSet.installCoordinationPersonaMarker.dropFirst())
+        isolate([personaPatch]) {
+            // Undo the experimental entitlement-only patch if this machine
+            // received it. Platform Protobox profiles ignore that exception.
+            let proxy = "System/Library/PrivateFrameworks/InstallCoordination.framework/Support/installcoordination_proxy"
+            if priorGuest.contains(personaPatch), try revertMachO(system: system, work: work, path: proxy) {
+                print("  [+] \(personaPatch): restored proxy before enabling launchd compatibility")
+            }
+            if version.hasPrefix("27."), on(personaPatch) {
+                try system.writeFile(personaMarker, contents: Data("1\n".utf8), mode: 0o644, owner: Self.guestOwner)
+                live.insert(personaPatch)
+                print("  [+] \(personaPatch): enabled scoped UserManager lookup")
+            } else {
+                try system.removeItem(personaMarker)
+            }
+        }
+
         if !failures.isEmpty {
             print("[!] \(failures.count) guest patch(es) failed and were left in their prior state: \(Set(failures).sorted().joined(separator: ", "))")
         }

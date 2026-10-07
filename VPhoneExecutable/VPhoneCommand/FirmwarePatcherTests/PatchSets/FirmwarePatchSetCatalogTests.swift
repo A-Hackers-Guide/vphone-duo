@@ -17,6 +17,17 @@ import VPhonePatchKit
 
 @Suite("Bundled patch set catalogue")
 struct FirmwarePatchSetCatalogTests {
+    @Test func `CoreDevice persona lookup is selected only for iOS 27`() throws {
+        for base in ["26.4", "27.0.1", "28.0"] {
+            let plan = try VPhonePatchPlan.resolve(
+                preset: FirmwarePatchSetCatalog.standardPreset,
+                patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4")
+            )
+            #expect(plan.isEnabled(FirmwareGuestSystemPatchSet.installCoordinationPersona) == base.hasPrefix("27."))
+        }
+    }
+
     @Test
     func `Every bundled set has a unique identifier and no duplicate patches`() {
         let setIdentifiers = FirmwarePatchSetCatalog.bundled.map(\.identifier)
