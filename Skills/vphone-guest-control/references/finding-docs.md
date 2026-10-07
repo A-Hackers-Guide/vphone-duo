@@ -40,6 +40,7 @@ note's command lines.
 | Developer Mode, DDI mount errors | `Research/Guest/devmode_xpc_protocol.md` |
 | App install fails, signature, profile checks, UDID | `Research/Guest/xcode_install_signature_gate.md` |
 | Location simulation returns `unavailable` | `Research/Guest/location_simulation_26_4_failure.md` |
+| `location.*` times out after 120 s, or every CoreLocation client hangs | `Research/Guest/locationd_startup_deadlock.md` |
 | Camera / virtual camera | `Research/Guest/virtual_camera_transport.md` |
 | Machine identity, clone behaving like the same device | `Research/Guest/machine_identifier_storage_analysis.md` |
 | What a patch does, whether it is on, why a preset differs | `Research/0_binary_patch_comparison.md`, `Research/KernelCustomFirmwarePatches/README.md` |

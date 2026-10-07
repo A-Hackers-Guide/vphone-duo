@@ -48,13 +48,12 @@ one ran. StageBundle.sh now signs the helper with `designated => identifier
 cdhash-signed helper was running, and the helper went from `NotDetermined` to
 `AuthorizedAlways` without a prompt.
 
-**locationd deadlocks in a headless guest.** Started with `--headless`, the VM's
-locationd deadlocked within a second of starting on every boot, with sync off
-and no location request sent; with a window it never did. A spindump has its
-`CLClientManagerSilo` and `CLAuthSyncManagerSilo` queues "blocked by queue in a
-transient state" and every client (vphoned, Maps, navd, nearbyd) waiting on
-`com.apple.locationd.synchronous`. Location RPCs then time out after 120 s. Not
-solved here.
+**locationd can deadlock as it starts.** It was first seen on headless starts,
+where the VM's locationd hung within a second on every boot tried; more boots
+showed windowed starts hang too, less often. Every CoreLocation client then
+waits on `com.apple.locationd.synchronous` and location RPCs time out after
+120 s. vphoned now restarts such a locationd; see
+`Research/Guest/locationd_startup_deadlock.md`.
 
 Sync Host Location is now a machine setting, `syncsHostLocation` in
 `config.plist`, off when absent, in a window and headless alike (headless used
