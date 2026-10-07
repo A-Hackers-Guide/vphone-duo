@@ -113,8 +113,6 @@ class VPhoneVirtualMachineRefactored: NSObject, VZVirtualMachineDelegate {
         )
         platform.auxiliaryStorage = auxiliaryStorage
 
-        setBootArgsSerialOutput(auxiliaryStorage)
-
         return platform
     }
 
@@ -130,19 +128,6 @@ class VPhoneVirtualMachineRefactored: NSObject, VZVirtualMachineDelegate {
         try? newID.dataRepresentation.write(to: url)
         print("[vphone] Created new machineIdentifier -> \(url.lastPathComponent)")
         return newID
-    }
-
-    private func setBootArgsSerialOutput(_ auxiliaryStorage: VZMacAuxiliaryStorage) {
-        let bootArgs = "serial=3 debug=0x104c04"
-        guard let bootArgsData = bootArgs.data(using: .utf8) else { return }
-
-        let success = Dynamic(auxiliaryStorage)
-            ._setDataValue(bootArgsData, forNVRAMVariableNamed: "boot-args", error: nil)
-            .asBool ?? false
-
-        if success {
-            print("[vphone] NVRAM boot-args: \(bootArgs)")
-        }
     }
 
     // MARK: - Bootloader
