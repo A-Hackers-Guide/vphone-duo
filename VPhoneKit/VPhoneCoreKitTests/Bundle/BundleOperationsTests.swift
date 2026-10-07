@@ -398,4 +398,177 @@ struct BundleOperationsTests {
             _ = try VPhoneBundleOperations.clone(bundleNamed: "a", to: "b", in: lib)
         }
     }
+
+    // MARK: - Clone state and identity
+
+    /// A stopped machine with the files a booted one has: state files with
+    /// distinct bytes, an identity, fixed network settings, a stale control
+    /// socket and a snapshot.
+    private func makeBootedSource(named name: String, in lib: VPhoneLibrary) throws -> VPhoneBundle {
+        let rom = try fakeROM()
+        defer { try? FileManager.default.removeItem(at: rom) }
+        let created = try VPhoneBundleOperations.create(
+            .init(name: name, cpuCount: 8, memoryMB: 4096, diskSizeGB: 1, romSource: rom, sepromSource: rom),
+            in: lib,
+        )
+        let url = created.url
+        // A small disk image keeps the byte comparisons cheap.
+        try Data([0xD1, 0x5C, 0x00, 0x01]).write(to: url.appendingPathComponent("Disk.img"))
+        try Data([0x5E, 0x90]).write(to: url.appendingPathComponent("SEPStorage"))
+        try Data([1, 2, 3]).write(to: url.appendingPathComponent("nvram.bin"))
+        try Data([4]).write(to: url.appendingPathComponent("udid-prediction.txt"))
+        try Data([5]).write(to: url.appendingPathComponent("launchpad.json"))
+        // A regular file stands in for the socket a stopped VM leaves behind;
+        // nothing accepts a connection on it.
+        try Data().write(to: url.appendingPathComponent("vphone.sock"))
+        let snapshot = url.appendingPathComponent("Snapshots/before-update")
+        try FileManager.default.createDirectory(at: snapshot, withIntermediateDirectories: true)
+        try Data([0xD1]).write(to: snapshot.appendingPathComponent("Disk.img"))
+
+        typealias Network = VPhoneVirtualMachineManifest.NetworkConfig
+        let network = Network(
+            mode: .nat,
+            macAddress: "aa:bb:cc:dd:ee:ff",
+            ipv4: .init(address: "192.168.64.20", prefixLength: 24),
+            portForwards: [.init(hostPort: 8022, guestPort: 22)],
+            localHostName: "src-phone",
+            resolvesMacName: false,
+        )
+        let manifest = created.manifest.updating(
+            machineIdentifier: Data([9, 9]),
+            networkConfig: network,
+            unlocksAtStartup: true,
+        )
+        try manifest.write(to: created.configURL)
+        return VPhoneBundle(url: url, manifest: manifest)
+    }
+
+    @Test func `clone with a new identity clears the identity and colliding network settings`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let lib = VPhoneLibrary(root: root)
+        let src = try makeBootedSource(named: "src", in: lib)
+        let sourceConfig = try Data(contentsOf: src.configURL)
+
+        let clone = try VPhoneBundleOperations.clone(bundleNamed: "src", to: "dst", in: lib, newIdentity: true)
+
+        // The identity and the settings that would collide with the source are gone.
+        let manifest = try lib.bundle(named: "dst").manifest
+        #expect(manifest.machineIdentifier.isEmpty)
+        #expect(manifest.networkConfig.macAddress.isEmpty)
+        #expect(manifest.networkConfig.ipv4 == nil)
+        #expect(manifest.networkConfig.portForwards == nil)
+        #expect(manifest.networkConfig.localHostName == nil)
+        // Everything else is kept.
+        #expect(manifest.networkConfig.mode == .nat)
+        #expect(manifest.networkConfig.resolvesMacName == false)
+        #expect(manifest.cpuCount == 8)
+        #expect(manifest.memorySize == 4096 * 1024 * 1024)
+        #expect(manifest.unlocksAtStartup == true)
+        #expect(manifest.romImages?.avpBooter == src.manifest.romImages?.avpBooter)
+        #expect(manifest.screenConfig == src.manifest.screenConfig)
+
+        // The ECID's record goes; the state files made by one restore stay byte for byte.
+        let fm = FileManager.default
+        #expect(!fm.fileExists(atPath: clone.url.appendingPathComponent("udid-prediction.txt").path))
+        #expect(!fm.fileExists(atPath: clone.url.appendingPathComponent("vphone.sock").path))
+        #expect(!fm.fileExists(atPath: clone.url.appendingPathComponent("Snapshots").path))
+        for name in ["Disk.img", "SEPStorage", "nvram.bin", "launchpad.json", "AVPBooter.vresearch1.bin"] {
+            #expect(try Data(contentsOf: clone.url.appendingPathComponent(name))
+                == Data(contentsOf: src.url.appendingPathComponent(name)))
+        }
+
+        // The source is untouched.
+        #expect(try Data(contentsOf: src.configURL) == sourceConfig)
+        #expect(fm.fileExists(atPath: src.url.appendingPathComponent("udid-prediction.txt").path))
+        #expect(fm.fileExists(atPath: src.url.appendingPathComponent("Snapshots/before-update/Disk.img").path))
+    }
+
+    @Test func `a plain clone keeps the identity but not snapshots or the control socket`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let lib = VPhoneLibrary(root: root)
+        let src = try makeBootedSource(named: "src", in: lib)
+
+        let clone = try VPhoneBundleOperations.clone(bundleNamed: "src", to: "dst", in: lib)
+
+        #expect(clone.manifest.machineIdentifier == Data([9, 9]))
+        #expect(clone.manifest.networkConfig == src.manifest.networkConfig)
+        let fm = FileManager.default
+        #expect(fm.fileExists(atPath: clone.url.appendingPathComponent("udid-prediction.txt").path))
+        #expect(!fm.fileExists(atPath: clone.url.appendingPathComponent("vphone.sock").path))
+        #expect(!fm.fileExists(atPath: clone.url.appendingPathComponent("Snapshots").path))
+    }
+
+    @Test func `clone refuses while the source holds a state file open`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let lib = VPhoneLibrary(root: root)
+        let src = try makeBootedSource(named: "src", in: lib)
+
+        let fd = open(src.url.appendingPathComponent("Disk.img").path, O_RDONLY)
+        #expect(fd >= 0)
+        defer { close(fd) }
+        for newIdentity in [false, true] {
+            #expect(throws: VPhoneBundleActivityError.running(name: "src", pids: [getpid()])) {
+                try VPhoneBundleOperations.clone(bundleNamed: "src", to: "dst", in: lib, newIdentity: newIdentity)
+            }
+            #expect(!FileManager.default.fileExists(atPath: lib.url(forName: "dst").path))
+        }
+    }
+
+    @Test func `clone refuses a source that starts while it is copied and leaves no copy`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let lib = VPhoneLibrary(root: root)
+        let src = try makeBootedSource(named: "src", in: lib)
+
+        for name in ["Disk.img", "SEPStorage", "nvram.bin"] {
+            var fd: Int32 = -1
+            defer { if fd >= 0 { close(fd) } }
+            #expect(throws: VPhoneBundleActivityError.running(name: "src", pids: [getpid()])) {
+                try VPhoneBundleOperations.clone(bundleNamed: "src", to: "dst", in: lib, newIdentity: false) {
+                    // The source starts after the first check passed.
+                    fd = open(src.url.appendingPathComponent(name).path, O_RDONLY)
+                }
+            }
+            #expect(fd >= 0)
+            #expect(!FileManager.default.fileExists(atPath: lib.url(forName: "dst").path))
+        }
+    }
+
+    @Test func `lists the network settings a new identity clears`() {
+        typealias Network = VPhoneVirtualMachineManifest.NetworkConfig
+        #expect(VPhoneBundleOperations.networkSettingsClearedByNewIdentity(.default, sourceName: "src").isEmpty)
+        let network = Network(
+            mode: .tunnel,
+            macAddress: "aa:bb:cc:dd:ee:ff",
+            ipv4: .init(address: "10.0.0.5", prefixLength: 24),
+            portForwards: [.init(hostPort: 8022, guestPort: 22)],
+            localHostName: "phone",
+        )
+        #expect(VPhoneBundleOperations.networkSettingsClearedByNewIdentity(network, sourceName: "src") == [
+            "fixed IPv4 address 10.0.0.5/24",
+            "port forwards tcp:127.0.0.1:8022:22",
+            "mDNS name phone",
+        ])
+        // A name derived from the source's name is not listed: it follows the clone.
+        let derived = network.with(localHostName: .some(VPhoneNetworking.localHostName(forVMName: "lab_a")))
+        #expect(!VPhoneBundleOperations.networkSettingsClearedByNewIdentity(derived, sourceName: "lab_a")
+            .contains { $0.hasPrefix("mDNS name") })
+    }
+
+    @Test func `clone with a new identity carries a derived mDNS name over to the new name`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let lib = VPhoneLibrary(root: root)
+        let src = try makeBootedSource(named: "lab_a", in: lib)
+        let derived = src.manifest.networkConfig.with(localHostName: .some(VPhoneNetworking.localHostName(forVMName: "lab_a")))
+        try src.manifest.updating(networkConfig: derived).write(to: src.configURL)
+
+        let clone = try VPhoneBundleOperations.clone(bundleNamed: "lab_a", to: "lab_b", in: lib, newIdentity: true)
+
+        #expect(clone.manifest.networkConfig.localHostName == "lab-b")
+        #expect(try lib.bundle(named: "lab_a").manifest.networkConfig.localHostName == "lab-a")
+    }
 }

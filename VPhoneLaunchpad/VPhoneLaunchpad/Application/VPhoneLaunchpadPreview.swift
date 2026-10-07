@@ -131,6 +131,14 @@
                         .environment(model)
                 }
                 await sheet(.clone(labMachine), "10-clone", suffix)
+                await sheet(.snapshots(labMachine), "10a-snapshots", suffix)
+                await sheet(.snapshots(path("research-01")), "10b-snapshots-running", suffix)
+                snapshots = []
+                await sheet(.snapshots(labMachine), "10c-snapshots-empty", suffix)
+                snapshots = sampleSnapshots
+                await standalone("10d-take-snapshot", suffix, size: NSSize(width: 420, height: 330)) {
+                    VPhoneLaunchpadTakeSnapshotSheet(machine: labMachine, taken: Set(sampleSnapshots.map(\.name))) { _, _ in }
+                }
                 await sheet(.export([labMachine]), "11-export", suffix)
                 await sheet(.console(path("research-01")), "12-console", suffix)
             }
@@ -224,6 +232,19 @@
                 sha256: sha256,
             )
         }
+
+        /// Stands in for `vm snapshot list --json`. The sheet reads this one, so
+        /// the driver can empty it.
+        static var snapshots = sampleSnapshots
+
+        static let sampleSnapshots: [VPhoneLaunchpadMachineSnapshot] = {
+            let json = """
+            [{"created":"2026-09-30T08:12:44Z","name":"fresh-install","note":"Setup Assistant skipped, nothing installed"},
+             {"created":"2026-10-03T14:05:10Z","name":"frida-17.2","note":"frida-server 17.2 from the package manager, before the Stalker patch test"},
+             {"created":"2026-10-06T14:30:00Z","name":"2026-10-06-2230"}]
+            """
+            return (try? VPhoneLaunchpadMachineSnapshot.list(from: Data(json.utf8))) ?? []
+        }()
 
         static let artifacts: [VPhoneLaunchpadArtifact] = [
             artifact(1, "cd013c2a5e8f41b7d09c3e6a2f14b85d7c90e3a1", "2026-09-28T02:14:00Z"),

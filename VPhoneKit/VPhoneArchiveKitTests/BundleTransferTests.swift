@@ -161,6 +161,26 @@ struct BundleTransferTests {
         #expect(members.contains("orig/config.plist"))
     }
 
+    /// Snapshots are clones on the machine's own volume; in an archive each
+    /// would be another full disk image. They stay out even with
+    /// `--include-ipsw`.
+    @Test func `export leaves snapshots behind`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let lib = VPhoneLibrary(root: root)
+        let b = try makeBundle("orig", in: lib)
+        try Data([1]).write(to: b.url.appendingPathComponent("nvram.bin"))
+        try VPhoneMachineSnapshots.create("clean", of: b)
+
+        for includeIPSW in [false, true] {
+            let archive = root.appendingPathComponent("orig-\(includeIPSW).tgz")
+            try VPhoneBundleTransfer.export(bundleNamed: "orig", to: archive, includeIPSW: includeIPSW, in: lib)
+            let members = try VPhoneArchiveReader.entries(of: archive).map(\.path)
+            #expect(!members.contains { $0.contains(VPhoneMachineSnapshots.directoryName) })
+            #expect(members.contains("orig/Disk.img"))
+        }
+    }
+
     /// A machine prepared while IPSWs were cached inside it still carries them.
     /// They are a cache, so they stay out even with `--include-ipsw`, which is
     /// about the restore tree; so do staging directories left by a failed detach.

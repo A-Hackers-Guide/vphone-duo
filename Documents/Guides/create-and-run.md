@@ -67,10 +67,15 @@ The online restore obtains its ticket in process. For an offline restore, see `v
 vphone-cli vm list
 vphone-cli vm info myphone
 vphone-cli vm clone myphone copy
+vphone-cli vm clone myphone second --new-identity
 vphone-cli vm export myphone --out myphone.tzst
 vphone-cli vm import myphone.tzst --name restored
 ```
 
-`vm clone` copies the complete machine state, including its device identity and boot files. It uses APFS copy-on-write when available. Edit the identity yourself if you need a different device.
+`vm clone` copies a stopped machine, using APFS copy-on-write when available; it refuses while the source runs. A plain copy keeps everything, including the device identity (machine identifier and MAC address), so it is a backup and cannot run beside the original.
+
+`--new-identity` makes a second device instead. The copy gets a new machine identifier (ECID), and with it a new UDID, and a new MAC address on its first start. Its fixed IPv4 address, port forwards and a hand-chosen mDNS name are cleared, since they would collide with the original's; an mDNS name `--mdns on` derived from the original's name follows the new name, as on rename. Set new ones with `vm config` if you need them. The guest keeps the original's data, apps and settings, and no restore is needed. Before lockdown tools such as `ideviceinstaller` work, unlock the copy and trust this Mac again. On APFS a copy shares its disk blocks with the original and holds only what it changes, about 0.35 GB after its first boots, although `du` and Finder report the full size for each.
+
+Do not swap `SEPStorage`, `nvram.bin` or the disk image between machines: they were made together by one restore, and a guest whose SEP storage does not match its disk panics at boot.
 
 Run resource-heavy creations **one at a time**. Both the IPSWs and temporary restore tree consume substantial disk space, and patching large caches can be memory intensive. Check free space before starting a second VM.

@@ -392,15 +392,34 @@ struct VPhoneLaunchpadMachineSettingsView: View {
 
 // MARK: - Rename and clone
 
-struct VPhoneLaunchpadNameSheet: View {
+/// A new name for a machine, and for a clone whatever else it takes, in
+/// sections of `options` under the name.
+struct VPhoneLaunchpadNameSheet<Options: View>: View {
     let title: LocalizedStringKey
     let action: LocalizedStringKey
     let initial: String
     /// The machine renamed or cloned. The new name stays in its library.
     let machine: VPhoneLaunchpadMachinePath
+    @ViewBuilder let options: Options
     let onConfirm: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
+
+    init(
+        title: LocalizedStringKey,
+        action: LocalizedStringKey,
+        initial: String,
+        machine: VPhoneLaunchpadMachinePath,
+        @ViewBuilder options: () -> Options,
+        onConfirm: @escaping (String) -> Void,
+    ) {
+        self.title = title
+        self.action = action
+        self.initial = initial
+        self.machine = machine
+        self.options = options()
+        self.onConfirm = onConfirm
+    }
 
     private var fitsLocation: Bool {
         VPhoneLaunchpadMachineLocations.socketPathFits(root: machine.libraryRoot, name: name)
@@ -424,6 +443,7 @@ struct VPhoneLaunchpadNameSheet: View {
                             .foregroundStyle(.red)
                     }
                 }
+                options
             }
             .formStyle(.grouped)
         } actions: {
@@ -439,6 +459,47 @@ struct VPhoneLaunchpadNameSheet: View {
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
         .onAppear { name = initial }
+    }
+}
+
+extension VPhoneLaunchpadNameSheet where Options == EmptyView {
+    init(
+        title: LocalizedStringKey,
+        action: LocalizedStringKey,
+        initial: String,
+        machine: VPhoneLaunchpadMachinePath,
+        onConfirm: @escaping (String) -> Void,
+    ) {
+        self.init(title: title, action: action, initial: initial, machine: machine, options: { EmptyView() }, onConfirm: onConfirm)
+    }
+}
+
+/// Clone, with the choice of a device of its own. A new identity is the
+/// default: a clone that keeps the original's ECID, UDID and MAC cannot run
+/// at the same time as it, and the host sees them as one device.
+struct VPhoneLaunchpadCloneSheet: View {
+    let machine: VPhoneLaunchpadMachinePath
+    let onConfirm: (_ name: String, _ newIdentity: Bool) -> Void
+    @State private var newIdentity = true
+
+    var body: some View {
+        VPhoneLaunchpadNameSheet(
+            title: "Clone \(machine.name)",
+            action: "Clone",
+            initial: "\(machine.name)-clone",
+            machine: machine,
+        ) {
+            Section {
+                Toggle("New device identity", isOn: $newIdentity)
+            } footer: {
+                Text(newIdentity
+                    ? "The clone gets its own ECID, UDID and MAC address, so it can run alongside the original. The guest asks to trust this Mac again the first time it connects."
+                    : "The clone is the same device as the original. Run only one of them at a time.")
+                    .foregroundStyle(.secondary)
+            }
+        } onConfirm: { name in
+            onConfirm(name, newIdentity)
+        }
     }
 }
 

@@ -18,6 +18,7 @@ struct VPhoneVirtualMachineCommand: ParsableCommand {
             VPhoneVirtualMachineRenameCommand.self,
             VPhoneVirtualMachineDeleteCommand.self,
             VPhoneVirtualMachineCloneCommand.self,
+            VPhoneVirtualMachineSnapshotCommand.self,
             VPhoneVirtualMachineExportCommand.self,
             VPhoneVirtualMachineImportCommand.self,
             VPhoneVirtualMachineLaunchCommand.self,
@@ -159,6 +160,9 @@ struct VPhoneVirtualMachineInfoCommand: ParsableCommand {
             print("disk:  \(report.diskSizeBytes) bytes")
             print("net:   \(describeNetwork(report.network))")
             print("unlock: \(report.unlocksAtStartup ? "on" : "off")")
+            if let snapshots = try? VPhoneMachineSnapshots.list(of: bundle), !snapshots.isEmpty {
+                print("snapshots: \(snapshots.count)")
+            }
             if let udid = report.udid {
                 print("udid:  \(udid)")
             }

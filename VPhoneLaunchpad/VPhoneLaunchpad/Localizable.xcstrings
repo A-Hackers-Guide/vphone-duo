@@ -13459,6 +13459,258 @@
         "vi" : { "stringUnit" : { "state" : "translated", "value" : "vphoned và các thư viện hook trong máy khách." } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "客户机中的 vphoned 和 hook 库。" } }
       }
+    },
+    "New device identity" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New device identity" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "新しいデバイス ID" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "새 기기 식별 정보" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Danh tính thiết bị mới" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新的设备身份" } }
+      }
+    },
+    "The clone gets its own ECID, UDID and MAC address, so it can run alongside the original. The guest asks to trust this Mac again the first time it connects." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The clone gets its own ECID, UDID and MAC address, so it can run alongside the original. The guest asks to trust this Mac again the first time it connects." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "複製には独自の ECID、UDID、MAC アドレスが割り当てられるため、元のマシンと同時に実行できます。初めて接続するとき、ゲストはこの Mac を信頼するかどうかを再度確認します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "복제본은 고유한 ECID, UDID 및 MAC 주소를 받으므로 원본과 함께 실행할 수 있습니다. 처음 연결할 때 게스트가 이 Mac을 신뢰할지 다시 묻습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Bản sao nhận ECID, UDID và địa chỉ MAC riêng nên có thể chạy cùng lúc với máy gốc. Ở lần kết nối đầu tiên, máy khách sẽ hỏi lại có tin cậy máy Mac này không." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "克隆会获得自己的 ECID、UDID 和 MAC 地址，因此可以与原虚拟机同时运行。首次连接时，客户机会再次询问是否信任这台 Mac。" } }
+      }
+    },
+    "The clone is the same device as the original. Run only one of them at a time." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The clone is the same device as the original. Run only one of them at a time." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "複製は元のマシンと同じデバイスです。同時に実行できるのはどちらか一方だけです。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "복제본은 원본과 같은 기기입니다. 한 번에 하나만 실행하십시오." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Bản sao là cùng một thiết bị với máy gốc. Mỗi lúc chỉ chạy một trong hai máy." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "克隆与原虚拟机是同一台设备。两者同一时间只能运行一个。" } }
+      }
+    },
+    "Snapshots…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Snapshots…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スナップショット…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스냅샷…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Ảnh chụp nhanh…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "快照…" } }
+      }
+    },
+    "Unable to List Snapshots" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to List Snapshots" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スナップショットを一覧表示できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스냅샷 목록을 가져올 수 없음" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không thể liệt kê ảnh chụp nhanh" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法列出快照" } }
+      }
+    },
+    "Taking snapshot…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Taking snapshot…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スナップショットを作成中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스냅샷 생성 중…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang tạo ảnh chụp nhanh…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在拍摄快照…" } }
+      }
+    },
+    "Reverting to snapshot…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reverting to snapshot…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スナップショットに復元中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스냅샷으로 되돌리는 중…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang hoàn nguyên về ảnh chụp nhanh…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在恢复到快照…" } }
+      }
+    },
+    "Deleting snapshot…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Deleting snapshot…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スナップショットを削除中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스냅샷 삭제 중…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đang xóa ảnh chụp nhanh…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在删除快照…" } }
+      }
+    },
+    "%@ Snapshots" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ Snapshots" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ のスナップショット" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 스냅샷" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Ảnh chụp nhanh của %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 的快照" } }
+      }
+    },
+    "Take Snapshot…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Take Snapshot…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スナップショットを作成…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스냅샷 생성…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Tạo ảnh chụp nhanh…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "拍摄快照…" } }
+      }
+    },
+    "Save the machine's disk, SEP storage and NVRAM as they are now." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Save the machine's disk, SEP storage and NVRAM as they are now." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "マシンのディスク、SEP ストレージ、NVRAM を現在の状態で保存します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "머신의 디스크, SEP 저장소 및 NVRAM을 현재 상태 그대로 저장합니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Lưu ổ đĩa, bộ nhớ SEP và NVRAM của máy ảo ở trạng thái hiện tại." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "按当前状态保存虚拟机的磁盘、SEP 存储和 NVRAM。" } }
+      }
+    },
+    "Revert…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Revert…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "復元…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "되돌리기…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hoàn nguyên…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "恢复…" } }
+      }
+    },
+    "Revert %@ to “%@”?" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Revert %@ to “%@”?" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ を「%2$@」に復元しますか？" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%1$@을(를) “%2$@”(으)로 되돌리겠습니까?" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hoàn nguyên %1$@ về “%2$@”?" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "将 %1$@ 恢复到“%2$@”？" } }
+      }
+    },
+    "Revert" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Revert" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "復元" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "되돌리기" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hoàn nguyên" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "恢复" } }
+      }
+    },
+    "The machine's current disk, SEP storage and NVRAM are replaced with the snapshot's. Anything changed since then is lost unless you take a snapshot first." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The machine's current disk, SEP storage and NVRAM are replaced with the snapshot's. Anything changed since then is lost unless you take a snapshot first." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "マシンの現在のディスク、SEP ストレージ、NVRAM がスナップショットのものに置き換えられます。先にスナップショットを作成しておかないと、それ以降の変更はすべて失われます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "머신의 현재 디스크, SEP 저장소 및 NVRAM이 스냅샷의 것으로 대체됩니다. 먼저 스냅샷을 생성하지 않으면 그 이후의 변경 사항은 모두 사라집니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Ổ đĩa, bộ nhớ SEP và NVRAM hiện tại của máy ảo sẽ được thay bằng của ảnh chụp nhanh. Mọi thay đổi kể từ đó sẽ mất, trừ khi bạn tạo ảnh chụp nhanh trước." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "虚拟机当前的磁盘、SEP 存储和 NVRAM 将被替换为快照中的版本。除非先拍摄快照，否则此后的所有更改都会丢失。" } }
+      }
+    },
+    "Delete Snapshot “%@”?" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete Snapshot “%@”?" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スナップショット「%@」を削除しますか？" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스냅샷 “%@”을(를) 삭제하겠습니까?" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Xóa ảnh chụp nhanh “%@”?" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除快照“%@”？" } }
+      }
+    },
+    "The snapshot's files are removed. The machine itself is not changed. This cannot be undone." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The snapshot's files are removed. The machine itself is not changed. This cannot be undone." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スナップショットのファイルが削除されます。マシン自体は変更されません。この操作は取り消せません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스냅샷의 파일이 제거됩니다. 머신 자체는 변경되지 않습니다. 이 작업은 실행 취소할 수 없습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Các tệp của ảnh chụp nhanh sẽ bị xóa. Bản thân máy ảo không thay đổi. Không thể hoàn tác thao tác này." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "快照的文件将被移除，虚拟机本身不受影响。此操作无法撤销。" } }
+      }
+    },
+    "No Snapshots" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No Snapshots" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スナップショットなし" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스냅샷 없음" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không có ảnh chụp nhanh" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有快照" } }
+      }
+    },
+    "Take a snapshot before you change the guest, so you can put it back later. A snapshot keeps the disk, SEP storage and NVRAM; settings and the Core Bundle are not part of it." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Take a snapshot before you change the guest, so you can put it back later. A snapshot keeps the disk, SEP storage and NVRAM; settings and the Core Bundle are not part of it." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゲストを変更する前にスナップショットを作成しておくと、あとで元の状態に戻せます。スナップショットにはディスク、SEP ストレージ、NVRAM が含まれます。設定とコアバンドルは含まれません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트를 변경하기 전에 스냅샷을 생성해 두면 나중에 되돌릴 수 있습니다. 스냅샷에는 디스크, SEP 저장소 및 NVRAM이 포함되며, 설정과 코어 번들은 포함되지 않습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hãy tạo ảnh chụp nhanh trước khi thay đổi máy khách để có thể khôi phục sau này. Ảnh chụp nhanh giữ ổ đĩa, bộ nhớ SEP và NVRAM; cài đặt và Bundle lõi không nằm trong đó." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在更改客户机之前拍摄快照，以后就能恢复回来。快照包含磁盘、SEP 存储和 NVRAM，不包含设置和核心 Bundle。" } }
+      }
+    },
+    "Try Again" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Try Again" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "再試行" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "다시 시도" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Thử lại" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重试" } }
+      }
+    },
+    "Date Created" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Date Created" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "作成日" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "생성일" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Ngày tạo" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创建日期" } }
+      }
+    },
+    "Note" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Note" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メモ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메모" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Ghi chú" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "备注" } }
+      }
+    },
+    "Stop the machine to take, revert to or delete a snapshot." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Stop the machine to take, revert to or delete a snapshot." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スナップショットを作成、復元、削除するには、マシンを停止してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스냅샷을 생성, 되돌리기 또는 삭제하려면 머신을 중지하십시오." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hãy dừng máy để tạo, hoàn nguyên hoặc xóa ảnh chụp nhanh." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "停止虚拟机后才能拍摄、恢复或删除快照。" } }
+      }
+    },
+    "Take Snapshot of %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Take Snapshot of %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ のスナップショットを作成" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 스냅샷 생성" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Tạo ảnh chụp nhanh của %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "为 %@ 拍摄快照" } }
+      }
+    },
+    "A snapshot with this name already exists." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "A snapshot with this name already exists." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "この名前のスナップショットはすでに存在します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 이름의 스냅샷이 이미 있습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đã có ảnh chụp nhanh mang tên này." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已存在同名快照。" } }
+      }
+    },
+    "Optional" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Optional" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "任意" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "선택 사항" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không bắt buộc" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可选" } }
+      }
+    },
+    "The snapshot keeps the machine's disk, SEP storage and NVRAM as they are now. Its settings and Core Bundle are not part of it." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The snapshot keeps the machine's disk, SEP storage and NVRAM as they are now. Its settings and Core Bundle are not part of it." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スナップショットには、マシンのディスク、SEP ストレージ、NVRAM が現在の状態で保存されます。設定とコアバンドルは含まれません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스냅샷은 머신의 디스크, SEP 저장소 및 NVRAM을 현재 상태 그대로 보관합니다. 설정과 코어 번들은 포함되지 않습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Ảnh chụp nhanh giữ ổ đĩa, bộ nhớ SEP và NVRAM của máy ảo ở trạng thái hiện tại. Cài đặt và Bundle lõi không nằm trong đó." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "快照会按当前状态保存虚拟机的磁盘、SEP 存储和 NVRAM，不包含其设置和核心 Bundle。" } }
+      }
+    },
+    "Take Snapshot" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Take Snapshot" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スナップショットを作成" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스냅샷 생성" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Tạo ảnh chụp nhanh" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "拍摄快照" } }
+      }
     }
   },
   "version" : "1.0"

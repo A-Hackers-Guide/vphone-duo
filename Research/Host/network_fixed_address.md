@@ -26,7 +26,8 @@ saves `machineIdentifier`. With `aa:73:76:98:a7:06`:
 Whatever broke before was not a fixed MAC as such. One likely cause is the same
 MAC on several VMs, for example from a manifest template: two guests on one
 L2 network with one MAC cannot both work. Each VM now gets its own, and a clone
-keeps the original's, like its machine identifier.
+keeps the original's, like its machine identifier, unless made with
+`vm clone --new-identity` ([machine identity and clone](machine_identity_and_clone.md)).
 
 ## Leases held by MACs no machine uses
 

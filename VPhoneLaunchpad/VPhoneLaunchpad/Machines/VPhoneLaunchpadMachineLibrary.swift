@@ -307,6 +307,11 @@ final class VPhoneLaunchpadMachineLibrary {
         machines.filter { bundleVersion(for: $0.path) == version }.map(\.name)
     }
 
+    /// The binding on disk, or the listed copy when the file cannot be read.
+    private func currentBinding(of machine: Path) -> VPhoneLaunchpadMachineBinding? {
+        VPhoneLaunchpadMachineBinding.load(machine) ?? bindings[machine]
+    }
+
     /// Writes a machine's binding and keeps the listed copy in step.
     func bind(_ machine: Path, _ binding: VPhoneLaunchpadMachineBinding) throws {
         try binding.save(to: machine)
@@ -323,8 +328,7 @@ final class VPhoneLaunchpadMachineLibrary {
             return
         }
         for machine in machines {
-            var binding = VPhoneLaunchpadMachineBinding.load(machine)
-                ?? bindings[machine]
+            var binding = currentBinding(of: machine)
                 ?? VPhoneLaunchpadMachineBinding(bundle: version)
             binding.bundle = version
             do {
@@ -671,8 +675,10 @@ final class VPhoneLaunchpadMachineLibrary {
         }
     }
 
-    func clone(_ machine: Path, as newName: String) async {
-        if await perform(String(localized: "Cloning…"), on: machine, ["vm", "clone", machine.name, newName] + machine.libraryArguments) {
+    /// With `newIdentity` the clone gets its own ECID, UDID and MAC address,
+    /// so both machines can run at once; a plain clone is the same device.
+    func clone(_ machine: Path, as newName: String, newIdentity: Bool) async {
+        if await perform(String(localized: "Cloning…"), on: machine, machine.cloneArguments(as: newName, newIdentity: newIdentity)) {
             selection = [Path(libraryRoot: machine.libraryRoot, name: newName)]
         }
     }
@@ -763,14 +769,30 @@ final class VPhoneLaunchpadMachineLibrary {
         _ arguments: [String],
         onProgress: (@Sendable (Double) -> Void)? = nil,
     ) async -> Bool {
-        guard let commandLine = machine.map(commandLine(for:)) ?? bundles.commandLine() else {
-            if let machine {
-                actionError = VPhoneLaunchpadError(
-                    String(localized: "Unable to Complete Action"),
-                    detail: String(localized: "The Core Bundle of \(machine.name) is not installed. Choose another Core Bundle for it."),
-                )
+        do {
+            try await performChecked(activity, on: machine, arguments, onProgress: onProgress)
+            return true
+        } catch {
+            if !(error is CancellationError) {
+                actionError = VPhoneLaunchpadError(actionFailure: error)
             }
             return false
+        }
+    }
+
+    /// `perform` for a sheet that reports its own errors: throws what failed,
+    /// or `CancellationError` when the command was cancelled.
+    private func performChecked(
+        _ activity: String,
+        on machine: Path?,
+        _ arguments: [String],
+        onProgress: (@Sendable (Double) -> Void)? = nil,
+    ) async throws {
+        guard let commandLine = machine.map(commandLine(for:)) ?? bundles.commandLine() else {
+            if let machine {
+                throw Self.missingBundle(machine)
+            }
+            throw CancellationError()
         }
         if let machine {
             activities[machine] = activity
@@ -787,17 +809,79 @@ final class VPhoneLaunchpadMachineLibrary {
         do {
             try await commandLine.runChecked(arguments, onProgress: onProgress)
             await refresh()
-            return true
         } catch {
-            if error is CancellationError || Task.isCancelled {
-                await refresh()
-                return false
-            }
-            actionError = error as? VPhoneLaunchpadError
-                ?? VPhoneLaunchpadError(String(localized: "Unable to Complete Action"), detail: error.localizedDescription)
             await refresh()
-            return false
+            if error is CancellationError || Task.isCancelled {
+                throw CancellationError()
+            }
+            throw error
         }
+    }
+
+    private static func missingBundle(_ machine: Path) -> VPhoneLaunchpadError {
+        VPhoneLaunchpadError(
+            String(localized: "Unable to Complete Action"),
+            detail: String(localized: "The Core Bundle of \(machine.name) is not installed. Choose another Core Bundle for it."),
+        )
+    }
+
+    // MARK: - Snapshots
+
+    /// The machine's snapshots, oldest first, from its own bundle's
+    /// `vm snapshot list --json`. Errors go to the caller, the Snapshots
+    /// sheet, which shows them itself.
+    func snapshots(of machine: Path) async throws -> [VPhoneLaunchpadMachineSnapshot] {
+        guard let commandLine = commandLine(for: machine) else {
+            throw Self.missingBundle(machine)
+        }
+        let result = try await commandLine.run(machine.snapshotListArguments, recordInHistory: false)
+        guard result.succeeded, let data = result.jsonData else {
+            throw VPhoneLaunchpadError(String(localized: "Unable to List Snapshots"), detail: result.tail)
+        }
+        return try VPhoneLaunchpadMachineSnapshot.list(from: data)
+    }
+
+    /// Takes a snapshot of a stopped machine, then saves its binding with it
+    /// so a revert can tell which bundles built what the snapshot holds.
+    func createSnapshot(of machine: Path, name: String, note: String?) async throws {
+        try await performChecked(
+            String(localized: "Taking snapshot…"),
+            on: machine,
+            machine.snapshotCreateArguments(name, note: note),
+        )
+        // The snapshot is taken either way; without the copy a revert can
+        // only mark the guest environment and boot chain unknown.
+        if let binding = currentBinding(of: machine) {
+            try? binding.save(to: machine, snapshot: name)
+        }
+    }
+
+    /// Puts a snapshot's disk, SEP storage and NVRAM back in place of the
+    /// machine's own. What was there is gone unless it was snapshotted too.
+    func revertSnapshot(of machine: Path, to name: String) async throws {
+        try await performChecked(
+            String(localized: "Reverting to snapshot…"),
+            on: machine,
+            machine.snapshotRevertArguments(name),
+        )
+        // The guest environment and the boot chain are on the disk and in
+        // the NVRAM the revert just replaced, so the binding takes them from
+        // the copy saved with the snapshot, or become unknown when there is
+        // none to read (a snapshot taken with vphone-cli, or a copy that was
+        // not written). The bundle is not on the disk: the machine keeps
+        // running with the one chosen now.
+        if let current = currentBinding(of: machine) {
+            let saved = VPhoneLaunchpadMachineBinding.load(machine, snapshot: name)
+            try? bind(machine, current.reverted(to: saved))
+        }
+    }
+
+    func deleteSnapshot(of machine: Path, name: String) async throws {
+        try await performChecked(
+            String(localized: "Deleting snapshot…"),
+            on: machine,
+            machine.snapshotDeleteArguments(name),
+        )
     }
 
     // MARK: - Create
