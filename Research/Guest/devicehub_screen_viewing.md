@@ -262,6 +262,16 @@ showed the guest live, 30–40 ms behind the VZ window.
     clipped inside the chrome at all four corners.
   - A swipe sent to the guest moved the Settings list identically in the VZ
     window and in DeviceHub.
+- **`iPhone17,3 26.6.2 (23G90)`, new test VM (2026-10-07).** Paired on its
+  own, `supportedFeatures: 140`, live view 50–150 ms behind the VZ window. It
+  reports `phone11` chrome without a mask too; the `dtdeviceinfod` hook fills
+  it and the corners are clipped inside the chrome.
+- **`iPad16,1 27.0.1 (24A446)`, new test VM (2026-10-07).** The conditional
+  dispatch writes the same ten sites and the VZ window scans out normally, so
+  the patch does not regress iPad. DeviceHub could not be tested: the guest
+  refuses pairing (`kAMDUserDeniedPairingError`, from `devicectl manage pair`
+  and from Xcode alike) without showing a trust alert. That happens before
+  any of this code is involved and is left for separate work.
 - **Tests.** `InjectionEnvironmentTests` covers the three targets and their
   near-miss suffixes. The real-cache force-kern tests cover conditional
   routing, the preserved null check, symbol discovery, dry run and
@@ -323,9 +333,40 @@ path.
 `alarmsSentForDecodeButNotDisplayedCount=16` stays at its threshold even
 after presentation recovers, so that warning is no failure detector.
 
+### Encoding happens on the Mac
+
+A targeted spindump of the guest's `avconferenced` shows the queues
+`com.apple.videotoolbox.paravirtualization.guest` and
+`…paravirtualization.host-to-guest`: the guest's VideoToolbox HEVC encoder is
+paravirtualized, and the conversion ahead of it goes through
+`AppleM2ScalerParavirtDriver` and IOSurface kernel calls. Encoding a frame is a
+round trip to the Mac's VideoToolbox and scaler, which every running VM
+shares.
+
+That explains the worst events seen on 2026-10-07: two VMs streaming at once
+(26.6.2 iPad and 27.0.1 iPhone) logged `Delay Warning: Encoding time=…` at the
+same second, up to about 1.2 s a frame against about 5 ms normally, and both
+DeviceHub views fell 1.9–2.7 s behind, then recovered within about ten
+seconds. The VZ windows stayed fluid throughout, so only the encode path
+stalled, not the guests.
+
+What triggers it is not established:
+
+- Two such events fell in minutes where the Mac had 40–100 MB free and was
+  compressing and paging in tens of thousands of pages a second. A later VM
+  restore that paged just as hard did not reproduce a stall (encodes peaked at
+  229 ms, DeviceHub stayed at 10–120 ms), so memory pressure alone is not it.
+- Both events also coincided with starting screen-capture measurement
+  processes. A burst of captures later, including one that hung, did not
+  reproduce it either.
+
+The slow growth in a single long session (above) is a different shape: no
+encode warnings, just a lag that ratchets up. A 26.6.2 iPad stream that had
+run for about an hour was measured at 2.1 s on 2026-10-07 as well.
+
 ### Other
 
-- iPad guests on 27.x were not tested.
+- iPadOS 27 refuses pairing (see Validation), so DeviceHub is untested there.
 - The `0x14` port offset in the conditional dispatch is fixed, not derived;
   check it on the next 27.x build.
 
@@ -338,11 +379,21 @@ after presentation recovers, so that warning is no failure detector.
 - **DeviceHub's windows are not in the accessibility tree.** Capture them
   with `screencapture -x -o -l <CGWindowID>`, the ID from
   `CGWindowListCopyWindowInfo` filtered by DeviceHub's pid.
-- **Latency:** take a base frame, change the guest screen through vphoned, and
-  capture repeatedly until the centre of the frame differs; repeat on the VM
-  window for the baseline. A guest app that draws the guest's epoch
-  milliseconds at 60 Hz allows paired VZ/DeviceHub screenshots instead; a
-  common host/guest offset is not DeviceHub latency.
+- **Latency:** run a guest app that draws the guest's clock every frame as a
+  machine-readable pattern (a green frame around a 4×8 grid: 24 bits of
+  epoch ms / 10 and an 8-bit checksum), capture the VZ window and the
+  DeviceHub window at the same moment, decode both, and subtract. That gives
+  DeviceHub's delay over the VZ window to about ±30 ms, every few seconds,
+  without touching the guest. Without such an app, change the guest screen
+  through vphoned and capture until the frame differs, with the VM window as
+  the baseline.
+- **Capturing windows:** ScreenCaptureKit (`SCScreenshotManager` with
+  `desktopIndependentWindow`) captures covered windows correctly, but two
+  capturing processes at once hang each other; sample several window pairs
+  from one process. `CGWindowListCreateImage` (looked up at run time) returned
+  a frame minutes old for DeviceHub's main window, and `screencapture -l` is
+  live but its timing varies by hundreds of milliseconds. DeviceHub has one
+  viewer window: opening a second device with `devices://` reuses it.
 - **Host logs:** `/usr/bin/log show` (zsh shadows `log`). In DeviceHub,
   `MediaStreamGetSupportInfo` and `MediaStreamStart` replies. In the Mac's
   `avconferenced`, `Health: VideoReceiver` (`videoJitterQueueSize`),
