@@ -217,20 +217,30 @@ spans are re-attested. On 24A446 it rewrites ten entry points and leaves
 
 ### Upgrading an existing iOS 27 guest
 
-The patch identifier did not change, and `applyDyldPatches` skips an enabled
-patch whose identifier is already in the guest receipt. A guest installed
-with the old unconditional patch therefore keeps its 31 four-byte sites until
-they are reverted:
+Nothing to do by hand: bind the machine to the new bundle with its guest
+environment (Launchpad's bundle switch, or `vm set-bundle <vm> <version>
+--update-environment`), or run `cfw install` / `cfw update-environment`.
 
-1. Stop the VM and run `fw set-patches --block dyld-boot-iomfb_force_kern`,
-   then `cfw update-environment`. This reverts the old sites.
-2. Restore the standard selection and update again with the new bundle. It
-   writes ten 16-byte sites; the guest's undo log should list ten 16-byte
-   originals.
+The patch identifier did not change, and `applyDyldPatches` normally skips an
+enabled patch whose identifier is already in the guest receipt, which would
+leave the old 31 four-byte sites in place for good. The undo log tells the two
+implementations apart: the old one recorded 4 bytes per entry point, the new
+one 16. `DyldSharedCacheUndoLog.outdatedImplementations` names that shape, and
+for such a patch the installer reverts its records and applies the current
+implementation in the same run. A second run finds 16-byte records and leaves
+the cache alone. If the revert succeeds and the new write fails, the patch is
+reported as failed and left out of the receipt rather than listed as applied.
 
-A successful install and a receipt listing the identifier do not prove which
-bytes are in the cache; read the undo log or the cache itself. A new
-`vm create` needs none of this.
+A guest patched before the undo log existed has no records, so it cannot be
+reverted this way and keeps the old bytes; it needs a restore.
+
+**Validated (2026-10-07, `iPhone17,3 27.0.1`):** the guest was put back on the
+old implementation with bundle 2.6.0 (`31 newly forced`), then bound to the new
+bundle with `--update-environment`. The log shows `an earlier implementation is
+applied; reverting it and applying the current one`, 31 four-byte reverts and
+`10 newly forced, 0 already conditional`. A further `cfw update-environment`
+did not touch the patch. After boot the VZ window scanned out and DeviceHub
+showed the guest live, 30–40 ms behind the VZ window.
 
 ## Validation
 
