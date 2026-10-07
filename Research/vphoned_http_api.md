@@ -294,9 +294,10 @@ request carries `"force": true`.
 | Logs | `logs.syslog {seconds, process?, level?, max_lines?}` (a bounded capture of at most 60 s), `logs.crashes {bundle_id?}`, `logs.crash {path}` |
 | Darwin notifications | `notify.post {name, state?}` (`postDarwinNotification`; `state` is a UInt64, as a number or a decimal string, stored before the post), `notify.state {name}` (`darwinNotificationState`) |
 | Network, security | `network.capture {seconds, interface?, filter?}` (writes a pcap in the guest scratch directory and returns its path), `network.ipv4.get {interface?}`, `network.ipv4.set {interface?, method, address?, subnet_mask?, router?, dns?}`, `network.hostname.get`, `network.hostname.set {local_host_name?}`, `device.name.get`, `device.name.set {name}` (see below), `network.static_names.get`, `network.static_names.set {entries}`, `network.resolve {host, family?, port?, first_only?, timeout_ms?}` (see below), `security.ssl_killswitch` |
-| Apps | `apps.list`, `search`, `refresh`, `launch`, `terminate`, `foreground`, `open_url`, `install`, `info`, `binary`, `data_dir`, `url_schemes`, `handlers`, `registration`, `register`, `network_policy {repair?}`; `apps.uninstall`, `unregister`, `unregister_dir` **force** |
+| Apps | `apps.list`, `search`, `refresh`, `launch`, `terminate`, `foreground`, `open_url`, `install`, `info`, `binary`, `data_dir`, `url_schemes`, `handlers`, `registration`, `register`, `network_policy {repair?}`; `apps.uninstall`, `unregister`, `unregister_dir` **force**; `apps.removed_system`, `apps.remove_system {bundle_ids, backup?, respring?}` **force**, `apps.restore_system {bundle_ids?, respring?}` **force** (removable system apps, see below) |
 | System | `system.uicache`, `system.system_apps {visible?}`, `system.respring` **force**, `system.reboot {userspace?}` **force**, `system.shutdown` **force**, `developer_mode.status`, `developer_mode.enable`, `power.low_power_mode`, `time.timezone {identifier?, automatic?}` (see below), `diagnostics.self_test` |
 | Files | `files.list`, `mkdir`, `remove`, `rename`, `read {binary?, limit?}`, `write`, `find`, `copy`, `symlink`, `chmod`, `chown`, `plist`, `plist_set {value \| remove}` |
+| APFS snapshots | `apfs.snapshots {mount?}`, `apfs.snapshot.delete {mount?, name? \| prefix?}` **force** (only `orig-fs.disabled.rn-*`, see below) |
 | Preferences, clipboard, location | `settings.get/set/delete`, `clipboard.get/set/clear`, `location.set/clear/current` |
 | Motion | `motion.gyroscope.get`, `motion.gyroscope.set {x,y,z,enabled?}`, `motion.gyroscope.clear` (capability `motion_gyroscope`; finite JSON numbers in [-1000,1000] rad/s, all axes required; `enabled` defaults to true and must be a JSON Boolean; capability `motion_gyroscope_toggle` supports disabling while retaining configured axes; returns configuration, `units`, `provider`, and `provider_running`; HID provider status is not proof of CoreMotion app delivery) |
 | Keychain | `keychain.list {class?}`, `add`, `delete`, `get`, `update`, `database` |
@@ -523,6 +524,101 @@ areas in `capabilities` (`device_info`, `display`, `audio`, `input_gestures`,
 panels an older agent cannot serve. icli failures reach the caller with
 icli's own error `code` (`failed`, `unavailable`, `device_locked`, …) and
 message.
+
+## Removable system apps and APFS snapshots
+
+These methods trim a guest that will serve as a template; `/v1/health` lists
+them as `system_app_removal` and `apfs_snapshots`.
+
+**`apps.remove_system {bundle_ids: [...], backup?: true, respring?: true, force}`**
+(`VPhoneDaemon/Daemon/GuestAPI+SystemApps.swift`) removes Apple's removable
+apps durably. For each identifier it reads the app's current `bundle_path`
+from the live app list (the container UUID changes with every install, so
+nothing is cached) and requires a `com.apple.` app whose bundle is
+`/private/var/containers/Bundle/Application/<UUID>/<Name>.app`. An app under
+`/Applications` or `/System` (Phone, Settings) is refused, as is any other
+path shape (`GuestSystemAppPolicy.swift`). Then, in this order:
+
+1. the whole container is cloned (or copied) to
+   `/private/var/mobile/Library/removed-system-apps/<bundle_id>.container`, with
+   `<bundle_id>.manifest.json` beside it (`bundle_id`, `container_uuid`, `app`,
+   `container_path`, `removed_at`); `backup: false` skips this;
+2. the app is unregistered from LaunchServices (icli's `unregisterApp`, as
+   `apps.unregister`);
+3. the container is removed recursively, with `SerializedPlaceholder.ipa`,
+   `BundleMetadata.plist` and the container metadata.
+
+Unregistering first matters: a registered app whose bundle is missing is
+repaired by installd from the placeholder on the next boot
+(`Research/Guest/post_setup_signin_and_appstore.md`). SpringBoard restarts once
+at the end when anything was removed and `respring` is not false. The result
+is `{results: [{bundle_id, status, removed, container, app, backup,
+unregistered, error?}], removed, failed, backup_directory, respring}`.
+`status` is `removed`, `absent` (not installed: a no-op that succeeds; a
+removal an earlier call left half done, with its backup in place, is finished
+instead), `unregistered_stale` (LaunchServices listed a container that is
+gone) or `failed`. One app's failure does not stop the others; if any failed,
+the call returns error `command_failed` (`error: "remove_incomplete"`) whose
+body carries the same fields.
+
+```json
+{"method":"apps.remove_system","params":{"bundle_ids":["com.apple.news","com.apple.mobilephone"],"force":true}}
+→ error: {"code":"command_failed","message":"1 of 2 apps were not removed; see results","removed":1,"failed":1,
+   "results":[{"bundle_id":"com.apple.news","status":"removed","removed":true,"unregistered":true,
+               "container":"/private/var/containers/Bundle/Application/6EB8…55A1","app":"News.app",
+               "backup":"/private/var/mobile/Library/removed-system-apps/com.apple.news.container"},
+              {"bundle_id":"com.apple.mobilephone","status":"failed","removed":false,
+               "error":"/Applications/MobilePhone.app is not in a bundle container under /private/var/containers/Bundle/Application; …"}],
+   "respring":{"method":"frontboard_relaunch",…}}
+```
+
+**`apps.restore_system {bundle_ids?, respring?: true, force}`** moves each
+backup container back to the UUID path its manifest names (validated as a
+removal is) and registers the app in it with LaunchServices as a deletable
+system app (`VPhoneDaemon/Native/vphoned_apps.m`: `registerApplication:`, then
+`registerApplicationDictionary:`, then the containerized interface, each read
+back). icli's `registerApp`, behind `apps.register`, refuses Apple's apps since
+0.7.17. Without `bundle_ids` every backup is restored. An app that is
+installed is reported `present` and its backup left alone; a restore that
+moved the container but could not register it keeps the manifest, so calling
+it again retries the registration. Results mirror the removal (`status`
+`restored`, `present` or `failed`, plus `registration`, the call that worked;
+`error: "restore_incomplete"` when any failed). **`apps.removed_system`** lists
+the backups: `{directory, backups: [{bundle_id, backup, container,
+container_uuid, app, removed_at, restorable}], other}`, where `other` names
+entries without a bundle identifier, such as `News.container` backups made by
+hand before this verb existed.
+
+**`apfs.snapshots {mount?: "/"}`** returns `{mount, snapshots: [name]}` from
+`fs_snapshot_list` (`VPhoneDaemon/Native/vphoned_apfs.m`).
+**`apfs.snapshot.delete {mount?: "/", name? | prefix?, force}`** deletes with
+`fs_snapshot_delete` only snapshots named `orig-fs.disabled.rn-*`, the sealed
+update snapshot CFW install renamed (`GuestSnapshotPolicy.swift`). A `name` or
+`prefix` that does not start with that is refused, `com.apple.os.update-*`
+included; with neither, every `orig-fs.disabled.rn-*` snapshot is selected.
+A selection that matches nothing succeeds with nothing deleted, and a snapshot
+already gone (ENOENT) is listed under `already_deleted`. The result is `{mount,
+before, deleted, already_deleted, after, remaining}`. A refusal from the
+kernel stops the call: EINVAL and ENOTSUP are invalid requests; EPERM or
+EACCES (`reason: "not_permitted"`: vphoned is not root or lacks
+`com.apple.developer.vfs.snapshot`), EBUSY (`reason: "busy"`, `retryable:
+true`: mounted, or APFS is still merging an earlier deletion) and anything
+else return `command_failed` with `reason`, `retryable`, `errno`, `snapshot`
+and the `before`/`deleted`/`after` listings. Why and when to call it:
+`Research/Guest/template_snapshot_deletion.md`.
+
+```json
+{"method":"apfs.snapshot.delete","params":{"force":true}}
+→ {"mount":"/","before":["orig-fs.disabled.rn-4EC2…ECB9"],"deleted":["orig-fs.disabled.rn-4EC2…ECB9"],
+   "already_deleted":[],"after":[],"remaining":[]}
+```
+
+The path, identifier, manifest, snapshot-name and errno rules, and the
+`fs_snapshot_list` batch parser, are checked on the Mac without a guest:
+
+```sh
+VPhoneDaemon/Tests/run-system-maintenance-tests.sh
+```
 
 ## Nested accessibility snapshots
 
