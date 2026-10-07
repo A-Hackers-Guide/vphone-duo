@@ -29,6 +29,13 @@ The three files move together. The Secure Enclave's anti-replay counters live in
 a `SEPStorage` from another makes the SEP panic on the next boot, so a snapshot
 always takes all three at once and a revert always puts all three back.
 
+A revert is all or nothing. If it fails partway, it puts the VM's own files
+back and reports the error, so the VM is as it was. In the rare case that
+putting them back fails too, the error says so: revert to a snapshot again
+before starting the VM. A snapshot whose `Snapshot.plist` does not list all
+three files, or lists a file that is not part of a snapshot, is refused as
+damaged before anything changes.
+
 `list` and `delete` work while the VM runs; neither touches its live files.
 
 ## What a snapshot holds

@@ -38,6 +38,28 @@ struct BundleSnapshotsTests {
         VPhoneMachineSnapshots.directory(of: bundle).appendingPathComponent(name)
     }
 
+    /// Every visible file in the machine folder, by name.
+    private func liveFiles(of bundle: VPhoneBundle) throws -> [String: Data] {
+        var files: [String: Data] = [:]
+        for name in try FileManager.default.contentsOfDirectory(atPath: bundle.url.path) where !name.hasPrefix(".") {
+            let url = bundle.url.appendingPathComponent(name)
+            if VPhoneVirtualMachineManifest.fileKind(at: url) == .regularFile {
+                files[name] = try Data(contentsOf: url)
+            }
+        }
+        return files
+    }
+
+    /// Rewrites a snapshot's `Snapshot.plist` as a hand edit would.
+    private func editMetadata(of name: String, in bundle: VPhoneBundle, _ edit: (inout [String: Any]) -> Void) throws {
+        let url = snapshotDirectory(name, of: bundle).appendingPathComponent(VPhoneMachineSnapshots.metadataFileName)
+        var plist = try #require(
+            PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: Any],
+        )
+        edit(&plist)
+        try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(to: url)
+    }
+
     // MARK: - Create
 
     @Test func `create clones every present state file byte for byte`() throws {
@@ -190,6 +212,92 @@ struct BundleSnapshotsTests {
         #expect(try read("Disk.img", in: bundle.url) == Data([5, 5]))
         let hidden = try FileManager.default.contentsOfDirectory(atPath: bundle.url.path).filter { $0.hasPrefix(".") }
         #expect(hidden.isEmpty)
+    }
+
+    @Test func `revert refuses metadata that does not list the state files exactly`() throws {
+        let (root, bundle) = try makeBundle()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try VPhoneMachineSnapshots.create("edited", of: bundle)
+        let full = ["Disk.img", "SEPStorage", "nvram.bin", "PatchReceipt.plist"]
+        let cases: [(files: [String], absent: [String])] = [
+            // The disk without its SEPStorage and NVRAM.
+            (["Disk.img"], ["restore-info.json"]),
+            (full.filter { $0 != "nvram.bin" }, ["restore-info.json", "nvram.bin"]),
+            // Files that are not state files.
+            (full + ["launchpad.json"], ["restore-info.json"]),
+            (full + ["config.plist"], ["restore-info.json"]),
+            (full, ["restore-info.json", "launchpad.json"]),
+            (full, ["restore-info.json", "../Disk.img"]),
+            // Overlapping or repeated.
+            (full, ["restore-info.json", "Disk.img"]),
+            (full, ["restore-info.json", "PatchReceipt.plist"]),
+            (full + ["Disk.img"], ["restore-info.json"]),
+            (full, ["restore-info.json", "restore-info.json"]),
+        ]
+
+        // The live set differs from the snapshot, and Launchpad has its binding.
+        try write([5, 5], to: "Disk.img", in: bundle)
+        try write([6, 6], to: "SEPStorage", in: bundle)
+        try write([7, 7], to: "nvram.bin", in: bundle)
+        try write(Array("{}".utf8), to: "restore-info.json", in: bundle)
+        try write(Array("{}".utf8), to: "launchpad.json", in: bundle)
+        let before = try liveFiles(of: bundle)
+
+        for (files, absent) in cases {
+            try editMetadata(of: "edited", in: bundle) {
+                $0["Files"] = files
+                $0["AbsentFiles"] = absent
+            }
+            do {
+                try VPhoneMachineSnapshots.revert(to: "edited", of: bundle)
+                Issue.record("revert accepted Files \(files), AbsentFiles \(absent)")
+            } catch let VPhoneMachineSnapshotError.damaged(name, _) {
+                #expect(name == "edited")
+            }
+            #expect(try liveFiles(of: bundle) == before, "Files \(files), AbsentFiles \(absent)")
+        }
+        let hidden = try FileManager.default.contentsOfDirectory(atPath: bundle.url.path).filter { $0.hasPrefix(".") }
+        #expect(hidden.isEmpty)
+    }
+
+    /// The swap moves each live file aside, then puts the snapshot's in its
+    /// place. An immutable live file cannot be moved, so the swap fails there:
+    /// at `nvram.bin` after the disk and SEPStorage were replaced, or at
+    /// `restore-info.json`, the file the snapshot records as absent, after
+    /// every captured file was.
+    @Test(arguments: ["nvram.bin", "restore-info.json"])
+    func `a revert that fails partway puts every live file back`(blocked: String) throws {
+        let (root, bundle) = try makeBundle()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try VPhoneMachineSnapshots.create("before", of: bundle)
+
+        try write([9, 9, 9, 9], to: "Disk.img", in: bundle)
+        try write([8, 8], to: "SEPStorage", in: bundle)
+        try write([7], to: "nvram.bin", in: bundle)
+        try write(Array("receipt-2".utf8), to: "PatchReceipt.plist", in: bundle)
+        try write(Array("{}".utf8), to: "restore-info.json", in: bundle)
+        let before = try liveFiles(of: bundle)
+
+        let blockedPath = bundle.url.appendingPathComponent(blocked).path
+        #expect(chflags(blockedPath, UInt32(UF_IMMUTABLE)) == 0)
+        defer { chflags(blockedPath, 0) }
+
+        do {
+            try VPhoneMachineSnapshots.revert(to: "before", of: bundle)
+            Issue.record("revert succeeded with \(blocked) immutable")
+        } catch let VPhoneMachineSnapshotError.failed(path, _) {
+            #expect(path == blockedPath)
+        }
+        #expect(try liveFiles(of: bundle) == before)
+        let hidden = try FileManager.default.contentsOfDirectory(atPath: bundle.url.path).filter { $0.hasPrefix(".") }
+        #expect(hidden.isEmpty)
+
+        // Nothing was lost: with the file unblocked the revert goes through.
+        chflags(blockedPath, 0)
+        try VPhoneMachineSnapshots.revert(to: "before", of: bundle)
+        #expect(try read("Disk.img", in: bundle.url) == Data([1, 2, 3]))
+        #expect(try read("nvram.bin", in: bundle.url) == Data([7, 8, 9]))
+        #expect(!FileManager.default.fileExists(atPath: bundle.url.appendingPathComponent("restore-info.json").path))
     }
 
     @Test func `unknown snapshots are reported`() throws {

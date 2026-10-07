@@ -203,6 +203,10 @@ public enum VPhoneMachineSnapshots {
             encoder.outputFormat = .xml
             try encoder.encode(metadata).write(to: staging.appendingPathComponent(metadataFileName))
             try VPhoneHostFilePermissions.makeAccessible(at: staging)
+            // Checked again before the snapshot is published: a VM started
+            // while the files were cloned may have moved one of them, and the
+            // copies would then come from different moments.
+            try VPhoneBundleActivity.requireStopped(bundle)
             // Exclusive: a snapshot of the same name made meanwhile is not replaced.
             guard renamex_np(staging.path, destination.path, UInt32(RENAME_EXCL)) == 0 else {
                 if errno == EEXIST {
@@ -225,16 +229,16 @@ public enum VPhoneMachineSnapshots {
     /// snapshot.
     ///
     /// Every file is cloned into a hidden directory in the machine folder
-    /// first; only when all of them are there does each one replace its live
-    /// file with `rename(2)`. A failure while cloning leaves the live set
-    /// untouched, and the switch itself is a handful of renames on one volume.
+    /// first; only when all of them are there does the live set change, by
+    /// `rename(2)` on one volume. Each live file is moved aside into that
+    /// directory before its snapshot copy takes its place, and a failure
+    /// partway puts the moved files back, so the live set is either the old
+    /// one or the snapshot's, never a mix.
     @discardableResult
     public static func revert(to name: String, of bundle: VPhoneBundle) throws -> VPhoneMachineSnapshot {
         let snapshot = try snapshot(named: name, of: bundle)
         let source = directory(of: bundle).appendingPathComponent(name, isDirectory: true)
-        for file in snapshot.files + snapshot.absentFiles {
-            try requireStateFileName(file, snapshot: name)
-        }
+        try requireValidFileLists(of: snapshot, bundle: bundle)
         try VPhoneBundleActivity.requireStopped(bundle)
 
         let fm = FileManager.default
@@ -257,19 +261,71 @@ public enum VPhoneMachineSnapshots {
         // Checked again just before the live files change: the clones above
         // take a moment, and nothing may open the machine meanwhile.
         try VPhoneBundleActivity.requireStopped(bundle)
-        for file in snapshot.files {
-            let live = bundle.url.appendingPathComponent(file)
-            guard rename(staging.appendingPathComponent(file).path, live.path) == 0 else {
-                throw VPhoneMachineSnapshotError.failed(path: live.path, reason: currentErrorText())
-            }
-        }
-        for file in snapshot.absentFiles {
-            let live = bundle.url.appendingPathComponent(file)
-            if unlink(live.path) != 0, errno != ENOENT {
-                throw VPhoneMachineSnapshotError.failed(path: live.path, reason: currentErrorText())
-            }
-        }
+        try replaceLiveFiles(with: snapshot, staged: staging, in: bundle)
         return snapshot
+    }
+
+    /// One step of the swap: `file` was moved aside (or did not exist live),
+    /// and a snapshot copy may have taken its place.
+    private struct SwapStep {
+        let file: String
+        let movedAside: Bool
+        var placed = false
+    }
+
+    /// Replaces each live file in `snapshot.files` with its copy in `staging`
+    /// and removes each one in `snapshot.absentFiles`. A live file is first
+    /// renamed to `staging/old-<name>`, so it is deleted only with the staging
+    /// directory once every step has succeeded. On a failure the steps done
+    /// are undone in reverse.
+    private static func replaceLiveFiles(with snapshot: VPhoneMachineSnapshot, staged staging: URL, in bundle: VPhoneBundle) throws {
+        let absent = Set(snapshot.absentFiles)
+        var steps: [SwapStep] = []
+        do {
+            for file in snapshot.files + snapshot.absentFiles {
+                let live = bundle.url.appendingPathComponent(file).path
+                let aside = staging.appendingPathComponent("old-\(file)").path
+                let movedAside = rename(live, aside) == 0
+                if !movedAside, errno != ENOENT {
+                    throw VPhoneMachineSnapshotError.failed(path: live, reason: currentErrorText())
+                }
+                steps.append(SwapStep(file: file, movedAside: movedAside))
+                if absent.contains(file) { continue }
+                guard rename(staging.appendingPathComponent(file).path, live) == 0 else {
+                    throw VPhoneMachineSnapshotError.failed(path: live, reason: currentErrorText())
+                }
+                steps[steps.count - 1].placed = true
+            }
+        } catch {
+            let notRestored = undo(steps, staging: staging, bundle: bundle)
+            guard notRestored.isEmpty else {
+                throw VPhoneMachineSnapshotError.revertIncomplete(
+                    machine: bundle.name,
+                    reason: "\(error)",
+                    files: notRestored,
+                )
+            }
+            throw error
+        }
+    }
+
+    /// Puts each live file moved aside back, and removes a snapshot copy
+    /// placed where there was no live file. Best effort, in reverse; returns
+    /// the files it could not put back.
+    private static func undo(_ steps: [SwapStep], staging: URL, bundle: VPhoneBundle) -> [String] {
+        var notRestored: [String] = []
+        for step in steps.reversed() {
+            let live = bundle.url.appendingPathComponent(step.file).path
+            if step.movedAside {
+                // Replaces the placed snapshot copy, if any, in one rename.
+                if rename(staging.appendingPathComponent("old-\(step.file)").path, live) != 0 {
+                    notRestored.append(step.file)
+                }
+            } else if step.placed, unlink(live) != 0, errno != ENOENT {
+                notRestored.append(step.file)
+            }
+        }
+        return notRestored.reversed()
     }
 
     // MARK: Delete
@@ -293,13 +349,29 @@ public enum VPhoneMachineSnapshots {
         }
     }
 
-    /// A file named in a snapshot's metadata is written into the machine
-    /// folder on revert, so it must be one plain name and never the manifest.
-    private static func requireStateFileName(_ file: String, snapshot: String) throws {
-        guard VPhoneVirtualMachineManifest.isPlainFileName(file),
-              file != "config.plist", file != metadataFileName, file != directoryName
-        else {
-            throw VPhoneMachineSnapshotError.damaged(name: snapshot, reason: "it names the file '\(file)'")
+    /// Revert replaces every file in `files` and deletes every file in
+    /// `absentFiles` in the machine folder, by names read from metadata anyone
+    /// can edit. So the lists must name state files only, each once, and
+    /// `files` must hold the disk image, `SEPStorage` and `nvram.bin`: a revert
+    /// that put back the disk alone would pair it with the live `SEPStorage`.
+    private static func requireValidFileLists(of snapshot: VPhoneMachineSnapshot, bundle: VPhoneBundle) throws {
+        func damaged(_ reason: String) -> VPhoneMachineSnapshotError {
+            .damaged(name: snapshot.name, reason: reason)
+        }
+        let required = VPhoneBundleActivity.stateFileNames(of: bundle)
+        let known = Set(required + optionalStateFileNames)
+        let listed = snapshot.files + snapshot.absentFiles
+        if let unknown = listed.first(where: { !known.contains($0) }) {
+            throw damaged("it names '\(unknown)', which is not a state file")
+        }
+        if let missing = required.first(where: { !snapshot.files.contains($0) }) {
+            throw damaged("it does not hold \(missing), which must be restored with the other state files")
+        }
+        if let both = snapshot.files.first(where: { snapshot.absentFiles.contains($0) }) {
+            throw damaged("it lists \(both) as both captured and absent")
+        }
+        if Set(listed).count != listed.count {
+            throw damaged("it lists a state file more than once")
         }
     }
 
@@ -343,6 +415,8 @@ public enum VPhoneMachineSnapshotError: Error, Equatable {
     case notCloneable(path: String)
     case damaged(name: String, reason: String)
     case failed(path: String, reason: String)
+    /// A revert failed partway and some live files could not be put back.
+    case revertIncomplete(machine: String, reason: String, files: [String])
 }
 
 extension VPhoneMachineSnapshotError: CustomStringConvertible, LocalizedError {
@@ -362,6 +436,10 @@ extension VPhoneMachineSnapshotError: CustomStringConvertible, LocalizedError {
             "Snapshot '\(name)' is damaged: \(reason). Delete it."
         case let .failed(path, reason):
             "Snapshot operation failed at \(path): \(reason)."
+        case let .revertIncomplete(machine, reason, files):
+            "Reverting VM '\(machine)' failed (\(reason)), and its previous "
+                + "\(files.joined(separator: ", ")) could not be put back. Its state files may be "
+                + "inconsistent: revert to a snapshot again before starting it."
         }
     }
 
