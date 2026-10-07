@@ -13738,6 +13738,213 @@
         "vi" : { "stringUnit" : { "state" : "translated", "value" : "Tạo ảnh chụp nhanh" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "拍摄快照" } }
       }
+    },
+    "Downloaded IPSWs…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Downloaded IPSWs…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ダウンロード済みの IPSW…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "다운로드한 IPSW…" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "IPSW đã tải xuống…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已下载的 IPSW…" } }
+      }
+    },
+    "Downloaded IPSWs" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Downloaded IPSWs" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ダウンロード済みの IPSW" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "다운로드한 IPSW" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "IPSW đã tải xuống" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已下载的 IPSW" } }
+      }
+    },
+    "No Downloaded IPSWs" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No Downloaded IPSWs" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ダウンロード済みの IPSW はありません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "다운로드한 IPSW 없음" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chưa có IPSW nào được tải xuống" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有已下载的 IPSW" } }
+      }
+    },
+    "The IPSWs a machine is created from are downloaded into the IPSW cache and listed here." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The IPSWs a machine is created from are downloaded into the IPSW cache and listed here." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "マシンの作成に使う IPSW は IPSW キャッシュにダウンロードされ、ここに表示されます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "머신을 생성할 때 사용하는 IPSW는 IPSW 캐시에 다운로드되며 여기에 표시됩니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Các IPSW dùng để tạo máy ảo được tải vào bộ nhớ đệm IPSW và hiển thị tại đây." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创建虚拟机所用的 IPSW 会下载到 IPSW 缓存，并显示在这里。" } }
+      }
+    },
+    "Image" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Image" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "イメージ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이미지" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Bản firmware" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "映像" } }
+      }
+    },
+    "Kind" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Kind" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "種類" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "종류" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Loại" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "种类" } }
+      }
+    },
+    "Size" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Size" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "サイズ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "크기" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Dung lượng" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "大小" } }
+      }
+    },
+    "Used By" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Used By" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "使用しているマシン" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "사용 중인 머신" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Máy ảo sử dụng" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用它的虚拟机" } }
+      }
+    },
+    "iPhone" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "iPhone" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "iPhone" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "iPhone" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "iPhone" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "iPhone" } }
+      }
+    },
+    "iPad" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "iPad" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "iPad" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "iPad" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "iPad" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "iPad" } }
+      }
+    },
+    "%@ · beta" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ · beta" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ · ベータ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ · 베타" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%@ · beta" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ · 测试版" } }
+      }
+    },
+    "%@ (creating)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ (creating)" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@（作成中）" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@(생성 중)" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%@ (đang tạo)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@（创建中）" } }
+      }
+    },
+    "%@ (partial download)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ (partial download)" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@（未完了のダウンロード）" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@(완료되지 않은 다운로드)" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%@ (tải xuống dở dang)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@（未完成的下载）" } }
+      }
+    },
+    "Delete the selected IPSW from the IPSW cache." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete the selected IPSW from the IPSW cache." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "選択した IPSW を IPSW キャッシュから削除します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "선택한 IPSW를 IPSW 캐시에서 삭제합니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Xóa IPSW đã chọn khỏi bộ nhớ đệm IPSW." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "从 IPSW 缓存中删除所选的 IPSW。" } }
+      }
+    },
+    "Delete %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ を削除" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 삭제" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Xóa %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除 %@" } }
+      }
+    },
+    "Unable to Delete %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to Delete %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ を削除できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@을(를) 삭제할 수 없음" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không thể xóa %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法删除 %@" } }
+      }
+    },
+    "Creating %@ reads this IPSW until the creation finishes." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Creating %@ reads this IPSW until the creation finishes." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ の作成が完了するまで、この IPSW を読み込みます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 생성이 끝날 때까지 이 IPSW를 읽습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Quá trình tạo %@ đọc IPSW này cho đến khi hoàn tất." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创建 %@ 完成之前需要读取这个 IPSW。" } }
+      }
+    },
+    "This IPSW is still downloading." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This IPSW is still downloading." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "この IPSW はまだダウンロード中です。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 IPSW는 아직 다운로드 중입니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "IPSW này vẫn đang được tải xuống." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这个 IPSW 仍在下载中。" } }
+      }
+    },
+    "%@ is deleted from the IPSW cache." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ is deleted from the IPSW cache." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ を IPSW キャッシュから削除します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "IPSW 캐시에서 %@을(를) 삭제합니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%@ sẽ bị xóa khỏi bộ nhớ đệm IPSW." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "将从 IPSW 缓存中删除 %@。" } }
+      }
+    },
+    "%@ keep working without it." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ keep working without it." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ はこのファイルがなくても引き続き使えます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@은(는) 이 파일 없이도 계속 작동합니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%@ vẫn hoạt động bình thường khi không có tệp này." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 不受影响，可以继续使用。" } }
+      }
+    },
+    "Creating a machine from this release downloads it again." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Creating a machine from this release downloads it again." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このリリースからマシンを作成するときは、もう一度ダウンロードされます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 릴리스로 머신을 생성하면 다시 다운로드됩니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Khi tạo máy ảo từ bản phát hành này, tệp sẽ được tải lại." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "之后用这个版本新建虚拟机时会重新下载。" } }
+      }
+    },
+    "The partial download of %@ is deleted." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The partial download of %@ is deleted." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ の未完了のダウンロードを削除します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@의 완료되지 않은 다운로드를 삭제합니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Phần tải xuống dở dang của %@ sẽ bị xóa." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "将删除 %@ 未完成的下载。" } }
+      }
+    },
+    "%@ is not an IPSW in the IPSW cache." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ is not an IPSW in the IPSW cache." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ は IPSW キャッシュ内の IPSW ではありません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@은(는) IPSW 캐시에 있는 IPSW가 아닙니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "%@ không phải là IPSW trong bộ nhớ đệm IPSW." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 不是 IPSW 缓存中的 IPSW。" } }
+      }
     }
   },
   "version" : "1.0"
