@@ -157,6 +157,19 @@ final class VPhoneLaunchpadHostSetup {
         update(.resources, Self.resources())
     }
 
+    /// Re-reads the free space alone. The window does so every few seconds,
+    /// so a restore or a download filling the volume shows without a recheck.
+    /// An unchanged amount leaves the row alone.
+    func refreshDiskSpace() {
+        let result = Self.diskSpace(libraryRoot)
+        guard let check = checks.first(where: { $0.kind == .diskSpace }),
+              check.status != result.0 || check.detail != result.1
+        else {
+            return
+        }
+        update(.diskSpace, result)
+    }
+
     /// Re-reads Developer Tools access alone, for when the app comes back
     /// from Settings.
     func refreshDeveloperTools() {
@@ -301,7 +314,9 @@ final class VPhoneLaunchpadHostSetup {
     }
 
     private nonisolated static func diskSpace(_ root: URL) -> (VPhoneLaunchpadStatus, String) {
-        let url = existingAncestor(of: root)
+        var url = existingAncestor(of: root)
+        // The URL may be the library root itself, which keeps what it read.
+        url.removeAllCachedResourceValues()
         let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         guard let available = values?.volumeAvailableCapacityForImportantUsage else {
             return (.warning, String(localized: "Unknown"))

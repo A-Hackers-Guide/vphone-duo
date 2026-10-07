@@ -17,9 +17,18 @@ struct VPhoneLaunchpadRootView: View {
             }
             .navigationTitle("Machines")
             .task { await model.start() }
+            // Free space changes as machines restore and IPSWs download; the
+            // Host Setup row follows it.
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(5))
+                    host.refreshDiskSpace()
+                }
+            }
             // Coming back from Settings, with or without Host Setup open.
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 host.refreshDeveloperTools()
+                host.refreshDiskSpace()
             }
             .sheet(item: $model.panel, onDismiss: model.panelDidDismiss) { panel in
                 Group {
