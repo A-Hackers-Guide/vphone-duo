@@ -1,4 +1,5 @@
 #include "../Shared/InjectionEnvironment.h"
+#include "../Shared/JetsamLimits.h"
 #include "../Shared/RootHideLoaderLinks.h"
 #include <crt_externs.h>
 #include <dlfcn.h>
@@ -117,7 +118,9 @@ static int vpSpawnP(pid_t *restrict pid, const char *restrict path, const posix_
                     const posix_spawnattr_t *restrict attributes, char *const argv[restrict],
                     char *const envp[restrict]) {
     VPInjectionEnvironment injected = vpPrepareChild(path, envp, "");
+    VPJetsamLimits limits = vpRaiseJetsamLimits(getenv("VPHONE_JB_ROOT"), path, attributes, envp);
     int status = posix_spawnp(pid, path, actions, attributes, argv, injected.values ? injected.values : envp);
+    vpRestoreJetsamLimits(&limits);
     vpFreeEnvironment(&injected);
     return status;
 }
@@ -126,7 +129,9 @@ static int vpSpawn(pid_t *restrict pid, const char *restrict path, const posix_s
                    const posix_spawnattr_t *restrict attributes, char *const argv[restrict],
                    char *const envp[restrict]) {
     VPInjectionEnvironment injected = vpPrepareChild(path, envp, "");
+    VPJetsamLimits limits = vpRaiseJetsamLimits(getenv("VPHONE_JB_ROOT"), path, attributes, envp);
     int status = posix_spawn(pid, path, actions, attributes, argv, injected.values ? injected.values : envp);
+    vpRestoreJetsamLimits(&limits);
     vpFreeEnvironment(&injected);
     return status;
 }
