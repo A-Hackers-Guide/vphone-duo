@@ -1,7 +1,8 @@
 // libdevicehubfix.c — let Xcode's DeviceHub show a vphone guest's screen.
 //
 // DeviceHub (Xcode 27) views a device through the developer disk image's
-// dtremotedisplayd. Two things stop it on a vphone guest, one per process.
+// dtremotedisplayd. Guest compatibility also requires DDI mounting and display
+// metadata from dtdeviceinfod.
 //
 // ## cryptexd: the DDI does not mount on iOS 27
 //
@@ -52,14 +53,21 @@
 // host still intersects the answer with its own features, so asking for more
 // than the Mac can take changes nothing.
 //
+// ## dtdeviceinfod: missing framebuffer mask
+//
+// The virtual board reports phone11 chrome with no FramebufferIdentifier.
+// Supply the matching Xcode mask only for that missing answer in dtdeviceinfod,
+// preserving existing answers and MobileGestalt's Copy ownership contract.
+//
 // ## Reach
 //
-// The interposes reach both callers because cryptexd, dtremotedisplayd and
+// The interposes reach their callers because cryptexd, dtremotedisplayd,
+// dtdeviceinfod and
 // CoreDeviceUtilities are standalone images, not shared-cache ones: dyld binds
 // their imports through the interposing table. CoreDeviceUtilities is on the
 // DDI and not in the SDK, so its two symbols are weak flat-namespace imports;
 // in cryptexd they resolve to nothing and dyld skips those entries. The spawn
-// hooks insert this into those two processes only — `vpIsDeviceHubFixTarget`
+// hooks insert this into those three processes only — `vpIsDeviceHubFixTarget`
 // in Shared/InjectionEnvironment.h.
 
 #include <errno.h>
@@ -67,8 +75,12 @@
 #include <stdarg.h>
 #include <stdatomic.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <CoreFoundation/CoreFoundation.h>
+
+extern CFTypeRef MGCopyAnswer(CFStringRef key, CFDictionaryRef options);
 
 // The features a Mac host reports for itself (raw 0x8c): primary display
 // mirrored output 0x4, system audio output 0x8, display information 0x80.
@@ -139,12 +151,46 @@ __attribute__((constructor)) static void vpLogLoad(void) {
               vpOriginalIsCustomerRestricted ? "interposed" : "absent");
 }
 
-int vphone_devicehubfix_version(void) { return 1; }
+// Fill the missing mask and preserve Copy ownership. Bounded diagnostics log
+// only the three identifiers consumed by the DDI DisplayInfoProvider.
+static CFTypeRef vpDisplayAnswer(CFStringRef key, CFDictionaryRef options) {
+    CFTypeRef result = MGCopyAnswer(key, options);
+    // The virtual board advertises phone11 chrome but no framebuffer mask.
+    // DDI metadata only: use the matching mask shipped in Xcode's
+    // /Library/Developer/DeviceKit/chrome_map.plist. Keep real answers intact.
+    if (!result && key && !strcmp(getprogname(), "dtdeviceinfod") &&
+        CFEqual(key, CFSTR("FramebufferIdentifier"))) {
+        CFTypeRef chrome = MGCopyAnswer(CFSTR("ChromeIdentifier"), NULL);
+        if (chrome && CFEqual(chrome, CFSTR("com.apple.dt.devicekit.chrome.phone11")))
+            result = CFRetain(CFSTR("4E5532ED-1470-47D1-BDF4-7AA90C26957A"));
+        if (chrome) CFRelease(chrome);
+    }
+    if (key && (!strcmp(getprogname(), "dtdeviceinfod")) &&
+        (CFEqual(key, CFSTR("FramebufferIdentifier")) ||
+         CFEqual(key, CFSTR("ChromeIdentifier")) ||
+         CFEqual(key, CFSTR("DisplayExtendedProperties")))) {
+        static atomic_uint count;
+        if (atomic_fetch_add(&count, 1) < 12) {
+            char name[128] = {0}, value[4096] = {0};
+            CFStringGetCString(key, name, sizeof(name), kCFStringEncodingUTF8);
+            CFStringRef description = result ? CFCopyDescription(result) : NULL;
+            if (description) {
+                CFStringGetCString(description, value, sizeof(value), kCFStringEncodingUTF8);
+                CFRelease(description);
+            }
+            vpLog("display %s = %s", name, result ? value : "<null>");
+        }
+    }
+    return result;
+}
+
+int vphone_devicehubfix_version(void) { return 2; }
 
 __attribute__((used, section("__DATA,__interpose"))) static const struct {
     const void *replacement;
     const void *replacee;
 } vpInterpose[] = {
+    {(const void *)vpDisplayAnswer, (const void *)MGCopyAnswer},
     {(const void *)vpFcntl, (const void *)fcntl},
     {(const void *)vpCurrentFeatures, (const void *)vpOriginalCurrentFeatures},
     {(const void *)vpIsCustomerRestricted, (const void *)vpOriginalIsCustomerRestricted},

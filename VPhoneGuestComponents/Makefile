@@ -221,6 +221,7 @@ $(DEVICEHUBFIX): $(DEVICEHUBFIX_SOURCES) $(DEVICEHUBFIX_INCLUDES) DeviceHubFix |
 	$(CLANG) $(GUEST_C_FLAGS) -dynamiclib \
 		-install_name /usr/lib/libdevicehubfix.dylib \
 		-o $@ $(DEVICEHUBFIX_SOURCES) $(DEVICEHUBFIX_DYNAMIC_LOOKUP_SYMS) \
+		-framework CoreFoundation -lMobileGestalt \
 		-Wl,-not_for_dyld_shared_cache
 	@codesign --force --sign - $@
 

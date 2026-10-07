@@ -1,5 +1,5 @@
-// DyldSharedCacheIOMFBForceKernPatcher.swift — Force IOMobileFramebuffer's present onto the
-// kernel (userclient method-5) path instead of the virt (in-process callback) one.
+// DyldSharedCacheIOMFBForceKernPatcher.swift — Route IOMobileFramebuffer presents
+// to the kernel only for connections that actually have a kernel userclient.
 //
 // Why
 // ---
@@ -20,18 +20,19 @@
 // What is rewritten
 // -----------------
 // The public `_IOMobileFramebufferSwap*` entry points are thin dispatch
-// trampolines that tail-call a per-connection function pointer:
+// trampolines that tail-call a per-connection function pointer. On iOS 27 the
+// capture display has no kernel userclient port, while the paravirtual primary
+// display does. The patch therefore replaces each trampoline with:
 //
 //     cbz   x0, <fail>
-//     ldr   xN, [x0, #<slot>]     ; the connection's swap fp (kern or virt impl)
-//     cbz   xN, <fail>
-//     braaz xN                    ; tail-call, all argument registers intact
+//     ldr   w16, [x0, #0x14]       ; IOConnect port (zero for display 2)
+//     cbnz  w16, _kern_Swap<Name>
+//     b     _virt_Swap<Name>
 //
-// The FIRST instruction of each such trampoline becomes an unconditional
-// `b _kern_Swap<Name>`. Because the trampoline tail-calls with the argument
-// registers untouched, that is behaviourally identical to the connection having
-// selected the kern fp — every present call now routes through the kern/method-5
-// implementation regardless of how iOS 27 classified the display.
+// x16 is an intra-procedure-call scratch register, so the public ABI arguments
+// remain untouched on either direct branch. The port offset is anchored by the
+// `_kern_Swap*` implementations, which all pass `[x0,#0x14]` to the external
+// method call.
 //
 // Companion kernel patch: `KernelCustomFirmwarePatcher.patchIomfbSwapEndVariableSize` /
 // `…HandlerSize`, which make the 26.4 userclient accept iOS 27's native 0x6e0
@@ -39,33 +40,23 @@
 // kern without the kernel size-accept makes method 5 return
 // `kIOReturnBadArgument`.
 //
-// Nothing is hardcoded. The public entry points and their `_kern_` counterparts
-// are resolved by NAME through `DyldSharedCacheSymbolResolver` (export trie plus the cache's
-// own `.symbols` table — no `ipsw` subprocess), the trampoline shape is verified
-// by Capstone decode of typed operands rather than operand text, the replacement
-// branch comes from `ARM64Encoder.encodeB`, and every DSC page the writes
-// dirtied is re-attested through the span log `DyldSharedCacheChunkSet` keeps.
+// Entry-point addresses and both siblings are resolved by name through
+// `DyldSharedCacheSymbolResolver` (export trie and cache symbols). Capstone
+// verifies the trampoline's typed operands; ARM64Encoder produces the four
+// replacement instructions. The connection layout's port offset is 0x14 on
+// the verified cache. Modified pages are re-attested through the chunk span log.
 //
-// Port of `scripts/patchers/cfw_patch_iomfb_force_kern.py`, which stays the
-// independent reference — `DyldSharedCacheIOMFBForceKernTests` runs the Python on one clone
-// of the real cache and this on another, and compares the two byte for byte.
-//
-// One place diverges from the reference on purpose. The Python writes every site
-// first and only then checks that the three required entry points were covered,
-// so a cache missing one is left half-patched AND un-attested — the worst of the
-// three possible states, because an un-attested DSC page is a
-// `KERN_PROTECTION_FAILURE` on first demand-page-in rather than a visible
-// failure. Here the whole candidate set is classified before anything is
-// written, so that check happens while the cache is still untouched. On the
-// success path the bytes are identical.
+// Classify the complete candidate set before writing, and require Begin, End,
+// and SetLayer coverage. Unlike the historical unconditional patch, only
+// operations with both kern and virt siblings participate. Real-cache tests
+// verify conditional routing, preserved null handling, dry-run and idempotence.
 
 import Foundation
 import VPhonePatchKit
 
-/// Retargets IOMobileFramebuffer's public swap trampolines at their `_kern_`
-/// implementations, inside a chunked dyld shared cache.
+/// Routes public swap trampolines to kern or virt according to the connection.
 public enum DyldSharedCacheIOMFBForceKernPatcher {
-    /// The image that carries both halves of every pair.
+    /// The image that carries the public entry points and their siblings.
     public static let imagePath =
         "/System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer"
 
@@ -75,6 +66,7 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
 
     /// Prefix of the kernel-path siblings. `End` → `_kern_SwapEnd`.
     public static let kernPrefix = "_kern_Swap"
+    public static let virtPrefix = "_virt_Swap"
 
     /// The present transaction the render server drives. Discovery finds
     /// whatever the cache has, but these three must come out covered or the
@@ -94,8 +86,7 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
 
     // MARK: - Model
 
-    /// A public entry point paired with the `_kern_` implementation it should
-    /// branch to.
+    /// A public entry point with its kernel and in-process implementations.
     public struct EntryPoint: Sendable, Hashable {
         /// The swap operation, spelled as the reference spells it in a record
         /// ID: `SwapEnd`, not `End`.
@@ -104,14 +95,18 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
         public let publicAddress: UInt64
         public let kernName: String
         public let kernAddress: UInt64
+        public let virtName: String
+        public let virtAddress: UInt64
     }
 
     /// What was decided about one entry point.
     public enum Disposition: String, Sendable {
-        /// A thin trampoline whose first instruction this run rewrote.
+        /// A thin trampoline rewritten to the conditional four-instruction form.
         case forced
         /// Already `b _kern_Swap<Name>` — a previous run did it.
         case alreadyForced
+        /// Already conditional on the per-connection kernel port.
+        case alreadyConditional
         /// Not a thin dispatch trampoline; left on whatever path it had.
         case notATrampoline
     }
@@ -122,6 +117,7 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
         public let disposition: Disposition
         /// The first instruction as it was found, e.g. `cbz x0, #0x22ac0c1c0`.
         public let originalDisassembly: String
+        public let failureAddress: UInt64
     }
 
     /// What one run did.
@@ -139,6 +135,10 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
 
         public var alreadyForced: [Site] {
             sites.filter { $0.disposition == .alreadyForced }
+        }
+
+        public var alreadyConditional: [Site] {
+            sites.filter { $0.disposition == .alreadyConditional }
         }
 
         public var notTrampolines: [Site] {
@@ -222,14 +222,17 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
         for site in sites {
             switch site.disposition {
             case .alreadyForced:
-                log?("      [=] \(site.entry.publicName) already -> b \(site.entry.kernName) (idempotent)")
+                log?("      [=] \(site.entry.publicName) already -> conditional kern/virt dispatch (idempotent)")
+            case .alreadyConditional:
+                log?("      [=] \(site.entry.publicName) already -> conditional kern/virt dispatch (idempotent)")
             case .notATrampoline:
                 log?("      [=] \(site.entry.publicName) not a thin trampoline; leaving on virt path")
             case .forced:
                 log?(
                     "      [+] \(site.entry.publicName) @ 0x\(hex(site.entry.publicAddress)): "
                         + "'\(site.originalDisassembly)' -> 'b \(site.entry.kernName)' "
-                        + "(0x\(hex(site.entry.kernAddress)))",
+                        + "(0x\(hex(site.entry.kernAddress))) when port != 0, "
+                        + "virt otherwise (0x\(hex(site.entry.virtAddress)))",
                 )
             }
         }
@@ -245,11 +248,12 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
             try records.append(force(site, chunks: chunks))
         }
 
+
         var reattestation: DyldSharedCacheReattestation?
         if records.isEmpty {
             log?(
-                "  [=] all \(sites.count { $0.disposition == .alreadyForced }) entrypoint(s) "
-                    + "already forced; nothing to patch/re-attest",
+                "  [=] all \(sites.count { $0.disposition == .alreadyForced || $0.disposition == .alreadyConditional }) entrypoint(s) "
+                    + "already conditional; nothing to patch/re-attest",
             )
         } else {
             log?("  [.] re-attesting the pages \(records.count) write(s) dirtied...")
@@ -265,10 +269,12 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
         }
 
         let forcedCount = toWrite.count
-        let alreadyCount = sites.count { $0.disposition == .alreadyForced }
+        let alreadyCount = sites.count {
+            $0.disposition == .alreadyForced || $0.disposition == .alreadyConditional
+        }
         log?(
             "  [+] IOMFB force-kern complete: \(forcedCount) newly forced, "
-                + "\(alreadyCount) already -> _kern_*",
+                + "\(alreadyCount) already conditional",
         )
         return Outcome(sites: sites, records: records, reattestation: reattestation)
     }
@@ -291,7 +297,8 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
         for (publicName, publicAddress) in publicEntries {
             let suffix = "Swap" + publicName.dropFirst(publicPrefix.count)
             let kernName = kernPrefix + publicName.dropFirst(publicPrefix.count)
-            guard let kern = all[kernName] else { continue }
+            let virtName = virtPrefix + publicName.dropFirst(publicPrefix.count)
+            guard let kern = all[kernName], let virt = all[virtName] else { continue }
             entries.append(
                 EntryPoint(
                     suffix: suffix,
@@ -299,6 +306,8 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
                     publicAddress: publicAddress,
                     kernName: kernName,
                     kernAddress: kern.address,
+                    virtName: virtName,
+                    virtAddress: virt.address,
                 ),
             )
         }
@@ -321,16 +330,53 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
         let first = instructions.first
         let text = first.map { "\($0.mnemonic) \($0.operandString)" } ?? "<undecodable>"
 
-        // Idempotent: a prior run already rewrote this entry point.
+        // Idempotent: accept both the historical unconditional form and the
+        // new conditional form while upgrading an already patched cache.
         if let first, first.mnemonic == "b",
            let target = immediate(first, at: 0), UInt64(bitPattern: target) == entry.kernAddress
         {
-            return Site(entry: entry, disposition: .alreadyForced, originalDisassembly: text)
+            return Site(
+                entry: entry, disposition: .forced, originalDisassembly: text,
+                failureAddress: entry.publicAddress + 16,
+            )
+        }
+
+        if isConditionalDispatch(instructions, entry: entry) {
+            return Site(
+                entry: entry, disposition: .alreadyConditional, originalDisassembly: text,
+                failureAddress: immediate(instructions[0], at: 1).map(UInt64.init(bitPattern:))
+                    ?? entry.publicAddress + 16,
+            )
         }
 
         let disposition: Disposition =
             isDispatchTrampoline(instructions) ? .forced : .notATrampoline
-        return Site(entry: entry, disposition: disposition, originalDisassembly: text)
+        return Site(
+            entry: entry, disposition: disposition, originalDisassembly: text,
+            failureAddress: immediate(instructions[0], at: 1).map(UInt64.init(bitPattern:))
+                ?? entry.publicAddress + 16,
+        )
+    }
+
+    private static func isConditionalDispatch(
+        _ instructions: [ARM64Instruction], entry: EntryPoint
+    ) -> Bool {
+        guard instructions.count >= 4,
+              instructions[0].mnemonic == "cbz",
+              register(instructions[0], at: 0) == .x(0),
+              instructions[1].mnemonic == "ldr",
+              register(instructions[1], at: 0) == .w(16),
+              let memory = memory(instructions[1]), memory.base == .x(0),
+              memory.index == .invalid, memory.disp == 0x14,
+              instructions[2].mnemonic == "cbnz",
+              register(instructions[2], at: 0) == .w(16),
+              let kernTarget = firstImmediate(instructions[2]),
+              UInt64(bitPattern: kernTarget) == entry.kernAddress,
+              instructions[3].mnemonic == "b",
+              let virtTarget = firstImmediate(instructions[3]),
+              UInt64(bitPattern: virtTarget) == entry.virtAddress
+        else { return false }
+        return true
     }
 
     /// True iff the four instructions are
@@ -378,20 +424,33 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
 
     private static func force(_ site: Site, chunks: DyldSharedCacheChunkSet) throws -> PatchRecord {
         let entry = site.entry
-        guard let branch = ARM64Encoder.encodeB(
-            from: Int(entry.publicAddress),
-            to: Int(entry.kernAddress),
-        ), branch.count == 4 else {
+        guard let portLoad = ARM64Encoder.encodeLdrWUnsignedOffset(rt: 16, rn: 0, offset: 0x14),
+              let nullBranch = ARM64Encoder.encodeCompareBranch(
+                  nonzero: false, register: 0,
+                  from: Int(entry.publicAddress), to: Int(site.failureAddress), width64: true,
+              ),
+              let kernBranch = ARM64Encoder.encodeCompareBranch(
+                  nonzero: true, register: 16,
+                  from: Int(entry.publicAddress + 8), to: Int(entry.kernAddress),
+              ),
+              let virtBranch = ARM64Encoder.encodeB(
+                  from: Int(entry.publicAddress + 12), to: Int(entry.virtAddress),
+              ), portLoad.count == 4, kernBranch.count == 4, virtBranch.count == 4 else {
             throw PatcherError.patchVerificationFailed(
-                "cannot encode b 0x\(hex(entry.publicAddress)) -> 0x\(hex(entry.kernAddress)) "
+                "cannot encode conditional IOMFB dispatch for \(entry.publicName) "
                     + "for \(entry.publicName)",
             )
         }
 
-        let span = DyldSharedCacheWriteSpan(vma: entry.publicAddress, length: 4)
+        var patched = Data()
+        patched.append(nullBranch)
+        patched.append(portLoad)
+        patched.append(kernBranch)
+        patched.append(virtBranch)
+        let span = DyldSharedCacheWriteSpan(vma: entry.publicAddress, length: 16)
         let (chunkURL, range) = try chunks.fileRange(of: span)
-        let original = try chunks.bytesAtVMA(entry.publicAddress, length: 4)
-        try chunks.write(at: entry.publicAddress, branch)
+        let original = try chunks.bytesAtVMA(entry.publicAddress, length: 16)
+        try chunks.write(at: entry.publicAddress, patched)
 
         return PatchRecord(
             patchID: "\(recordGroup).\(entry.suffix)",
@@ -399,11 +458,10 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
             fileOffset: range.lowerBound,
             virtualAddress: entry.publicAddress,
             originalBytes: original,
-            patchedBytes: branch,
+            patchedBytes: patched,
             beforeDisasm: site.originalDisassembly,
-            afterDisasm: "b #0x\(hex(entry.kernAddress).lowercased())",
-            description: "\(entry.publicName) trampoline -> b \(entry.kernName) "
-                + "(0x\(hex(entry.kernAddress)))",
+            afterDisasm: "cbz x0, fail; ldr w16, [x0,#0x14]; cbnz w16, #0x\(hex(entry.kernAddress).lowercased()); b #0x\(hex(entry.virtAddress).lowercased())",
+            description: "\(entry.publicName) conditional kern/virt dispatch",
         )
     }
 
@@ -414,16 +472,17 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
         chunks: DyldSharedCacheChunkSet,
         disassembler: ARM64Disassembler,
     ) throws {
-        for site in sites {
+        for site in sites where site.disposition == .forced {
             let address = site.entry.publicAddress
-            let data = try chunks.bytesAtVMA(address, length: 4)
-            guard let instruction = disassembler.disassembleOne(data, at: address),
-                  instruction.mnemonic == "b",
-                  let target = immediate(instruction, at: 0),
-                  UInt64(bitPattern: target) == site.entry.kernAddress
+            let data = try chunks.bytesAtVMA(address, length: 16)
+            let instructions = try disassembler.disassemble(data, at: address, count: 4)
+            guard isConditionalDispatch(instructions, entry: site.entry)
             else {
+                let bytes = data.map { String(format: "%02x", $0) }.joined()
                 throw PatcherError.patchVerificationFailed(
-                    "post-write verify failed at 0x\(hex(address)) for \(site.entry.publicName)",
+                    "post-write verify failed at 0x\(hex(address)) for \(site.entry.publicName): "
+                        + " bytes=\(bytes)"
+                        + " insns=" + instructions.map(\.description).joined(separator: "; "),
                 )
             }
         }
@@ -443,6 +502,10 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
               operands[index].type == .immediate
         else { return nil }
         return operands[index].imm
+    }
+
+    private static func firstImmediate(_ instruction: ARM64Instruction) -> Int64? {
+        instruction.detail?.operands.first(where: { $0.type == .immediate })?.imm
     }
 
     private static func memory(_ instruction: ARM64Instruction) -> ARM64MemoryOperand? {

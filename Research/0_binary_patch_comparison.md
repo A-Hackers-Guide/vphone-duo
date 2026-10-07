@@ -2784,3 +2784,17 @@ re-patched kernelcache and the marker survived. Flow: `fw set-patches` →
 route a kernel patch through `cfw update-kernel` and the rest of the boot chain
 (TXM, DeviceTree, LLB, iBSS, iBEC) through the erasing restore. TXM and
 DeviceTree are also in Preboot and could follow the same path later.
+
+### DeviceHub iOS 27 conditional swap and mask metadata (2026-10-07)
+
+The IOMFB force-kern candidate uses ten public/kern/virt symbol triples on
+24A446. Each writes a 16-byte null check, port load, conditional kernel branch,
+and virtual branch, followed by re-attestation. Reapply an existing installation
+by reverting the old 31 four-byte sites via patch selection first: an unchanged
+identifier in the receipt otherwise skips the new implementation.
+
+`libdevicehubfix` also loads in the DDI's dtdeviceinfod. It preserves existing
+MobileGestalt answers but supplies mask `4E5532ED-1470-47D1-BDF4-7AA90C26957A`
+when FramebufferIdentifier is missing and ChromeIdentifier is phone11. This is
+the corresponding Xcode DeviceKit mask, not a hardware device-tree rewrite.
+The null mask was observed in dtdeviceinfod; visual validation is pending.

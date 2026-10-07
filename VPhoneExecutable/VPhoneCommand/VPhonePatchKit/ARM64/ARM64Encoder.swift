@@ -62,6 +62,30 @@ public enum ARM64Encoder {
         return ARM64.encodeU32(insn)
     }
 
+    /// Encode `CBZ`/`CBNZ` for a general-purpose register.
+    ///
+    /// The 32-bit form is used by the IOMFB display dispatcher so the loaded
+    /// mach port does not overwrite the upper half of the scratch register.
+    /// The immediate is a signed 19-bit instruction offset (±1 MiB).
+    public static func encodeCompareBranch(
+        nonzero: Bool,
+        register: UInt32,
+        from pc: Int,
+        to target: Int,
+        width64: Bool = false,
+    ) -> Data? {
+        guard register < 32 else { return nil }
+        let delta = target - pc
+        guard delta & 0x3 == 0 else { return nil }
+        let imm19 = delta >> 2
+        guard imm19 >= -(1 << 18), imm19 < (1 << 18) else { return nil }
+        var insn: UInt32 = (width64 ? 0xB400_0000 : 0x3400_0000)
+        if nonzero { insn |= 1 << 24 }
+        insn |= (UInt32(bitPattern: Int32(imm19)) & 0x7FFFF) << 5
+        insn |= register
+        return ARM64.encodeU32(insn)
+    }
+
     /// Encode BL (branch with link) instruction.
     ///
     /// Format: `[31:26] = 0b100101`, `[25:0] = signed offset / 4`

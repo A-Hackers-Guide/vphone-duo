@@ -690,3 +690,22 @@ struct ARM64EncoderRangeTests {
         #expect(ARM64Encoder.decodeBranchTarget(insn: ARM64.retU32, pc: 0) == nil)
     }
 }
+
+struct ARM64CompareBranchTests {
+    @Test func `Compare branch matches Keystone and rejects unreachable targets`() throws {
+        // Keystone 0.9.2 C API in /tmp/ks2.c, assembled at 0x2000.
+        let backward = try #require(ARM64Encoder.encodeCompareBranch(
+            nonzero: true, register: 16, from: 0x2000, to: 0x1000
+        ))
+        #expect(word(backward) == 0x35FF_8010)
+        // Keystone C API in /tmp/ks.c, cbz x0 to PC+16.
+        let null = try #require(ARM64Encoder.encodeCompareBranch(
+            nonzero: false, register: 0, from: 0x1000, to: 0x1010, width64: true
+        ))
+        #expect(word(null) == 0xB400_0080)
+        #expect(ARM64Encoder.encodeCompareBranch(nonzero: true, register: 16,
+            from: 0, to: 1 << 20) == nil)
+        #expect(ARM64Encoder.encodeCompareBranch(nonzero: true, register: 32,
+            from: 0, to: 4) == nil)
+    }
+}

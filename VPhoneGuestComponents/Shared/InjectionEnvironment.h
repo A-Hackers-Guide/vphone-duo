@@ -90,7 +90,8 @@ static const char *vpBatteryHealthFixFor(const char *path) {
 // suffixes are matched like the other targets.
 static int vpIsDeviceHubFixTarget(const char *path) {
     return path && (vpPathHasSuffix(path, "/usr/libexec/cryptexd") ||
-                    vpPathHasSuffix(path, "/usr/libexec/dtremotedisplayd"));
+                    vpPathHasSuffix(path, "/usr/libexec/dtremotedisplayd") ||
+                    vpPathHasSuffix(path, "/usr/libexec/dtdeviceinfod"));
 }
 
 static const char *vpDeviceHubFixFor(const char *path) {
