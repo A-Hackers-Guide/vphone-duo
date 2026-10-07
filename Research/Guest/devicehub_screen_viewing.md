@@ -10,9 +10,13 @@ Measured with Xcode 27.0 (27A266a) and CoreDevice 642.16 on macOS 27.0.1,
 against `iPad16,1 26.6.2 (23G90)` and `iPhone17,3 27.0.1 (24A446)` guests
 over cloudOS 26.4, 2026-10-06 and 2026-10-07.
 
-Status: the live view works on both versions. Latency that grows over a long
-session, and occasional multi-second stalls after a cold start, are open (see
-[Open](#open)).
+Status: the live view works on iPadOS 26, iOS 26 and iOS 27; iPadOS 27 refuses
+pairing and is untested. Known issue: under load (several VMs streaming, or the
+Mac busy restoring or downloading) the view can stall for seconds or fall
+seconds behind and stay there until the stream restarts. A single stream on a
+quiet Mac showed no growing delay in two hours, though two short encode stalls
+still occurred (see
+[Known issue](#known-issue-stalls-and-growing-latency-under-load)).
 
 ## What stopped it
 
@@ -280,7 +284,24 @@ showed the guest live, 30–40 ms behind the VZ window.
 Touch input sent from inside DeviceHub reaches the guest (checked by hand),
 but has no automated check.
 
-## Open
+## Known issue: stalls and growing latency under load
+
+Not fixed. What a user sees and what helps:
+
+- With several VMs streaming, or while the Mac restores or downloads, the
+  DeviceHub view can freeze for 1–3 s, or its delay can climb in steps to a
+  couple of seconds and stay there.
+- A new stream clears the accumulated delay; this was verified by restarting
+  the guest's `avconferenced`. Whether reopening the device in DeviceHub alone
+  starts a new stream was not checked.
+- In testing, one VM streaming on an otherwise quiet Mac showed no growing
+  delay; two encode stalls of up to 1.4 s still occurred in two hours.
+- The VM's own window is unaffected, so it remains the reference for timing.
+
+The guest's HEVC encode is paravirtualized to the Mac and shared by every VM
+([Encoding happens on the Mac](#encoding-happens-on-the-mac)), which fits the
+dependence on load, but no profile of a stall has been caught yet. The
+sections below are the evidence so far.
 
 ### Latency grows over a long session
 
