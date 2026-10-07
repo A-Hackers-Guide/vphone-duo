@@ -52,9 +52,12 @@ logged, and the function still commits. It has two callers:
 
 ## The channel
 
-Before every boot with the feature on, the host writes NVRAM variable
-`vphone-device-name`: the name's UTF-8 bytes, no terminator. With it off, the
-host removes the variable. The guest reads it once per process as the
+Before every boot, `vphone-vm` writes the VM's name (the folder holding
+`config.plist`) to NVRAM variable `vphone-device-name`: its UTF-8 bytes, no
+terminator. There is no setting; the device name is the VM name, so `vm
+rename` applies from the next boot. A VM name that cannot be a device name
+(the rule below, `VPhoneGuestDeviceName` on the host) is not written, and
+`vphone-vm` removes the variable instead. The guest reads it once per process as the
 `IODeviceTree:/options` property of that name, then under Apple's NVRAM GUID
 (`7C436110-…:vphone-device-name`) if the bare name is absent.
 
@@ -87,8 +90,8 @@ returns would reach the same flattening, but the monitor's model-change path
 (`sub_10006155c`) reads that value and writes it back with
 `SCPreferencesSetValue` around `__SCNetworkConfigurationSaveModel`, which
 would commit the pinned name to disk. Applied at publication, it never
-reaches `preferences.plist`: the file keeps the guest's own name, and turning
-the feature off brings that name back at the next boot.
+reaches `preferences.plist`: the file keeps the guest's own name, and a guest booted without the
+variable shows that name again.
 
 Not pinned: `LocalHostName` and the DNS host name, which are separate keys
 derived from the name when it is set; set-hostname's
@@ -143,7 +146,7 @@ lockdownd pick it up when they next start, which in practice is the next boot.
 
 ## Verification
 
-On a test VM with the host writing a name, for example `Lab Phone`:
+On a test VM named, for example, `Lab Phone`:
 
 1. `/var/mobile/Library/Caches/vphone-launchdhook-injection.log` or
    `vphone-systemhook-spawn.log` shows `inserted+devicename` for configd and
@@ -157,8 +160,8 @@ On a test VM with the host writing a name, for example `Lab Phone`:
    `Lab Phone`. The log has `lockdownd refused
    SCPreferencesSetComputerName("Other")`. `preferences.plist` keeps the name
    it had before.
-5. With the variable removed and the guest rebooted, the guest's own name is
-   back and renames work again.
+5. After `vm rename` to another name and a reboot, every view shows the new
+   name.
 
 Host-side checks need no guest: `make -C VPhoneGuestComponents
 test-injection-environment test-devicename` covers target matching,
