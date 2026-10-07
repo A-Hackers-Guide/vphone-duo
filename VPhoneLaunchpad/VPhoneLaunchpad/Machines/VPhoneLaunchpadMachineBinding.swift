@@ -20,10 +20,11 @@ nonisolated struct VPhoneLaunchpadMachineBinding: Codable, Equatable, Sendable {
     /// The store version every command on this machine runs with.
     var bundle: String
     /// The bundle that patched and restored the boot chain. Nil for a
-    /// machine created before Launchpad recorded it.
+    /// machine created before Launchpad recorded it, or reverted to a
+    /// snapshot Launchpad saved no binding with.
     var bootChain: String?
     /// The bundle whose guest environment was installed last. Nil while
-    /// unknown.
+    /// unknown, as after a revert to a snapshot with no saved binding.
     var guestEnvironment: String?
 
     static let fileName = "launchpad.json"
@@ -120,16 +121,19 @@ nonisolated struct VPhoneLaunchpadMachineBinding: Codable, Equatable, Sendable {
         try write(to: url)
     }
 
-    /// This binding after its machine is reverted to a snapshot taken with
-    /// `snapshot` as the binding. The guest environment and the boot chain
-    /// live on the disk and in the NVRAM the revert put back, so they are
-    /// whatever they were when the snapshot was taken. The host programs are
-    /// not part of the machine's files: the bundle stays the one chosen now.
-    func reverted(to snapshot: VPhoneLaunchpadMachineBinding) -> VPhoneLaunchpadMachineBinding {
+    /// This binding after its machine is reverted to a snapshot, given the
+    /// binding saved with it. The guest environment and the boot chain live
+    /// on the disk and in the NVRAM the revert put back, so they are
+    /// whatever they were when the snapshot was taken: the saved ones, or
+    /// unknown when nothing readable was saved (a snapshot taken with
+    /// vphone-cli), never the ones the machine had before the revert. The
+    /// host programs are not part of the machine's files: the bundle stays
+    /// the one chosen now.
+    func reverted(to saved: VPhoneLaunchpadMachineBinding?) -> VPhoneLaunchpadMachineBinding {
         VPhoneLaunchpadMachineBinding(
             bundle: bundle,
-            bootChain: snapshot.bootChain,
-            guestEnvironment: snapshot.guestEnvironment,
+            bootChain: saved?.bootChain,
+            guestEnvironment: saved?.guestEnvironment,
         )
     }
 }

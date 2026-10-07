@@ -114,10 +114,21 @@ struct MachineSnapshotsTests {
         // A snapshot from before Launchpad knew the guest environment leaves it unknown.
         precondition(current.reverted(to: VPhoneLaunchpadMachineBinding(bundle: "2.7.0")).guestEnvironment == nil,
                      "An unknown guest environment stays unknown")
+        // A snapshot with no saved binding (taken with vphone-cli, or the
+        // copy was not written) makes both unknown rather than keeping the
+        // newer ones the revert just replaced; the bundle stays.
+        let unsaved = current.reverted(to: nil)
+        precondition(unsaved == VPhoneLaunchpadMachineBinding(bundle: "2.7.1-local.ab12cd34"), "Reverted without a saved binding: \(unsaved)")
+        precondition(!unsaved.hasMixedVersions, "An unknown guest environment is not claimed to match or differ")
+        precondition(VPhoneLaunchpadMachineBinding.load(machine, snapshot: "missing") == nil, "A snapshot with no folder has no saved binding")
+        precondition(current.reverted(to: VPhoneLaunchpadMachineBinding.load(machine, snapshot: "fresh")) == reverted,
+                     "A readable saved binding still supplies the boot chain and guest environment")
 
         // The sidecar is checked like the machine's own binding.
         try Data(#"{"bundle":"2.7.0","guestEnvironment":"../evil"}"#.utf8).write(to: sidecar)
         precondition(VPhoneLaunchpadMachineBinding.load(machine, snapshot: "fresh") == nil, "An invalid sidecar is rejected")
+        precondition(current.reverted(to: VPhoneLaunchpadMachineBinding.load(machine, snapshot: "fresh")) == unsaved,
+                     "An unreadable saved binding counts as none")
 
         // Names outside the rules, and folders that are links, are refused.
         for name in ["", ".", "..", "../research-02", "a/b", ".hidden"] {

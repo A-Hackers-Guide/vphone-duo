@@ -849,8 +849,8 @@ final class VPhoneLaunchpadMachineLibrary {
             on: machine,
             machine.snapshotCreateArguments(name, note: note),
         )
-        // The snapshot is taken either way; without the copy a revert only
-        // leaves the binding as it is then.
+        // The snapshot is taken either way; without the copy a revert can
+        // only mark the guest environment and boot chain unknown.
         if let binding = currentBinding(of: machine) {
             try? binding.save(to: machine, snapshot: name)
         }
@@ -866,11 +866,12 @@ final class VPhoneLaunchpadMachineLibrary {
         )
         // The guest environment and the boot chain are on the disk and in
         // the NVRAM the revert just replaced, so the binding takes them from
-        // the copy saved with the snapshot. The bundle is not on the disk:
-        // the machine keeps running with the one chosen now.
-        if let saved = VPhoneLaunchpadMachineBinding.load(machine, snapshot: name),
-           let current = currentBinding(of: machine)
-        {
+        // the copy saved with the snapshot, or become unknown when there is
+        // none to read (a snapshot taken with vphone-cli, or a copy that was
+        // not written). The bundle is not on the disk: the machine keeps
+        // running with the one chosen now.
+        if let current = currentBinding(of: machine) {
+            let saved = VPhoneLaunchpadMachineBinding.load(machine, snapshot: name)
             try? bind(machine, current.reverted(to: saved))
         }
     }
