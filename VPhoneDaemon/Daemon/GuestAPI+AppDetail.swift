@@ -57,8 +57,9 @@ extension GuestAPI {
 extension GuestAPI {
     /// `uicache -a`. Without a directory, IcliKit looks for the bootstrap from
     /// the running executable, and vphoned runs from the system volume, so it
-    /// finds none and refreshes the system's /Applications, failing on Apple's
-    /// apps. The bootstrap vphoned installed names the directory instead.
+    /// finds none and refreshes the system's /Applications, where every app is
+    /// Apple's and is skipped. The bootstrap vphoned installed names the
+    /// directory instead.
     static func refreshAppRegistrations(directory: String?) throws -> [String: Any] {
         guard let directory = try directory ?? GuestIrisinInstaller.completedBootstrap().map({ $0.root + "/Applications" })
         else {
