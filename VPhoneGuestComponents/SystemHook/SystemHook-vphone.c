@@ -149,12 +149,27 @@ static int vpExecve(const char *path, char *const argv[], char *const envp[]) {
 // HapticsFix/libhapticsfix.c for what it answers and why SpringBoard is the
 // target.
 #define VP_HAPTICS_FIX "/usr/lib/libhapticsfix.dylib"
+// The Settings follow-up-group hider. Rides the same dlopen route; it swizzles
+// (Preferences' classes are in the shared cache, so interposing would not reach
+// them) and hides the CoreFollowUp suggestion/upsell groups. See
+// PrefsFix/libprefsfix.m.
+#define VP_PREFS_FIX "/usr/lib/libprefsfix.dylib"
+// The sign-in suppressor. Loaded into every app (not daemons) and swizzles the
+// in-process Apple-ID / iCloud / store sign-in presentation controllers so no
+// app can present a sign-in sheet. Self-gates on each class being present.
+// See SignInFix/libsigninfix.m.
+#define VP_SIGNIN_FIX "/usr/lib/libsigninfix.dylib"
 
 // The one UIKit process measured creating a CHHapticEngine without first
 // asking CoreHaptics whether the hardware exists. Suffix-matched, like the
 // MIS targets, so it holds however launchd names the binary.
 static int vpIsSpringBoard(const char *path) {
     return vpPathHasSuffix(path, "/SpringBoard.app/SpringBoard");
+}
+
+// Settings. Suffix-matched like the other targets.
+static int vpIsPreferences(const char *path) {
+    return vpPathHasSuffix(path, "/Preferences.app/Preferences");
 }
 
 // A missing library is expected and stays quiet; anything else is logged.
@@ -217,8 +232,17 @@ __attribute__((constructor)) static void vpLogProcess(void) {
     // first asks CoreHaptics for an engine.
     if (vpIsSpringBoard(path))
         vpLoadLibrary("haptics-fix", VP_HAPTICS_FIX);
+    // Loaded before the app gate too: the swizzle must be in place before
+    // Settings builds its follow-up section.
+    if (vpIsPreferences(path))
+        vpLoadLibrary("prefs-fix", VP_PREFS_FIX);
     if (!vpInBootstrap && !vpIsAppPath(path))
         return;
+    // Every app gets the sign-in suppressor; it self-gates on the sign-in
+    // presentation classes being present (daemons are excluded by the app gate
+    // above, so background AuthKit auth is untouched).
+    if (vpIsAppPath(path))
+        vpLoadLibrary("signin-fix", VP_SIGNIN_FIX);
     if (vpIsAppPath(path) && dlopen(VP_AVFOUNDATION, RTLD_LAZY | RTLD_NOLOAD))
         vpLoadLibrary("camera-hook", VP_CAMERA_APP_HOOK);
     const char *root = getenv("VPHONE_JB_ROOT");
