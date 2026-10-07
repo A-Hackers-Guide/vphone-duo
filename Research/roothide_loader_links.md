@@ -37,7 +37,7 @@ framework or extension directory.
   and creates `../`×depth + `.jbroot` there. A directory with any `.jbroot`
   entry is skipped, and a failed link is not fatal. It runs at install, on
   `vphoned` startup, and one second after the root's `Library/dpkg` changes:
-  `watchRootHidePackages` keeps a vnode watch on that directory, which
+  `watchBootstrapPackages` keeps a vnode watch on that directory, which
   Irisin, apt and dpkg all rewrite when a package operation finishes.
 - The spawn hooks cannot replace that watch. `sudo` is usually run from a
   mobile shell (an ssh session, or `ighostvtd-io`'s zsh), and mobile cannot
