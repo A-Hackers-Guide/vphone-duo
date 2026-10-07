@@ -85,3 +85,19 @@ vphone-cli vm import myphone.tzst --name restored
 Do not swap `SEPStorage`, `nvram.bin` or the disk image between machines: they were made together by one restore, and a guest whose SEP storage does not match its disk panics at boot.
 
 Run resource-heavy creations **one at a time**. Both the IPSWs and temporary restore tree consume substantial disk space, and patching large caches can be memory intensive. Check free space before starting a second VM.
+
+### Sharing disk space between VMs
+
+Two VMs restored separately from the same IPSW share nothing on disk, although much of their disk images is the same: two iOS 27.0 iPhones hold about 8.6 GB of identical bytes at the same places in their roughly 20 GB of data, mostly the system volume. `vm rebase` makes a stopped VM store those blocks once with another VM's:
+
+```sh
+vphone-cli vm rebase second --onto template --dry-run
+vphone-cli vm rebase second --onto template
+```
+
+It rebuilds `second`'s disk image from an APFS clone of `template`'s and writes in only the blocks that differ. Every byte is compared with the original before the image is replaced, so the guest sees exactly the same disk. Only the disk image changes: `SEPStorage`, `nvram.bin`, `config.plist` and the device identity stay as they are. Both VMs must be stopped and on the same APFS volume, and the volume needs free space for the blocks that are written until the old image is released. `--dry-run` reports what would be shared and written without writing anything.
+
+- The space comes back only when nothing else holds the old image's blocks. Snapshots of the VM, and clones made from it, keep them; delete those first or expect no saving.
+- `du` and Finder still count each image at its full size. Free space on the volume (`df`) is the honest measure.
+- The two images drift apart again as either VM writes to its disk. A base that is never booted, such as a freshly restored VM kept as a template, stays the best base, and rebasing again later recovers what drifted.
+- A rebase that is interrupted leaves the VM unchanged and may leave a hidden `.rebase-*` folder in it; delete that folder.
