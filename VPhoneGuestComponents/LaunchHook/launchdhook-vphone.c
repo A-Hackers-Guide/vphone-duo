@@ -1,4 +1,5 @@
 #include "../Shared/InjectionEnvironment.h"
+#include "../Shared/JetsamLimits.h"
 #include "../Shared/RootHideLoaderLinks.h"
 #include <fcntl.h>
 #include <limits.h>
@@ -97,7 +98,9 @@ static int vpSpawnWith(VPSpawnFunction spawn, pid_t *restrict pid, const char *r
     // have to be decided here as well as in SystemHook.
     const VPInsertedLibraries libraries = vpInsertedLibrariesFor(path);
     VPInjectionEnvironment injected = vpInsertHooksFor(envp, vpBootRoot, &libraries);
+    VPJetsamLimits limits = vpRaiseJetsamLimits(vpBootRoot, path, attributes, envp);
     int status = spawn(pid, path, actions, attributes, argv, injected.values ? injected.values : envp);
+    vpRestoreJetsamLimits(&limits);
     if (bootstrapProgram || appProgram || libraries.count || strcmp(path, "/usr/libexec/xpcproxy") == 0) {
         char event[128];
         if (!injected.values) {

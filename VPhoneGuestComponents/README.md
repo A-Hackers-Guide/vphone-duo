@@ -47,6 +47,9 @@ ElleKit owns tweak selection and loading. It logs PID and executable path to
 `/var/mobile/Library/Caches/vphone-systemhook.log`, falling back to the app's
 own `Library/Caches` when sandboxed.
 `DISABLE_TWEAKS=1` and the safe-mode flags skip injection.
+While a bootstrap is installed, both spawn hooks also triple the jetsam memory
+limits a spawn carries, with Dopamine's exclusions, and restore the caller's
+attributes afterwards (`Shared/JetsamLimits.h`).
 Irisin installs ElleKit's own `TweakLoader.dylib` in the selected bootstrap.
 The required GPU bundle is extracted from the selected PCC firmware by
 `vphone-cli fw prepare` and copied into the VM during JB installation. No
