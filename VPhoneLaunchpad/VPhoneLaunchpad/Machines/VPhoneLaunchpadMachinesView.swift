@@ -367,10 +367,10 @@ struct VPhoneLaunchpadMachinesView: View {
                 .width(min: 80, ideal: 110)
             }
             // Standard comparison orders 18.10 after 18.9.
-            TableColumn("iOS", value: \.iosVersion) { machine in
-                Text(verbatim: machine.restoreInfo.map { "\($0.ios.version) (\($0.ios.build))" } ?? "—")
+            TableColumn("OS", value: \.iosVersion) { machine in
+                Text(verbatim: machine.restoreInfo.map { "\(machine.osName) \($0.ios.version) (\($0.ios.build))" } ?? "—")
             }
-            .width(min: 110, ideal: 120)
+            .width(min: 140, ideal: 160)
             TableColumn("Core Bundle") { machine in
                 // Each cell is a hosting view of its own. When its row leaves
                 // the table, the cell is updated once more with an empty
@@ -492,6 +492,7 @@ struct VPhoneLaunchpadMachinesView: View {
             machine.name,
             machine.restoreInfo?.ios.version,
             machine.restoreInfo?.ios.build,
+            machine.guestProductType,
             machine.udid,
             VPhoneLaunchpadMachineLocations.volumeName(machine.libraryRoot),
         ]

@@ -13738,6 +13738,15 @@
         "vi" : { "stringUnit" : { "state" : "translated", "value" : "Tạo ảnh chụp nhanh" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "拍摄快照" } }
       }
+    },
+    "OS" : {
+      "comment" : "Machines table column: the guest OS and its version, such as iOS 26.6.2 or iPadOS 26.6.2.",
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "OS" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "OS" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Hệ điều hành" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "系统" } }
+      }
     }
   },
   "version" : "1.0"

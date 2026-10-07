@@ -118,7 +118,7 @@ struct VPhoneLaunchpadMachineInspector: View {
 
             Section("Firmware") {
                 if let info = machine.restoreInfo {
-                    LabeledContent("iOS", value: "\(info.ios.version) (\(info.ios.build))")
+                    LabeledContent(machine.osName, value: "\(info.ios.version) (\(info.ios.build))")
                     LabeledContent("cloudOS", value: "\(info.cloudOS.version) (\(info.cloudOS.build))")
                 } else {
                     Text("Not restored").foregroundStyle(.secondary)
