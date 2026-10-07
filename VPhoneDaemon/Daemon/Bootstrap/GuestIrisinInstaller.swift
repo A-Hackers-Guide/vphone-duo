@@ -72,7 +72,7 @@ enum GuestIrisinInstaller {
             throw GuestAPIError.invalidRequest("Bootstrap paths changed; inspect them again before uninstalling")
         }
 
-        stopWatchingRootHidePackages()
+        stopWatchingBootstrapPackages()
         for installation in roots {
             try removeBootstrap(root: installation.root, layout: installation.layout)
         }
@@ -100,12 +100,12 @@ enum GuestIrisinInstaller {
                 if base["created"] as? [String] != [] || base["deferred"] as? [String] != [] {
                     NSLog("vphoned: RootHide bootstrap base: %@", String(describing: base))
                 }
-                watchRootHidePackages(root: installation.root)
             }
         } catch {
             NSLog("vphoned: could not repair RootHide bootstrap: %@", String(describing: error))
         }
         if let installation {
+            watchBootstrapPackages(layout: installation.layout, root: installation.root)
             // Off the startup path: the server should not wait for launchd.
             DispatchQueue.global().async {
                 loadBootstrapDaemons(layout: installation.layout, root: installation.root)
@@ -358,9 +358,7 @@ enum GuestIrisinInstaller {
             let firmware = try ensureFirmwareRecord(root: root)
             let marker = ["tag": tag, "layout": layout, "jbroot": root]
             try writeMarker(marker)
-            if layout == "roothide" {
-                watchRootHidePackages(root: root)
-            }
+            watchBootstrapPackages(layout: layout, root: root)
             for entry in replaced {
                 if let backup = entry.backup {
                     try? FileManager.default.removeItem(at: backup)

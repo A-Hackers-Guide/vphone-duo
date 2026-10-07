@@ -138,6 +138,11 @@ The launchd and SystemHook spawn bridges also create a missing `.jbroot`
 beside a bootstrap executable and its in-root dependencies just before it
 starts, when the spawning process may write there. See
 `Research/roothide_loader_links.md`.
+In either layout, the same `Library/dpkg` change, and vphoned's start, also
+refresh the bootstrap's `/Applications` as `apps.refresh` does. A package's
+postinst and uikittools' trigger run `uicache`, which cannot register an app on
+iOS 27, so an app installed by Irisin, apt or dpkg otherwise stays unregistered
+until `apps.refresh` is called.
 `POST /v1/bootstrap/firmware` (RPC `bootstrap.firmware`)
 repairs the record for a bootstrap already identified by the completion marker
 without running another install. The reply includes the tag,
