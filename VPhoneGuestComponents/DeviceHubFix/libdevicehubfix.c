@@ -1,9 +1,10 @@
 // libdevicehubfix.c — let Xcode's DeviceHub show a vphone guest's screen.
 //
 // DeviceHub (Xcode 27) views a device through the developer disk image's
-// dtremotedisplayd. On a vphone guest it needs three fixes, one per process:
+// dtremotedisplayd. On a vphone guest it needs four fixes, one per process:
 // cryptexd mounts the DDI, dtremotedisplayd reports media stream features,
-// and dtdeviceinfod supplies the framebuffer mask.
+// dtdeviceinfod supplies the framebuffer mask, and avconferenced keeps a
+// banded stream from deadlocking the host GPU.
 //
 // ## cryptexd: the DDI does not mount on iOS 27
 //
@@ -63,6 +64,40 @@
 // Xcode's /Library/Developer/DeviceKit/chrome_map.plist; existing answers and
 // other chromes pass through, and the result keeps the Copy ownership rule.
 //
+// ## avconferenced: a banded stream deadlocks the host GPU
+//
+// A RemoteDesktop stream may split each frame into bands (tilesPerFrame 4).
+// avconferenced then reads every captured frame on the GPU once per band, in
+// VideoProcessing's VCPSideCarMetal: `temporalTransitionScore:previousFrame:
+// forRegion:` and `copyFromFrame:toTile:origin:size:withFence:` each commit a
+// command buffer that samples the frame's two 420f planes as two textures.
+// The frame is written by backboardd's CoreAnimation display thread with the
+// paravirtual M2 scaler (`IOSurfaceAcceleratorTransformSurface`), and reaches
+// avconferenced while that transform is still in flight: IOSurface implicit
+// synchronization is what orders the band reads after the write.
+//
+// On the host the two reach that synchronization by different paths. The
+// VM process runs scaler requests one at a time and registers the write
+// 0.25–0.8 ms after taking a request; the band command buffers come through
+// ParavirtualizedGraphics' GPU task, which registers each texture's surface on
+// its own, and can get there first. Once a writer waits, the host queues new
+// readers behind it. When the scaler's write registers between the two plane
+// registrations of one command buffer, the buffer holds the first plane and
+// waits for the writer, which waits for that read: the scaler and the GPU
+// FIFO both stop ("Timeout in timestamp wait"), the host restarts the GPU and
+// the guest loses it for good. With on-screen activity this hit 3% of frames
+// and deadlocked within 16–35 s (macOS 27.0.1 on M2, iOS 27.0.1 guest with
+// cloudOS 26.4 paravirtual drivers). A single-band stream never reads the
+// frame on the GPU.
+//
+// The request that produced a frame is already on the host's scaler queue
+// when avconferenced gets the frame, and a synchronous transform returns only
+// after the host finished it. So before the first band read of each frame one
+// synchronous transform between two scratch surfaces is queued behind it;
+// when it returns the frame's write is done and released, and no band read
+// can meet it. That costs one scaler round trip per frame, 0.5–1 ms past the
+// write the band reads used to wait for on the host anyway.
+//
 // ## Reach
 //
 // The interposes reach their callers because cryptexd, dtremotedisplayd,
@@ -70,11 +105,16 @@
 // ones: dyld binds their imports through the interposing table.
 // CoreDeviceUtilities is on the DDI and not in the SDK, so its two symbols are
 // weak flat-namespace imports; outside dtremotedisplayd they resolve to nothing
-// and dyld skips those entries. The spawn hooks insert this into those three
-// processes only — `vpIsDeviceHubFixTarget` in Shared/InjectionEnvironment.h.
+// and dyld skips those entries. VideoProcessing is in the shared cache, so the
+// band reads are replaced through the Objective-C runtime instead. The spawn
+// hooks insert this into those four processes only — `vpIsDeviceHubFixTarget`
+// in Shared/InjectionEnvironment.h.
 
+#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <objc/runtime.h>
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -82,6 +122,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <CoreVideo/CoreVideo.h>
+#include <IOSurface/IOSurfaceRef.h>
 
 extern CFTypeRef MGCopyAnswer(CFStringRef key, CFDictionaryRef options);
 
@@ -187,7 +229,119 @@ static CFTypeRef vpDisplayAnswer(CFStringRef key, CFDictionaryRef options) {
     return result;
 }
 
-int vphone_devicehubfix_version(void) { return 2; }
+// MARK: - avconferenced
+
+#define VP_VIDEO_PROCESSING "/System/Library/PrivateFrameworks/VideoProcessing.framework/VideoProcessing"
+
+extern int IOSurfaceAcceleratorCreate(CFAllocatorRef allocator, CFDictionaryRef properties, void **accelerator);
+extern int IOSurfaceAcceleratorTransformSurface(void *accelerator, IOSurfaceRef source, IOSurfaceRef destination,
+                                                CFDictionaryRef options, void *rectangles, void *completion,
+                                                void *swap, void *command);
+
+__attribute__((used)) static IMP vpOriginalTransitionScore;
+__attribute__((used)) static IMP vpOriginalCopyFromFrame;
+
+static void *vpScaler;
+static CVPixelBufferRef vpScalerSource;
+static CVPixelBufferRef vpScalerDestination;
+
+static CVPixelBufferRef vpScratchBuffer(size_t width, size_t height) {
+    CFDictionaryRef surface = CFDictionaryCreate(NULL, NULL, NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                                                 &kCFTypeDictionaryValueCallBacks);
+    const void *keys[] = {kCVPixelBufferIOSurfacePropertiesKey};
+    const void *values[] = {surface};
+    CFDictionaryRef attributes = CFDictionaryCreate(NULL, keys, values, 1, &kCFTypeDictionaryKeyCallBacks,
+                                                    &kCFTypeDictionaryValueCallBacks);
+    CVPixelBufferRef buffer = NULL;
+    CVPixelBufferCreate(NULL, width, height, kCVPixelFormatType_32BGRA, attributes, &buffer);
+    CFRelease(attributes);
+    CFRelease(surface);
+    return buffer;
+}
+
+static void vpCreateScalerBarrier(void) {
+    if (IOSurfaceAcceleratorCreate(NULL, NULL, &vpScaler) != 0)
+        vpScaler = NULL;
+    vpScalerSource = vpScratchBuffer(64, 64);
+    vpScalerDestination = vpScratchBuffer(32, 32);
+    if (!vpScaler || !vpScalerSource || !vpScalerDestination)
+        vpLog("scaler barrier %s, %s", "unavailable", "a banded stream can deadlock");
+}
+
+__attribute__((used)) static void vpAwaitScaler(CVPixelBufferRef frame) {
+    static pthread_once_t once = PTHREAD_ONCE_INIT;
+    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    static _Atomic uint32_t awaited;
+    IOSurfaceRef surface = frame ? CVPixelBufferGetIOSurface(frame) : NULL;
+    if (!surface)
+        return;
+    uint32_t id = IOSurfaceGetID(surface);
+    if (atomic_load(&awaited) == id)
+        return;
+    pthread_once(&once, vpCreateScalerBarrier);
+    pthread_mutex_lock(&lock);
+    if (atomic_load(&awaited) != id) {
+        if (vpScaler && vpScalerSource && vpScalerDestination)
+            IOSurfaceAcceleratorTransformSurface(vpScaler, CVPixelBufferGetIOSurface(vpScalerSource),
+                                                 CVPixelBufferGetIOSurface(vpScalerDestination), NULL, NULL,
+                                                 NULL, NULL, NULL);
+        atomic_store(&awaited, id);
+    }
+    pthread_mutex_unlock(&lock);
+}
+
+// Calls vpAwaitScaler with the frame (x2) and continues into the original
+// with x0–x8 intact. Neither method takes a floating-point argument (region,
+// origin and size are passed by reference), and the score method returns a
+// C++ future indirectly, through x8.
+#define VP_AWAIT_SCALER_THEN(name, original)                                                             \
+    __attribute__((naked)) static void name(void) {                                                     \
+        __asm__ volatile("pacibsp\n"                                                                    \
+                         "stp x29, x30, [sp, #-0x60]!\n"                                                \
+                         "mov x29, sp\n"                                                                \
+                         "stp x0, x1, [sp, #0x10]\n"                                                    \
+                         "stp x2, x3, [sp, #0x20]\n"                                                    \
+                         "stp x4, x5, [sp, #0x30]\n"                                                    \
+                         "stp x6, x7, [sp, #0x40]\n"                                                    \
+                         "str x8, [sp, #0x50]\n"                                                        \
+                         "mov x0, x2\n"                                                                 \
+                         "bl _vpAwaitScaler\n"                                                          \
+                         "ldp x0, x1, [sp, #0x10]\n"                                                    \
+                         "ldp x2, x3, [sp, #0x20]\n"                                                    \
+                         "ldp x4, x5, [sp, #0x30]\n"                                                    \
+                         "ldp x6, x7, [sp, #0x40]\n"                                                    \
+                         "ldr x8, [sp, #0x50]\n"                                                        \
+                         "ldp x29, x30, [sp], #0x60\n"                                                  \
+                         "autibsp\n"                                                                    \
+                         "adrp x16, _" #original "@PAGE\n"                                              \
+                         "ldr x16, [x16, _" #original "@PAGEOFF]\n"                                     \
+                         "braaz x16\n");                                                                \
+    }
+
+VP_AWAIT_SCALER_THEN(vpTransitionScore, vpOriginalTransitionScore)
+VP_AWAIT_SCALER_THEN(vpCopyFromFrame, vpOriginalCopyFromFrame)
+
+__attribute__((constructor)) static void vpInstallScalerBarrier(void) {
+    if (strcmp(getprogname(), "avconferenced") != 0)
+        return;
+    dlopen(VP_VIDEO_PROCESSING, RTLD_LAZY | RTLD_LOCAL);
+    Class sideCar = objc_getClass("VCPSideCarMetal");
+    Method score = sideCar ? class_getInstanceMethod(sideCar, sel_registerName(
+                                 "temporalTransitionScore:previousFrame:forRegion:"))
+                           : NULL;
+    Method copy = sideCar ? class_getInstanceMethod(sideCar, sel_registerName(
+                                "copyFromFrame:toTile:origin:size:withFence:"))
+                          : NULL;
+    if (!score || !copy) {
+        vpLog("VCPSideCarMetal band reads %s, %s", "not found", "a banded stream can deadlock");
+        return;
+    }
+    vpOriginalTransitionScore = method_setImplementation(score, (IMP)vpTransitionScore);
+    vpOriginalCopyFromFrame = method_setImplementation(copy, (IMP)vpCopyFromFrame);
+    vpLog("VCPSideCarMetal band reads %s, %s", "found", "they wait for the scaler");
+}
+
+int vphone_devicehubfix_version(void) { return 3; }
 
 __attribute__((used, section("__DATA,__interpose"))) static const struct {
     const void *replacement;

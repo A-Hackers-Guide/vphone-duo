@@ -58,7 +58,8 @@ BATTERYHEALTHFIX_SOURCES := $(wildcard BatteryHealthFix/*.c)
 BATTERYHEALTHFIX_INCLUDES := $(wildcard BatteryHealthFix/*.h)
 # CoreDeviceUtilities lives on the developer disk image, not in the SDK, and
 # the image is mounted only after the host enables developer services. The two
-# interposed Swift getters are weak flat-namespace imports.
+# interposed Swift getters are weak flat-namespace imports. CoreVideo, IOSurface
+# and libobjc are for the avconferenced band reads it waits on the scaler for.
 DEVICEHUBFIX := $(STAGE)/devicehubfix/libdevicehubfix.dylib
 DEVICEHUBFIX_SOURCES := $(wildcard DeviceHubFix/*.c)
 DEVICEHUBFIX_INCLUDES := $(wildcard DeviceHubFix/*.h)
@@ -249,7 +250,7 @@ $(DEVICEHUBFIX): $(DEVICEHUBFIX_SOURCES) $(DEVICEHUBFIX_INCLUDES) DeviceHubFix |
 	$(CLANG) $(GUEST_C_FLAGS) -dynamiclib \
 		-install_name /usr/lib/libdevicehubfix.dylib \
 		-o $@ $(DEVICEHUBFIX_SOURCES) $(DEVICEHUBFIX_DYNAMIC_LOOKUP_SYMS) \
-		-framework CoreFoundation -lMobileGestalt \
+		-framework CoreFoundation -framework CoreVideo -framework IOSurface -lMobileGestalt -lobjc \
 		-Wl,-not_for_dyld_shared_cache
 	@codesign --force --sign - $@
 

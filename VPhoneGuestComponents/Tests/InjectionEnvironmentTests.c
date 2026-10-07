@@ -80,8 +80,10 @@ static void namesTheDeviceHubFixTarget(void) {
     assert(vpIsDeviceHubFixTarget("/usr/libexec/dtremotedisplayd"));
     assert(vpIsDeviceHubFixTarget("/usr/libexec/cryptexd"));
     assert(vpIsDeviceHubFixTarget("/System/Developer/usr/libexec/dtdeviceinfod"));
+    assert(vpIsDeviceHubFixTarget("/usr/libexec/avconferenced"));
     assert(!vpIsDeviceHubFixTarget("/usr/libexec/dtdeviceinfodx"));
     assert(!vpIsDeviceHubFixTarget("/usr/libexec/cryptexdx"));
+    assert(!vpIsDeviceHubFixTarget("/usr/libexec/avconferencedx"));
     assert(!vpIsDeviceHubFixTarget("/System/Developer/usr/libexec/dtremotedisplaydx"));
     assert(!vpIsDeviceHubFixTarget("/System/Developer/usr/libexec/remoted"));
     assert(!vpIsDeviceHubFixTarget(NULL));

@@ -16,7 +16,10 @@ Mac busy restoring or downloading) the view can stall for seconds or fall
 seconds behind and stay there until the stream restarts. A single stream on a
 quiet Mac showed no growing delay in two hours, though two short encode stalls
 still occurred (see
-[Known issue](#known-issue-stalls-and-growing-latency-under-load)).
+[Known issue](#known-issue-stalls-and-growing-latency-under-load)). A stream
+that splits each frame into bands deadlocked the host GPU until the library
+also loaded into `avconferenced` (see
+[Banded streams](#banded-streams-deadlock-the-host-gpu)).
 
 ## What stopped it
 
@@ -168,7 +171,7 @@ to an iPhone 16 (1179x2556) did not change the overflow either.
 ### `libdevicehubfix.dylib`
 
 `VPhoneGuestComponents/DeviceHubFix/libdevicehubfix.c`, installed as
-`/usr/lib/libdevicehubfix.dylib`. Both spawn hooks insert it into three
+`/usr/lib/libdevicehubfix.dylib`. Both spawn hooks insert it into four
 processes only (`vpIsDeviceHubFixTarget` in `Shared/InjectionEnvironment.h`):
 
 - **`cryptexd`**: interposes `fcntl`. An `EPERM` from `F_SETPROTECTIONCLASS`
@@ -186,12 +189,17 @@ processes only (`vpIsDeviceHubFixTarget` in `Shared/InjectionEnvironment.h`):
   `phone11`, it answers with Xcode's matching mask `4E5532ED-…`, retained under
   the Copy ownership rule. Existing answers and other chromes are unchanged.
   This is display metadata, not a change to the guest's hardware identity.
+- **`avconferenced`**: replaces `VCPSideCarMetal`'s two band reads and runs
+  one synchronous scaler transform before the first read of each frame (see
+  [Banded streams](#banded-streams-deadlock-the-host-gpu)).
 
 Interposing works because `cryptexd`, `dtremotedisplayd`, `dtdeviceinfod` and
 `CoreDeviceUtilities` are standalone images, not shared-cache ones, so dyld
 binds their imports through the interposing table. `CoreDeviceUtilities` lives
 on the DDI and not in the SDK, so its two symbols are weak flat-namespace
 imports (`-Wl,-U`) and resolve to nothing outside `dtremotedisplayd`.
+`VideoProcessing` is in the shared cache, which an interpose does not reach,
+so the band reads are replaced through the Objective-C runtime.
 
 The library ships with `system-launchdaemons-boot-environment`. An existing
 guest gets it from the environment update when it next starts on a bundle
@@ -276,13 +284,129 @@ showed the guest live, 30–40 ms behind the VZ window.
   refuses pairing (`kAMDUserDeniedPairingError`, from `devicectl manage pair`
   and from Xcode alike) without showing a trust alert. That happens before
   any of this code is involved and is left for separate work.
-- **Tests.** `InjectionEnvironmentTests` covers the three targets and their
+- **Tests.** `InjectionEnvironmentTests` covers the four targets and their
   near-miss suffixes. The seven real-cache force-kern tests (pristine 24A435
   cache via `VPHONE_DSC_PRISTINE`) cover conditional routing, the preserved
   null check, symbol discovery, dry run and idempotence, and pass. `ARM64CompareBranchTests` pins the new encoder.
 
 Touch input sent from inside DeviceHub reaches the guest (checked by hand),
 but has no automated check.
+
+## Banded streams deadlock the host GPU
+
+Fixed. A stream can split each frame into bands that are encoded separately
+(`tilesPerFrame` in the stream configuration). With four bands and a changing
+screen, the 27.0.1 iPhone guest froze within 16–35 s: the picture stopped
+while touch still worked, then the guest turned green and the VZ window
+stopped, until the VM was restarted. The Mac logged `Timeout in timestamp
+wait` and restarted its GPU, and the guest never got it back. A still screen
+produces no new frames and did not freeze; a single-band stream never froze.
+
+Measured with macOS 27.0.1 (26A434) on an M2 Mac and `iPhone17,3` 27.0.1
+(24A446) over cloudOS 26.4 (23E5207q), 2026-10-07 and 2026-10-08.
+
+### Who writes the frame and who reads it
+
+- backboardd's CoreAnimation display thread
+  (`com.apple.coreanimation.display.primary`) writes each capture frame (420f,
+  1320x2868) with the M2 scaler, through
+  `IOSurfaceAcceleratorTransformSurface`.
+- `avconferenced` gets the frame before that transform has run on the Mac and
+  does not wait for it: IOSurface implicit synchronization orders its reads
+  after the write.
+- With bands, VideoProcessing's `VCPSideCarMetal` reads the frame on the GPU
+  once per band, in `temporalTransitionScore:previousFrame:forRegion:`
+  (current and previous frame) and `copyFromFrame:toTile:origin:size:withFence:`.
+  Each command buffer samples the frame's two planes as two textures. With one
+  band neither method runs and the GPU does not read the frame.
+
+Both run on the Mac. The guest's Metal commands are replayed by one
+`ParavirtualizedGraphicsGPUTask` process per guest process, and scaler
+requests (`AppleM2ScalerParavirtDriver`) by the VM process. Both end in the
+Mac's IOSurface implicit synchronization, which the guest cannot see.
+
+### Host synchronization
+
+From the Mac's kdebug class `0x8521` (see [Measuring](#measuring)):
+
+- The VM process runs scaler requests one at a time, and registers the write
+  0.25–0.8 ms after taking a request.
+- The GPU task registers a command buffer's accesses on its own path, and can
+  register a band read inside that window, before the write.
+- A command buffer registers each texture on its own, so the frame's two
+  planes are two registrations, and another registration can land between
+  them.
+- Once a writer waits, new readers queue behind it.
+
+At the deadlock, a band read registered plane 0 of the current frame, the
+scaler's write registered 1 µs later and waited for it, and the same command
+buffer's plane 1 registration 1 µs after that queued behind the write. The
+surface was never released again; the scaler queue and the GPU FIFO stopped
+together. In two traced runs a band read registered before the write in 26 of
+779 and 20 of 564 frames. Most such inversions are harmless, because the write
+waits for the read; only the 1–2 µs between two plane registrations
+deadlocks, which fits a freeze after tens of seconds.
+
+### The fix
+
+Before the first band read of each frame (keyed by IOSurface ID),
+`avconferenced` runs one synchronous transform between two scratch surfaces,
+64x64 to 32x32. When `avconferenced` reads a frame, the VM process has always
+taken the request that writes it already (779 of 779 frames, at least 234 µs
+earlier), and a synchronous transform returns only after the host released its
+write. The scaler runs requests in order, so when the barrier returns the
+frame's write is done and no band read can meet it.
+
+Neither method takes a floating-point argument, and the score method returns a
+C++ future through `x8`, so the replacement saves `x0`–`x8`, calls the barrier
+with the frame and continues into the original. If either method is missing,
+nothing is replaced and the library logs `VCPSideCarMetal band reads not
+found`.
+
+Ruled out:
+
+- `IOSurfaceLock` before the reads returns within microseconds without waiting
+  for the host's write, and still deadlocked after 25 s.
+- Waiting after the write in backboardd: QuartzCore reaches the scaler through
+  a branch island, not its GOT, so an interpose does not see the call.
+- One band per frame avoids the deadlock but gives up the lower latency bands
+  are for.
+- Leaving the scaler out of the VM configuration
+  (`_VZMacScalerAcceleratorDeviceConfiguration`) would change every guest
+  process that uses it; not tried.
+
+### Validation
+
+Four bands while swiping back and forth on the home screen, unless noted:
+
+| `avconferenced` | Duration | Result |
+| --- | --- | --- |
+| unchanged | 18 s | deadlock |
+| `IOSurfaceLock` before the reads | 25 s | deadlock |
+| barrier | 60 s | no scaler write waited, no GPU error |
+| barrier, after a reboot, traced | 180 s | no IOSurface access waited; every band read of 6258 frames after the write's release |
+| barrier, after another reboot | 300 s | no GPU error, about 41 fps |
+| barrier, one band | 90 s | about 55 fps as before, no barrier transform |
+
+The barrier relies on two host behaviors that were observed, not documented:
+scaler requests run one at a time and in order, and a frame's request is taken
+before `avconferenced` reads the frame. A surface reused for two consecutive
+frames would skip the second barrier; this was not seen, since
+`temporalTransitionScore` holds the previous frame, and all 74651 band-read
+command buffers of the 180 s run came after their frame's barrier.
+
+### Cost
+
+- Only `avconferenced`, and only when frames are split into bands: the two
+  methods are not called otherwise. A single-band stream keeps its frame rate
+  and the host sees no barrier transform.
+- `avconferenced` waits in the barrier about 2 ms a frame, but without it most
+  band reads waited on the host for the same write. What the barrier adds is
+  the time from the write's release to the first band read: 760 µs median,
+  442 µs at least.
+- Four bands ran at 35–41 fps with the barrier, against about 29 fps without
+  it before the deadlock.
+- The host runs one extra 64x64 to 32x32 transform per frame.
 
 ## Known issue: stalls and growing latency under load
 
@@ -420,6 +544,9 @@ seconds.
 - Touch input sent from DeviceHub has no automated check.
 - The `0x14` port offset in the conditional dispatch is fixed, not derived;
   check it on the next 27.x build.
+- The band-read barrier was tested on the 27.0.1 iPhone only. It depends on
+  two private `VCPSideCarMetal` method names; if they change, the library logs
+  that they were not found and banded streams can deadlock again.
 
 ## Measuring
 
@@ -451,6 +578,13 @@ seconds.
   `Health: VCVideoPlayer` (presentation times) and `VCPDec` (decoder input).
   Player addresses are reused across streams, so start a stream's series at
   its `displayLinkTickCount=0` line rather than matching the pointer.
+- **Host IOSurface synchronization:** `sudo ktrace dump -b 1024 -T 210s -f
+  C0x85 <file>` while streaming, then `ktrace trace -R <file> -N --ndjson`. In
+  class `0x8521`, `0x85210000` registers an access, `0x85210004` waits,
+  `0x85210008` is granted and `0x8521000c` releases; `arg1` is 1 for the
+  scaler and other non-GPU access in the VM process and 2 for the GPU, `arg2`
+  the surface ID, `arg3` 1 for a read and 2 for a write. `0x8521001c` is the
+  scaler looking up a surface as it takes a request. A run writes 1–1.5 GB.
 - **Guest logs:** vphoned `logs.syslog` takes `level` `all`, `error` or
   `fault`; info lines are not persisted. `avconferenced` prints
   `fvdp_statsReport`, `VCPEnc` and `Health: VideoTransmitter` every second.
