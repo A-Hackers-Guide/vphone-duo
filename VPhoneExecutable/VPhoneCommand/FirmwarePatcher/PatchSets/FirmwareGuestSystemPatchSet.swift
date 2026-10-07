@@ -19,6 +19,9 @@ public enum FirmwareGuestSystemPatchSet {
     public static let settingsSoftwareUpdate = "dyld-exp-settings_software_update_row"
     public static let settingsRowPatches: Set<String> = [settingsRootRows, settingsSoftwareUpdate]
 
+    public static let installCoordinationPersona = "system-installcoordination_proxy-cfw-persona_lookup"
+    public static let installCoordinationPersonaMarker = "/usr/lib/vphone-installcoordination-persona-lookup"
+
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
 
     /// The bases where short-circuiting `checkTrustAndAuthorization` in the
@@ -156,6 +159,14 @@ public enum FirmwareGuestSystemPatchSet {
                 title: "Campo entitlements",
                 summary: "Widens Campo's entitlements so the 27 setup assistant completes.",
                 target: .guestEntitlements(path: "/System/Library/PrivateFrameworks/Campo.framework/Campo"),
+                applicability: ios27,
+            ),
+
+            VPhonePatchDeclaration(
+                identifier: installCoordinationPersona,
+                title: "Xcode installation persona lookup",
+                summary: "Allows only the CoreDevice installation proxy to look up UserManager through the launchd hook on the hybrid guest.",
+                target: .guestFile(path: installCoordinationPersonaMarker),
                 applicability: ios27,
             ),
 

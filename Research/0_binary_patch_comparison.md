@@ -2788,3 +2788,21 @@ DeviceTree are also in Preboot and could follow the same path later.
 ## Optional Settings row hiding (WIP, 2026-10-07)
 
 Two standard-blocked declarations hide Apple Account, Game Center, iCloud and Wallet in Preferences (`system-preferences-exp-root_rows`) and Software Update in GeneralSettingsUI (`dyld-exp-settings_software_update_row`). Native discovery is restricted to reviewed 24A435 inputs. The installer uses pristine executable backups and cache undo records with page re-attestation. All five rows passed guest rollback, reapplication and reboot checks. See [research report](Guest/2026-10-07_reverse-settings-rows-report.md). Broader firmware coverage and bundled deployment remain WIP; no kernel/SEP or runtime hook changes are included.
+
+## CoreDevice install proxy persona lookup (2026-10-07)
+
+`system-installcoordination_proxy-cfw-persona_lookup` is an iOS-27 guest
+compatibility patch, enabled in standard. Its root-owned marker
+`/usr/lib/vphone-installcoordination-persona-lookup` enables the existing
+launchd hook to allow only the system `installcoordination_proxy`, verified by
+executable path, signing identifier and kernel-validated audit token, to look
+up `com.apple.mobile.usermanagerd.xpc`. Other requests retain their original
+sandbox check. Disabling the patch removes the marker. Both CFW install and
+environment update reconcile its receipt. No kernel or proxy binary patch is
+needed; an experimental entitlement-only version is restored from backup.
+
+The original failure is a Protobox mach-lookup denial before UserManager's
+persona-fetch authorization. Adding a temporary exception entitlement was
+verified ineffective on the running guest and has been removed. IDA analysis
+of this guest's launchd confirms the bootstrap lookup gate and name filters
+2, 3 and 12. See [evidence, implementation and validation](Guest/ios27_xcode_persona_lookup.md).

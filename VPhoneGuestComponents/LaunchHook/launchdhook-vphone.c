@@ -1,6 +1,7 @@
 #include "../Shared/InjectionEnvironment.h"
 #include "../Shared/RootHideLoaderLinks.h"
 #include <fcntl.h>
+#include <stdint.h>
 #include <limits.h>
 #include <spawn.h>
 #include <stdarg.h>
@@ -180,6 +181,8 @@ static void vpLogVolumeAllow(const char *name) {
     close(fd);
 }
 
+#include "InstallCoordinationPersona.h"
+
 static int vpSandboxCheckByAuditToken(vp_audit_token_t token, const char *operation,
                                       unsigned int filter, ...) {
     va_list arguments;
@@ -191,6 +194,10 @@ static int vpSandboxCheckByAuditToken(vp_audit_token_t token, const char *operat
     if (operation && (filter == VPSandboxFilterGlobalName || filter == VPSandboxFilterLocalName) &&
         first && strcmp(operation, "mach-lookup") == 0 &&
         strcmp((const char *)first, VP_AVVOLUME_SERVICE) == 0) {
+        vpLogVolumeAllow((const char *)first);
+        return 0;
+    }
+    if (vpInstallProxyPersonaAllowed(token, operation, filter, first)) {
         vpLogVolumeAllow((const char *)first);
         return 0;
     }
