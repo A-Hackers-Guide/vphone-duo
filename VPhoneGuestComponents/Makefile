@@ -72,6 +72,16 @@ DEVICEHUBFIX_DYNAMIC_LOOKUP_SYMS := \
 DEVICENAME := $(STAGE)/devicename/libdevicename.dylib
 DEVICENAME_SOURCES := $(wildcard DeviceName/*.c)
 DEVICENAME_INCLUDES := $(wildcard DeviceName/*.h)
+# Foundation and the ObjC runtime for the Settings follow-up swizzle; CoreFollowUp
+# is reached through the runtime at runtime, so it needs nothing at link time.
+PREFSFIX := $(STAGE)/prefsfix/libprefsfix.dylib
+PREFSFIX_SOURCES := $(wildcard PrefsFix/*.m PrefsFix/*.c)
+PREFSFIX_INCLUDES := $(wildcard PrefsFix/*.h)
+# Foundation + ObjC runtime for the sign-in presentation swizzles; AppleAccountUI
+# etc. are reached through the runtime at runtime, so nothing is needed at link.
+SIGNINFIX := $(STAGE)/signinfix/libsigninfix.dylib
+SIGNINFIX_SOURCES := $(wildcard SignInFix/*.m SignInFix/*.c)
+SIGNINFIX_INCLUDES := $(wildcard SignInFix/*.h)
 GPU_PLUGIN := $(STAGE)/gpu/libAppleParavirtCompilerPluginIOGPUFamily.dylib
 GPU_PLUGIN_SOURCES := $(wildcard GraphicLoader/*.mm)
 GPU_PLUGIN_INCLUDES := $(wildcard GraphicLoader/*.h GraphicLoader/*.hpp GraphicLoader/*.inc)
@@ -105,7 +115,7 @@ GPU_DYNAMIC_LOOKUP_SYMS := \
 VIRTIOSOUND := $(STAGE)/virtiosound/VPhoneVirtIOSound.driver
 VIRTIOSOUND_SOURCES := $(wildcard VirtIOSound/*.m VirtIOSound/*.c)
 VIRTIOSOUND_INCLUDES := $(wildcard VirtIOSound/*.h) VirtIOSound/Info.plist VirtIOSound/AudioServerDriver.tbd
-ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(HAPTICSFIX) $(BATTERYHEALTHFIX) $(DEVICEHUBFIX) $(DEVICENAME) $(GPU_PLUGIN) $(VIRTIOSOUND)
+ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(HAPTICSFIX) $(BATTERYHEALTHFIX) $(DEVICEHUBFIX) $(DEVICENAME) $(PREFSFIX) $(SIGNINFIX) $(GPU_PLUGIN) $(VIRTIOSOUND)
 PLISTS := $(STAGE)/camfix/libcamfix.plist $(STAGE)/vcamcaptured/libvcamcaptured.plist \
 	$(STAGE)/misfix/libmisfix.plist
 GPU_PROVENANCE := $(STAGE)/gpu/README.md
@@ -120,7 +130,7 @@ gpu: $(GPU_PLUGIN)
 
 package: all
 	@rm -f $(ARCHIVE)
-	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix hapticsfix batteryhealthfix devicehubfix devicename gpu virtiosound
+	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix hapticsfix batteryhealthfix devicehubfix devicename prefsfix signinfix gpu virtiosound
 	@echo "Packaged $(ARCHIVE)"
 
 test-loader-links:
@@ -180,7 +190,7 @@ test-vcam-dataplane:
 		-framework CoreGraphics
 	@$(OUT)/VCamDataPlaneTests
 
-$(STAGE)/camfix $(STAGE)/vcamcaptured $(STAGE)/launchhook $(STAGE)/systemhook $(STAGE)/misfix $(STAGE)/hapticsfix $(STAGE)/batteryhealthfix $(STAGE)/devicehubfix $(STAGE)/devicename $(STAGE)/gpu $(STAGE)/virtiosound:
+$(STAGE)/camfix $(STAGE)/vcamcaptured $(STAGE)/launchhook $(STAGE)/systemhook $(STAGE)/misfix $(STAGE)/hapticsfix $(STAGE)/batteryhealthfix $(STAGE)/devicehubfix $(STAGE)/devicename $(STAGE)/prefsfix $(STAGE)/signinfix $(STAGE)/gpu $(STAGE)/virtiosound:
 	@mkdir -p $@
 
 $(CAMFIX): $(CAMFIX_SOURCES) $(CAMFIX_INPUTS) | $(STAGE)/camfix
@@ -248,6 +258,22 @@ $(DEVICENAME): $(DEVICENAME_SOURCES) $(DEVICENAME_INCLUDES) DeviceName | $(STAGE
 		-install_name /usr/lib/libdevicename.dylib \
 		-o $@ $(DEVICENAME_SOURCES) \
 		-framework CoreFoundation -framework SystemConfiguration \
+		-Wl,-not_for_dyld_shared_cache
+	@codesign --force --sign - $@
+
+$(PREFSFIX): $(PREFSFIX_SOURCES) $(PREFSFIX_INCLUDES) PrefsFix | $(STAGE)/prefsfix
+	$(CLANG) $(COMMON_FLAGS) -dynamiclib \
+		-install_name /usr/lib/libprefsfix.dylib \
+		-o $@ $(PREFSFIX_SOURCES) \
+		-framework Foundation -lobjc \
+		-Wl,-not_for_dyld_shared_cache
+	@codesign --force --sign - $@
+
+$(SIGNINFIX): $(SIGNINFIX_SOURCES) $(SIGNINFIX_INCLUDES) SignInFix | $(STAGE)/signinfix
+	$(CLANG) $(COMMON_FLAGS) -dynamiclib \
+		-install_name /usr/lib/libsigninfix.dylib \
+		-o $@ $(SIGNINFIX_SOURCES) \
+		-framework Foundation -lobjc \
 		-Wl,-not_for_dyld_shared_cache
 	@codesign --force --sign - $@
 
