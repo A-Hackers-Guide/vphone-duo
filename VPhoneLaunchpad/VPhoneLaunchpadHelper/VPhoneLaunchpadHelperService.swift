@@ -8,12 +8,19 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
     private let callerGID: gid_t
     private let work = DispatchQueue(label: "com.vphone.launchpad.helper.work")
 
-    /// One CFW install at a time across every connection: two installs
-    /// host-mounting disks at once is never what anyone wants. The owner is
-    /// the user that started it, the only one allowed to cancel it.
+    /// The CFW installs, environment updates and kernel updates running, one
+    /// per machine at most, across every connection and user. Which may start
+    /// is `VPhoneLaunchpadHelperFirmwareAdmission`. The owner is the user that
+    /// started a run, the only one allowed to cancel it.
     private static let firmwareLock = NSLock()
-    private nonisolated(unsafe) static var firmwareProcess: Process?
-    private nonisolated(unsafe) static var firmwareOwner: uid_t?
+    private nonisolated(unsafe) static var firmwareRuns: [VPhoneLaunchpadHelperFirmwareRequest.MachineKey: FirmwareRun] = [:]
+
+    private struct FirmwareRun {
+        let process: Process
+        let owner: uid_t
+        /// Devices of the volumes the run writes to.
+        let volumes: Set<dev_t>
+    }
 
     init(connection: NSXPCConnection) {
         self.connection = connection
@@ -125,9 +132,9 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
         )
     }
 
-    /// Both operations share one slot, so an install and an environment
-    /// update never write the same machine at once, and one cancel stops
-    /// either.
+    /// All three operations share one slot per machine, so an install and
+    /// an update never write the same machine at once, and one cancel for
+    /// that machine stops whichever is running.
     private func runFirmware(
         _ operation: VPhoneLaunchpadHelperFirmwareRequest.Operation,
         authorization: Data,
@@ -165,19 +172,23 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
             process.standardOutput = pipe
             process.standardError = pipe
 
+            // Checked and registered in one critical section, so two requests
+            // cannot both pass before either is counted.
             Self.firmwareLock.lock()
-            guard Self.firmwareProcess == nil else {
+            if let refusal = Self.firmwareRefusal(for: request) {
                 Self.firmwareLock.unlock()
-                reply(-1, "Another CFW install or environment update is in progress. Wait for it to finish, then try again.")
+                reply(-1, refusal)
                 return
             }
-            Self.firmwareProcess = process
-            Self.firmwareOwner = callerUID
+            Self.firmwareRuns[request.machineKey] = FirmwareRun(
+                process: process,
+                owner: callerUID,
+                volumes: Set(request.volumes.keys),
+            )
             Self.firmwareLock.unlock()
             defer {
                 Self.firmwareLock.lock()
-                Self.firmwareProcess = nil
-                Self.firmwareOwner = nil
+                Self.firmwareRuns[request.machineKey] = nil
                 Self.firmwareLock.unlock()
             }
 
@@ -192,6 +203,20 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
             process.waitUntilExit()
             finishOutput()
             reply(process.terminationStatus, nil)
+        }
+    }
+
+    /// Why a run may not start now, or nil. Called with `firmwareLock` held;
+    /// the capacity queries it makes are quick.
+    private static func firmwareRefusal(for request: VPhoneLaunchpadHelperFirmwareRequest) -> String? {
+        VPhoneLaunchpadHelperFirmwareAdmission.refusal(
+            machine: request.machineKey,
+            volumes: request.volumes,
+            running: firmwareRuns.mapValues(\.volumes),
+        ) { path in
+            (try? URL(fileURLWithPath: path)
+                .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+                .volumeAvailableCapacityForImportantUsage) ?? 0
         }
     }
 
@@ -260,7 +285,11 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
         }
     }
 
-    func cancelCustomFirmware(reply: @escaping @Sendable () -> Void) {
+    func cancelCustomFirmware(
+        machineName: String,
+        libraryRoot: String,
+        reply: @escaping @Sendable () -> Void,
+    ) {
         let callerUID = callerUID
         // Not on `work`: a bundle install queued there must not delay a cancel.
         // No authorization check: the install's right may have expired by
@@ -268,9 +297,16 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
         // user who started the install can stop it.
         DispatchQueue.global(qos: .userInitiated).async {
             defer { reply() }
+            // A machine that cannot be found has nothing running to stop.
+            guard let machine = try? VPhoneLaunchpadHelperFirmwareRequest.machineKey(
+                libraryRoot: libraryRoot,
+                machineName: machineName,
+            ) else { return }
             Self.firmwareLock.lock()
-            if Self.firmwareOwner == callerUID {
-                Self.firmwareProcess?.interrupt()
+            // A run is registered just before its process starts, and
+            // interrupting a process that has not started raises.
+            if let run = Self.firmwareRuns[machine], run.owner == callerUID, run.process.isRunning {
+                run.process.interrupt()
             }
             Self.firmwareLock.unlock()
         }
@@ -319,7 +355,7 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
     /// connection fails, or 30 seconds pass. Without it the request's reply
     /// could overtake the last lines, which then reach an app that has stopped
     /// listening: the output a command flushes when it exits never made the
-    /// console log. Bounded, so a stuck app cannot hold the install lock.
+    /// console log. Bounded, so a stuck app cannot hold its machine's slot.
     private func finishOutput() {
         let handled = DispatchSemaphore(value: 0)
         let proxy = connection?.remoteObjectProxyWithErrorHandler { _ in handled.signal() }

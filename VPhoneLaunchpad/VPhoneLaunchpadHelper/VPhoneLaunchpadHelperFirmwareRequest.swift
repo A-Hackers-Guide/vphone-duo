@@ -15,10 +15,20 @@ struct VPhoneLaunchpadHelperFirmwareRequest {
         case updateKernel
     }
 
+    typealias MachineKey = VPhoneLaunchpadHelperFirmwareAdmission.MachineKey
+
+    /// The installer's work parent, `VPhoneCustomFirmwareInstaller.workParent`:
+    /// every run makes its private work folder there.
+    static let workParent = "/private/var/tmp"
+
     let executable: URL
     let arguments: [String]
     let environment: [String: String]
     let workingDirectory: URL
+    let machineKey: MachineKey
+    /// The volumes the run writes to, by device, each with a path on it: the
+    /// machine folder's and the work parent's. One entry when they share one.
+    let volumes: [dev_t: String]
 
     init(
         operation: Operation,
@@ -45,9 +55,13 @@ struct VPhoneLaunchpadHelperFirmwareRequest {
         // to the caller. The caller can still rename these afterwards, so this
         // only refuses a bad request up front; the root vphone-cli child pins
         // the machine directory again itself before it touches anything.
-        try Self.requireMachine(libraryRoot: libraryRoot, machineName: machineName, ownedBy: callerUID)
+        let folder = try Self.requireMachine(libraryRoot: libraryRoot, machineName: machineName, ownedBy: callerUID)
         let machine = URL(fileURLWithPath: libraryRoot, isDirectory: true)
             .appendingPathComponent(machineName, isDirectory: true)
+        var work = stat()
+        guard stat(Self.workParent, &work) == 0 else {
+            throw VPhoneLaunchpadHelperError("Unable to read \(Self.workParent): \(String(cString: strerror(errno)))")
+        }
 
         var arguments: [String]
         switch operation {
@@ -65,24 +79,44 @@ struct VPhoneLaunchpadHelperFirmwareRequest {
         self.executable = executable
         self.arguments = arguments
         workingDirectory = machine
+        machineKey = MachineKey(device: folder.st_dev, inode: folder.st_ino)
+        // Not one literal: equal keys in a dictionary literal trap.
+        var volumes = [work.st_dev: Self.workParent]
+        volumes[folder.st_dev] = machine.path
+        self.volumes = volumes
         // The same environment `sudo vphone-cli cfw install` sees: SUDO_UID
         // and SUDO_GID are how the installer hands root-created files back
         // to the user afterwards.
         environment = try VPhoneLaunchpadHelperLibraryPath.environment(callerUID: callerUID, callerGID: callerGID)
     }
 
+    /// The machine a cancel names. It checks no ownership: the operation
+    /// found under the key is stopped only for the user who started it.
+    static func machineKey(libraryRoot: String, machineName: String) throws -> MachineKey {
+        guard VPhoneLaunchpadNames.isValidMachineName(machineName) else {
+            throw VPhoneLaunchpadHelperError("\"\(machineName)\" is not a valid machine name.")
+        }
+        let root = try VPhoneLaunchpadHelperLibraryPath.openDirectory(libraryRoot)
+        defer { close(root) }
+        let machine = try openMachine(root, libraryRoot: libraryRoot, machineName: machineName)
+        defer { close(machine) }
+        var folder = stat()
+        guard fstat(machine, &folder) == 0 else {
+            throw VPhoneLaunchpadHelperError("\(libraryRoot)/\(machineName) is not a folder.")
+        }
+        return MachineKey(device: folder.st_dev, inode: folder.st_ino)
+    }
+
     // MARK: - Machine directory
 
-    private static func requireMachine(libraryRoot: String, machineName: String, ownedBy uid: uid_t) throws {
+    /// Returns the machine folder's metadata.
+    private static func requireMachine(libraryRoot: String, machineName: String, ownedBy uid: uid_t) throws -> stat {
         let root = try VPhoneLaunchpadHelperLibraryPath.openDirectory(libraryRoot)
         defer { close(root) }
         try VPhoneLaunchpadHelperLibraryPath.requireOwner(root, libraryRoot, uid)
 
         let machinePath = libraryRoot + "/" + machineName
-        let machine = openat(root, machineName, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-        guard machine >= 0 else {
-            throw VPhoneLaunchpadHelperError("\(machinePath) is not a folder, or is a symbolic link.")
-        }
+        let machine = try openMachine(root, libraryRoot: libraryRoot, machineName: machineName)
         defer { close(machine) }
         try VPhoneLaunchpadHelperLibraryPath.requireOwner(machine, machinePath, uid)
 
@@ -96,5 +130,18 @@ struct VPhoneLaunchpadHelperFirmwareRequest {
         guard disk.st_uid == uid else {
             throw VPhoneLaunchpadHelperError("\(machinePath)/Disk.img is not owned by your user account.")
         }
+        var folder = stat()
+        guard fstat(machine, &folder) == 0 else {
+            throw VPhoneLaunchpadHelperError("\(machinePath) is not a folder.")
+        }
+        return folder
+    }
+
+    private static func openMachine(_ root: Int32, libraryRoot: String, machineName: String) throws -> Int32 {
+        let machine = openat(root, machineName, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard machine >= 0 else {
+            throw VPhoneLaunchpadHelperError("\(libraryRoot)/\(machineName) is not a folder, or is a symbolic link.")
+        }
+        return machine
     }
 }

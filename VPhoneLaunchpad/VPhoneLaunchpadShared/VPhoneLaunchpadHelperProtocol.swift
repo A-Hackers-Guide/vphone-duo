@@ -47,8 +47,14 @@ nonisolated protocol VPhoneLaunchpadHelperProtocol {
 
     /// Runs `vphone-cli cfw install` from a store bundle as root, on behalf of
     /// the calling user. Output lines arrive through
-    /// `VPhoneLaunchpadHelperClientProtocol`. Replies with the exit status and
-    /// an error message when the request was refused before running.
+    /// `VPhoneLaunchpadHelperClientProtocol` on the connection that made the
+    /// request, so the app opens one connection per operation. Replies with
+    /// the exit status and an error message when the request was refused
+    /// before running.
+    ///
+    /// One operation per machine at a time; different machines run side by
+    /// side, provided each volume they write to keeps enough free space for
+    /// every operation already running on it.
     func installCustomFirmware(
         authorization: Data,
         bundleVersion: String,
@@ -94,9 +100,14 @@ nonisolated protocol VPhoneLaunchpadHelperProtocol {
         reply: @escaping @Sendable (String?, String?) -> Void,
     )
 
-    /// Sends SIGINT to a running CFW install started by the same user. It
-    /// needs no authorization: it can only stop the caller's own install.
-    func cancelCustomFirmware(reply: @escaping @Sendable () -> Void)
+    /// Sends SIGINT to the CFW install, environment update or kernel update
+    /// running on one machine, when the same user started it. It needs no
+    /// authorization: it can only stop the caller's own operation.
+    func cancelCustomFirmware(
+        machineName: String,
+        libraryRoot: String,
+        reply: @escaping @Sendable () -> Void,
+    )
 
     /// Removes the helper's launchd job and binary, then exits.
     func uninstallHelper(authorization: Data, reply: @escaping @Sendable (String?) -> Void)

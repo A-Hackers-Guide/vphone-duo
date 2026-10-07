@@ -5679,13 +5679,13 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在更新客户机环境…" } }
       }
     },
-    "Another CFW install or environment update is in progress. Wait for it to finish, then try again." : {
+    "A CFW install or environment update is already running on this machine. Wait for it to finish, then try again." : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Another CFW install or environment update is in progress. Wait for it to finish, then try again." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "別の CFW インストールまたはゲスト環境の更新が実行中です。完了するまで待ってから、もう一度お試しください。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "다른 CFW 설치 또는 게스트 환경 업데이트가 진행 중입니다. 완료될 때까지 기다린 후 다시 시도하십시오." } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Một lần cài CFW hoặc cập nhật môi trường máy khách khác đang chạy. Hãy đợi nó xong rồi thử lại." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "另一个 CFW 安装或客户机环境更新正在进行。请等它完成后再试。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "A CFW install or environment update is already running on this machine. Wait for it to finish, then try again." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このマシンでは CFW インストールまたはゲスト環境の更新がすでに実行中です。完了するまで待ってから、もう一度お試しください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 머신에서 CFW 설치 또는 게스트 환경 업데이트가 이미 진행 중입니다. 완료될 때까지 기다린 후 다시 시도하십시오." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Máy này đang chạy một lần cài CFW hoặc cập nhật môi trường máy khách. Hãy đợi nó xong rồi thử lại." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这台机器上已有 CFW 安装或客户机环境更新正在进行。请等它完成后再试。" } }
       }
     },
     "Unable to update the guest environment." : {

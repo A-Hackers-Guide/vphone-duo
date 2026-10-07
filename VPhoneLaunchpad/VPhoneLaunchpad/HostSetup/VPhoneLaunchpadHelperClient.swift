@@ -20,7 +20,8 @@ final class VPhoneLaunchpadHelperClient {
 
     private(set) var state: State = .unknown
     private var connection: NSXPCConnection?
-    private let receiver = VPhoneLaunchpadHelperReceiver()
+    /// Machines with a CFW install or update running, by `firmwareKey`.
+    private var firmwareMachines: Set<String> = []
     private let authorizationSession = VPhoneLaunchpadHelperAuthorizationSession()
 
     private nonisolated static let label = VPhoneLaunchpadHelperIdentity.label
@@ -253,29 +254,15 @@ final class VPhoneLaunchpadHelperClient {
         keepArtifacts: Bool,
         onLine: @escaping @Sendable (String) -> Void,
     ) async throws -> Int32 {
-        let authorization = try await authorizationSession.externalForm()
-        guard receiver.claim(onLine) else {
-            throw Self.firmwareBusy
-        }
-        defer { receiver.release() }
-        return try await withTaskCancellationHandler {
-            try await request { proxy, done in
-                proxy.installCustomFirmware(
-                    authorization: authorization,
-                    bundleVersion: bundleVersion,
-                    machineName: machineName,
-                    libraryRoot: libraryRoot,
-                    keepArtifacts: keepArtifacts,
-                ) { status, message in
-                    if let message {
-                        done(.failure(VPhoneLaunchpadError(message)))
-                    } else {
-                        done(.success(status))
-                    }
-                }
-            }
-        } onCancel: {
-            Task { @MainActor in self.cancelCustomFirmware() }
+        try await runFirmware(machineName: machineName, libraryRoot: libraryRoot, onLine: onLine) { proxy, authorization, reply in
+            proxy.installCustomFirmware(
+                authorization: authorization,
+                bundleVersion: bundleVersion,
+                machineName: machineName,
+                libraryRoot: libraryRoot,
+                keepArtifacts: keepArtifacts,
+                reply: reply,
+            )
         }
     }
 
@@ -287,28 +274,14 @@ final class VPhoneLaunchpadHelperClient {
         libraryRoot: String,
         onLine: @escaping @Sendable (String) -> Void,
     ) async throws -> Int32 {
-        let authorization = try await authorizationSession.externalForm()
-        guard receiver.claim(onLine) else {
-            throw Self.firmwareBusy
-        }
-        defer { receiver.release() }
-        return try await withTaskCancellationHandler {
-            try await request { proxy, done in
-                proxy.updateGuestEnvironment(
-                    authorization: authorization,
-                    bundleVersion: bundleVersion,
-                    machineName: machineName,
-                    libraryRoot: libraryRoot,
-                ) { status, message in
-                    if let message {
-                        done(.failure(VPhoneLaunchpadError(message)))
-                    } else {
-                        done(.success(status))
-                    }
-                }
-            }
-        } onCancel: {
-            Task { @MainActor in self.cancelCustomFirmware() }
+        try await runFirmware(machineName: machineName, libraryRoot: libraryRoot, onLine: onLine) { proxy, authorization, reply in
+            proxy.updateGuestEnvironment(
+                authorization: authorization,
+                bundleVersion: bundleVersion,
+                machineName: machineName,
+                libraryRoot: libraryRoot,
+                reply: reply,
+            )
         }
     }
 
@@ -320,28 +293,14 @@ final class VPhoneLaunchpadHelperClient {
         libraryRoot: String,
         onLine: @escaping @Sendable (String) -> Void,
     ) async throws -> Int32 {
-        let authorization = try await authorizationSession.externalForm()
-        guard receiver.claim(onLine) else {
-            throw Self.firmwareBusy
-        }
-        defer { receiver.release() }
-        return try await withTaskCancellationHandler {
-            try await request { proxy, done in
-                proxy.updateKernel(
-                    authorization: authorization,
-                    bundleVersion: bundleVersion,
-                    machineName: machineName,
-                    libraryRoot: libraryRoot,
-                ) { status, message in
-                    if let message {
-                        done(.failure(VPhoneLaunchpadError(message)))
-                    } else {
-                        done(.success(status))
-                    }
-                }
-            }
-        } onCancel: {
-            Task { @MainActor in self.cancelCustomFirmware() }
+        try await runFirmware(machineName: machineName, libraryRoot: libraryRoot, onLine: onLine) { proxy, authorization, reply in
+            proxy.updateKernel(
+                authorization: authorization,
+                bundleVersion: bundleVersion,
+                machineName: machineName,
+                libraryRoot: libraryRoot,
+                reply: reply,
+            )
         }
     }
 
@@ -371,15 +330,46 @@ final class VPhoneLaunchpadHelperClient {
         }
     }
 
-    /// Never prompts. The helper stops only an install this user started.
-    func cancelCustomFirmware() {
+    /// Never prompts. The helper stops only an operation this user started on
+    /// that machine.
+    func cancelCustomFirmware(machineName: String, libraryRoot: String) {
         let proxy = currentConnection().remoteObjectProxy as? VPhoneLaunchpadHelperProtocol
-        proxy?.cancelCustomFirmware {}
+        proxy?.cancelCustomFirmware(machineName: machineName, libraryRoot: libraryRoot) {}
     }
 
-    /// A CFW install or environment update from this app is still streaming.
-    private static var firmwareBusy: VPhoneLaunchpadError {
-        VPhoneLaunchpadError(String(localized: "Another CFW install or environment update is in progress. Wait for it to finish, then try again."))
+    /// Runs one CFW install or update on its own connection. The helper sends
+    /// output lines only over the connection that made the request, so each
+    /// operation's lines reach its own receiver, and operations on different
+    /// machines run side by side. One machine runs one operation at a time.
+    private func runFirmware(
+        machineName: String,
+        libraryRoot: String,
+        onLine: @escaping @Sendable (String) -> Void,
+        _ body: @escaping (VPhoneLaunchpadHelperProtocol, Data, @escaping @Sendable (Int32, String?) -> Void) -> Void,
+    ) async throws -> Int32 {
+        let key = URL(fileURLWithPath: libraryRoot, isDirectory: true)
+            .appendingPathComponent(machineName)
+            .standardizedFileURL.resolvingSymlinksInPath().path
+        guard firmwareMachines.insert(key).inserted else {
+            throw VPhoneLaunchpadError(String(localized: "A CFW install or environment update is already running on this machine. Wait for it to finish, then try again."))
+        }
+        defer { firmwareMachines.remove(key) }
+        let authorization = try await authorizationSession.externalForm()
+        let connection = makeConnection(receiver: VPhoneLaunchpadHelperReceiver(onLine))
+        defer { connection.invalidate() }
+        return try await withTaskCancellationHandler {
+            try await request(on: connection) { proxy, done in
+                body(proxy, authorization) { status, message in
+                    if let message {
+                        done(.failure(VPhoneLaunchpadError(message)))
+                    } else {
+                        done(.success(status))
+                    }
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in self.cancelCustomFirmware(machineName: machineName, libraryRoot: libraryRoot) }
+        }
     }
 
     // MARK: - XPC plumbing
@@ -388,29 +378,43 @@ final class VPhoneLaunchpadHelperClient {
         if let connection {
             return connection
         }
-        let connection = NSXPCConnection(machServiceName: Self.label, options: .privileged)
-        connection.remoteObjectInterface = NSXPCInterface(with: VPhoneLaunchpadHelperProtocol.self)
-        connection.exportedInterface = NSXPCInterface(with: VPhoneLaunchpadHelperClientProtocol.self)
-        connection.exportedObject = receiver
-        if let helperRequirement {
-            connection.setCodeSigningRequirement(helperRequirement)
-        }
         // XPC calls this and the error handlers below on its own queue. Without
         // @Sendable they would inherit the main actor, and Swift 6 traps when
         // they run there.
-        connection.invalidationHandler = { @Sendable [weak self] in
+        let connection = makeConnection { @Sendable [weak self] in
             Task { @MainActor in self?.connection = nil }
         }
-        connection.resume()
         self.connection = connection
         return connection
     }
 
-    /// One request whose reply carries a value.
+    /// A resumed connection to the helper. Only a firmware operation's own
+    /// connection takes a receiver, as only those requests stream output.
+    private func makeConnection(
+        receiver: VPhoneLaunchpadHelperReceiver? = nil,
+        invalidationHandler: (@Sendable () -> Void)? = nil,
+    ) -> NSXPCConnection {
+        let connection = NSXPCConnection(machServiceName: Self.label, options: .privileged)
+        connection.remoteObjectInterface = NSXPCInterface(with: VPhoneLaunchpadHelperProtocol.self)
+        if let receiver {
+            connection.exportedInterface = NSXPCInterface(with: VPhoneLaunchpadHelperClientProtocol.self)
+            connection.exportedObject = receiver
+        }
+        if let helperRequirement {
+            connection.setCodeSigningRequirement(helperRequirement)
+        }
+        connection.invalidationHandler = invalidationHandler
+        connection.resume()
+        return connection
+    }
+
+    /// One request whose reply carries a value, on `connection` or else the
+    /// shared one.
     private func request<T: Sendable>(
+        on connection: NSXPCConnection? = nil,
         _ body: (VPhoneLaunchpadHelperProtocol, @escaping @Sendable (Result<T, Error>) -> Void) -> Void,
     ) async throws -> T {
-        let connection = currentConnection()
+        let connection = connection ?? currentConnection()
         return try await withCheckedThrowingContinuation { continuation in
             let once = VPhoneLaunchpadResumeOnce(continuation)
             let proxy = connection.remoteObjectProxyWithErrorHandler { @Sendable error in
@@ -545,34 +549,17 @@ final nonisolated class VPhoneLaunchpadHelperAuthorizationSession: @unchecked Se
     }
 }
 
-/// Receives output lines the helper streams back during a CFW install.
-///
-/// One operation owns it at a time, as the helper runs one at a time. A second
-/// request made while one is streaming is turned away here: if it set its own
-/// handler, the running install's lines would go to the wrong log, and when it
-/// finished it would clear the handler the running install still needs.
-final nonisolated class VPhoneLaunchpadHelperReceiver: NSObject, VPhoneLaunchpadHelperClientProtocol, @unchecked Sendable {
-    private let lock = NSLock()
-    private var handler: (@Sendable (String) -> Void)?
+/// Receives the output lines the helper streams back during one CFW install
+/// or update, on that operation's own connection.
+final nonisolated class VPhoneLaunchpadHelperReceiver: NSObject, VPhoneLaunchpadHelperClientProtocol, Sendable {
+    private let handler: @Sendable (String) -> Void
 
-    /// Takes the receiver for one operation; false while another holds it.
-    func claim(_ handler: @escaping @Sendable (String) -> Void) -> Bool {
-        lock.withLock {
-            guard self.handler == nil else {
-                return false
-            }
-            self.handler = handler
-            return true
-        }
-    }
-
-    func release() {
-        lock.withLock { handler = nil }
+    init(_ handler: @escaping @Sendable (String) -> Void) {
+        self.handler = handler
     }
 
     func helperDidEmit(line: String) {
-        let handler = lock.withLock { self.handler }
-        handler?(line)
+        handler(line)
     }
 
     /// XPC hands this over after every line sent before it, so replying is
