@@ -28,16 +28,12 @@ extension VPhoneGuestDeviceNameError: CustomStringConvertible, LocalizedError {
 // MARK: - Device Name
 
 /// The guest shows the VM's name as its device name: what Xcode's device list
-/// and `xcrun devicectl list devices` report. vphone-vm hands it to the guest
-/// before every boot in the NVRAM variable `nvramVariable`, as the name's UTF-8
-/// bytes with no terminating NUL; guest hooks have configd publish it and
-/// lockdownd refuse to change it. A VM name that cannot be a device name is
-/// not handed over, and the guest keeps its own. A rename applies from the
-/// next boot.
+/// and `xcrun devicectl list devices` report. vphone-vm hands it to vphoned
+/// (`device.name.set`) after every connect; vphoned stores it where guest hooks
+/// read it, so configd publishes it and lockdownd refuses to change it, from
+/// that moment and from the start of every later boot. A VM name that cannot
+/// be a device name is not handed over, and the guest keeps its own.
 public enum VPhoneGuestDeviceName {
-    /// The NVRAM variable vphone-vm writes and the guest reads.
-    public static let nvramVariable = "vphone-device-name"
-
     /// The longest name accepted, in UTF-8 bytes. The guest applies the same
     /// limit (VPhoneGuestComponents/DeviceName/DeviceNamePolicy.c).
     public static let maximumByteCount = 255

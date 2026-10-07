@@ -55,6 +55,9 @@ final class VPhoneGuestControl {
     /// The guest's mDNS name from the manifest, applied on every connect; nil
     /// puts back a name vphoned replaced, and leaves any other alone.
     @ObservationIgnored var guestLocalHostName: String?
+    /// The guest's device name, the VM's name, applied on every connect; nil
+    /// gives the guest its own back.
+    @ObservationIgnored var guestDeviceName: String?
     /// Names the guest resolves locally, worked out on each connect (the Mac's
     /// name or a bridged address can change while the VM runs). Nil sends
     /// nothing.
@@ -228,6 +231,9 @@ final class VPhoneGuestControl {
                 }
                 if capabilities.contains("network_hostname") {
                     Task { await applyGuestLocalHostName(guestLocalHostName) }
+                }
+                if capabilities.contains("device_name") {
+                    Task { await applyGuestDeviceName(guestDeviceName) }
                 }
                 if capabilities.contains("network_static_names"), let entries = guestStaticNames?() {
                     Task { await applyGuestStaticNames(entries) }
@@ -931,6 +937,22 @@ extension VPhoneGuestControl {
             }
         } catch {
             print("[network] could not set the guest's mDNS name: \(error)")
+        }
+    }
+}
+
+extension VPhoneGuestControl {
+    /// Pin the guest's device name to `name`, what Xcode, devicectl and Finder
+    /// show, or with nil give the guest its own back. vphoned stores it where
+    /// the guest's hooks read it at every boot, and applies it at once.
+    func applyGuestDeviceName(_ name: String?) async {
+        do {
+            let result = try await call("device.name.set", params: ["name": name ?? NSNull()])
+            if result["changed"] as? Bool == true {
+                print("[device] guest device name \(name.map { "set to \($0)" } ?? "restored to its own")")
+            }
+        } catch {
+            print("[device] could not set the guest's device name: \(error)")
         }
     }
 }

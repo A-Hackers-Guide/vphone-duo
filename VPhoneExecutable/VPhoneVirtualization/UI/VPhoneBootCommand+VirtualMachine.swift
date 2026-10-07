@@ -32,7 +32,6 @@ extension VPhoneBootCommand {
             screenScale: manifest.screenConfig.scale,
             kernelDebugPort: kernelDebugPort,
             isPadGuest: manifest.guestDevice.isPad,
-            deviceName: vmDir.lastPathComponent,
         )
     }
 }

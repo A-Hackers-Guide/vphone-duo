@@ -3,10 +3,6 @@ import Testing
 @testable import VPhoneCoreKit
 
 struct GuestDeviceNameTests {
-    @Test func `the NVRAM variable name is the one the guest reads`() {
-        #expect(VPhoneGuestDeviceName.nvramVariable == "vphone-device-name")
-    }
-
     @Test(arguments: [
         "lab-a",
         "Jacky's iPhone",

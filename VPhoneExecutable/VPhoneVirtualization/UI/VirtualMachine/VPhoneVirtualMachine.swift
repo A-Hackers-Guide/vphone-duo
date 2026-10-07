@@ -44,9 +44,6 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         var kernelDebugPort: Int?
         /// The guest runs iPadOS: Esc is a key there, not the back gesture.
         var isPadGuest = false
-        /// The VM's name, written to NVRAM before boot as the guest's device
-        /// name; nil removes it.
-        var deviceName: String?
     }
 
     private struct DeviceIdentity {
@@ -143,7 +140,6 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
                 print("[vphone] NVRAM boot-args: \(bootArgs)")
             }
         }
-        Self.applyGuestDeviceName(options.deviceName, to: auxStorage)
 
         // --- Boot loader with custom ROM ---
         let bootloader = VZMacOSBootLoader()
@@ -377,60 +373,6 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         MACHINE_IDENTIFIER=config.plist
         """
         try content.write(to: outputURL, atomically: true, encoding: .utf8)
-    }
-
-    // MARK: - Guest Device Name
-
-    /// Hand the guest the VM's name as its device name in NVRAM before boot.
-    /// Written on every launch, so a rename applies from the next boot. A name
-    /// that cannot be a device name is removed instead, and the guest goes back
-    /// to its own. Never fails the boot: a guest without the name only shows
-    /// its own.
-    private static func applyGuestDeviceName(_ name: String?, to auxStorage: VZMacAuxiliaryStorage) {
-        let variable = VPhoneGuestDeviceName.nvramVariable
-        guard let name else {
-            removeNVRAMVariable(variable, from: auxStorage)
-            return
-        }
-        do {
-            try VPhoneGuestDeviceName.validate(name)
-        } catch {
-            print("[vphone] Warning: the VM name is not used as the device name: \(error)")
-            removeNVRAMVariable(variable, from: auxStorage)
-            return
-        }
-        // The bytes alone: no terminating NUL.
-        let ok = Dynamic(auxStorage)
-            ._setDataValue(Data(name.utf8), forNVRAMVariableNamed: variable, error: nil)
-            .asBool ?? false
-        if ok {
-            print("[vphone] NVRAM \(variable): \(name)")
-        } else {
-            print("[vphone] Warning: could not set NVRAM \(variable); the guest keeps its own name")
-        }
-    }
-
-    /// Remove an NVRAM variable if it is there. `_removeNVRAMVariableNamed:error:`
-    /// is private and returns a BOOL, so its presence is checked first; a
-    /// missing variable is left alone rather than reported as a failure.
-    private static func removeNVRAMVariable(_ variable: String, from auxStorage: VZMacAuxiliaryStorage) {
-        let remove = NSSelectorFromString("_removeNVRAMVariableNamed:error:")
-        guard auxStorage.responds(to: remove) else {
-            print("[vphone] Warning: this macOS has no VZMacAuxiliaryStorage._removeNVRAMVariableNamed:error:; NVRAM \(variable) left as it is")
-            return
-        }
-        let read = NSSelectorFromString("_dataValueForNVRAMVariableNamed:error:")
-        if auxStorage.responds(to: read),
-           Dynamic(auxStorage)._dataValueForNVRAMVariableNamed(variable, error: nil).asObject == nil
-        {
-            return
-        }
-        let ok = Dynamic(auxStorage)._removeNVRAMVariableNamed(variable, error: nil).asBool ?? false
-        if ok {
-            print("[vphone] NVRAM \(variable): removed")
-        } else {
-            print("[vphone] Warning: could not remove NVRAM \(variable)")
-        }
     }
 
     // MARK: - Battery
