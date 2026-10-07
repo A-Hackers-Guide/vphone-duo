@@ -61,12 +61,29 @@ static void namesTheBatteryHealthFixTarget(void) {
     assert(!vpInsertedLibraryFor(NULL));
 }
 
+static void namesTheDeviceHubFixTarget(void) {
+    // The developer disk image is mounted under /System/Developer.
+    assert(vpIsDeviceHubFixTarget("/System/Developer/usr/libexec/dtremotedisplayd"));
+    assert(vpIsDeviceHubFixTarget("/usr/libexec/dtremotedisplayd"));
+    assert(vpIsDeviceHubFixTarget("/usr/libexec/cryptexd"));
+    assert(vpIsDeviceHubFixTarget("/System/Developer/usr/libexec/dtdeviceinfod"));
+    assert(!vpIsDeviceHubFixTarget("/usr/libexec/dtdeviceinfodx"));
+    assert(!vpIsDeviceHubFixTarget("/usr/libexec/cryptexdx"));
+    assert(!vpIsDeviceHubFixTarget("/System/Developer/usr/libexec/dtremotedisplaydx"));
+    assert(!vpIsDeviceHubFixTarget("/System/Developer/usr/libexec/remoted"));
+    assert(!vpIsDeviceHubFixTarget(NULL));
+    assert(!vpIsMISFixTarget("/System/Developer/usr/libexec/dtremotedisplayd"));
+    assert(!vpIsMISFixTarget("/usr/libexec/cryptexd"));
+    assert(!vpIsBatteryHealthFixTarget("/System/Developer/usr/libexec/dtremotedisplayd"));
+}
+
 int main(void) {
     insertsBoth();
     addsExtraBesideAnExistingHook();
     leavesACompleteEnvironmentAlone();
     namesTheMISFixTargets();
     namesTheBatteryHealthFixTarget();
+    namesTheDeviceHubFixTarget();
     puts("InjectionEnvironmentTests: ok");
     return 0;
 }

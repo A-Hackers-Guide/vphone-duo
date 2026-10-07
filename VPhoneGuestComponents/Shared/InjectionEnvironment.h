@@ -80,11 +80,31 @@ static const char *vpBatteryHealthFixFor(const char *path) {
                : NULL;
 }
 
+// The DeviceHub hook, which lets Xcode's device viewer stream the guest's
+// screen; see DeviceHubFix/libdevicehubfix.c. Inserted because its
+// interposes have to be in place when the target's imports are bound.
+#define VP_DEVICEHUB_FIX "/usr/lib/libdevicehubfix.dylib"
+
+// cryptexd, which stages and grafts the developer disk image, and the DDI's
+// display server. The DDI is mounted under /System/Developer, so the
+// suffixes are matched like the other targets.
+static int vpIsDeviceHubFixTarget(const char *path) {
+    return path && (vpPathHasSuffix(path, "/usr/libexec/cryptexd") ||
+                    vpPathHasSuffix(path, "/usr/libexec/dtremotedisplayd") ||
+                    vpPathHasSuffix(path, "/usr/libexec/dtdeviceinfod"));
+}
+
+static const char *vpDeviceHubFixFor(const char *path) {
+    return vpIsDeviceHubFixTarget(path) && access(VP_DEVICEHUB_FIX, R_OK) == 0 ? VP_DEVICEHUB_FIX : NULL;
+}
+
 // The one library, if any, the spawn hooks insert beside SystemHook for
-// `path`. The MIS and battery health targets do not overlap.
+// `path`. The MIS, battery health and DeviceHub targets do not overlap.
 static const char *vpInsertedLibraryFor(const char *path) {
     const char *library = vpMISFixFor(path);
-    return library ? library : vpBatteryHealthFixFor(path);
+    if (!library)
+        library = vpBatteryHealthFixFor(path);
+    return library ? library : vpDeviceHubFixFor(path);
 }
 
 typedef struct {

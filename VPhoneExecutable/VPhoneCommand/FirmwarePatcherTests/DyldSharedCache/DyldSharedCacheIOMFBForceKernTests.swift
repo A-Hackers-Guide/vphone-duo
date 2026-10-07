@@ -1,15 +1,11 @@
-// DyldSharedCacheIOMFBForceKernTests.swift — Parity for the IOMFB force-kern DSC patcher.
+// DyldSharedCacheIOMFBForceKernTests.swift — Conditional IOMFB routing checks.
 //
-// There is no independent oracle for a patched dyld shared cache: `codesign -v`
-// does not apply to a cache chunk, and nothing but the guest kernel reads the
-// slot hashes. The only reference was
-// `scripts/patchers/cfw_patch_iomfb_force_kern.py`, and that Python has been
-// removed — so what it did on the real cache is frozen in `FrozenReference`
-// below: the 35 entry points it discovered, the address it resolved for each,
-// which four it refused to touch, and the SHA-256 of the one chunk it changed.
-// The Swift runs on a clone and is graded against those. A port that writes a
-// different number of sites, or the same number in different places, or
-// re-attests a different set of pages, lands on a different digest.
+// FrozenReference preserves the historical unconditional patch's symbol
+// addresses and changed chunk. ConditionalReference selects the operations
+// that also have virt siblings. Current tests verify discovery, decoded branch
+// targets and null handling, changed chunks, dry-run, and idempotence. The old
+// unconditional patch's recorded digest is historical data, not the expected
+// output of the conditional implementation. No Python is executed.
 //
 // The tests need the real cache. Point `VPHONE_DSC_PRISTINE` at a directory of
 // `dyld_shared_cache_arm64e*` chunks, or leave the default
@@ -468,11 +464,24 @@ private enum Digest {
         let mine = try chunkDigests(of: directory)
         let changed = mine.filter { pristineDigests[$0.key] != $0.value }.keys.sorted()
         #expect(changed == FrozenReference.changedChunks.keys.sorted())
-        for name in changed {
-            let frozen = FrozenReference.changedChunks[name] ?? "(not a chunk the Python moved)"
-            #expect(mine[name] == frozen, "\(name): Swift \(mine[name] ?? "—"), reference \(frozen)")
-        }
+
     }
+}
+
+// The conditional dispatcher requires a real virtual sibling. These ten were
+// independently resolved on the 24A446 cache; the remaining old force sites
+// must not be rewritten by this narrower patch.
+private enum ConditionalReference {
+    static let suffixes: Set<String> = [
+        "Begin", "Cancel", "DebugInfo", "End", "SetEventSignal",
+        "SetEventSignalOnGlass", "SetEventWait", "SetLayer", "Wait", "WaitWithTimeout",
+    ]
+    static let forcedPairs = FrozenReference.forcedPairs.filter {
+        suffixes.contains(String($0.publicName.dropFirst("_IOMobileFramebufferSwap".count)))
+    }
+    static let newlyForced = 10
+    static let leftOnVirtPath: Set<String> = ["_IOMobileFramebufferSwapSignal"]
+    static let discoveredNames = Set(forcedPairs.map(\.publicName)).union(leftOnVirtPath)
 }
 
 // MARK: - Parity against the frozen reference
@@ -481,7 +490,7 @@ private enum Digest {
 struct DyldSharedCacheIOMFBForceKernParityTests {
     /// The one test that decides whether this port is done.
     @Test
-    func `Swift force-kern reproduces the reference cache byte for byte`() throws {
+    func `Conditional dispatch changes only the expected cache chunk`() throws {
         _ = try #require(ForceKernFixture.pristine, ForceKernFixture.missing)
 
         let swiftClone = try ForceKernFixture.cloneCache(named: "swift")
@@ -493,16 +502,16 @@ struct DyldSharedCacheIOMFBForceKernParityTests {
         )
 
         #expect(
-            outcome.writtenSiteCount == FrozenReference.newlyForced,
-            "swift wrote \(outcome.writtenSiteCount) sites, reference \(FrozenReference.newlyForced)",
+            outcome.writtenSiteCount == ConditionalReference.newlyForced,
+            "swift wrote \(outcome.writtenSiteCount) sites, reference \(ConditionalReference.newlyForced)",
         )
         // The same entry points, not merely the same count.
         #expect(
             Set(outcome.forced.map(\.entry.publicName))
-                == Set(FrozenReference.forcedPairs.map(\.publicName)),
+                == Set(ConditionalReference.forcedPairs.map(\.publicName)),
         )
         #expect(Set(outcome.notTrampolines.map(\.entry.publicName))
-            == Set(FrozenReference.leftOnVirtPath))
+            == Set(ConditionalReference.leftOnVirtPath))
 
         try Digest.expectMatchesReference(swiftClone)
     }
@@ -519,14 +528,14 @@ struct DyldSharedCacheIOMFBForceKernParityTests {
         defer { ForceKernFixture.discard(clone) }
 
         let first = try DyldSharedCacheIOMFBForceKernPatcher.patch(chunksDirectory: clone, log: nil)
-        #expect(first.writtenSiteCount == FrozenReference.newlyForced)
+        #expect(first.writtenSiteCount == ConditionalReference.newlyForced)
 
         let hashesBefore = try Digest.chunkDigests(of: clone)
         let second = try DyldSharedCacheIOMFBForceKernPatcher.patch(chunksDirectory: clone, log: nil)
 
         #expect(second.writtenSiteCount == 0, "a second pass rewrote \(second.writtenSiteCount) site(s)")
         #expect(second.reattestation == nil, "a second pass re-attested pages it did not dirty")
-        #expect(second.alreadyForced.count == FrozenReference.newlyForced)
+        #expect(second.alreadyConditional.count == ConditionalReference.newlyForced)
         let hashesAfter = try Digest.chunkDigests(of: clone)
         #expect(hashesAfter == hashesBefore, "a no-op run changed bytes")
 
@@ -547,7 +556,7 @@ struct DyldSharedCacheIOMFBForceKernParityTests {
             dryRun: true,
             log: nil,
         )
-        #expect(dry.writtenSiteCount == FrozenReference.newlyForced)
+        #expect(dry.writtenSiteCount == ConditionalReference.newlyForced)
         #expect(dry.records.isEmpty)
         #expect(dry.reattestation == nil)
         let hashesAfter = try Digest.chunkDigests(of: clone)
@@ -576,14 +585,14 @@ struct DyldSharedCacheIOMFBForceKernDiscoveryTests {
         #expect(entries.count >= DyldSharedCacheIOMFBForceKernPatcher.requiredSuffixes.count)
 
         let discovered = Set(entries.map(\.publicName))
-        let expected = FrozenReference.discoveredNames
+        let expected = ConditionalReference.discoveredNames
         let disagreement = discovered.symmetricDifference(expected).sorted()
         #expect(discovered == expected, "discovery differs from the reference: \(disagreement)")
 
         // The 31 the reference resolved an address for — it printed no address
         // for the four it left on the virt path.
         let byName = Dictionary(uniqueKeysWithValues: entries.map { ($0.publicName, $0) })
-        for pair in FrozenReference.forcedPairs {
+        for pair in ConditionalReference.forcedPairs {
             let entry = try #require(byName[pair.publicName], "\(pair.publicName) was not discovered")
             let mine = String(entry.publicAddress, radix: 16, uppercase: true)
             let theirs = String(pair.publicAddress, radix: 16, uppercase: true)
@@ -642,7 +651,7 @@ struct DyldSharedCacheIOMFBForceKernDiscoveryTests {
 
         #expect(
             dry.notTrampolines.map(\.entry.publicName).sorted()
-                == FrozenReference.leftOnVirtPath.sorted(),
+                == ConditionalReference.leftOnVirtPath.sorted(),
         )
         #expect(dry.forced.count + dry.notTrampolines.count + dry.alreadyForced.count == dry.sites.count)
 
@@ -666,7 +675,7 @@ struct DyldSharedCacheIOMFBForceKernDiscoveryTests {
     /// kern sibling — checked from the record the patcher emits, which is what
     /// the record-comparison harness consumes.
     @Test
-    func `Every record is a four-byte branch to the paired kern implementation`() throws {
+    func `Every record preserves null handling and branches by kernel port`() throws {
         _ = try #require(ForceKernFixture.pristine, ForceKernFixture.missing)
 
         let clone = try ForceKernFixture.cloneCache(named: "records")
@@ -675,32 +684,30 @@ struct DyldSharedCacheIOMFBForceKernDiscoveryTests {
 
         #expect(outcome.records.count == outcome.writtenSiteCount)
         let kernAddresses = Dictionary(
-            uniqueKeysWithValues: FrozenReference.forcedPairs.map { ($0.publicAddress, $0.kernAddress) },
+            uniqueKeysWithValues: ConditionalReference.forcedPairs.map { ($0.publicAddress, $0.kernAddress) },
         )
         let chunks = try DyldSharedCacheChunkSet(directory: clone)
         let disassembler = ARM64Disassembler()
         for record in outcome.records {
             #expect(record.patchID.hasPrefix("\(DyldSharedCacheIOMFBForceKernPatcher.recordGroup)."))
-            #expect(record.patchedBytes.count == 4)
-            #expect(record.originalBytes.count == 4)
+            #expect(record.patchedBytes.count == 16)
+            #expect(record.originalBytes.count == 16)
             #expect(record.originalBytes != record.patchedBytes)
             let address = try #require(record.virtualAddress)
-            let instruction = try #require(
-                try disassembler.disassembleOne(
-                    chunks.bytesAtVMA(address, length: 4),
-                    at: address,
-                ),
-            )
-            #expect(instruction.mnemonic == "b")
-            // …and it lands on the kern sibling the reference named for this
-            // entry point, rather than merely on some branch.
-            let target = try #require(kernAddresses[address], "0x\(String(address, radix: 16)) is not a reference site")
-            let expected = "0x\(String(target, radix: 16))"
-            let site = "0x\(String(address, radix: 16))"
-            #expect(
-                instruction.operandString == expected,
-                "\(site) branches to \(instruction.operandString), reference paired it with \(expected)",
-            )
+            let decoded = disassembler.disassemble(record.patchedBytes, at: address, count: 4)
+            #expect(decoded.count == 4)
+            let entry = try #require(outcome.forced.first { $0.entry.publicAddress == address }?.entry)
+            #expect(decoded.map(\.mnemonic) == ["cbz", "ldr", "cbnz", "b"])
+            #expect(decoded[0].detail?.operands[0].reg == .x(0))
+            #expect(decoded[0].detail?.operands[1].imm == Int64(address + 16))
+            #expect(decoded[1].detail?.operands[0].reg == .w(16))
+            #expect(decoded[1].detail?.operands[1].mem.base == .x(0))
+            #expect(decoded[1].detail?.operands[1].mem.disp == 0x14)
+            #expect(decoded[2].detail?.operands[0].reg == .w(16))
+            #expect(decoded[2].detail?.operands[1].imm == Int64(entry.kernAddress))
+            #expect(decoded[3].detail?.operands[0].imm == Int64(entry.virtAddress))
+            #expect(try chunks.bytesAtVMA(address, length: 16) == record.patchedBytes)
+
         }
     }
 }

@@ -100,12 +100,13 @@ static void vpPrepareLoaderLink(const char *path) {
 static VPInjectionEnvironment vpPrepareChild(const char *path, char *const envp[], const char *kind) {
     const int misFix = vpIsMISFixTarget(path);
     const int batteryHealthFix = vpIsBatteryHealthFixTarget(path);
+    const int deviceHubFix = vpIsDeviceHubFixTarget(path);
     VPInjectionEnvironment injected = vpInsertHooks(envp, getenv("VPHONE_JB_ROOT"), vpInsertedLibraryFor(path));
-    if (vpIsInjectionTarget(path) || misFix) {
+    if (vpIsInjectionTarget(path) || misFix || deviceHubFix) {
         vpPrepareLoaderLink(path);
         char decision[96];
         snprintf(decision, sizeof(decision), "%s%s%s%s", kind, !injected.values ? "unchanged" : "inserted",
-                 misFix ? "+misfix" : batteryHealthFix ? "+batteryhealthfix" : "",
+                 misFix ? "+misfix" : batteryHealthFix ? "+batteryhealthfix" : deviceHubFix ? "+devicehubfix" : "",
                  vpInjectionDisabled(envp) ? "-tweaks-disabled" : "");
         vpLogSpawn(path, decision);
     }

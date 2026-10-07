@@ -1352,8 +1352,8 @@ struct VPhoneCustomFirmwareInstaller {
         func enabled(_ id: String) -> Bool { plan?.isEnabled(id) ?? !FirmwareGuestSystemPatchSet.settingsRowPatches.contains(id) }
         let undoAbsolute = (dsc as NSString).appendingPathComponent(Self.dscUndoLogLeaf)
         let undoRelative = "\(Self.dscCacheRelative)/\(Self.dscUndoLogLeaf)"
-        let recorded = (try? system.readData(undoRelative))
-            .flatMap { try? DyldSharedCacheUndoLog.decode($0) }?.patchIDs ?? []
+        let undoLog = (try? system.readData(undoRelative)).flatMap { try? DyldSharedCacheUndoLog.decode($0) }
+        let recorded = undoLog?.patchIDs ?? []
 
         var revertable: [String] = []
         for entry in dyld {
@@ -1361,7 +1361,27 @@ struct VPhoneCustomFirmwareInstaller {
             let had = priorGuest.contains(entry.id)
             switch (want, had) {
             case (true, true):
-                // Already applied; leave it, no scan.
+                // Already applied; leave it, no scan — unless the bytes on disk
+                // are an earlier implementation of the same identifier. Then put
+                // the originals back and apply the current one, in this run.
+                if let undoLog, undoLog.hasOutdatedImplementation(of: entry.id) {
+                    print("  [*] \(entry.id): an earlier implementation is applied; reverting it and applying the current one")
+                    do {
+                        try patch("patch-dsc-revert", [dsc, "--undo-log", undoAbsolute, "--patch", entry.id])
+                    } catch {
+                        failures.append(entry.id)
+                        live.insert(entry.id)
+                        print("  [!] \(entry.id): reverting the earlier implementation failed, left as it was: \(error)")
+                        continue
+                    }
+                    do {
+                        try patch(entry.verb, entry.args + ["--undo-log", undoAbsolute, "--undo-id", entry.id])
+                    } catch {
+                        failures.append(entry.id)
+                        print("  [!] \(entry.id): the earlier implementation was reverted but the current one failed; the cache is unpatched for it: \(error)")
+                        continue
+                    }
+                }
                 live.insert(entry.id)
             case (true, false):
                 do {

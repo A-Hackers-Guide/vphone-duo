@@ -210,3 +210,25 @@ struct DyldSharedCacheUndoLogTests {
         }
     }
 }
+
+@Suite("Dyld patches whose implementation changed")
+struct DyldSharedCacheOutdatedImplementationTests {
+    private func record(_ id: String, bytes: Int, offset: Int = 0) -> DyldSharedCacheUndoLog.Record {
+        .init(patchID: id, chunk: "dyld_shared_cache_arm64e", fileOffset: offset, vma: 0x1_8000_0000, original: Data(count: bytes))
+    }
+
+    @Test func `The unconditional force-kern records are an earlier implementation`() {
+        let id = "dyld-boot-iomfb_force_kern"
+        let old = DyldSharedCacheUndoLog(records: (0..<31).map { record(id, bytes: 4, offset: $0 * 64) })
+        #expect(old.hasOutdatedImplementation(of: id))
+        let current = DyldSharedCacheUndoLog(records: (0..<10).map { record(id, bytes: 16, offset: $0 * 64) })
+        #expect(!current.hasOutdatedImplementation(of: id))
+    }
+
+    @Test func `Patches without a recorded change, or without records, are never outdated`() {
+        let log = DyldSharedCacheUndoLog(records: [record("dyld-boot-maxslide", bytes: 4)])
+        #expect(!log.hasOutdatedImplementation(of: "dyld-boot-maxslide"))
+        #expect(!log.hasOutdatedImplementation(of: "dyld-boot-iomfb_force_kern"))
+        #expect(!DyldSharedCacheUndoLog().hasOutdatedImplementation(of: "dyld-boot-iomfb_force_kern"))
+    }
+}

@@ -56,6 +56,15 @@ HAPTICSFIX_INCLUDES := $(wildcard HapticsFix/*.h)
 BATTERYHEALTHFIX := $(STAGE)/batteryhealthfix/libbatteryhealthfix.dylib
 BATTERYHEALTHFIX_SOURCES := $(wildcard BatteryHealthFix/*.c)
 BATTERYHEALTHFIX_INCLUDES := $(wildcard BatteryHealthFix/*.h)
+# CoreDeviceUtilities lives on the developer disk image, not in the SDK, and
+# the image is mounted only after the host enables developer services. The two
+# interposed Swift getters are weak flat-namespace imports.
+DEVICEHUBFIX := $(STAGE)/devicehubfix/libdevicehubfix.dylib
+DEVICEHUBFIX_SOURCES := $(wildcard DeviceHubFix/*.c)
+DEVICEHUBFIX_INCLUDES := $(wildcard DeviceHubFix/*.h)
+DEVICEHUBFIX_DYNAMIC_LOOKUP_SYMS := \
+	'-Wl,-U,_$$s19CoreDeviceUtilities28MediaStreamSupportedFeaturesV7currentACvgZ' \
+	'-Wl,-U,_$$s19CoreDeviceUtilities07CurrentB0V20isCustomerRestrictedSbvg'
 GPU_PLUGIN := $(STAGE)/gpu/libAppleParavirtCompilerPluginIOGPUFamily.dylib
 GPU_PLUGIN_SOURCES := $(wildcard GraphicLoader/*.mm)
 GPU_PLUGIN_INCLUDES := $(wildcard GraphicLoader/*.h GraphicLoader/*.hpp GraphicLoader/*.inc)
@@ -89,7 +98,7 @@ GPU_DYNAMIC_LOOKUP_SYMS := \
 VIRTIOSOUND := $(STAGE)/virtiosound/VPhoneVirtIOSound.driver
 VIRTIOSOUND_SOURCES := $(wildcard VirtIOSound/*.m VirtIOSound/*.c)
 VIRTIOSOUND_INCLUDES := $(wildcard VirtIOSound/*.h) VirtIOSound/Info.plist VirtIOSound/AudioServerDriver.tbd
-ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(HAPTICSFIX) $(BATTERYHEALTHFIX) $(GPU_PLUGIN) $(VIRTIOSOUND)
+ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(HAPTICSFIX) $(BATTERYHEALTHFIX) $(DEVICEHUBFIX) $(GPU_PLUGIN) $(VIRTIOSOUND)
 PLISTS := $(STAGE)/camfix/libcamfix.plist $(STAGE)/vcamcaptured/libvcamcaptured.plist \
 	$(STAGE)/misfix/libmisfix.plist
 GPU_PROVENANCE := $(STAGE)/gpu/README.md
@@ -104,7 +113,7 @@ gpu: $(GPU_PLUGIN)
 
 package: all
 	@rm -f $(ARCHIVE)
-	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix hapticsfix batteryhealthfix gpu virtiosound
+	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix hapticsfix batteryhealthfix devicehubfix gpu virtiosound
 	@echo "Packaged $(ARCHIVE)"
 
 test-loader-links:
@@ -153,7 +162,7 @@ test-vcam-dataplane:
 		-framework CoreGraphics
 	@$(OUT)/VCamDataPlaneTests
 
-$(STAGE)/camfix $(STAGE)/vcamcaptured $(STAGE)/launchhook $(STAGE)/systemhook $(STAGE)/misfix $(STAGE)/hapticsfix $(STAGE)/batteryhealthfix $(STAGE)/gpu $(STAGE)/virtiosound:
+$(STAGE)/camfix $(STAGE)/vcamcaptured $(STAGE)/launchhook $(STAGE)/systemhook $(STAGE)/misfix $(STAGE)/hapticsfix $(STAGE)/batteryhealthfix $(STAGE)/devicehubfix $(STAGE)/gpu $(STAGE)/virtiosound:
 	@mkdir -p $@
 
 $(CAMFIX): $(CAMFIX_SOURCES) $(CAMFIX_INPUTS) | $(STAGE)/camfix
@@ -205,6 +214,14 @@ $(BATTERYHEALTHFIX): $(BATTERYHEALTHFIX_SOURCES) $(BATTERYHEALTHFIX_INCLUDES) Ba
 		-install_name /usr/lib/libbatteryhealthfix.dylib \
 		-o $@ $(BATTERYHEALTHFIX_SOURCES) \
 		-framework CoreFoundation -framework IOKit -lMobileGestalt \
+		-Wl,-not_for_dyld_shared_cache
+	@codesign --force --sign - $@
+
+$(DEVICEHUBFIX): $(DEVICEHUBFIX_SOURCES) $(DEVICEHUBFIX_INCLUDES) DeviceHubFix | $(STAGE)/devicehubfix
+	$(CLANG) $(GUEST_C_FLAGS) -dynamiclib \
+		-install_name /usr/lib/libdevicehubfix.dylib \
+		-o $@ $(DEVICEHUBFIX_SOURCES) $(DEVICEHUBFIX_DYNAMIC_LOOKUP_SYMS) \
+		-framework CoreFoundation -lMobileGestalt \
 		-Wl,-not_for_dyld_shared_cache
 	@codesign --force --sign - $@
 
