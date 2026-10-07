@@ -30,10 +30,11 @@ SystemHook; it completes the internal battery's power source description with
 the health keys a real battery has and answers the two questions only battery
 hardware can, so Battery Health shows a healthy battery instead of loading
 forever. Both also insert `libdevicename.dylib` into configd and lockdownd
-(lockdownd takes it after `libmisfix.dylib`). It acts only when the host has
-written the NVRAM variable `vphone-device-name`: configd then publishes that
-name as the device name and lockdownd refuses renames, while
-`preferences.plist` keeps the guest's own name. See
+(lockdownd takes it after `libmisfix.dylib`). It acts only when vphoned has
+stored a name in `/var/db/vphone/devicename.plist` (the host sends the VM's
+name after every connect): configd then publishes that name as the device name
+and lockdownd refuses renames, while `preferences.plist` keeps the guest's own
+name. See
 `Research/Guest/device_name_pinning.md`.
 After a bootstrap installs ElleKit, the launchd hook
 inserts SystemHook into `xpcproxy`, bootstrap executables, and apps started

@@ -198,9 +198,9 @@ public enum FirmwareGuestSystemPatchSet {
                 libdevicehubfix.dylib, inserted into cryptexd, which then stages the iOS 27 \
                 developer disk image, and into the image's dtremotedisplayd, which then reports \
                 the media stream features Xcode's DeviceHub needs to show the screen. \
-                libdevicename.dylib, inserted into configd and lockdownd, does nothing unless the \
-                host writes a device name to NVRAM; then configd publishes that name and lockdownd \
-                refuses to rename the device.
+                libdevicename.dylib, inserted into configd and lockdownd, does nothing until \
+                vphoned stores a device name (the host sends the VM's name); then configd \
+                publishes that name and lockdownd refuses to rename the device.
                 """,
                 target: .guestFile(path: "/Library/LaunchDaemons"),
                 bootEssential: true,

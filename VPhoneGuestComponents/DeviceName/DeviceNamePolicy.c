@@ -7,7 +7,7 @@
 CFStringRef VPDeviceNameCreateFromBytes(const UInt8 *bytes, CFIndex length) {
     if (!bytes || length <= 0)
         return NULL;
-    // The host writes no terminator, but a C-string writer would; drop it.
+    // A C-string writer leaves a terminator; drop it.
     while (length > 0 && bytes[length - 1] == 0)
         length--;
     if (length == 0 || length > VP_DEVICE_NAME_MAX_BYTES)
@@ -40,6 +40,20 @@ CFStringRef VPDeviceNameCreateFromProperty(CFTypeRef property) {
         return VPDeviceNameCreateFromBytes(bytes, used);
     }
     return NULL;
+}
+
+CFStringRef VPDeviceNameCreateFromConfiguration(CFDataRef contents) {
+    if (!contents)
+        return NULL;
+    CFPropertyListRef plist =
+        CFPropertyListCreateWithData(kCFAllocatorDefault, contents, kCFPropertyListImmutable, NULL, NULL);
+    if (!plist)
+        return NULL;
+    CFStringRef name = NULL;
+    if (CFGetTypeID(plist) == CFDictionaryGetTypeID())
+        name = VPDeviceNameCreateFromProperty(CFDictionaryGetValue((CFDictionaryRef)plist, VP_DEVICE_NAME_CONFIG_KEY));
+    CFRelease(plist);
+    return name;
 }
 
 // MARK: - configd
@@ -158,6 +172,6 @@ Boolean VPDeviceNameCreatePinnedPublication(CFDictionaryRef keysToSet, CFArrayRe
 
 // MARK: - lockdownd
 
-Boolean VPDeviceNameAllowsRename(CFStringRef pinned, CFStringRef requested) {
-    return !pinned || (requested && CFEqual(pinned, requested));
+Boolean VPDeviceNameAllowsRename(CFStringRef pinned) {
+    return !pinned;
 }

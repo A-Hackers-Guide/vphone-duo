@@ -247,7 +247,7 @@ $(DEVICENAME): $(DEVICENAME_SOURCES) $(DEVICENAME_INCLUDES) DeviceName | $(STAGE
 	$(CLANG) $(GUEST_C_FLAGS) -Wall -Wextra -Werror -dynamiclib \
 		-install_name /usr/lib/libdevicename.dylib \
 		-o $@ $(DEVICENAME_SOURCES) \
-		-framework CoreFoundation -framework IOKit -framework SystemConfiguration \
+		-framework CoreFoundation -framework SystemConfiguration \
 		-Wl,-not_for_dyld_shared_cache
 	@codesign --force --sign - $@
 

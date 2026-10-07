@@ -9,9 +9,11 @@
 // Internal to the library that compiles them in.
 #define VP_DEVICE_NAME_INTERNAL __attribute__((visibility("hidden")))
 
-// The NVRAM variable the host writes before boot: the name's UTF-8 bytes, no
-// terminator. Absent, empty or not a valid name means the feature is off.
-#define VP_DEVICE_NAME_NVRAM_VARIABLE "vphone-device-name"
+// The file vphoned writes when the host sets a device name (`device.name.set`):
+// a property list whose `DeviceName` string is the name. Absent, unreadable, or
+// without a valid name means nothing is pinned.
+#define VP_DEVICE_NAME_CONFIG_PATH "/var/db/vphone/devicename.plist"
+#define VP_DEVICE_NAME_CONFIG_KEY CFSTR("DeviceName")
 
 // The longest name taken, in UTF-8 bytes. A longer value is invalid, so the
 // feature is off rather than truncating the name.
@@ -24,13 +26,17 @@
 #define VP_DEVICE_NAME_COMPUTER_NAME CFSTR("ComputerName")
 #define VP_DEVICE_NAME_COMPUTER_NAME_ENCODING CFSTR("ComputerNameEncoding")
 
-// The name in an NVRAM property: CFData holding UTF-8 (trailing NULs are
-// dropped) or a CFString. NULL when the property is absent, empty, longer than
+// The name in a value: CFData holding UTF-8 (trailing NULs are dropped) or a
+// CFString. NULL when the property is absent, empty, longer than
 // VP_DEVICE_NAME_MAX_BYTES, not UTF-8, or holds a control character.
 VP_DEVICE_NAME_INTERNAL CFStringRef VPDeviceNameCreateFromProperty(CFTypeRef property);
 
 // The same for raw bytes.
 VP_DEVICE_NAME_INTERNAL CFStringRef VPDeviceNameCreateFromBytes(const UInt8 *bytes, CFIndex length);
+
+// The name in the contents of VP_DEVICE_NAME_CONFIG_PATH: NULL unless they are
+// a property list dictionary whose VP_DEVICE_NAME_CONFIG_KEY holds a valid name.
+VP_DEVICE_NAME_INTERNAL CFStringRef VPDeviceNameCreateFromConfiguration(CFDataRef contents);
 
 // A copy of a `Setup:/System` value with ComputerName set to `name` and its
 // encoding to UTF-8; every other entry is kept. A missing value, or one that is
@@ -61,8 +67,11 @@ VP_DEVICE_NAME_INTERNAL Boolean VPDeviceNameCreatePinnedPublication(CFDictionary
                                             CFTypeRef stored, CFStringRef name,
                                             CFDictionaryRef *outSet, CFArrayRef *outRemove);
 
-// Whether lockdownd may set the ComputerName `requested` while `pinned` is in
-// force: only to the pinned name itself, or anything when nothing is pinned.
-VP_DEVICE_NAME_INTERNAL Boolean VPDeviceNameAllowsRename(CFStringRef pinned, CFStringRef requested);
+// Whether lockdownd may set the ComputerName while `pinned` is in force: only
+// when nothing is pinned. The pinned name itself is refused too: lockdownd names
+// the device after the store whenever it starts, and once configd has published
+// the pin that would write the pinned name, and a host name and local host name
+// derived from it, into preferences.plist.
+VP_DEVICE_NAME_INTERNAL Boolean VPDeviceNameAllowsRename(CFStringRef pinned);
 
 #endif

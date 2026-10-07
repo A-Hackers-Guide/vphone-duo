@@ -48,7 +48,7 @@ static int encodingIsUTF8(CFDictionaryRef set) {
 
 // MARK: - Name
 
-static void decodesTheNVRAMName(void) {
+static void decodesAName(void) {
     CFStringRef name = nameFromBytes("Lab iPhone", 10);
     assert(namesEqual(name, "Lab iPhone"));
     CFRelease(name);
@@ -102,6 +102,59 @@ static void refusesWhatIsNotAName(void) {
                                                   kCFStringEncodingUTF8, false);
     assert(!VPDeviceNameCreateFromProperty(tooLong));
     CFRelease(tooLong);
+}
+
+static CFDataRef configuration(CFTypeRef name, CFPropertyListFormat format) {
+    CFMutableDictionaryRef plist = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+                                                             &kCFTypeDictionaryValueCallBacks);
+    if (name)
+        CFDictionarySetValue(plist, VP_DEVICE_NAME_CONFIG_KEY, name);
+    CFDictionarySetValue(plist, CFSTR("Other"), CFSTR("kept"));
+    CFDataRef data = CFPropertyListCreateData(kCFAllocatorDefault, plist, format, 0, NULL);
+    CFRelease(plist);
+    return data;
+}
+
+static void readsTheConfiguration(void) {
+    // What vphoned writes: a binary property list. XML reads the same.
+    CFStringRef wanted = CFStringCreateWithCString(kCFAllocatorDefault, "dhtest 27 \xe6\xb5\x8b\xe8\xaf\x95",
+                                                   kCFStringEncodingUTF8);
+    CFPropertyListFormat formats[] = {kCFPropertyListBinaryFormat_v1_0, kCFPropertyListXMLFormat_v1_0};
+    for (size_t index = 0; index < sizeof(formats) / sizeof(formats[0]); index++) {
+        CFDataRef data = configuration(wanted, formats[index]);
+        CFStringRef name = VPDeviceNameCreateFromConfiguration(data);
+        assert(name && CFEqual(name, wanted));
+        CFRelease(name);
+        CFRelease(data);
+    }
+    CFRelease(wanted);
+
+    // No key, an invalid name, a value of another type: nothing pinned.
+    CFDataRef data = configuration(NULL, kCFPropertyListBinaryFormat_v1_0);
+    assert(!VPDeviceNameCreateFromConfiguration(data));
+    CFRelease(data);
+    data = configuration(CFSTR("Lab\niPhone"), kCFPropertyListBinaryFormat_v1_0);
+    assert(!VPDeviceNameCreateFromConfiguration(data));
+    CFRelease(data);
+    data = configuration(CFSTR(""), kCFPropertyListBinaryFormat_v1_0);
+    assert(!VPDeviceNameCreateFromConfiguration(data));
+    CFRelease(data);
+    int number = 1;
+    CFNumberRef value = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &number);
+    data = configuration(value, kCFPropertyListBinaryFormat_v1_0);
+    assert(!VPDeviceNameCreateFromConfiguration(data));
+    CFRelease(data);
+    CFRelease(value);
+
+    // Not a property list, or not a dictionary.
+    assert(!VPDeviceNameCreateFromConfiguration(NULL));
+    data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)"Lab iPhone", 10);
+    assert(!VPDeviceNameCreateFromConfiguration(data));
+    CFRelease(data);
+    data = CFPropertyListCreateData(kCFAllocatorDefault, CFSTR("Lab iPhone"), kCFPropertyListBinaryFormat_v1_0, 0,
+                                    NULL);
+    assert(!VPDeviceNameCreateFromConfiguration(data));
+    CFRelease(data);
 }
 
 // MARK: - configd
@@ -262,25 +315,23 @@ static void passesThroughWithoutAName(void) {
 
 // MARK: - lockdownd
 
-static void allowsOnlyThePinnedName(void) {
-    assert(VPDeviceNameAllowsRename(NULL, CFSTR("Anything")));
-    assert(VPDeviceNameAllowsRename(NULL, NULL));
-    assert(VPDeviceNameAllowsRename(CFSTR("Lab"), CFSTR("Lab")));
-    assert(!VPDeviceNameAllowsRename(CFSTR("Lab"), CFSTR("iPhone")));
-    assert(!VPDeviceNameAllowsRename(CFSTR("Lab"), CFSTR("lab")));
-    assert(!VPDeviceNameAllowsRename(CFSTR("Lab"), NULL));
+static void refusesEveryRenameWhilePinned(void) {
+    assert(VPDeviceNameAllowsRename(NULL));
+    // The pinned name itself too: lockdownd would store it in the preferences.
+    assert(!VPDeviceNameAllowsRename(CFSTR("Lab")));
 }
 
 int main(void) {
-    decodesTheNVRAMName();
+    decodesAName();
     refusesWhatIsNotAName();
+    readsTheConfiguration();
     pinsTheSystemValue();
     recognisesThePreferencesMonitor();
     pinsAPublishedName();
     pinsAnUnchangedName();
     keepsARemovedName();
     passesThroughWithoutAName();
-    allowsOnlyThePinnedName();
+    refusesEveryRenameWhilePinned();
     puts("DeviceNameTests: ok");
     return 0;
 }
