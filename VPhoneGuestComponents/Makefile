@@ -65,6 +65,13 @@ DEVICEHUBFIX_INCLUDES := $(wildcard DeviceHubFix/*.h)
 DEVICEHUBFIX_DYNAMIC_LOOKUP_SYMS := \
 	'-Wl,-U,_$$s19CoreDeviceUtilities28MediaStreamSupportedFeaturesV7currentACvgZ' \
 	'-Wl,-U,_$$s19CoreDeviceUtilities07CurrentB0V20isCustomerRestrictedSbvg'
+# SystemConfiguration for the imports it interposes in configd and lockdownd
+# (its iOS headers mark them unavailable, so the source declares them), IOKit
+# for the NVRAM read. The policy beside it is pure CoreFoundation, so the host
+# tests build it too.
+DEVICENAME := $(STAGE)/devicename/libdevicename.dylib
+DEVICENAME_SOURCES := $(wildcard DeviceName/*.c)
+DEVICENAME_INCLUDES := $(wildcard DeviceName/*.h)
 GPU_PLUGIN := $(STAGE)/gpu/libAppleParavirtCompilerPluginIOGPUFamily.dylib
 GPU_PLUGIN_SOURCES := $(wildcard GraphicLoader/*.mm)
 GPU_PLUGIN_INCLUDES := $(wildcard GraphicLoader/*.h GraphicLoader/*.hpp GraphicLoader/*.inc)
@@ -98,14 +105,14 @@ GPU_DYNAMIC_LOOKUP_SYMS := \
 VIRTIOSOUND := $(STAGE)/virtiosound/VPhoneVirtIOSound.driver
 VIRTIOSOUND_SOURCES := $(wildcard VirtIOSound/*.m VirtIOSound/*.c)
 VIRTIOSOUND_INCLUDES := $(wildcard VirtIOSound/*.h) VirtIOSound/Info.plist VirtIOSound/AudioServerDriver.tbd
-ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(HAPTICSFIX) $(BATTERYHEALTHFIX) $(DEVICEHUBFIX) $(GPU_PLUGIN) $(VIRTIOSOUND)
+ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(HAPTICSFIX) $(BATTERYHEALTHFIX) $(DEVICEHUBFIX) $(DEVICENAME) $(GPU_PLUGIN) $(VIRTIOSOUND)
 PLISTS := $(STAGE)/camfix/libcamfix.plist $(STAGE)/vcamcaptured/libvcamcaptured.plist \
 	$(STAGE)/misfix/libmisfix.plist
 GPU_PROVENANCE := $(STAGE)/gpu/README.md
 
 # Directory timestamps also catch files removed from the wildcard inputs.
 
-.PHONY: all gpu package test-loader-links test-injection-environment test-vcam-dataplane test-virtiosound clean
+.PHONY: all gpu package test-loader-links test-injection-environment test-devicename test-vcam-dataplane test-virtiosound clean
 
 all: $(ARTIFACTS) $(PLISTS) $(GPU_PROVENANCE)
 
@@ -113,7 +120,7 @@ gpu: $(GPU_PLUGIN)
 
 package: all
 	@rm -f $(ARCHIVE)
-	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix hapticsfix batteryhealthfix devicehubfix gpu virtiosound
+	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix hapticsfix batteryhealthfix devicehubfix devicename gpu virtiosound
 	@echo "Packaged $(ARCHIVE)"
 
 test-loader-links:
@@ -128,6 +135,16 @@ test-injection-environment:
 		-DVP_TEST_LIBRARY_DIR='"$(OUT)/injection-libraries"' \
 		-o $(OUT)/InjectionEnvironmentTests Tests/InjectionEnvironmentTests.c
 	@$(OUT)/InjectionEnvironmentTests
+
+# Host proof harness for libdevicename's name decoding, configd publication
+# rewrite and lockdownd rename decision.
+test-devicename:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -O1 -Wall -Wextra -Werror -IDeviceName \
+		-o $(OUT)/DeviceNameTests \
+		Tests/DeviceNameTests.c DeviceName/DeviceNamePolicy.c \
+		-framework CoreFoundation
+	@$(OUT)/DeviceNameTests
 
 # Host proof harness for the virtio-snd format choice, the rings, the input
 # reader, the capture's low cut, the clock, the capture rate converter and the
@@ -163,7 +180,7 @@ test-vcam-dataplane:
 		-framework CoreGraphics
 	@$(OUT)/VCamDataPlaneTests
 
-$(STAGE)/camfix $(STAGE)/vcamcaptured $(STAGE)/launchhook $(STAGE)/systemhook $(STAGE)/misfix $(STAGE)/hapticsfix $(STAGE)/batteryhealthfix $(STAGE)/devicehubfix $(STAGE)/gpu $(STAGE)/virtiosound:
+$(STAGE)/camfix $(STAGE)/vcamcaptured $(STAGE)/launchhook $(STAGE)/systemhook $(STAGE)/misfix $(STAGE)/hapticsfix $(STAGE)/batteryhealthfix $(STAGE)/devicehubfix $(STAGE)/devicename $(STAGE)/gpu $(STAGE)/virtiosound:
 	@mkdir -p $@
 
 $(CAMFIX): $(CAMFIX_SOURCES) $(CAMFIX_INPUTS) | $(STAGE)/camfix
@@ -223,6 +240,14 @@ $(DEVICEHUBFIX): $(DEVICEHUBFIX_SOURCES) $(DEVICEHUBFIX_INCLUDES) DeviceHubFix |
 		-install_name /usr/lib/libdevicehubfix.dylib \
 		-o $@ $(DEVICEHUBFIX_SOURCES) $(DEVICEHUBFIX_DYNAMIC_LOOKUP_SYMS) \
 		-framework CoreFoundation -lMobileGestalt \
+		-Wl,-not_for_dyld_shared_cache
+	@codesign --force --sign - $@
+
+$(DEVICENAME): $(DEVICENAME_SOURCES) $(DEVICENAME_INCLUDES) DeviceName | $(STAGE)/devicename
+	$(CLANG) $(GUEST_C_FLAGS) -Wall -Wextra -Werror -dynamiclib \
+		-install_name /usr/lib/libdevicename.dylib \
+		-o $@ $(DEVICENAME_SOURCES) \
+		-framework CoreFoundation -framework IOKit -framework SystemConfiguration \
 		-Wl,-not_for_dyld_shared_cache
 	@codesign --force --sign - $@
 
