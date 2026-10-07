@@ -142,67 +142,24 @@ extension GuestIrisinInstaller {
         return created
     }
 
-    // MARK: - Package changes
-
-    private static let packageQueue = DispatchQueue(label: "vphoned.roothide.packages")
-    private nonisolated(unsafe) static var packageWatch: DispatchSourceFileSystemObject?
-    private nonisolated(unsafe) static var packageRelinkPending = false
-
-    /// Irisin, apt and dpkg all rewrite Library/dpkg/status when they finish,
-    /// so a changed directory relinks the new package's Mach-O directories
-    /// right away. The spawn hooks cannot do it for a mobile shell: running
-    /// sudo there cannot create a link in the root-owned usr/libexec/sudo.
-    /// The base steps that waited for pwd_mkdb or ssh-keygen run then too,
-    /// so sshd has host keys as soon as openssh is installed.
-    static func watchRootHidePackages(root: String) {
-        packageQueue.async {
-            guard packageWatch == nil else { return }
-            let directory = root + "/Library/dpkg"
-            let descriptor = open(directory, O_EVTONLY | O_CLOEXEC)
-            guard descriptor >= 0 else {
-                NSLog("vphoned: cannot watch %@: %s", directory, strerror(errno))
-                return
-            }
-            let source = DispatchSource.makeFileSystemObjectSource(
-                fileDescriptor: descriptor, eventMask: [.write, .delete, .rename], queue: packageQueue,
-            )
-            source.setEventHandler {
-                guard let watch = packageWatch else { return }
-                if !watch.data.isDisjoint(with: [.delete, .rename]) {
-                    // The bootstrap was removed; a new install starts a new watch.
-                    watch.cancel()
-                    packageWatch = nil
-                    return
-                }
-                guard !packageRelinkPending else { return }
-                packageRelinkPending = true
-                // Let the package manager finish writing before walking.
-                packageQueue.asyncAfter(deadline: .now() + 1) {
-                    packageRelinkPending = false
-                    let seeded = ensureRootHideMachOLinks(root: root)
-                    if !seeded.isEmpty {
-                        NSLog("vphoned: RootHide loader links: %@", seeded.joined(separator: ", "))
-                    }
-                    do {
-                        let base = try ensureRootHideBase(root: root)
-                        if base["created"] as? [String] != [] {
-                            NSLog("vphoned: RootHide bootstrap base: %@", String(describing: base))
-                        }
-                    } catch {
-                        NSLog("vphoned: could not repair RootHide bootstrap: %@", String(describing: error))
-                    }
-                }
-            }
-            source.setCancelHandler { close(descriptor) }
-            packageWatch = source
-            source.resume()
+    /// After a package operation: relinks the new package's Mach-O
+    /// directories right away. The spawn hooks cannot do it for a mobile
+    /// shell: running sudo there cannot create a link in the root-owned
+    /// usr/libexec/sudo. The base steps that waited for pwd_mkdb or
+    /// ssh-keygen run then too, so sshd has host keys as soon as openssh is
+    /// installed.
+    static func repairRootHidePackages(root: String) {
+        let seeded = ensureRootHideMachOLinks(root: root)
+        if !seeded.isEmpty {
+            NSLog("vphoned: RootHide loader links: %@", seeded.joined(separator: ", "))
         }
-    }
-
-    static func stopWatchingRootHidePackages() {
-        packageQueue.sync {
-            packageWatch?.cancel()
-            packageWatch = nil
+        do {
+            let base = try ensureRootHideBase(root: root)
+            if base["created"] as? [String] != [] {
+                NSLog("vphoned: RootHide bootstrap base: %@", String(describing: base))
+            }
+        } catch {
+            NSLog("vphoned: could not repair RootHide bootstrap: %@", String(describing: error))
         }
     }
 

@@ -1,4 +1,5 @@
 #include "../Shared/InjectionEnvironment.h"
+#include "../Shared/JetsamLimits.h"
 #include "../Shared/RootHideLoaderLinks.h"
 #include <crt_externs.h>
 #include <dlfcn.h>
@@ -98,16 +99,16 @@ static void vpPrepareLoaderLink(const char *path) {
 // then skips ElleKit. Only bootstrap, app and camera targets are logged and
 // get their loader links prepared.
 static VPInjectionEnvironment vpPrepareChild(const char *path, char *const envp[], const char *kind) {
-    const int misFix = vpIsMISFixTarget(path);
-    const int batteryHealthFix = vpIsBatteryHealthFixTarget(path);
-    const int deviceHubFix = vpIsDeviceHubFixTarget(path);
-    VPInjectionEnvironment injected = vpInsertHooks(envp, getenv("VPHONE_JB_ROOT"), vpInsertedLibraryFor(path));
-    if (vpIsInjectionTarget(path) || misFix || deviceHubFix) {
+    const VPInsertedLibraries libraries = vpInsertedLibrariesFor(path);
+    VPInjectionEnvironment injected = vpInsertHooksFor(envp, getenv("VPHONE_JB_ROOT"), &libraries);
+    if (vpIsInjectionTarget(path) || vpIsMISFixTarget(path) || vpIsDeviceHubFixTarget(path) ||
+        vpIsDeviceNameTarget(path)) {
         vpPrepareLoaderLink(path);
-        char decision[96];
+        char names[96];
+        vpDescribeInsertedLibraries(&libraries, names, sizeof(names));
+        char decision[160];
         snprintf(decision, sizeof(decision), "%s%s%s%s", kind, !injected.values ? "unchanged" : "inserted",
-                 misFix ? "+misfix" : batteryHealthFix ? "+batteryhealthfix" : deviceHubFix ? "+devicehubfix" : "",
-                 vpInjectionDisabled(envp) ? "-tweaks-disabled" : "");
+                 names, vpInjectionDisabled(envp) ? "-tweaks-disabled" : "");
         vpLogSpawn(path, decision);
     }
     return injected;
@@ -117,7 +118,9 @@ static int vpSpawnP(pid_t *restrict pid, const char *restrict path, const posix_
                     const posix_spawnattr_t *restrict attributes, char *const argv[restrict],
                     char *const envp[restrict]) {
     VPInjectionEnvironment injected = vpPrepareChild(path, envp, "");
+    VPJetsamLimits limits = vpRaiseJetsamLimits(getenv("VPHONE_JB_ROOT"), path, attributes, envp);
     int status = posix_spawnp(pid, path, actions, attributes, argv, injected.values ? injected.values : envp);
+    vpRestoreJetsamLimits(&limits);
     vpFreeEnvironment(&injected);
     return status;
 }
@@ -126,7 +129,9 @@ static int vpSpawn(pid_t *restrict pid, const char *restrict path, const posix_s
                    const posix_spawnattr_t *restrict attributes, char *const argv[restrict],
                    char *const envp[restrict]) {
     VPInjectionEnvironment injected = vpPrepareChild(path, envp, "");
+    VPJetsamLimits limits = vpRaiseJetsamLimits(getenv("VPHONE_JB_ROOT"), path, attributes, envp);
     int status = posix_spawn(pid, path, actions, attributes, argv, injected.values ? injected.values : envp);
+    vpRestoreJetsamLimits(&limits);
     vpFreeEnvironment(&injected);
     return status;
 }
@@ -149,12 +154,27 @@ static int vpExecve(const char *path, char *const argv[], char *const envp[]) {
 // HapticsFix/libhapticsfix.c for what it answers and why SpringBoard is the
 // target.
 #define VP_HAPTICS_FIX "/usr/lib/libhapticsfix.dylib"
+// The Settings follow-up-group hider. Rides the same dlopen route; it swizzles
+// (Preferences' classes are in the shared cache, so interposing would not reach
+// them) and hides the CoreFollowUp suggestion/upsell groups. See
+// PrefsFix/libprefsfix.m.
+#define VP_PREFS_FIX "/usr/lib/libprefsfix.dylib"
+// The sign-in suppressor. Loaded into every app (not daemons) and swizzles the
+// in-process Apple-ID / iCloud / store sign-in presentation controllers so no
+// app can present a sign-in sheet. Self-gates on each class being present.
+// See SignInFix/libsigninfix.m.
+#define VP_SIGNIN_FIX "/usr/lib/libsigninfix.dylib"
 
 // The one UIKit process measured creating a CHHapticEngine without first
 // asking CoreHaptics whether the hardware exists. Suffix-matched, like the
 // MIS targets, so it holds however launchd names the binary.
 static int vpIsSpringBoard(const char *path) {
     return vpPathHasSuffix(path, "/SpringBoard.app/SpringBoard");
+}
+
+// Settings. Suffix-matched like the other targets.
+static int vpIsPreferences(const char *path) {
+    return vpPathHasSuffix(path, "/Preferences.app/Preferences");
 }
 
 // A missing library is expected and stays quiet; anything else is logged.
@@ -217,8 +237,17 @@ __attribute__((constructor)) static void vpLogProcess(void) {
     // first asks CoreHaptics for an engine.
     if (vpIsSpringBoard(path))
         vpLoadLibrary("haptics-fix", VP_HAPTICS_FIX);
+    // Loaded before the app gate too: the swizzle must be in place before
+    // Settings builds its follow-up section.
+    if (vpIsPreferences(path))
+        vpLoadLibrary("prefs-fix", VP_PREFS_FIX);
     if (!vpInBootstrap && !vpIsAppPath(path))
         return;
+    // Every app gets the sign-in suppressor; it self-gates on the sign-in
+    // presentation classes being present (daemons are excluded by the app gate
+    // above, so background AuthKit auth is untouched).
+    if (vpIsAppPath(path))
+        vpLoadLibrary("signin-fix", VP_SIGNIN_FIX);
     if (vpIsAppPath(path) && dlopen(VP_AVFOUNDATION, RTLD_LAZY | RTLD_NOLOAD))
         vpLoadLibrary("camera-hook", VP_CAMERA_APP_HOOK);
     const char *root = getenv("VPHONE_JB_ROOT");

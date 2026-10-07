@@ -12,7 +12,12 @@
 // signature or a provisioning profile — see `vpIsMISFixTarget` below —
 // rather than carried by every spawn. This insertion is the only way it gets
 // there: no guest binary carries a load command for it.
+//
+// The inserted libraries' paths can be predefined, so the host tests can point
+// them at files of their own; the guest builds use these.
+#ifndef VP_MIS_FIX
 #define VP_MIS_FIX "/usr/lib/libmisfix.dylib"
+#endif
 
 static int vpPathHasSuffix(const char *path, const char *suffix) {
     size_t length = path ? strlen(path) : 0;
@@ -66,7 +71,9 @@ static const char *vpMISFixFor(const char *path) {
 // BatteryHealthFix/libbatteryhealthfix.c. Inserted rather than loaded by
 // SystemHook because it interposes: the table has to be in place before
 // BatteryUsageUI.bundle is bound.
+#ifndef VP_BATTERY_HEALTH_FIX
 #define VP_BATTERY_HEALTH_FIX "/usr/lib/libbatteryhealthfix.dylib"
+#endif
 
 // Settings, the one process that shows Battery Health. Asked by both spawn
 // hooks, like the MIS targets, so it holds whichever of them starts the app.
@@ -83,7 +90,9 @@ static const char *vpBatteryHealthFixFor(const char *path) {
 // The DeviceHub hook, which lets Xcode's device viewer stream the guest's
 // screen; see DeviceHubFix/libdevicehubfix.c. Inserted because its
 // interposes have to be in place when the target's imports are bound.
+#ifndef VP_DEVICEHUB_FIX
 #define VP_DEVICEHUB_FIX "/usr/lib/libdevicehubfix.dylib"
+#endif
 
 // cryptexd, which stages and grafts the developer disk image, and the DDI's
 // display server. The DDI is mounted under /System/Developer, so the
@@ -98,13 +107,79 @@ static const char *vpDeviceHubFixFor(const char *path) {
     return vpIsDeviceHubFixTarget(path) && access(VP_DEVICEHUB_FIX, R_OK) == 0 ? VP_DEVICEHUB_FIX : NULL;
 }
 
-// The one library, if any, the spawn hooks insert beside SystemHook for
-// `path`. The MIS, battery health and DeviceHub targets do not overlap.
+// The device name hook, which pins the name the host chose; see
+// DeviceName/libdevicename.c. Inserted because it interposes the
+// SystemConfiguration imports of the two processes below, which have to be
+// rebound before either runs.
+#ifndef VP_DEVICE_NAME
+#define VP_DEVICE_NAME "/usr/lib/libdevicename.dylib"
+#endif
+
+// configd publishes the name into the dynamic store, and lockdownd is where a
+// host or Settings renames the device. lockdownd also takes libmisfix, so it
+// is the one process that gets two libraries.
+static int vpIsDeviceNameTarget(const char *path) {
+    return path && (vpPathHasSuffix(path, "/usr/libexec/configd") ||
+                    vpPathHasSuffix(path, "/usr/libexec/lockdownd"));
+}
+
+static const char *vpDeviceNameFor(const char *path) {
+    return vpIsDeviceNameTarget(path) && access(VP_DEVICE_NAME, R_OK) == 0 ? VP_DEVICE_NAME : NULL;
+}
+
+// The most libraries one process takes beside SystemHook.
+#define VP_INSERTED_LIBRARIES_MAX 4
+
+typedef struct {
+    const char *paths[VP_INSERTED_LIBRARIES_MAX];
+    size_t count;
+} VPInsertedLibraries;
+
+// The libraries the spawn hooks insert beside SystemHook for `path`, in
+// insertion order. Each is listed only when it is installed. The MIS, battery
+// health and DeviceHub targets do not overlap; the device name targets overlap
+// the MIS ones at lockdownd, which gets libmisfix and then libdevicename.
+static VPInsertedLibraries vpInsertedLibrariesFor(const char *path) {
+    VPInsertedLibraries result = {{0}, 0};
+    const char *const candidates[] = {
+        vpMISFixFor(path),
+        vpBatteryHealthFixFor(path),
+        vpDeviceHubFixFor(path),
+        vpDeviceNameFor(path),
+    };
+    for (size_t index = 0; index < sizeof(candidates) / sizeof(candidates[0]); index++) {
+        if (candidates[index] && result.count < VP_INSERTED_LIBRARIES_MAX)
+            result.paths[result.count++] = candidates[index];
+    }
+    return result;
+}
+
+// The first of those libraries, or NULL.
 static const char *vpInsertedLibraryFor(const char *path) {
-    const char *library = vpMISFixFor(path);
-    if (!library)
-        library = vpBatteryHealthFixFor(path);
-    return library ? library : vpDeviceHubFixFor(path);
+    VPInsertedLibraries libraries = vpInsertedLibrariesFor(path);
+    return libraries.count ? libraries.paths[0] : NULL;
+}
+
+// "+misfix+devicename" for the libraries' file names, for the spawn logs:
+// "/usr/lib/libmisfix.dylib" is logged as "+misfix", as it always was.
+static void vpDescribeInsertedLibraries(const VPInsertedLibraries *libraries, char *buffer, size_t size) {
+    if (!size)
+        return;
+    buffer[0] = '\0';
+    size_t used = 0;
+    for (size_t index = 0; libraries && index < libraries->count; index++) {
+        const char *name = strrchr(libraries->paths[index], '/');
+        name = name ? name + 1 : libraries->paths[index];
+        if (strncmp(name, "lib", 3) == 0)
+            name += 3;
+        size_t length = strlen(name);
+        if (length > 6 && strcmp(name + length - 6, ".dylib") == 0)
+            length -= 6;
+        int written = snprintf(buffer + used, size - used, "+%.*s", (int)length, name);
+        if (written < 0 || (size_t)written >= size - used)
+            return;
+        used += (size_t)written;
+    }
 }
 
 typedef struct {
@@ -156,10 +231,12 @@ static int vpHasHook(const char *paths) {
 
 // Keep the bootstrap path with the injected hooks across xpcproxy's new envp.
 //
-// `extra` is a second library to insert alongside the system hook, or NULL.
-// Only the ones not already listed are added, so this is safe to run over an
-// environment that has been through here before.
-static VPInjectionEnvironment vpInsertHooks(char *const env[], const char *root, const char *extra) {
+// `extras` are `extraCount` libraries to insert alongside the system hook, in
+// order; NULL and empty entries are skipped. Only the ones not already listed
+// are added, so this is safe to run over an environment that has been through
+// here before.
+static VPInjectionEnvironment vpInsertHookLibraries(char *const env[], const char *root,
+                                                    const char *const extras[], size_t extraCount) {
     VPInjectionEnvironment result = {0};
     size_t count = 0;
     size_t dyld = (size_t)-1;
@@ -177,7 +254,20 @@ static VPInjectionEnvironment vpInsertHooks(char *const env[], const char *root,
     }
     const char *existing = dyld == (size_t)-1 ? NULL : env[dyld] + 22;
     int addHook = !vpListHasPath(existing, VP_SYSTEM_HOOK);
-    int addExtra = extra && *extra && !vpListHasPath(existing, extra);
+    // The extras still missing, without repeats, in the caller's order.
+    const char *adding[VP_INSERTED_LIBRARIES_MAX];
+    size_t addCount = 0;
+    for (size_t index = 0; extras && index < extraCount && addCount < VP_INSERTED_LIBRARIES_MAX; index++) {
+        const char *extra = extras[index];
+        if (!extra || !*extra || strcmp(extra, VP_SYSTEM_HOOK) == 0 || vpListHasPath(existing, extra))
+            continue;
+        int repeated = 0;
+        for (size_t earlier = 0; earlier < addCount; earlier++)
+            repeated = repeated || strcmp(adding[earlier], extra) == 0;
+        if (!repeated)
+            adding[addCount++] = extra;
+    }
+    int addExtra = addCount > 0;
     int addRoot = root && *root &&
                   (jbRoot == (size_t)-1 || strcmp(env[jbRoot] + 15, root) != 0);
     if (!addHook && !addExtra && !addRoot)
@@ -186,8 +276,8 @@ static VPInjectionEnvironment vpInsertHooks(char *const env[], const char *root,
         size_t size = strlen("DYLD_INSERT_LIBRARIES=") + 1;
         if (addHook)
             size += strlen(VP_SYSTEM_HOOK) + 1;
-        if (addExtra)
-            size += strlen(extra) + 1;
+        for (size_t index = 0; index < addCount; index++)
+            size += strlen(adding[index]) + 1;
         if (existing && *existing)
             size += strlen(existing) + 1;
         result.hook = malloc(size);
@@ -196,11 +286,16 @@ static VPInjectionEnvironment vpInsertHooks(char *const env[], const char *root,
         // The inserted libraries go first, before whatever the caller already
         // had, so their interposes are in place before anything else loads.
         int written = snprintf(result.hook, size, "DYLD_INSERT_LIBRARIES=");
-        if (addHook)
+        int listed = 0;
+        if (addHook) {
             written += snprintf(result.hook + written, size - (size_t)written, "%s", VP_SYSTEM_HOOK);
-        if (addExtra)
+            listed = 1;
+        }
+        for (size_t index = 0; index < addCount; index++) {
             written += snprintf(result.hook + written, size - (size_t)written, "%s%s",
-                                addHook ? ":" : "", extra);
+                                listed ? ":" : "", adding[index]);
+            listed = 1;
+        }
         if (existing && *existing)
             snprintf(result.hook + written, size - (size_t)written, ":%s", existing);
     }
@@ -231,6 +326,19 @@ static VPInjectionEnvironment vpInsertHooks(char *const env[], const char *root,
     if (addRoot && jbRoot == (size_t)-1)
         result.values[count] = result.root;
     return result;
+}
+
+// One extra library, or none when `extra` is NULL.
+static VPInjectionEnvironment vpInsertHooks(char *const env[], const char *root, const char *extra) {
+    const char *const extras[] = {extra};
+    return vpInsertHookLibraries(env, root, extras, extra ? 1 : 0);
+}
+
+// The libraries `vpInsertedLibrariesFor` chose.
+static VPInjectionEnvironment vpInsertHooksFor(char *const env[], const char *root,
+                                               const VPInsertedLibraries *libraries) {
+    return vpInsertHookLibraries(env, root, libraries ? libraries->paths : NULL,
+                                 libraries ? libraries->count : 0);
 }
 
 static void vpFreeEnvironment(VPInjectionEnvironment *environment) {

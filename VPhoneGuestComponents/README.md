@@ -10,6 +10,8 @@ tweak filter plists, and the GPU provenance note:
 | Camera daemon hook | `vcamcaptured/libvcamcaptured.dylib`, `vcamcaptured/libvcamcaptured.plist` |
 | Haptics fix | `hapticsfix/libhapticsfix.dylib` |
 | Battery health fix | `batteryhealthfix/libbatteryhealthfix.dylib` |
+| DeviceHub fix | `devicehubfix/libdevicehubfix.dylib` |
+| Device name pin | `devicename/libdevicename.dylib` |
 | Launchd hook | `launchhook/launchdhook-vphone.dylib` |
 | Process injection bridge | `systemhook/SystemHook-vphone.dylib` |
 | iOS 27 app registrar | `vpregister/vpregister` |
@@ -27,7 +29,13 @@ VM has. Both spawn hooks insert `libbatteryhealthfix.dylib` into Settings beside
 SystemHook; it completes the internal battery's power source description with
 the health keys a real battery has and answers the two questions only battery
 hardware can, so Battery Health shows a healthy battery instead of loading
-forever.
+forever. Both also insert `libdevicename.dylib` into configd and lockdownd
+(lockdownd takes it after `libmisfix.dylib`). It acts only when vphoned has
+stored a name in `/var/db/vphone/devicename.plist` (the host sends the VM's
+name after every connect): configd then publishes that name as the device name
+and lockdownd refuses renames, while `preferences.plist` keeps the guest's own
+name. See
+`Research/Guest/device_name_pinning.md`.
 After a bootstrap installs ElleKit, the launchd hook
 inserts SystemHook into `xpcproxy`, bootstrap executables, and apps started
 directly by launchd. Inside `xpcproxy`, SystemHook carries itself into the
@@ -39,6 +47,9 @@ ElleKit owns tweak selection and loading. It logs PID and executable path to
 `/var/mobile/Library/Caches/vphone-systemhook.log`, falling back to the app's
 own `Library/Caches` when sandboxed.
 `DISABLE_TWEAKS=1` and the safe-mode flags skip injection.
+While a bootstrap is installed, both spawn hooks also triple the jetsam memory
+limits a spawn carries, with Dopamine's exclusions, and restore the caller's
+attributes afterwards (`Shared/JetsamLimits.h`).
 Irisin installs ElleKit's own `TweakLoader.dylib` in the selected bootstrap.
 The required GPU bundle is extracted from the selected PCC firmware by
 `vphone-cli fw prepare` and copied into the VM during JB installation. No

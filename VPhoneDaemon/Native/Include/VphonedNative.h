@@ -78,4 +78,9 @@ NSDictionary *vp_network_hostname_get(NSString **error);
 /// Set the mDNS name, or with nil put back the one vphoned replaced. Only a
 /// name vphoned set is ever undone. Returns the get result plus `changed`.
 NSDictionary *vp_network_hostname_set(NSString *name, NSString **error);
+
+/// Apply the preferences as they are, changing nothing: every process
+/// watching them, configd's preferences monitor first, reads them again and
+/// publishes what it derives from them.
+BOOL vp_preferences_apply(NSString **error);
 #endif

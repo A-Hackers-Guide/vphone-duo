@@ -1,4 +1,5 @@
 #include "../Shared/InjectionEnvironment.h"
+#include "../Shared/JetsamLimits.h"
 #include "../Shared/RootHideLoaderLinks.h"
 #include <fcntl.h>
 #include <stdint.h>
@@ -94,17 +95,25 @@ static int vpSpawnWith(VPSpawnFunction spawn, pid_t *restrict pid, const char *r
     if (!path || strcmp(path, "/sbin/launchd") == 0)
         return spawn(pid, path, actions, attributes, argv, envp);
     // launchd starts some jobs itself rather than through xpcproxy — SpringBoard
-    // is one — so the MIS, battery health and DeviceHub hooks have to be
-    // decided here as well as in SystemHook.
-    const char *library = vpInsertedLibraryFor(path);
-    VPInjectionEnvironment injected = vpInsertHooks(envp, vpBootRoot, library);
+    // is one — so the MIS, battery health, DeviceHub and device name hooks
+    // have to be decided here as well as in SystemHook.
+    const VPInsertedLibraries libraries = vpInsertedLibrariesFor(path);
+    VPInjectionEnvironment injected = vpInsertHooksFor(envp, vpBootRoot, &libraries);
+    VPJetsamLimits limits = vpRaiseJetsamLimits(vpBootRoot, path, attributes, envp);
     int status = spawn(pid, path, actions, attributes, argv, injected.values ? injected.values : envp);
-    if (bootstrapProgram || appProgram || library || strcmp(path, "/usr/libexec/xpcproxy") == 0) {
-        const char *event = !injected.values ? "unchanged" :
-                            library && strcmp(library, VP_MIS_FIX) == 0 ? "inserted+misfix" :
-                            library && strcmp(library, VP_BATTERY_HEALTH_FIX) == 0 ? "inserted+batteryhealthfix" :
-                            library ? "inserted+devicehubfix" :
-                            vpInjectionDisabled(envp) ? "inserted-tweaks-disabled" : "inserted";
+    vpRestoreJetsamLimits(&limits);
+    if (bootstrapProgram || appProgram || libraries.count || strcmp(path, "/usr/libexec/xpcproxy") == 0) {
+        char event[128];
+        if (!injected.values) {
+            snprintf(event, sizeof(event), "unchanged");
+        } else if (libraries.count) {
+            char names[96];
+            vpDescribeInsertedLibraries(&libraries, names, sizeof(names));
+            snprintf(event, sizeof(event), "inserted%s", names);
+        } else {
+            snprintf(event, sizeof(event), "%s",
+                     vpInjectionDisabled(envp) ? "inserted-tweaks-disabled" : "inserted");
+        }
         vpLogInjection(event, path, status);
         vpLogSpawn(event, path, status == 0 && pid ? *pid : -1, status);
     }
