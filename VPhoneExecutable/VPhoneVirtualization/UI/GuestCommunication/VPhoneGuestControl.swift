@@ -16,6 +16,9 @@ final class VPhoneGuestControl {
         case guestError(String)
         /// `bootstrap.install` found a completed installation in the guest.
         case bootstrapAlreadyInstalled(String)
+        /// The guest's Location Services switch is off, so it has no location to
+        /// give an app, a simulated one included.
+        case locationServicesOff(String)
 
         var description: String {
             switch self {
@@ -23,7 +26,7 @@ final class VPhoneGuestControl {
                 VPhoneLocalization.text("The guest agent is not connected. Wait for it to connect, then try again.")
             case let .unsupportedCapability(value): "guest does not support capability: \(value)"
             case let .protocolError(value): "API protocol error: \(value)"
-            case let .guestError(value), let .bootstrapAlreadyInstalled(value): value
+            case let .guestError(value), let .bootstrapAlreadyInstalled(value), let .locationServicesOff(value): value
             }
         }
     }
@@ -66,6 +69,11 @@ final class VPhoneGuestControl {
     /// that has just started connects, from the manifest. Read at each connect,
     /// so a change from the menu holds from the next guest start.
     @ObservationIgnored var unlocksAtStartup = false
+    /// Whether the Mac's location is forwarded to the guest, from the manifest.
+    /// The VM window's Location menu starts from it and writes it back.
+    @ObservationIgnored var syncsHostLocation = false
+    /// Called on the main actor when a `location.set` or `location.clear` fails.
+    @ObservationIgnored var onLocationFailure: ((Error) -> Void)?
     /// The `instance` of the last vphoned connected to. Kept across
     /// disconnects: a lost probe reconnects to the same vphoned, which is not
     /// a start. Guest counters such as the clipboard's change count start
@@ -418,6 +426,9 @@ final class VPhoneGuestControl {
             if error["code"] as? String == "bootstrap_already_installed" {
                 throw ControlError.bootstrapAlreadyInstalled(message)
             }
+            if error["code"] as? String == "location_services_off" {
+                throw ControlError.locationServicesOff(message)
+            }
             throw ControlError.guestError(message)
         }
         guard response.status == 200, let result = envelope["result"] as? [String: Any]
@@ -666,7 +677,12 @@ final class VPhoneGuestControl {
         orderedLocation = Task {
             await previous?.value
             guard !Task.isCancelled, generation == locationGeneration else { return }
-            do { _ = try await call(method, params: params) } catch { print("[control] \(method): \(error)") }
+            do {
+                _ = try await call(method, params: params)
+            } catch {
+                print("[control] \(method): \(error)")
+                onLocationFailure?(error)
+            }
         }
     }
 

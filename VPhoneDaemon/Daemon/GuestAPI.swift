@@ -1,3 +1,4 @@
+import CoreLocation
 import CryptoKit
 import Darwin
 import Foundation
@@ -13,18 +14,26 @@ enum GuestAPIError: Error, CustomStringConvertible {
     /// The request would repeat work the guest has already done. The code is
     /// sent as the error code so a client can tell it apart from a failure.
     case alreadyDone(code: String, message: String)
+    /// The guest's Location Services switch is off, so locationd gives no
+    /// client a location. vphoned leaves the switch to the guest's Settings.
+    case locationServicesOff
 
     var description: String {
         switch self {
         case let .invalidRequest(message), let .operationFailed(message): message
         case let .unsupportedMethod(method): "Unknown method: \(method)"
         case let .alreadyDone(_, message): message
+        case .locationServicesOff:
+            "Location Services are turned off in the guest. Turn them on in Settings > Privacy & Security > Location Services."
         }
     }
 
     var code: String {
         if case let .alreadyDone(code, _) = self {
             return code
+        }
+        if case .locationServicesOff = self {
+            return "location_services_off"
         }
         return "invalid_operation"
     }
@@ -319,6 +328,7 @@ enum GuestAPI {
             }
             return try hidPress(page: page, usage: usage)
         case "location.set":
+            guard CLLocationManager.locationServicesEnabled() else { throw GuestAPIError.locationServicesOff }
             return try simulateLocation(
                 latitude: number(params, "latitude"),
                 longitude: number(params, "longitude"),
@@ -331,6 +341,7 @@ enum GuestAPI {
         case "location.clear":
             return try clearSimulatedLocation()
         case "location.current":
+            guard CLLocationManager.locationServicesEnabled() else { throw GuestAPIError.locationServicesOff }
             return try currentLocation(timeout: number(params, "timeout", default: 10))
         case "developer_mode.status":
             return try developerModeStatus()

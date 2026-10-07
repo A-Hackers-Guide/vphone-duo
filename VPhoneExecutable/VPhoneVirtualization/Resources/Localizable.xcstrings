@@ -242,6 +242,111 @@
         }
       }
     },
+    "Unable to Change Sync Host Location" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to Change Sync Host Location"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「ホストの位置情報を同期」を変更できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "호스트 위치 동기화를 변경할 수 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể thay đổi Đồng bộ vị trí máy chủ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法更改同步主机位置"
+          }
+        }
+      }
+    },
+    "Location Services Are Off in the Guest" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Location Services Are Off in the Guest"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストの位置情報サービスがオフです"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트의 위치 서비스가 꺼져 있음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dịch vụ định vị trên máy khách đang tắt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机的定位服务已关闭"
+          }
+        }
+      }
+    },
+    "Turn on Location Services in the guest's Settings > Privacy & Security > Location Services. Until then, apps in the guest get no location; the Mac's location is sent again once they are on." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on Location Services in the guest's Settings > Privacy & Security > Location Services. Until then, apps in the guest get no location; the Mac's location is sent again once they are on."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストの「設定」>「プライバシーとセキュリティ」>「位置情報サービス」で位置情報サービスをオンにしてください。オンにするまで、ゲストのアプリは位置情報を取得できません。オンにすると、Mac の位置情報がもう一度送信されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트의 설정 > 개인정보 보호 및 보안 > 위치 서비스에서 위치 서비스를 켜십시오. 켜기 전까지 게스트의 앱은 위치를 받을 수 없으며, 켜면 Mac의 위치가 다시 전송됩니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hãy bật Dịch vụ định vị trong Cài đặt > Quyền riêng tư & Bảo mật > Dịch vụ định vị của máy khách. Trước khi bật, các ứng dụng trên máy khách không nhận được vị trí; vị trí của máy Mac sẽ được gửi lại khi dịch vụ được bật."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在客户机的“设置”>“隐私与安全性”>“定位服务”中打开定位服务。打开之前，客户机里的 App 拿不到位置；打开后会重新发送这台 Mac 的位置。"
+          }
+        }
+      }
+    },
     "Stop the Virtual Machine?" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -44,6 +44,12 @@ done
 require_signed_macho "$frameworks/VPhonePatchKit.framework/Versions/A/VPhonePatchKit"
 require_signed_macho "$location_helper"
 /usr/bin/codesign --verify --strict "$location_app"
+# One requirement for every build, so locationd keeps one grant for all of
+# them (see StageBundle.sh).
+[[ "$(/usr/bin/codesign -d -r- "$location_app" 2>/dev/null)" == *'designated => identifier "com.vphone.bundle.location"' ]] || {
+    print -u2 "VPhoneLocation.app does not carry its identifier requirement"
+    exit 1
+}
 # locationd answers only a client inside an .app, and prompts with its usage
 # description in the user's language.
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$location_app/Contents/Info.plist")" == "APPL" ]] || {

@@ -49,6 +49,11 @@ class VPhoneLocationProvider: NSObject {
     private var replayTask: Task<Void, Never>?
     private var replayName: String?
     var onAuthorizationFailure: (() -> Void)?
+    /// Called once per sync, preset or replay when the guest refuses a
+    /// location because its Location Services switch is off.
+    var onGuestLocationServicesOff: (() -> Void)?
+    private var reportedGuestServicesOff = false
+    private var resendTask: Task<Void, Never>?
 
     var isReplaying: Bool {
         replayTask != nil
@@ -57,12 +62,14 @@ class VPhoneLocationProvider: NSObject {
     init(control: VPhoneGuestControl) {
         self.control = control
         super.init()
+        control.onLocationFailure = { [weak self] error in self?.guestRefused(error) }
     }
 
     /// Begin sending location to the guest.  Safe to call on every (re)connect.
     func startForwarding() {
         stopReplay()
         hostModeStarted = true
+        reportedGuestServicesOff = false
         if let last = lastHostLocation, abs(last.date.timeIntervalSinceNow) < 60 {
             forward(last)
         }
@@ -82,6 +89,8 @@ class VPhoneLocationProvider: NSObject {
         if hostModeStarted {
             hostModeStarted = false
             stopHelper()
+            resendTask?.cancel()
+            resendTask = nil
             print("[location] stopped host location tracking")
         }
     }
@@ -171,6 +180,7 @@ class VPhoneLocationProvider: NSObject {
     /// Send a fixed simulated location to the guest.
     func sendPreset(name: String, latitude: Double, longitude: Double, altitude: Double = 0) {
         stopReplay()
+        reportedGuestServicesOff = false
         sendSimulatedLocation(
             latitude: latitude,
             longitude: longitude,
@@ -197,6 +207,7 @@ class VPhoneLocationProvider: NSObject {
 
         stopForwarding()
         stopReplay()
+        reportedGuestServicesOff = false
 
         replayName = name
         let sleepNanos = UInt64((max(intervalSeconds, 0.1) * 1_000_000_000).rounded())
@@ -258,6 +269,8 @@ class VPhoneLocationProvider: NSObject {
     private func forward(_ location: HostLocation) {
         lastHostLocation = location
         guard hostModeStarted else { return }
+        resendTask?.cancel()
+        resendTask = nil
         guard control.isConnected else {
             print("[location] forward: not connected, cached for later")
             return
@@ -271,6 +284,25 @@ class VPhoneLocationProvider: NSObject {
             speed: location.speed,
             course: location.course,
         )
+    }
+
+    // MARK: - Guest Refusals
+
+    private func guestRefused(_ error: Error) {
+        guard case VPhoneGuestControl.ControlError.locationServicesOff = error else { return }
+        if !reportedGuestServicesOff {
+            reportedGuestServicesOff = true
+            onGuestLocationServicesOff?()
+        }
+        // The Mac sends a fix only when it moves, so keep offering the last one
+        // until someone turns Location Services on in the guest.
+        guard hostModeStarted, let last = lastHostLocation, resendTask == nil else { return }
+        resendTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            guard let self, !Task.isCancelled else { return }
+            resendTask = nil
+            forward(lastHostLocation ?? last)
+        }
     }
 
     private func sendSimulatedLocation(

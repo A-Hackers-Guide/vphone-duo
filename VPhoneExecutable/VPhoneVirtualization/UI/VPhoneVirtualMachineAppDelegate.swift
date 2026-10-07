@@ -113,6 +113,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         self.control = control
         if !command.dfu {
             control.unlocksAtStartup = vm.unlocksAtStartup
+            control.syncsHostLocation = vm.syncsHostLocation
             control.guestDeviceName = Self.guestDeviceName(forConfig: options.configURL)
             startNetworkServices(vm: vm, control: control)
             let vphonedURL = URL(fileURLWithPath: command.vphonedBin)
@@ -193,6 +194,11 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 try manifest.updating(unlocksAtStartup: enabled).write(to: config)
                 try VPhoneHostFilePermissions.makeAccessible(at: config)
             }
+            mc.onHostLocationSyncChange = { [config = command.config] enabled in
+                let manifest = try VPhoneVirtualMachineManifest.load(from: config)
+                try manifest.updating(syncsHostLocation: enabled).write(to: config)
+                try VPhoneHostFilePermissions.makeAccessible(at: config)
+            }
             mc.captureView = wc.captureView
             mc.touchIDMonitor = wc.touchIDMonitor
             mc.onFilesPressed = { [weak fileWC, weak control] in
@@ -227,6 +233,13 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                         "Allow VPhone to use your location in System Settings > Privacy & Security > Location Services to sync the Mac's location.",
                     )
                     alert.runModal()
+                }
+                provider.onGuestLocationServicesOff = {
+                    VPhoneAlert.present(
+                        title: "Location Services Are Off in the Guest",
+                        message: "Turn on Location Services in the guest's Settings > Privacy & Security > Location Services. Until then, apps in the guest get no location; the Mac's location is sent again once they are on.",
+                        style: .informational,
+                    )
                 }
             }
             if let camServer = cameraServer {
@@ -296,12 +309,12 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 hostAudioLatencySync?.stop()
             }
         } else if !command.dfu {
-            // Headless mode: auto-start location as before (no menu exists)
-            control.onConnect = { [weak self, weak provider = locationProvider, weak timeZoneSync, weak hostAudioLatencySync] caps in
-                if caps.contains("location") {
-                    provider?.startForwarding()
-                } else {
+            // Headless mode: no menu, so the machine's setting alone decides.
+            control.onConnect = { [weak self, weak control, weak provider = locationProvider, weak timeZoneSync, weak hostAudioLatencySync] caps in
+                if !caps.contains("location") {
                     print("[location] guest does not support location simulation")
+                } else if control?.syncsHostLocation == true {
+                    provider?.startForwarding()
                 }
                 if caps.contains("timezone") {
                     timeZoneSync?.start()

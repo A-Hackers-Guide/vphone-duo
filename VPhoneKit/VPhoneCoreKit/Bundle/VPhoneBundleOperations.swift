@@ -109,6 +109,7 @@ public enum VPhoneBundleOperations {
         bridgeInterface: String? = nil,
         networkEdit: VPhoneNetworkEdit = VPhoneNetworkEdit(),
         unlocksAtStartup: Bool? = nil,
+        syncsHostLocation: Bool? = nil,
     ) throws -> VPhoneBundle {
         let bundle = try library.bundle(named: name)
         var edit = networkEdit
@@ -122,6 +123,7 @@ public enum VPhoneBundleOperations {
             memorySize: memoryMB.map { $0 * 1024 * 1024 },
             networkConfig: network,
             unlocksAtStartup: unlocksAtStartup,
+            syncsHostLocation: syncsHostLocation,
         )
         try updated.write(to: bundle.configURL)
         try VPhoneHostFilePermissions.makeAccessible(at: bundle.configURL)

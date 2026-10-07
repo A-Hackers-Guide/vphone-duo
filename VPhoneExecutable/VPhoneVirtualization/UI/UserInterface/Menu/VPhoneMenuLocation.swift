@@ -55,7 +55,7 @@ extension VPhoneMenuController {
         let menu = NSMenu(title: "Location")
 
         let toggle = makeItem("Sync Host Location", action: #selector(toggleLocationSync))
-        toggle.state = .off
+        toggle.state = control.syncsHostLocation ? .on : .off
         toggle.isEnabled = false
         locationMenuItem = toggle
         menu.addItem(toggle)
@@ -99,9 +99,23 @@ extension VPhoneMenuController {
         refreshLocationReplayState(available: available)
     }
 
+    /// Saved to this machine's config.plist, so the next start syncs, or does
+    /// not, the same way. A preset or a replay pauses sync for this run only.
     @objc func toggleLocationSync() {
         guard let item = locationMenuItem else { return }
-        if item.state == .on {
+        let enabled = item.state != .on
+        do {
+            try onHostLocationSyncChange?(enabled)
+            control.syncsHostLocation = enabled
+        } catch {
+            VPhoneAlert.present(
+                title: "Unable to Change Sync Host Location",
+                message: error.localizedDescription,
+                style: .warning,
+            )
+            return
+        }
+        if !enabled {
             locationProvider?.stopForwarding()
             control.sendLocationStop()
             item.state = .off

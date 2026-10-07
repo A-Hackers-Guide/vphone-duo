@@ -13,6 +13,52 @@
 > identity rewrites off; only the camera patches remain from EXP. Re-run the
 > reproduction below on a VM restored with `standard` to confirm.
 
+## Host location never reached the guest (2026-10-07)
+
+Every VM log that recorded Sync Host Location had the host working and the
+guest refusing: VPhoneLocation.app was authorized and wrote fixes, vphone-vm
+forwarded them, and every `location.set` failed with `Location Services are
+turned off` (issue596-ip18, unlocktest-iphone, nettest-01, discard-a/b). vphone-vm
+only printed the error and the menu checkmark stayed on. Three separate causes
+turned up on new `standard` iPhone17,3 iOS 27.0 (24A435) VMs.
+
+**The guest's Location Services switch is off.** Setup Assistant's Location
+Services pane turns it on, so a guest whose Setup Assistant was skipped, or not
+yet finished, has it off and locationd gives no client a location, a simulated
+one included. vphoned leaves the switch alone: `location.set` and
+`location.current` now fail with the code `location_services_off`, the VM
+window says so once, and vphone-vm offers the last Mac fix again every 10 s.
+Turning the switch on in the guest's Settings brought the Mac's coordinate in
+6 s later with the Mac standing still (`fresh` and `simulated` true), and Maps
+drew its blue dot there. Turning the switch on from vphoned works too
+(`+[CLLocationManager setLocationServicesEnabled:]` with
+`com.apple.locationd.authorizeapplications`, verified on 2026-10-07) but was
+left out: the switch is the guest user's.
+
+**The Mac's locationd turned the helper away.** It keys VPhoneLocation.app by
+bundle identifier and stores the code requirement the first client registered
+with; an ad hoc signature's implicit requirement is its cdhash. While a helper
+with the stored requirement runs, a helper from another build is refused
+silently (`#registration stored requirement is not equal to this new
+requirement`, then `#registration can't continue`) and never gets an
+authorization status, so it sends nothing. Two machines on different bundles
+could not both sync, and a helper of a new build was refused as long as an old
+one ran. StageBundle.sh now signs the helper with `designated => identifier
+"com.vphone.bundle.location"`; locationd accepted that requirement once no
+cdhash-signed helper was running, and the helper went from `NotDetermined` to
+`AuthorizedAlways` without a prompt.
+
+**locationd can deadlock as it starts.** It was first seen on headless starts,
+where the VM's locationd hung within a second on every boot tried; more boots
+showed windowed starts hang too, less often. Every CoreLocation client then
+waits on `com.apple.locationd.synchronous` and location RPCs time out after
+120 s. vphoned now restarts such a locationd; see
+`Research/Guest/locationd_startup_deadlock.md`.
+
+Sync Host Location is now a machine setting, `syncsHostLocation` in
+`config.plist`, off when absent, in a window and headless alike (headless used
+to start it unconditionally).
+
 ## Reproduction (2026-09-25)
 
 The running `26.4` VM uses the `jb` firmware variant and iOS 26.4.0. Its

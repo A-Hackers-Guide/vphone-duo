@@ -636,6 +636,7 @@ final class VPhoneLaunchpadMachineLibrary {
         bridgeInterface: String?,
         networkArguments: [String] = [],
         unlocksAtStartup: Bool? = nil,
+        syncsHostLocation: Bool? = nil,
     ) async {
         var arguments = ["vm", "config", machine.name] + machine.libraryArguments
         if let cpu {
@@ -653,6 +654,9 @@ final class VPhoneLaunchpadMachineLibrary {
         arguments += networkArguments
         if let unlocksAtStartup {
             arguments += ["--unlock-at-startup", unlocksAtStartup ? "on" : "off"]
+        }
+        if let syncsHostLocation {
+            arguments += ["--sync-host-location", syncsHostLocation ? "on" : "off"]
         }
         await perform(String(localized: "Saving settings…"), on: machine, arguments)
     }

@@ -349,6 +349,16 @@ so the host tells a start (guest boot, userspace reboot, a vphoned update) from
 a probe it lost and found again; only a new instance is unlocked. A guest still
 in Setup Assistant is left alone.
 
+A machine with `syncsHostLocation` in its `config.plist` (`vphone-cli vm config
+<name> --sync-host-location on`, Location > Sync Host Location in the VM window,
+or the Location section of a machine's Settings in Launchpad) has `vphone-vm`
+send each fix of the Mac's location as `location.set` while vphoned is
+connected. Absent means off, in a window and headless alike. When the guest
+answers `location_services_off`, the window says so once, and `vphone-vm`
+offers the last fix again every 10 s until the guest takes it, since the Mac
+sends a new one only when it moves. A preset or a replay pauses sync for that
+run without changing the setting.
+
 `time.timezone` (capability `timezone`; REST `GET/PUT /v1/timezone`) returns
 `{identifier, automatic, seconds_from_gmt}`: the Olson name
 `/var/db/timezone/localtime` points to under `/var/db/timezone/zoneinfo`, and
@@ -545,7 +555,15 @@ switching back needs trusting again too. The VM window's Device › Set UDID… 
 accepts only 8 and 16 hex digits joined by a hyphen (sent upper-case) or 40 hex
 digits (sent lower-case).
 
-`location.set` is IcliKit's `simulateLocation`: it sends locationd's
+`location.set` and `location.current` first check
+`CLLocationManager.locationServicesEnabled()`. With the guest's Location
+Services switch off they fail with the code `location_services_off`, since
+locationd then gives no client a location, the simulated one included. The
+switch is turned on by Setup Assistant's Location Services pane, so a guest
+whose Setup Assistant was skipped has it off. vphoned never changes the switch;
+it belongs to the guest's Settings > Privacy & Security > Location Services.
+
+Past that check, `location.set` is IcliKit's `simulateLocation`: it sends locationd's
 `CLSimulationManager` the sequence Xcode uses (`stopLocationSimulation`,
 `clearSimulatedLocations`, `appendSimulatedLocation:`, `flush`,
 `startLocationSimulation`). locationd sends no reply and silently ignores a

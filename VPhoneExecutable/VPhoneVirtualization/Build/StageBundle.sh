@@ -142,7 +142,15 @@ compatibility_library="$(/usr/bin/xcrun swift-stdlib-tool --print \
 /usr/bin/codesign --force --sign - "$macos/vphone-escalator"
 /usr/bin/codesign --force --sign - "$macos/libswiftCompatibilitySpan.vphone.dylib"
 /usr/bin/codesign --force --sign - --entitlements "$root/VPhoneExecutable/VPhoneVirtualization/Resources/VPhoneVirtualization.entitlements" "$macos/vphone-vm"
-/usr/bin/codesign --force --sign - "$location_app"
+# locationd keeps the requirement a client first registered with and turns
+# away a client with another one while that one still runs. An ad hoc
+# signature's implicit requirement is its cdhash, so each build would be a
+# new app: after an update the grant is lost, and two machines on different
+# bundles cannot both read the Mac's location. Every build names the helper by
+# identifier instead. That lends nothing new: the helper already hands the
+# location to whatever starts it.
+/usr/bin/codesign --force --sign - \
+    --requirements '=designated => identifier "com.vphone.bundle.location"' "$location_app"
 /usr/bin/codesign --force --sign - "$bundle"
 
 "${0:a:h}/ValidateBundle.sh" "$bundle"

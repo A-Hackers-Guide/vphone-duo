@@ -11,6 +11,8 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
     let usesHardwareKeyboard: Bool
     /// The manifest's unlock-at-startup setting as the VM started with it.
     let unlocksAtStartup: Bool
+    /// The manifest's Sync Host Location setting as the VM started with it.
+    let syncsHostLocation: Bool
     /// ECID hex string resolved from machineIdentifier (e.g. "0x0012345678ABCDEF").
     let ecidHex: String?
     /// Read handle for VM serial output.
@@ -242,6 +244,7 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         print("[vphone] Entropy device configured")
 
         unlocksAtStartup = manifest.unlocksScreenAtStartup
+        syncsHostLocation = manifest.sharesHostLocation
         usesHardwareKeyboard = manifest.usesHardwareKeyboard
         config.keyboards = usesHardwareKeyboard ? [VZUSBKeyboardConfiguration()] : []
         print("[vphone] Hardware keyboard: \(usesHardwareKeyboard ? "enabled" : "disabled")")

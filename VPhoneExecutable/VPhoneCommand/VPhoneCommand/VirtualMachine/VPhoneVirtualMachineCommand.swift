@@ -160,6 +160,7 @@ struct VPhoneVirtualMachineInfoCommand: ParsableCommand {
             print("disk:  \(report.diskSizeBytes) bytes")
             print("net:   \(describeNetwork(report.network))")
             print("unlock: \(report.unlocksAtStartup ? "on" : "off")")
+            print("location: \(report.syncsHostLocation ? "on" : "off")")
             if let snapshots = try? VPhoneMachineSnapshots.list(of: bundle), !snapshots.isEmpty {
                 print("snapshots: \(snapshots.count)")
             }
@@ -237,6 +238,11 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
         --unlock-at-startup on has vphone-vm wake the guest and dismiss its Lock Screen each time \
         vphoned starts in it: after the VM starts and after the guest reboots. Applies from the \
         next connect.
+
+        --sync-host-location on has vphone-vm forward this Mac's location to the guest while it \
+        runs, as a simulated location; macOS asks once for permission. The guest's own Location \
+        Services switch is left alone: with it off, apps in the guest get no location. Applies \
+        from the next start; in a VM window, Location > Sync Host Location changes it at once.
         """,
     )
 
@@ -267,11 +273,14 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
     var macName: String?
     @Option(name: .long, help: "Unlock the guest when it starts: on | off (default)")
     var unlockAtStartup: String?
+    @Option(name: .long, help: "Forward this Mac's location to the guest: on | off (default)")
+    var syncHostLocation: String?
 
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
         let edit = try networkEdit(vmName: name)
         let unlocks = try unlockAtStartup.map { try Self.parseSwitch($0, option: "--unlock-at-startup") }
+        let syncsLocation = try syncHostLocation.map { try Self.parseSwitch($0, option: "--sync-host-location") }
         let updated = try VPhoneBundleOperations.updateConfig(
             bundleNamed: name,
             in: lib.library,
@@ -279,6 +288,7 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
             memoryMB: memory,
             networkEdit: edit,
             unlocksAtStartup: unlocks,
+            syncsHostLocation: syncsLocation,
         )
         let m = updated.manifest
         print(
