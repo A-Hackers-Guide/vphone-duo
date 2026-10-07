@@ -47,6 +47,15 @@ extension GuestAPI {
         case "network.hostname.set":
             // An absent or null name puts back the one vphoned replaced.
             return try networkHostName(set: .some(params["local_host_name"] as? String))
+        case "device.name.get":
+            return deviceNameState()
+        case "device.name.set":
+            // An absent or null name gives the guest its own back.
+            let name = params["name"].flatMap { $0 is NSNull ? nil : $0 }
+            guard name == nil || name is String else {
+                throw GuestAPIError.invalidRequest("name must be a string or null")
+            }
+            return try setDeviceName(name as? String)
         case "device.ioreg":
             return try ioregistry(plane: optionalString(params, "plane") ?? "IOService")
         case "device.environment":
@@ -167,6 +176,107 @@ extension GuestAPI {
             throw GuestAPIError.operationFailed(error.map(String.init) ?? "host name change failed")
         }
         return result
+    }
+}
+
+// MARK: - Device name
+
+/// The device name the host pins: what Xcode, devicectl and Finder show.
+/// `libdevicename.dylib` in configd and lockdownd reads it from
+/// `deviceNameConfigPath` (see `Research/Guest/device_name_pinning.md`):
+/// configd publishes it as `Setup:/System`'s ComputerName and lockdownd refuses
+/// every rename. The guest's own name stays in preferences.plist.
+///
+/// The file outlives a reboot, so configd's first publication at boot already
+/// carries the name. A change applies at once: both daemons check the file on
+/// every decision, and applying the preferences unchanged makes configd's
+/// preferences monitor publish again.
+extension GuestAPI {
+    /// Must match `VP_DEVICE_NAME_CONFIG_PATH` and `VP_DEVICE_NAME_CONFIG_KEY`
+    /// in `VPhoneGuestComponents/DeviceName/DeviceNamePolicy.h`.
+    static let deviceNameConfigPath = "/var/db/vphone/devicename.plist"
+    static let deviceNameConfigKey = "DeviceName"
+    /// What lockdownd posts after a rename; lockdown clients read the name again.
+    static let deviceNameChangedNotification = "com.apple.mobile.lockdown.device_name_changed"
+
+    /// `{name}`: the pinned name, or null when the guest shows its own.
+    static func deviceNameState() -> [String: Any] {
+        ["name": storedDeviceName() ?? NSNull()]
+    }
+
+    /// Pin `name`, or with nil give the guest its own back. Returns the state
+    /// plus `changed`.
+    static func setDeviceName(_ name: String?) throws -> [String: Any] {
+        if let name {
+            try validateDeviceName(name)
+        }
+        let changed = storedDeviceName() != name
+        if changed {
+            try writeDeviceName(name)
+            guard storedDeviceName() == name else {
+                throw GuestAPIError.operationFailed("\(deviceNameConfigPath) did not read back as written")
+            }
+            var error: NSString?
+            guard vp_preferences_apply(&error) else {
+                throw GuestAPIError.operationFailed(
+                    "The name is stored but configd was not asked to publish it: \(error.map(String.init) ?? "apply failed")",
+                )
+            }
+            _ = try? postDarwinNotification(deviceNameChangedNotification, state: nil)
+        }
+        var state = deviceNameState()
+        state["changed"] = changed
+        return state
+    }
+
+    /// The host's rule (`VPhoneGuestDeviceName.validate`), which the guest's
+    /// (`VPDeviceNameCreateFromBytes`) accepts: not blank, at most 255 UTF-8
+    /// bytes, no control character.
+    private static func validateDeviceName(_ name: String) throws {
+        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw GuestAPIError.invalidRequest("name must not be blank")
+        }
+        if name.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) {
+            throw GuestAPIError.invalidRequest("name must not contain a control character")
+        }
+        if name.utf8.count > 255 {
+            throw GuestAPIError.invalidRequest("name must be at most 255 bytes in UTF-8")
+        }
+    }
+
+    private static func storedDeviceName() -> String? {
+        guard let data = FileManager.default.contents(atPath: deviceNameConfigPath),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let name = plist[deviceNameConfigKey] as? String, !name.isEmpty
+        else { return nil }
+        return name
+    }
+
+    /// Replaces the file in one rename, which is what the hook's stamp check
+    /// expects, or removes it.
+    private static func writeDeviceName(_ name: String?) throws {
+        guard let name else {
+            if unlink(deviceNameConfigPath) != 0, errno != ENOENT {
+                throw GuestAPIError.operationFailed("Could not remove \(deviceNameConfigPath): \(String(cString: strerror(errno)))")
+            }
+            return
+        }
+        let directory = (deviceNameConfigPath as NSString).deletingLastPathComponent
+        do {
+            try FileManager.default.createDirectory(
+                atPath: directory,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o755],
+            )
+            let data = try PropertyListSerialization.data(
+                fromPropertyList: [deviceNameConfigKey: name], format: .binary, options: 0,
+            )
+            try data.write(to: URL(fileURLWithPath: deviceNameConfigPath), options: .atomic)
+        } catch {
+            throw GuestAPIError.operationFailed("Could not write \(deviceNameConfigPath): \(error.localizedDescription)")
+        }
+        // World-readable: the hooks only ever read it.
+        chmod(deviceNameConfigPath, 0o644)
     }
 }
 

@@ -113,6 +113,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         self.control = control
         if !command.dfu {
             control.unlocksAtStartup = vm.unlocksAtStartup
+            control.guestDeviceName = Self.guestDeviceName(forConfig: options.configURL)
             startNetworkServices(vm: vm, control: control)
             let vphonedURL = URL(fileURLWithPath: command.vphonedBin)
             if FileManager.default.fileExists(atPath: vphonedURL.path) {
@@ -334,6 +335,20 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         )
         server.virtualMachine = vm
         hostAutomationServer = server
+    }
+
+    /// The guest shows the VM's name, the folder holding config.plist, as its
+    /// device name. A VM name that cannot be one is not used, and the guest
+    /// keeps its own.
+    private static func guestDeviceName(forConfig config: URL) -> String? {
+        let name = VPhoneDockName.name(forConfig: config)
+        do {
+            try VPhoneGuestDeviceName.validate(name)
+            return name
+        } catch {
+            print("[device] the VM name is not used as the device name: \(error)")
+            return nil
+        }
     }
 
     /// Hold the guest to its configured address and open its forwarded ports.

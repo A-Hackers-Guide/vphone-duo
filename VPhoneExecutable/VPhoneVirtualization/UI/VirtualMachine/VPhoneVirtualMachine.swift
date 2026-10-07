@@ -129,17 +129,11 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         platform.auxiliaryStorage = auxStorage
         platform.hardwareModel = hwModel
 
-        // Set NVRAM boot-args to enable serial output
-        let bootArgs = "serial=3 debug=0x104c04"
-        if let bootArgsData = bootArgs.data(using: .utf8) {
-            let ok =
-                Dynamic(auxStorage)
-                    ._setDataValue(bootArgsData, forNVRAMVariableNamed: "boot-args", error: nil)
-                    .asBool ?? false
-            if ok {
-                print("[vphone] NVRAM boot-args: \(bootArgs)")
-            }
-        }
+        // No boot-args are set here. The guest's come from the iBEC/LLB patch
+        // (IBootPatcher.bootArgs and extraBootArgs), applied by `cfw install`:
+        // the research iBoot reads its own NVRAM banks in this file, not the
+        // store VZMacAuxiliaryStorage writes, so an NVRAM value set from the
+        // host never reaches the guest.
 
         // --- Boot loader with custom ROM ---
         let bootloader = VZMacOSBootLoader()

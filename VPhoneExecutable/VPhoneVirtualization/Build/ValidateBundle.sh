@@ -88,8 +88,8 @@ for preset in "$resources/patches_presets/"*.plist; do
 done
 
 for name in vphoned launchdhook-vphone.dylib SystemHook-vphone.dylib libcamfix.dylib \
-    libvcamcaptured.dylib libmisfix.dylib libhapticsfix.dylib libbatteryhealthfix.dylib libdevicehubfix.dylib \
-    libAppleParavirtCompilerPluginIOGPUFamily.dylib; do
+    libvcamcaptured.dylib libmisfix.dylib libhapticsfix.dylib libbatteryhealthfix.dylib libdevicehubfix.dylib libdevicename.dylib \
+    libprefsfix.dylib libsigninfix.dylib libAppleParavirtCompilerPluginIOGPUFamily.dylib; do
     require_signed_macho "$guest/$name"
 done
 for name in vphoned.plist libcamfix.plist libvcamcaptured.plist libmisfix.plist; do

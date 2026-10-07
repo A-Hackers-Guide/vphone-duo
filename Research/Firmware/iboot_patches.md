@@ -133,6 +133,17 @@ regardless of validation results.
 `"serial=3 -v debug=0x2014e %s"` to enable serial output, verbose boot,
 and debug flags.
 
+This is the only source of the guest's boot-args. iBoot formats the kernel
+command line with this string, and the trailing `%s` takes the `boot-args`
+from iBoot's own NVRAM banks in `nvram.bin`, which are empty after a restore.
+The host cannot add to them: `VZMacAuxiliaryStorage`'s
+`_setDataValue:forNVRAMVariableNamed:` writes a different store, which this
+iBoot never reads. vphone-vm wrote `serial=3 debug=0x104c04` there before every
+boot until 2026-10; the guest never saw it, and the write was removed. A custom
+variable written the same way does not reach the guest's
+`IODeviceTree:/options` either. To change the guest's boot-args, change
+`IBootPatcher.bootArgs` or `extraBootArgs` and run `cfw install` again.
+
 **Anchoring:**
 
 1. Find `"rd=md0"` string → search nearby for standalone `"%s"` (NUL-terminated)
