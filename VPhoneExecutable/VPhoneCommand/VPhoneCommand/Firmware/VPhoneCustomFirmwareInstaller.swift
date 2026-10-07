@@ -999,9 +999,10 @@ struct VPhoneCustomFirmwareInstaller {
 
         /// Whether the VM's plan (its guest half re-resolved from the current
         /// selection) turned this guest patch on. A VM with no plan gets every
-        /// patch, which is what it was restored with.
+        /// legacy patch, which is what it was restored with. New Settings-row
+        /// preferences still require an explicit plan.
         func on(_ identifier: String) -> Bool {
-            guard let plan else { return true }
+            guard let plan else { return !FirmwareGuestSystemPatchSet.settingsRowPatches.contains(identifier) }
             guard plan.isEnabled(identifier) else {
                 print("  [·] \(identifier): off in preset \(plan.presetIdentifier)")
                 return false
@@ -1126,6 +1127,7 @@ struct VPhoneCustomFirmwareInstaller {
             dyld.append(("dyld-boot-iomfb_swapend", "patch-iomfb-swapend", [dsc, "--target-size", "0x560"]))
         }
         dyld += [
+            (FirmwareGuestSystemPatchSet.settingsSoftwareUpdate, "patch-settings-software-update", [dsc]),
             (FirmwarePatchSetCatalog.misTrustAuthPatch, "patch-mis-trust-auth", [dsc]),
             ("dyld-exp-hv_vmm", "patch-hv-vmm-dsc", [dsc]),
             ("dyld-cfw-camera", "patch-camera-dsc", [dsc, (dsc as NSString).appendingPathComponent("dyld_shared_cache_arm64e")]),
@@ -1162,6 +1164,14 @@ struct VPhoneCustomFirmwareInstaller {
         }
 
         machO("system-seputil-boot-gigalocker_uuid", path: "usr/libexec/seputil", verbs: ["patch-seputil"], codeIdentifier: "com.apple.seputil")
+        machO(
+            FirmwareGuestSystemPatchSet.settingsRootRows,
+            path: "Applications/Preferences.app/Preferences",
+            verbs: ["patch-settings-root-rows"],
+            codeIdentifier: "com.apple.Preferences",
+            preserveEntitlements: true,
+        )
+
         if version.hasPrefix("27.") {
             machO("system-diskimagesiod-cfw-is_mount_complete", path: "usr/libexec/diskimagesiod", verbs: ["patch-diskimagesiod"], preserveEntitlements: true)
         }
@@ -1339,7 +1349,7 @@ struct VPhoneCustomFirmwareInstaller {
         live: inout Set<String>,
         failures: inout [String],
     ) {
-        func enabled(_ id: String) -> Bool { plan?.isEnabled(id) ?? true }
+        func enabled(_ id: String) -> Bool { plan?.isEnabled(id) ?? !FirmwareGuestSystemPatchSet.settingsRowPatches.contains(id) }
         let undoAbsolute = (dsc as NSString).appendingPathComponent(Self.dscUndoLogLeaf)
         let undoRelative = "\(Self.dscCacheRelative)/\(Self.dscUndoLogLeaf)"
         let recorded = (try? system.readData(undoRelative))

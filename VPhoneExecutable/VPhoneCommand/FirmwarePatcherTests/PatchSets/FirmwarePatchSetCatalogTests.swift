@@ -134,21 +134,31 @@ struct FirmwarePatchSetCatalogTests {
     }
 
     @Test
-    func `Extended is standard plus the manual-only patches, and nothing else`() throws {
-        let standard = try VPhonePatchPlan.resolve(
-            preset: FirmwarePatchSetCatalog.standardPreset,
-            patchSets: FirmwarePatchSetCatalog.bundled,
-            iOSBase: VPhoneVersion("26.4"),
-            cloudOS: VPhoneVersion("26.4"),
-        )
-        let experimental = try VPhonePatchPlan.resolve(
-            preset: FirmwarePatchSetCatalog.experimentalPreset,
-            patchSets: FirmwarePatchSetCatalog.bundled,
-            iOSBase: VPhoneVersion("26.4"),
-            cloudOS: VPhoneVersion("26.4"),
-        )
-        #expect(experimental.enabled.subtracting(standard.enabled) == FirmwarePatchSetCatalog.manualOnlyPatches)
-        #expect(standard.enabled.subtracting(experimental.enabled).isEmpty)
+    func `Extended adds exactly the manual-only patches applicable to each base`() throws {
+        for base in ["18.6.2", "26.4", "27.0", "27.1"] {
+            let version = VPhoneVersion(base)
+            let cloud = VPhoneVersion("26.4")
+            let standard = try VPhonePatchPlan.resolve(
+                preset: FirmwarePatchSetCatalog.standardPreset,
+                patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: version,
+                cloudOS: cloud,
+            )
+            let experimental = try VPhonePatchPlan.resolve(
+                preset: FirmwarePatchSetCatalog.experimentalPreset,
+                patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: version,
+                cloudOS: cloud,
+            )
+            let applicableManual = Set(FirmwarePatchSetCatalog.allDeclarations.filter {
+                FirmwarePatchSetCatalog.manualOnlyPatches.contains($0.identifier)
+                    && $0.applicability.matches(iOSBase: version, cloudOS: cloud)
+            }.map(\.identifier))
+            #expect(experimental.enabled.subtracting(standard.enabled) == applicableManual)
+            #expect(standard.enabled.subtracting(experimental.enabled).isEmpty)
+            #expect(experimental.isEnabled(FirmwareGuestSystemPatchSet.settingsRootRows) == (base == "27.0"))
+            #expect(experimental.isEnabled(FirmwareGuestSystemPatchSet.settingsSoftwareUpdate) == (base == "27.0"))
+        }
     }
 
     @Test

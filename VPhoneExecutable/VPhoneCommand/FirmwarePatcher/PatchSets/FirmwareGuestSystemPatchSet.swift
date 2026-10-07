@@ -15,6 +15,10 @@ import VPhonePatchKit
 public enum FirmwareGuestSystemPatchSet {
     public static let identifier = "com.vphone.patchset.guest.system"
 
+    public static let settingsRootRows = "system-preferences-exp-root_rows"
+    public static let settingsSoftwareUpdate = "dyld-exp-settings_software_update_row"
+    public static let settingsRowPatches: Set<String> = [settingsRootRows, settingsSoftwareUpdate]
+
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
 
     /// The bases where short-circuiting `checkTrustAndAuthorization` in the
@@ -86,6 +90,22 @@ public enum FirmwareGuestSystemPatchSet {
                 """,
                 target: .dyldSharedCache,
                 applicability: misTrustAuthBases,
+            ),
+
+            VPhonePatchDeclaration(
+                identifier: settingsRootRows,
+                title: "Hide selected Settings root rows",
+                summary: "Hides Apple Account, Game Center, iCloud and Wallet on reviewed 24A435 Preferences. Does not hide Indexing or Software Update. Other binary revisions are refused.",
+                target: .guestExecutable(path: "/Applications/Preferences.app/Preferences"),
+                applicability: VPhonePatchApplicability(iOSBase: .release(major: 27, minor: 0)),
+            ),
+
+            VPhonePatchDeclaration(
+                identifier: settingsSoftwareUpdate,
+                title: "Hide Software Update in Settings",
+                summary: "Hides the General Software Update row in reviewed 24A435 GeneralSettingsUI. Uses cache-page re-attestation and the normal undo log; other image UUIDs are refused.",
+                target: .dyldSharedCache,
+                applicability: VPhonePatchApplicability(iOSBase: .release(major: 27, minor: 0)),
             ),
 
             // MARK: System Daemons

@@ -515,6 +515,7 @@ enum VPhoneCustomFirmwareMachOVerbs {
     /// Python's usage block read in the same order.
     static var all: [ParsableCommand.Type] {
         [
+            VPhoneCustomFirmwarePatchSettingsRootRowsCommand.self,
             VPhoneCustomFirmwarePatchSeputilCommand.self,
             VPhoneCustomFirmwarePatchLaunchdCacheLoaderCommand.self,
             VPhoneCustomFirmwarePatchMobileactivationdCommand.self,
