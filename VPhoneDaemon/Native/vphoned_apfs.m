@@ -4,7 +4,7 @@
  * fs_snapshot_list reads the snapshots of the volume a directory descriptor
  * is on, in getattrlistbulk's packed format; fs_snapshot_delete removes one
  * by name. The kernel lets a root caller holding a vfs snapshot entitlement
- * (vphoned carries com.apple.developer.vfs.snapshot) delete a snapshot that
+ * (vphoned carries com.apple.private.vfs.snapshot) delete a snapshot that
  * is not the volume's root or revert target and is not mounted.
  *
  * Both return 0 or an errno value. Which snapshot may be deleted is decided

@@ -73,8 +73,8 @@ extension GuestAPI {
         } else if let entries = try? FileManager.default.contentsOfDirectory(atPath: staged) {
             sample.stagedSystemApps = entries.filter { !$0.hasPrefix(".") }.count
         }
-        if let apps = try? listApps(), let count = apps["count"] as? Int {
-            sample.appCount = count
+        if let apps = try? listedApps() {
+            sample.appCount = apps.count
         }
         let processes = (try? listProcesses(filter: "installd"))?["processes"] as? [[String: Any]] ?? []
         if let pid = processes.first(where: { ($0["executable"] as? String)?.hasSuffix("/installd") == true })?["pid"] as? Int {

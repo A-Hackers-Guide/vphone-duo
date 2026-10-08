@@ -65,8 +65,6 @@
 	<true/>
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
-	<key>com.apple.developer.vfs.snapshot</key>
-	<true/>
 	<key>com.apple.frontboard.launchapplications</key>
 	<true/>
 	<key>com.apple.frontboard.shutdown</key>
@@ -335,6 +333,8 @@
 	<array>
 		<string>critical-alerts</string>
 	</array>
+	<key>com.apple.private.vfs.snapshot</key>
+	<true/>
 	<key>com.apple.rootless.critical</key>
 	<true/>
 	<key>com.apple.rootless.datavault.metadata</key>

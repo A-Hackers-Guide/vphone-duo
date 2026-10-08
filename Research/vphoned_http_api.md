@@ -539,10 +539,15 @@ nothing is cached) and requires a `com.apple.` app whose bundle is
 `/Applications` or `/System` (Phone, Settings) is refused, as is any other
 path shape (`GuestSystemAppPolicy.swift`). Then, in this order:
 
-1. the whole container is cloned (or copied) to
-   `/private/var/mobile/Library/removed-system-apps/<bundle_id>.container`, with
-   `<bundle_id>.manifest.json` beside it (`bundle_id`, `container_uuid`, `app`,
-   `container_path`, `removed_at`); `backup: false` skips this;
+1. the whole container is cloned to
+   `/private/var/db/vphoned/removed-system-apps/<bundle_id>.container` (root
+   only, mode 0700, on the Data volume with the bundle containers, so the clone
+   shares every block), with `<bundle_id>.manifest.json` beside it
+   (`bundle_id`, `container_uuid`, `app`, `container_path`, `removed_at`). If
+   the clone fails, a copy that keeps owners, modes, extended attributes and
+   flags is made instead; `backup_method` in the result says `clone` or
+   `copy`. A backup of the same app in the legacy directory (below) is removed
+   once the new removal is done. `backup: false` skips this;
 2. the app is unregistered from LaunchServices (icli's `unregisterApp`, as
    `apps.unregister`);
 3. the container is removed recursively, with `SerializedPlaceholder.ipa`,
@@ -553,7 +558,7 @@ repaired by installd from the placeholder on the next boot
 (`Research/Guest/post_setup_signin_and_appstore.md`). SpringBoard restarts once
 at the end when anything was removed and `respring` is not false. The result
 is `{results: [{bundle_id, status, removed, container, app, backup,
-unregistered, error?}], removed, failed, backup_directory, respring}`.
+backup_method, unregistered, error?}], removed, failed, backup_directory, respring}`.
 `status` is `removed`, `absent` (not installed: a no-op that succeeds; a
 removal an earlier call left half done, with its backup in place, is finished
 instead), `unregistered_stale` (LaunchServices listed a container that is
@@ -566,7 +571,7 @@ body carries the same fields.
 → error: {"code":"command_failed","message":"1 of 2 apps were not removed; see results","removed":1,"failed":1,
    "results":[{"bundle_id":"com.apple.news","status":"removed","removed":true,"unregistered":true,
                "container":"/private/var/containers/Bundle/Application/6EB8…55A1","app":"News.app",
-               "backup":"/private/var/mobile/Library/removed-system-apps/com.apple.news.container"},
+               "backup":"/private/var/db/vphoned/removed-system-apps/com.apple.news.container","backup_method":"clone"},
               {"bundle_id":"com.apple.mobilephone","status":"failed","removed":false,
                "error":"/Applications/MobilePhone.app is not in a bundle container under /private/var/containers/Bundle/Application; …"}],
    "respring":{"method":"frontboard_relaunch",…}}
@@ -581,13 +586,22 @@ back). icli's `registerApp`, behind `apps.register`, refuses Apple's apps since
 0.7.17. Without `bundle_ids` every backup is restored. An app that is
 installed is reported `present` and its backup left alone; a restore that
 moved the container but could not register it keeps the manifest, so calling
-it again retries the registration. Results mirror the removal (`status`
-`restored`, `present` or `failed`, plus `registration`, the call that worked;
-`error: "restore_incomplete"` when any failed). **`apps.removed_system`** lists
-the backups: `{directory, backups: [{bundle_id, backup, container,
-container_uuid, app, removed_at, restorable}], other}`, where `other` names
-entries without a bundle identifier, such as `News.container` backups made by
-hand before this verb existed.
+it again retries the registration. A backup in the backup directory goes back
+with `rename(2)` (`restore_method: "rename"`). The first version of this verb
+kept backups in `/private/var/mobile/Library/removed-system-apps`, on the User
+volume, where `rename(2)` answers EXDEV; a backup found there (`legacy: true`;
+the new directory is searched first) is copied back with owners, modes,
+extended attributes and flags to a staging name beside the destination, renamed
+into place and then removed (`restore_method: "copy"`; `warning` if the legacy
+copy could not be removed). Results mirror the removal (`status` `restored`,
+`present` or `failed`, plus `backup`, `legacy`, `restore_method` and
+`registration`, the call that worked; `error: "restore_incomplete"` when any
+failed). **`apps.removed_system`** lists the backups in both directories:
+`{directory, legacy_directory, backups: [{bundle_id, backup, legacy,
+container, container_uuid, app, removed_at, restorable}], other,
+legacy_other}`, where `other` and `legacy_other` name entries without a bundle
+identifier, such as `News.container` backups made by hand before this verb
+existed.
 
 **`apfs.snapshots {mount?: "/"}`** returns `{mount, snapshots: [name]}` from
 `fs_snapshot_list` (`VPhoneDaemon/Native/vphoned_apfs.m`).
@@ -601,7 +615,8 @@ already gone (ENOENT) is listed under `already_deleted`. The result is `{mount,
 before, deleted, already_deleted, after, remaining}`. A refusal from the
 kernel stops the call: EINVAL and ENOTSUP are invalid requests; EPERM or
 EACCES (`reason: "not_permitted"`: vphoned is not root or lacks
-`com.apple.developer.vfs.snapshot`), EBUSY (`reason: "busy"`, `retryable:
+`com.apple.private.vfs.snapshot`; `com.apple.developer.vfs.snapshot` alone is
+refused), EBUSY (`reason: "busy"`, `retryable:
 true`: mounted, or APFS is still merging an earlier deletion) and anything
 else return `command_failed` with `reason`, `retryable`, `errno`, `snapshot`
 and the `before`/`deleted`/`after` listings. Why and when to call it:

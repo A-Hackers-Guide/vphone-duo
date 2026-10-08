@@ -36,6 +36,7 @@ enum SystemMaintenanceTests {
         containerPaths()
         bundleIdentifiers()
         backupNames()
+        backupSelection()
         manifests()
         snapshotSelection()
         snapshotErrno()
@@ -117,8 +118,17 @@ enum SystemMaintenanceTests {
     // MARK: - Backup names
 
     static func backupNames() {
-        let directory = "/private/var/mobile/Library/removed-system-apps"
-        check(GuestSystemAppPolicy.backupDirectory == directory, "backup directory")
+        let directory = "/private/var/db/vphoned/removed-system-apps"
+        let legacy = "/private/var/mobile/Library/removed-system-apps"
+        check(GuestSystemAppPolicy.backupDirectory == directory, "backup directory is on the data volume")
+        check(GuestSystemAppPolicy.legacyBackupDirectory == legacy, "legacy backup directory")
+        check(GuestSystemAppPolicy.backupDirectories == [directory, legacy], "search order: new, then legacy")
+        check(GuestSystemAppPolicy.isLegacy(legacy) && !GuestSystemAppPolicy.isLegacy(directory), "legacy detection")
+        check(!GuestSystemAppPolicy.isLegacy(legacy + "/"), "legacy detection is exact")
+        check(GuestSystemAppPolicy.backupContainerPath("com.apple.news", in: legacy) == "\(legacy)/com.apple.news.container",
+              "legacy backup container path")
+        check(GuestSystemAppPolicy.manifestPath("com.apple.news", in: legacy) == "\(legacy)/com.apple.news.manifest.json",
+              "legacy manifest path")
         check(GuestSystemAppPolicy.backupContainerPath("com.apple.news") == "\(directory)/com.apple.news.container",
               "backup container path")
         check(GuestSystemAppPolicy.manifestPath("com.apple.news") == "\(directory)/com.apple.news.manifest.json",
@@ -129,6 +139,38 @@ enum SystemMaintenanceTests {
               "id from manifest entry")
         for name in ["News.container", "com.apple.news.container.partial", ".DS_Store", "com.apple.news", ".container"] {
             check(GuestSystemAppPolicy.bundleID(forBackupEntry: name) == nil, "ignores entry \(name)")
+        }
+    }
+
+    // MARK: - Backup selection
+
+    static func backupSelection() {
+        let current = GuestSystemAppPolicy.backupDirectory
+        let legacy = GuestSystemAppPolicy.legacyBackupDirectory
+        let id = "com.apple.news"
+        func holding(_ present: Set<String>) -> String? {
+            GuestSystemAppPolicy.backupDirectory(holding: id) { present.contains($0) }
+        }
+        let currentManifest = "\(current)/\(id).manifest.json"
+        let currentContainer = "\(current)/\(id).container"
+        let legacyManifest = "\(legacy)/\(id).manifest.json"
+        let legacyContainer = "\(legacy)/\(id).container"
+
+        check(holding([]) == nil, "no backup anywhere")
+        check(holding([currentManifest, currentContainer]) == current, "new backup")
+        check(holding([legacyManifest, legacyContainer]) == legacy, "legacy backup only")
+        check(holding([currentManifest, currentContainer, legacyManifest, legacyContainer]) == current,
+              "new backup wins over a legacy one")
+        check(holding([legacyManifest, legacyContainer, currentContainer]) == legacy,
+              "a manifest wins over a stray container")
+        check(holding([currentManifest]) == current, "manifest alone (container already moved back)")
+        check(holding([legacyContainer]) == legacy, "container without a manifest is still found")
+        check(holding(["\(legacy)/News.container"]) == nil, "a hand-made backup names no app")
+        check(holding(["\(current)/com.apple.tv.manifest.json"]) == nil, "another app's backup")
+
+        check(GuestSystemAppPolicy.restoreCopiesAcrossVolumes(renameErrno: EXDEV), "EXDEV copies across volumes")
+        for code in [EPERM, EACCES, ENOENT, EEXIST, ENOTEMPTY, EBUSY, EIO] {
+            check(!GuestSystemAppPolicy.restoreCopiesAcrossVolumes(renameErrno: code), "errno \(code) does not copy")
         }
     }
 
@@ -250,7 +292,7 @@ enum SystemMaintenanceTests {
         check(Failure.notPermitted.rawValue == "not_permitted" && Failure.alreadyDeleted.rawValue == "already_deleted"
             && Failure.invalidRequest.rawValue == "invalid_request", "wire reasons")
         let message = GuestSnapshotPolicy.message(.notPermitted, errno: EPERM, operation: "fs_snapshot_delete(x)")
-        check(message.contains("com.apple.developer.vfs.snapshot") && message.contains("root"),
+        check(message.contains("carry com.apple.private.vfs.snapshot") && message.contains("root"),
               "permission message names the entitlement")
         check(GuestSnapshotPolicy.message(.busy, errno: EBUSY, operation: "x").contains("retry"), "busy message says retry")
     }

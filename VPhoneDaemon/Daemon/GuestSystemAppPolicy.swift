@@ -16,7 +16,16 @@ import Foundation
 /// `Research/Guest/post_setup_signin_and_appstore.md` has the measurements.
 enum GuestSystemAppPolicy {
     static let containersRoot = "/private/var/containers/Bundle/Application"
-    static let backupDirectory = "/private/var/mobile/Library/removed-system-apps"
+    /// Where new backups go: vphoned's own root-only state directory on the
+    /// data volume, the volume the bundle containers are on, so a backup is an
+    /// APFS clone and a restore is a rename.
+    static let backupDirectory = "/private/var/db/vphoned/removed-system-apps"
+    /// Where backups went first. `/private/var/mobile` is the User volume, so
+    /// a backup there is a full copy and a restore has to copy it back
+    /// (`rename(2)` answers EXDEV). Still listed and restored.
+    static let legacyBackupDirectory = "/private/var/mobile/Library/removed-system-apps"
+    /// The directories a backup is looked for in, in order.
+    static let backupDirectories = [backupDirectory, legacyBackupDirectory]
     static let backupSuffix = ".container"
     static let manifestSuffix = ".manifest.json"
 
@@ -35,12 +44,31 @@ enum GuestSystemAppPolicy {
         }
     }
 
-    static func backupContainerPath(_ bundleID: String) -> String {
-        backupDirectory + "/" + bundleID + backupSuffix
+    static func backupContainerPath(_ bundleID: String, in directory: String = backupDirectory) -> String {
+        directory + "/" + bundleID + backupSuffix
     }
 
-    static func manifestPath(_ bundleID: String) -> String {
-        backupDirectory + "/" + bundleID + manifestSuffix
+    static func manifestPath(_ bundleID: String, in directory: String = backupDirectory) -> String {
+        directory + "/" + bundleID + manifestSuffix
+    }
+
+    static func isLegacy(_ directory: String) -> Bool {
+        directory == legacyBackupDirectory
+    }
+
+    /// The directory that holds the backup of `bundleID`: the first one, in
+    /// `backupDirectories` order, with its manifest, else the first with its
+    /// container, else nil. `exists` is `lstat` in the daemon.
+    static func backupDirectory(holding bundleID: String, exists: (String) -> Bool) -> String? {
+        backupDirectories.first { exists(manifestPath(bundleID, in: $0)) }
+            ?? backupDirectories.first { exists(backupContainerPath(bundleID, in: $0)) }
+    }
+
+    /// A restore moves the container back with `rename(2)`. Only a backup on
+    /// another volume (EXDEV, the legacy directory) is copied back instead;
+    /// any other failure stops the restore.
+    static func restoreCopiesAcrossVolumes(renameErrno code: Int32) -> Bool {
+        code == EXDEV
     }
 
     /// The bundle identifier a backup directory entry belongs to, or nil for
@@ -156,7 +184,7 @@ struct GuestSystemAppManifest: Codable, Equatable {
     }
 
     /// The location the restore moves the container back to, validated as a
-    /// removal is: the backup directory is the mobile user's, so the manifest
+    /// removal is: the legacy backup directory is the mobile user's, so the manifest
     /// is not trusted to name any other path.
     func location() throws(GuestSystemAppPolicyError) -> GuestSystemAppLocation {
         try GuestSystemAppPolicy.validateBundleID(bundleID)

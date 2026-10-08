@@ -103,7 +103,9 @@ extension GuestAPI {
 
             result["backup"] = NSNull()
             if backup {
-                result["backup"] = try backUpContainer(id, location)
+                let made = try backUpContainer(id, location)
+                result["backup"] = made.path
+                result["backup_method"] = made.method
             }
             do {
                 let unregistered = try unregisterApp(bundlePath, force: true)
@@ -126,6 +128,11 @@ extension GuestAPI {
             }
             result["status"] = "removed"
             result["removed"] = true
+            if backup {
+                // The new backup supersedes one an older vphoned left on the
+                // User volume.
+                discardBackup(id, in: GuestSystemAppPolicy.legacyBackupDirectory)
+            }
         } catch {
             result["status"] = "failed"
             result["error"] = describe(error)
@@ -140,10 +147,12 @@ extension GuestAPI {
     private static func finishInterruptedRemoval(_ id: String, result: [String: Any]) throws -> [String: Any] {
         var result = result
         result["status"] = "absent"
-        let backupPath = GuestSystemAppPolicy.backupContainerPath(id)
+        result["backup"] = NSNull()
+        guard let directory = GuestSystemAppPolicy.backupDirectory(holding: id, exists: pathExists) else { return result }
+        let backupPath = GuestSystemAppPolicy.backupContainerPath(id, in: directory)
         result["backup"] = pathExists(backupPath) ? backupPath : NSNull()
-        guard pathExists(GuestSystemAppPolicy.manifestPath(id)), pathExists(backupPath) else { return result }
-        let location = try readManifest(id).location()
+        guard pathExists(GuestSystemAppPolicy.manifestPath(id, in: directory)), pathExists(backupPath) else { return result }
+        let location = try readManifest(id, in: directory).location()
         guard try bundleContainerExists(location) else { return result }
         try checkBundleIdentifier(location, id)
         _ = try removePath(location.containerPath, recursive: true, force: true)
@@ -154,16 +163,19 @@ extension GuestAPI {
         return result
     }
 
-    /// Copies the whole container to `<bundle_id>.container` (an APFS clone
-    /// when it can) and writes `<bundle_id>.manifest.json` beside it. An older
-    /// backup of the same app is replaced once the new copy is complete.
-    private static func backUpContainer(_ id: String, _ location: GuestSystemAppLocation) throws -> String {
+    /// Clones the whole container to `<bundle_id>.container` in the backup
+    /// directory and writes `<bundle_id>.manifest.json` beside it. The backup
+    /// directory is on the containers' volume, so the clone shares every block
+    /// and costs next to nothing; if the clone fails anyway, a copy that keeps
+    /// owners, modes, extended attributes and flags is made instead, and
+    /// `method` says which. An older backup of the same app is replaced once
+    /// the new one is complete.
+    private static func backUpContainer(
+        _ id: String,
+        _ location: GuestSystemAppLocation,
+    ) throws -> (path: String, method: String) {
         let files = FileManager.default
-        try files.createDirectory(
-            atPath: GuestSystemAppPolicy.backupDirectory,
-            withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o755],
-        )
+        try prepareBackupDirectory()
         let destination = GuestSystemAppPolicy.backupContainerPath(id)
         let staging = destination + ".partial"
         if pathExists(staging) {
@@ -171,19 +183,19 @@ extension GuestAPI {
         }
         // clonefile keeps owners and modes when root calls it; the container
         // must come back as installd left it.
+        var method = "clone"
         if clonefile(location.containerPath, staging, UInt32(CLONE_NOFOLLOW)) != 0 {
             let reason = String(cString: strerror(errno))
             if pathExists(staging) {
                 try? files.removeItem(atPath: staging)
             }
-            do {
-                try files.copyItem(atPath: location.containerPath, toPath: staging)
-            } catch {
+            if let copyFailure = preservingCopy(location.containerPath, to: staging) {
                 try? files.removeItem(atPath: staging)
                 throw GuestAPIError.operationFailed(
-                    "Could not back up \(location.containerPath): clone failed (\(reason)), copy failed (\(describe(error)))",
+                    "Could not back up \(location.containerPath): clone failed (\(reason)), copy failed (\(copyFailure))",
                 )
             }
+            method = "copy"
         }
         if pathExists(destination) {
             try files.removeItem(atPath: destination)
@@ -203,12 +215,43 @@ extension GuestAPI {
             try? files.removeItem(atPath: destination)
             throw GuestAPIError.operationFailed("Could not write the backup manifest: \(describe(error))")
         }
-        return destination
+        return (destination, method)
     }
 
-    private static func discardBackup(_ id: String) {
-        try? FileManager.default.removeItem(atPath: GuestSystemAppPolicy.backupContainerPath(id))
-        try? FileManager.default.removeItem(atPath: GuestSystemAppPolicy.manifestPath(id))
+    /// `/private/var/db/vphoned/removed-system-apps`, root's alone: mode 0700,
+    /// and a real directory, not a link somebody left in its place.
+    private static func prepareBackupDirectory() throws {
+        let directory = GuestSystemAppPolicy.backupDirectory
+        try FileManager.default.createDirectory(
+            atPath: (directory as NSString).deletingLastPathComponent,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o755],
+        )
+        if mkdir(directory, 0o700) != 0, errno != EEXIST {
+            throw GuestAPIError.operationFailed("Could not create \(directory): \(String(cString: strerror(errno)))")
+        }
+        var info = stat()
+        guard lstat(directory, &info) == 0, info.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR), info.st_uid == 0 else {
+            throw GuestAPIError.operationFailed("\(directory) is not a directory owned by root")
+        }
+        if info.st_mode & 0o777 != 0o700 {
+            _ = chmod(directory, 0o700)
+        }
+    }
+
+    /// Copies a directory tree as it is: owners, modes, extended attributes,
+    /// flags and links. Returns why it failed, or nil.
+    private static func preservingCopy(_ source: String, to destination: String) -> String? {
+        let flags = copyfile_flags_t(COPYFILE_ALL | COPYFILE_RECURSIVE | COPYFILE_NOFOLLOW)
+        guard copyfile(source, destination, nil, flags) == 0 else {
+            return String(cString: strerror(errno))
+        }
+        return nil
+    }
+
+    private static func discardBackup(_ id: String, in directory: String = GuestSystemAppPolicy.backupDirectory) {
+        try? FileManager.default.removeItem(atPath: GuestSystemAppPolicy.backupContainerPath(id, in: directory))
+        try? FileManager.default.removeItem(atPath: GuestSystemAppPolicy.manifestPath(id, in: directory))
     }
 
     // MARK: - Restore
@@ -232,27 +275,32 @@ extension GuestAPI {
     }
 
     /// Moves the backup container back to its original UUID path and
-    /// registers the app in it. The manifest stays until LaunchServices lists
-    /// the app, so a restore that moved the container but could not register
-    /// it is finished by running it again.
+    /// registers the app in it. A backup in the backup directory goes back by
+    /// rename; one in the legacy directory is on the User volume and is copied
+    /// back with owners, modes, extended attributes and flags, then removed.
+    /// The manifest stays until LaunchServices lists the app, so a restore
+    /// that moved the container but could not register it is finished by
+    /// running it again.
     private static func restoreSystemApp(_ id: String) -> [String: Any] {
         var result: [String: Any] = ["bundle_id": id, "restored": false]
         do {
             try GuestSystemAppPolicy.validateBundleID(id)
-            let backupPath = GuestSystemAppPolicy.backupContainerPath(id)
-            guard pathExists(GuestSystemAppPolicy.manifestPath(id)) else {
+            let directory = GuestSystemAppPolicy.backupDirectory(holding: id, exists: pathExists)
+            guard let directory, pathExists(GuestSystemAppPolicy.manifestPath(id, in: directory)) else {
                 if let record = try installedApp(id) {
                     result["status"] = "present"
                     result["bundle_path"] = record["bundle_path"] ?? ""
                     return result
                 }
                 throw GuestAPIError.operationFailed(
-                    pathExists(backupPath)
-                        ? "\(backupPath) has no manifest naming its original container"
-                        : "No backup of \(id) in \(GuestSystemAppPolicy.backupDirectory)",
+                    directory.map { "\(GuestSystemAppPolicy.backupContainerPath(id, in: $0)) has no manifest naming its original container" }
+                        ?? "No backup of \(id) in \(GuestSystemAppPolicy.backupDirectories.joined(separator: " or "))",
                 )
             }
-            let location = try readManifest(id).location()
+            let backupPath = GuestSystemAppPolicy.backupContainerPath(id, in: directory)
+            result["backup"] = backupPath
+            result["legacy"] = GuestSystemAppPolicy.isLegacy(directory)
+            let location = try readManifest(id, in: directory).location()
             result["container"] = location.containerPath
             result["app"] = location.appDirectoryName
             if let record = try installedApp(id) {
@@ -265,10 +313,10 @@ extension GuestAPI {
                 guard !pathExists(location.containerPath) else {
                     throw GuestAPIError.operationFailed("\(location.containerPath) already exists; the backup was left in place")
                 }
-                guard rename(backupPath, location.containerPath) == 0 else {
-                    throw GuestAPIError.operationFailed(
-                        "Could not move \(backupPath) back: \(String(cString: strerror(errno)))",
-                    )
+                let moved = try moveBack(backupPath, to: location.containerPath)
+                result["restore_method"] = moved.method
+                if let warning = moved.warning {
+                    result["warning"] = warning
                 }
             } else {
                 guard try bundleContainerExists(location) else {
@@ -290,7 +338,7 @@ extension GuestAPI {
             guard registration["registered"] as? Bool == true else {
                 throw GuestAPIError.operationFailed("LaunchServices does not list \(location.appPath) after registration")
             }
-            try? FileManager.default.removeItem(atPath: GuestSystemAppPolicy.manifestPath(id))
+            try? FileManager.default.removeItem(atPath: GuestSystemAppPolicy.manifestPath(id, in: directory))
             result["registration"] = method.map { String(cString: $0) } ?? ""
             result["status"] = "restored"
             result["restored"] = true
@@ -301,44 +349,99 @@ extension GuestAPI {
         return result
     }
 
+    /// Puts a backup container back at `destination`. A rename on the same
+    /// volume; across volumes (EXDEV) a preserving copy to a staging name
+    /// beside the destination, a rename into place, then the source removed.
+    private static func moveBack(_ source: String, to destination: String) throws -> (method: String, warning: String?) {
+        var info = stat()
+        guard lstat(source, &info) == 0, info.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR) else {
+            throw GuestAPIError.operationFailed("\(source) is not a backup container directory")
+        }
+        if rename(source, destination) == 0 {
+            return ("rename", nil)
+        }
+        let code = errno
+        guard GuestSystemAppPolicy.restoreCopiesAcrossVolumes(renameErrno: code) else {
+            throw GuestAPIError.operationFailed("Could not move \(source) back: \(String(cString: strerror(code)))")
+        }
+        let files = FileManager.default
+        let staging = destination + ".partial"
+        if pathExists(staging) {
+            try files.removeItem(atPath: staging)
+        }
+        if let failure = preservingCopy(source, to: staging) {
+            try? files.removeItem(atPath: staging)
+            throw GuestAPIError.operationFailed("Could not copy \(source) back across volumes: \(failure)")
+        }
+        guard rename(staging, destination) == 0 else {
+            let reason = String(cString: strerror(errno))
+            try? files.removeItem(atPath: staging)
+            throw GuestAPIError.operationFailed("Could not move the copy of \(source) into place: \(reason)")
+        }
+        do {
+            try files.removeItem(atPath: source)
+        } catch {
+            return ("copy", "The container is back, but \(source) was not removed: \(describe(error))")
+        }
+        return ("copy", nil)
+    }
+
     // MARK: - Backups
 
-    /// Every app with a backup or a manifest in the backup directory.
+    /// Every app with a backup or a manifest in either backup directory.
     private static func backedUpSystemAppIDs() -> [String] {
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: GuestSystemAppPolicy.backupDirectory)) ?? []
+        let names = GuestSystemAppPolicy.backupDirectories.flatMap(directoryEntries)
         return Set(names.compactMap(GuestSystemAppPolicy.bundleID(forBackupEntry:))).sorted()
     }
 
+    private static func directoryEntries(_ directory: String) -> [String] {
+        (try? FileManager.default.contentsOfDirectory(atPath: directory)) ?? []
+    }
+
+    /// The backups in the backup directory, then those an older vphoned left
+    /// in the legacy directory, each marked `legacy`.
     private static func removedSystemApps() -> [String: Any] {
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: GuestSystemAppPolicy.backupDirectory)) ?? []
-        let backups = backedUpSystemAppIDs().map { id -> [String: Any] in
-            let backupPath = GuestSystemAppPolicy.backupContainerPath(id)
-            var entry: [String: Any] = [
-                "bundle_id": id,
-                "backup": pathExists(backupPath) ? backupPath : NSNull(),
-            ]
-            do {
-                let manifest = try readManifest(id)
-                let location = try manifest.location()
-                entry["container"] = location.containerPath
-                entry["container_uuid"] = location.containerUUID
-                entry["app"] = location.appDirectoryName
-                entry["removed_at"] = ISO8601DateFormatter().string(from: manifest.removedAt)
-                entry["restorable"] = pathExists(backupPath) || pathExists(location.containerPath)
-            } catch {
-                entry["restorable"] = false
-                entry["error"] = describe(error)
+        var backups: [[String: Any]] = []
+        for directory in GuestSystemAppPolicy.backupDirectories {
+            let ids = Set(directoryEntries(directory).compactMap(GuestSystemAppPolicy.bundleID(forBackupEntry:))).sorted()
+            for id in ids {
+                let backupPath = GuestSystemAppPolicy.backupContainerPath(id, in: directory)
+                var entry: [String: Any] = [
+                    "bundle_id": id,
+                    "backup": pathExists(backupPath) ? backupPath : NSNull(),
+                    "legacy": GuestSystemAppPolicy.isLegacy(directory),
+                ]
+                do {
+                    let manifest = try readManifest(id, in: directory)
+                    let location = try manifest.location()
+                    entry["container"] = location.containerPath
+                    entry["container_uuid"] = location.containerUUID
+                    entry["app"] = location.appDirectoryName
+                    entry["removed_at"] = ISO8601DateFormatter().string(from: manifest.removedAt)
+                    entry["restorable"] = pathExists(backupPath) || pathExists(location.containerPath)
+                } catch {
+                    entry["restorable"] = false
+                    entry["error"] = describe(error)
+                }
+                backups.append(entry)
             }
-            return entry
         }
         // Backups made by hand before this verb existed (`News.container`)
         // name no bundle identifier and have no manifest.
-        let other = names.filter { GuestSystemAppPolicy.bundleID(forBackupEntry: $0) == nil }.sorted()
-        return ["directory": GuestSystemAppPolicy.backupDirectory, "backups": backups, "other": other]
+        func other(_ directory: String) -> [String] {
+            directoryEntries(directory).filter { GuestSystemAppPolicy.bundleID(forBackupEntry: $0) == nil }.sorted()
+        }
+        return [
+            "directory": GuestSystemAppPolicy.backupDirectory,
+            "legacy_directory": GuestSystemAppPolicy.legacyBackupDirectory,
+            "backups": backups,
+            "other": other(GuestSystemAppPolicy.backupDirectory),
+            "legacy_other": other(GuestSystemAppPolicy.legacyBackupDirectory),
+        ]
     }
 
-    private static func readManifest(_ id: String) throws -> GuestSystemAppManifest {
-        let path = GuestSystemAppPolicy.manifestPath(id)
+    private static func readManifest(_ id: String, in directory: String) throws -> GuestSystemAppManifest {
+        let path = GuestSystemAppPolicy.manifestPath(id, in: directory)
         var info = stat()
         guard lstat(path, &info) == 0, info.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG), info.st_size <= 64 * 1024 else {
             throw GuestAPIError.operationFailed("\(path) is not a manifest file")

@@ -69,7 +69,7 @@ void vp_apfs_snapshot_names_free(char **names, int count);
 int vp_apfs_snapshot_parse(const char *buffer, size_t size, int entries, char ***names, int *count, int *added);
 
 /// Delete the snapshot `name` of the volume mounted at `mount`. Returns 0 or
-/// an errno value. Needs root and a vfs snapshot entitlement.
+/// an errno value. Needs root and com.apple.private.vfs.snapshot.
 int vp_apfs_snapshot_delete(const char *mount, const char *name);
 
 /// Register the Apple app bundle at `app_path`, inside the bundle container

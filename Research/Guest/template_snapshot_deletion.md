@@ -46,7 +46,7 @@ From the strings of `kernelcache.research.vphone600` and the experiment:
 
 | Requirement | Evidence | Result |
 | --- | --- | --- |
-| A vfs snapshot entitlement | `"%s (pid %d) is missing vfs snapshot entitlements"`; candidates `com.apple.developer.vfs.snapshot`, `com.apple.private.vfs.snapshot`, `com.apple.private.vfs.snapshot.user` | The prototype was signed with all three and succeeded. vphoned carries only `com.apple.developer.vfs.snapshot` (see "Not yet verified") |
+| `com.apple.private.vfs.snapshot` | `"%s (pid %d) is missing vfs snapshot entitlements"`; candidates `com.apple.developer.vfs.snapshot`, `com.apple.private.vfs.snapshot`, `com.apple.private.vfs.snapshot.user`. Measured 2026-10-07 with a root prototype also signed `platform-application`: `developer` alone fails with EPERM, `private` alone deletes | vphoned carries `com.apple.private.vfs.snapshot` only. With `com.apple.developer.vfs.snapshot` alone, vphoned answered `not_permitted` |
 | Root | XNU `fs_snapshot` checks `PRIV_VFS_SNAPSHOT` | vphoned runs as root |
 | Not the volume's default root snapshot, not set to root or revert to, not mounted | `cannot delete snapshot '%s' because it is the default root snapshot…`, `…set to root from it`, `…set to revert to it…`, `cannot delete mounted snapshot` | `orig-fs.disabled.rn-*` meets none of them after CFW |
 | No replication and no merge from an earlier deletion in progress | `Can't delete snapshots while volume is replicating`, `merge in progress due to previous snapshot deletion` | Not hit with a single snapshot; vphoned reports EBUSY as retryable |

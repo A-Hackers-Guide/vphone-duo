@@ -75,7 +75,7 @@ enum GuestSnapshotPolicy {
     enum Failure: String, Equatable {
         /// The snapshot is not there: a delete counts it as done.
         case alreadyDeleted = "already_deleted"
-        /// vphoned lacks `com.apple.developer.vfs.snapshot` or is not root.
+        /// vphoned lacks `com.apple.private.vfs.snapshot` or is not root.
         case notPermitted = "not_permitted"
         /// Mounted, or APFS is still merging an earlier deletion. Retry later.
         case busy
@@ -102,7 +102,7 @@ enum GuestSnapshotPolicy {
         case .alreadyDeleted:
             "\(operation): the snapshot no longer exists (\(reason))"
         case .notPermitted:
-            "\(operation): \(reason). vphoned must run as root and carry com.apple.developer.vfs.snapshot"
+            "\(operation): \(reason). vphoned must run as root and carry com.apple.private.vfs.snapshot (com.apple.developer.vfs.snapshot alone is refused)"
         case .busy:
             "\(operation): \(reason). The snapshot is mounted or APFS is still merging an earlier deletion; retry later"
         case .invalidRequest:
