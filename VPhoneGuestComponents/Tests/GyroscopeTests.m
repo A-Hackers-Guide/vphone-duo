@@ -18,6 +18,14 @@ int main(void) {
         assert(state.enabled && state.x == 1.25 && state.y == -2.5 && state.z == 0.125);
         assert([VPhoneGyroscopeEncode(state) isEqual:sample]);
 
+        NSMutableDictionary *disabled = [sample mutableCopy];
+        disabled[@"enabled"] = @NO;
+        NSData *disabledWire = [NSPropertyListSerialization dataWithPropertyList:disabled
+                                     format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil];
+        id disabledRead = [NSPropertyListSerialization propertyListWithData:disabledWire options:0 format:nil error:nil];
+        assert(VPhoneGyroscopeDecode(disabledRead, &state));
+        assert(!state.enabled && state.x == 1.25 && state.y == -2.5 && state.z == 0.125);
+
         for (id invalid in @[@YES, @"1", NSNull.null, @(NAN), @(INFINITY), @1001, @-1001]) {
             NSMutableDictionary *bad = [sample mutableCopy];
             bad[@"y"] = invalid;

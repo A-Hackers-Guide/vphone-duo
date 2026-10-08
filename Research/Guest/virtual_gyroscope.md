@@ -4,13 +4,15 @@
 
 The core adds raw three-axis angular velocity, in **radians per second**. It
 does not represent Euler angles or synthesize accelerometer, compass, attitude,
-or fused `CMDeviceMotion`. The host menu and axis panel are a separate task.
+or fused `CMDeviceMotion`.
 
-`vphoned` exposes `motion.gyroscope.set {x,y,z}`, `motion.gyroscope.get`, and
+`vphoned` exposes `motion.gyroscope.set {x,y,z,enabled?}`, `motion.gyroscope.get`, and
 `motion.gyroscope.clear` over the existing VSOCK 1339 RPC transport. Set requires
 all three finite JSON numbers in [-1000,1000]; strings, Booleans, missing axes,
 and out-of-range values are refused before any state is changed. Clear disables
-the configured rotation and writes zero on every axis.
+the configured rotation and writes zero on every axis. Set's optional `enabled`
+must be a JSON Boolean and defaults to true, preserving existing clients. False
+keeps the configured axes but makes the provider emit stationary samples.
 
 One dictionary, `VPhoneGyroscopeConfiguration`, is written through cfprefsd to
 the mobile user's `com.apple.backboardd` domain and then
@@ -42,6 +44,34 @@ the latter requires an enumerated service and a heartbeat younger than ten
 seconds. The status includes service ID, PID, report interval, dispatched event
 count, dispatch failures, last error, and the configuration consumed by the
 provider. **Enumeration and dispatch do not prove CoreMotion acceptance.**
+
+## Host panel
+
+The VM display app's **Motion Sensors → 3D Gyroscope** menu opens a native
+SwiftUI panel (Chinese: **运动传感器 → 3D 陀螺仪**). Each axis has a text field
+and a 0.1 rad/s stepper. Valid edits are sent immediately; partial, non-finite
+and out-of-range text stays in the field with a validation message and is not
+sent. The checkbox enables/disables simulation without discarding axis values.
+**Reset** zeros all fields and sends the zero configuration, preserving the
+checkbox. Reset also repairs partially typed/invalid fields.
+
+The panel uses capability `motion_gyroscope_toggle`, so an older daemon which
+would ignore `enabled` cannot silently apply the wrong checkbox state. It reads
+the stored configuration on opening/reconnect, and keeps accepted local edits
+when reconnecting after a failed send. A single in-flight RPC and one pending
+full configuration coalesce rapid edits; disable and reset replace that pending
+state, and stale acknowledgements never replace newer field text. Failed writes
+remain unsynced with a retry action. Closing the panel does not drop a write
+already accepted by the UI. The existing window controller retains the model
+and uses `isReleasedWhenClosed = false`.
+
+The model test harness (`zsh VPhoneExecutable/VPhoneVirtualization/Tests/run-gyroscope-tests.sh`)
+exercises delayed acknowledgements, coalescing, reset/disable while a write is
+pending, invalid text, retry, reconnect, stale reads and decimal-comma input.
+On 2026-10-08 these tests, the disabled-state property-list round trip and HID
+event factory tests passed; the full `VPhone` bundle build also passed with the
+Chinese menu/panel strings compiled into its resources. Native UI interaction
+was not run after the local preview compilation request was declined.
 
 ## Patch selection and installation
 

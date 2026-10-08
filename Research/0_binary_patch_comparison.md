@@ -242,8 +242,13 @@
 > a Darwin notification. There is no system executable, kernel or DSC byte
 > change. Disabling the patch removes the added library; live environment
 > sync cannot reinstall an absent selected library. A provider/library update
-> needs a reboot, without silently restarting backboardd. The host menu and
-> panel are deferred until the user approves the next task. HID enumeration
+> needs a reboot, without silently restarting backboardd. The VM display app's
+> Motion Sensors → 3D Gyroscope panel sends valid three-axis edits immediately,
+> with a simulation checkbox that retains values and a reset that zeros all
+> axes. `motion.gyroscope.set` accepts an optional Boolean `enabled` (default
+> true); the panel checks `motion_gyroscope_toggle` support. Writes serialize
+> and coalesce, preserve the latest values across old acknowledgements, and
+> retry pending state after reconnect. HID enumeration
 > and dispatch are observable separately from CoreMotion app acceptance; the
 > platform capability gate and optional IMU match still require guest proof.
 > Reveal evidence and manual acceptance: `Research/Guest/virtual_gyroscope.md`.

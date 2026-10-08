@@ -12,6 +12,7 @@ enum VPhoneGuestPanel: CaseIterable {
     case crashLogs
     case services
     case controls
+    case gyroscope
 
     /// The `/v1/health` capability an agent must report before the panel can
     /// talk to it. Older agents answer "Unknown method" for everything else.
@@ -22,6 +23,7 @@ enum VPhoneGuestPanel: CaseIterable {
         case .console, .crashLogs: "logs"
         case .services: "services"
         case .controls: "display"
+        case .gyroscope: "motion_gyroscope_toggle"
         }
     }
 }
@@ -96,6 +98,17 @@ final class VPhoneGuestPanelsWindowController {
                 size: NSSize(width: 480, height: 640),
                 minSize: NSSize(width: 460, height: 400),
             ) { VPhoneControlsView(model: model) }
+        case .gyroscope:
+            let model = VPhoneGyroscopeModel(
+                read: { try await control.readGyroscope() },
+                write: { try await control.setGyroscope($0) },
+            )
+            return VPhoneGuestToolWindow(
+                title: String(localized: "3D Gyroscope", bundle: VPhoneLocalization.bundle),
+                autosaveName: "vphone-panel-gyroscope",
+                size: NSSize(width: 440, height: 380),
+                minSize: NSSize(width: 400, height: 340),
+            ) { VPhoneGyroscopeView(model: model, connected: { control.isConnected }) }
         }
     }
 }

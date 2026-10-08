@@ -141,6 +141,7 @@ enum GuestAPI {
                 "timezone",
                 "audio_host_latency",
                 "motion_gyroscope",
+                "motion_gyroscope_toggle",
             ],
         ]
     }
