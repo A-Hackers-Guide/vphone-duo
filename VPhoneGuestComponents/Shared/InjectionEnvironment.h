@@ -94,13 +94,15 @@ static const char *vpBatteryHealthFixFor(const char *path) {
 #define VP_DEVICEHUB_FIX "/usr/lib/libdevicehubfix.dylib"
 #endif
 
-// cryptexd, which stages and grafts the developer disk image, and the DDI's
-// display server. The DDI is mounted under /System/Developer, so the
-// suffixes are matched like the other targets.
+// cryptexd, which stages and grafts the developer disk image, the DDI's
+// display server, and avconferenced, which captures and encodes the stream.
+// The DDI is mounted under /System/Developer, so the suffixes are matched like
+// the other targets.
 static int vpIsDeviceHubFixTarget(const char *path) {
     return path && (vpPathHasSuffix(path, "/usr/libexec/cryptexd") ||
                     vpPathHasSuffix(path, "/usr/libexec/dtremotedisplayd") ||
-                    vpPathHasSuffix(path, "/usr/libexec/dtdeviceinfod"));
+                    vpPathHasSuffix(path, "/usr/libexec/dtdeviceinfod") ||
+                    vpPathHasSuffix(path, "/usr/libexec/avconferenced"));
 }
 
 static const char *vpDeviceHubFixFor(const char *path) {
