@@ -64,3 +64,9 @@ which iOS ships no driver for. audiomxd loads it when the kernel publishes
 `make test-virtiosound` checks its format choice, its rings and how captured
 frames are served, on the host. See `Research/Guest/virtio_sound.md` and
 `Research/Guest/virtio_sound_microphone.md`.
+
+`FlutterRemapFix` is linked into SystemHook for early handling of a specific
+Flutter AOT callback remap permission mismatch. It checks canonical same-bundle
+images, native parameters and actual permissions before making a private copy
+and transitioning RW to RX. It does not alter kernel policy. Tests and coverage
+limits are in `Research/Guest/flutter_aot_remap_compatibility.md`.

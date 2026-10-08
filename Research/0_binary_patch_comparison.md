@@ -2812,3 +2812,12 @@ persona-fetch authorization. Adding a temporary exception entitlement was
 verified ineffective on the running guest and has been removed. IDA analysis
 of this guest's launchd confirms the bootstrap lookup gate and name filters
 2, 3 and 12. See [evidence, implementation and validation](Guest/ios27_xcode_persona_lookup.md).
+
+## Flutter AOT executable-remap compatibility
+
+The existing guest SystemHook component has a guarded `vm_remap` fallback for
+an observed Flutter AOT callback layout whose returned RX permission disagrees
+with the actual read-only destination. The fallback creates a private RW copy,
+then changes it to RX; other calls pass through. No kernel patch or protection
+policy change is added. See `Research/Guest/flutter_aot_remap_compatibility.md`
+for exact guards, failure semantics, reproduction and validation limits.
