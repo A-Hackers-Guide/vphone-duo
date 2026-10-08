@@ -218,9 +218,9 @@ struct VPhoneCustomFirmwareInstaller {
         } else {
             // Another volume, or no clone support: attach the caller's file
             // in place. Confirm the name still refers to the inode verified
-            // above immediately before hdiutil opens it. A swap in the moment
-            // between this check and hdiutil's own open remains possible,
-            // and hdiutil then works on the caller's own replacement. The
+            // above immediately before diskutil opens it. A swap in the moment
+            // between this check and diskutil's own open remains possible,
+            // and diskutil then works on the caller's own replacement. The
             // snapshot rename below writes only the verified inode. The clone
             // path, the normal case on APFS, has no such window.
             guard try bundleDirectory.refersTo("Disk.img", file: disk) else {
@@ -233,12 +233,12 @@ struct VPhoneCustomFirmwareInstaller {
         }
 
         let attached = try tool(
-            "/usr/bin/hdiutil",
+            "/usr/sbin/diskutil",
             [
-                "attach", "-nomount", "-imagekey", "diskimage-class=CRawDiskImage", image.path,
+                "image", "attach", "-noMount", image.path,
             ],
         )
-        // `hdiutil attach` prints the image's own disk and, on macOS 27, the APFS
+        // `diskutil image attach` prints the image's own disk and, on macOS 27, the APFS
         // container it synthesizes over it before that disk, so its first line is
         // no longer the image: the container's line carries the container's type
         // and taking it would make every later device reference point at the
@@ -256,16 +256,18 @@ struct VPhoneCustomFirmwareInstaller {
         } ?? wholeDisk ?? devices.first?.device
         guard let baseDisk, baseDisk.hasPrefix("/dev/disk") else {
             if let range = attached.range(of: #"/dev/disk[0-9]+"#, options: .regularExpression) {
-                _ = try? tool("/usr/bin/hdiutil", ["detach", "-force", String(attached[range])], quiet: true)
+                _ = try? tool("/usr/sbin/diskutil", ["unmountDisk", "force", String(attached[range])], quiet: true)
+                _ = try? tool("/usr/sbin/diskutil", ["eject", String(attached[range])], quiet: true)
             }
             throw ValidationError("Unable to attach the VM disk image. Try again.")
         }
         var diskAttached = true
         defer {
             if diskAttached,
-               (try? tool("/usr/bin/hdiutil", ["detach", baseDisk], quiet: true)) == nil
+               (try? tool("/usr/sbin/diskutil", ["eject", baseDisk], quiet: true)) == nil
             {
-                _ = try? tool("/usr/bin/hdiutil", ["detach", "-force", baseDisk], quiet: true)
+                _ = try? tool("/usr/sbin/diskutil", ["unmountDisk", "force", baseDisk], quiet: true)
+                _ = try? tool("/usr/sbin/diskutil", ["eject", baseDisk], quiet: true)
             }
         }
 
@@ -414,7 +416,7 @@ struct VPhoneCustomFirmwareInstaller {
         xartMounted = false
         _ = try tool("/sbin/umount", [system.path])
         systemMounted = false
-        _ = try tool("/usr/bin/hdiutil", ["detach", baseDisk], quiet: true)
+        _ = try tool("/usr/sbin/diskutil", ["eject", baseDisk], quiet: true)
         diskAttached = false
         if mode == .full {
             if cloned {
@@ -510,8 +512,8 @@ struct VPhoneCustomFirmwareInstaller {
         }
 
         let attached = try tool(
-            "/usr/bin/hdiutil",
-            ["attach", "-nomount", "-imagekey", "diskimage-class=CRawDiskImage", image.path],
+            "/usr/sbin/diskutil",
+            ["image", "attach", "-noMount", image.path],
         )
         let devices = attached.split(whereSeparator: \.isNewline).compactMap { line -> (device: String, type: String)? in
             let fields = line.split(whereSeparator: \.isWhitespace)
@@ -525,16 +527,18 @@ struct VPhoneCustomFirmwareInstaller {
         } ?? wholeDisk ?? devices.first?.device
         guard let baseDisk, baseDisk.hasPrefix("/dev/disk") else {
             if let range = attached.range(of: #"/dev/disk[0-9]+"#, options: .regularExpression) {
-                _ = try? tool("/usr/bin/hdiutil", ["detach", "-force", String(attached[range])], quiet: true)
+                _ = try? tool("/usr/sbin/diskutil", ["unmountDisk", "force", String(attached[range])], quiet: true)
+                _ = try? tool("/usr/sbin/diskutil", ["eject", String(attached[range])], quiet: true)
             }
             throw ValidationError("Unable to attach the VM disk image. Try again.")
         }
         var diskAttached = true
         defer {
             if diskAttached,
-               (try? tool("/usr/bin/hdiutil", ["detach", baseDisk], quiet: true)) == nil
+               (try? tool("/usr/sbin/diskutil", ["eject", baseDisk], quiet: true)) == nil
             {
-                _ = try? tool("/usr/bin/hdiutil", ["detach", "-force", baseDisk], quiet: true)
+                _ = try? tool("/usr/sbin/diskutil", ["unmountDisk", "force", baseDisk], quiet: true)
+                _ = try? tool("/usr/sbin/diskutil", ["eject", baseDisk], quiet: true)
             }
         }
 
@@ -599,7 +603,7 @@ struct VPhoneCustomFirmwareInstaller {
 
         _ = try tool("/sbin/umount", [mount.path])
         prebootMounted = false
-        _ = try tool("/usr/bin/hdiutil", ["detach", baseDisk], quiet: true)
+        _ = try tool("/usr/sbin/diskutil", ["eject", baseDisk], quiet: true)
         diskAttached = false
         // No snapshot rename: the kernelcache is read from Preboot, not from the
         // System volume's root snapshot, so nothing on System changed.
@@ -1656,17 +1660,16 @@ struct VPhoneCustomFirmwareInstaller {
         return work.file(name)
     }
 
-    /// Cryptex images are only read from. hdiutil applies nosuid to disk
-    /// image mounts itself and does not take mount options, so the other
-    /// guards are the read-only attach, the mount point inside the root-only
+    /// Cryptex images are only read from. Keep noowners and nosuid mount
+    /// options, the read-only attach, the mount point inside the root-only
     /// work folder, and `copyTree`, which never follows a link and refuses
     /// device nodes.
     private func attachCryptex(_ image: URL, at mountPoint: URL) throws {
         try tool(
-            "/usr/bin/hdiutil",
+            "/usr/sbin/diskutil",
             [
-                "attach", "-readonly", "-noautoopen", "-nobrowse", "-owners", "off",
-                "-mountpoint", mountPoint.path, image.path,
+                "image", "attach", "-readOnly", "-nobrowse", "-mountOptions", "noowners,nosuid",
+                "-mountPoint", mountPoint.path, image.path,
             ],
             quiet: true,
         )
@@ -2551,9 +2554,10 @@ struct VPhoneCustomFirmwareInstaller {
 
     private func detachImage(at mount: URL) throws {
         do {
-            _ = try tool("/usr/bin/hdiutil", ["detach", mount.path], quiet: true)
+            _ = try tool("/usr/sbin/diskutil", ["eject", mount.path], quiet: true)
         } catch {
-            _ = try tool("/usr/bin/hdiutil", ["detach", "-force", mount.path], quiet: true)
+            _ = try tool("/usr/sbin/diskutil", ["unmountDisk", "force", mount.path], quiet: true)
+            _ = try tool("/usr/sbin/diskutil", ["eject", mount.path], quiet: true)
         }
     }
 

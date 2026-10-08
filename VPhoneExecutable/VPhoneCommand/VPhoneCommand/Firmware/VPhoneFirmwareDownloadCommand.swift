@@ -4,7 +4,7 @@
 //
 //     ipsw download ipsw --device D --urls        ->  vphone-cli fw urls --device D
 //     ipsw download appledb --os macOS … +
-//       ipsw img4 im4p extract + hdiutil          ->  vphone-cli fw seal-tool
+//       ipsw img4 im4p extract + diskutil          ->  vphone-cli fw seal-tool
 //
 // The second was five steps in shell: resolve a macOS build for the iOS
 // version, range-fetch BuildManifest.plist out of an 18 GB remote zip, read the
@@ -158,24 +158,25 @@ struct VPhoneFirmwareSealToolCommand: ParsableCommand {
 
     /// Mount the ramdisk read-only and take the one file out of it.
     private static func copyOut(of dmg: URL, to destination: URL, attached: inout Bool) throws {
-        let output = try run("/usr/bin/hdiutil",
-                             ["attach", "-readonly", "-nobrowse", "-plist", dmg.path])
+        let output = try run("/usr/sbin/diskutil",
+                             ["image", "attach", "-readOnly", "-nobrowse", dmg.path])
         attached = true
-        guard let plist = try PropertyListSerialization.propertyList(
-            from: Data(output.utf8),
-            format: nil,
-        ) as? [String: Any],
-            let entities = plist["system-entities"] as? [[String: Any]]
-        else { throw VPhoneRemoteZip.Error.malformed("hdiutil returned no disk information") }
-        let mount = entities.compactMap { $0["mount-point"] as? String }.first
-        let device = entities.compactMap { $0["dev-entry"] as? String }.first
+        let entities = output.split(whereSeparator: \.isNewline).compactMap { line -> (device: String, mount: String?)? in
+            let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            guard let device = fields.first, device.hasPrefix("/dev/disk") else { return nil }
+            let mount = fields.count > 2 && fields[2].hasPrefix("/") ? fields[2] : nil
+            return (device, mount)
+        }
+        let mount = entities.compactMap(\.mount).first
+        let device = entities.first?.device
         guard let target = device ?? mount else {
-            throw VPhoneRemoteZip.Error.malformed("hdiutil attached nothing that can be detached")
+            throw VPhoneRemoteZip.Error.malformed("diskutil attached nothing that can be detached")
         }
 
         let copied: Result<Void, Swift.Error> = Result {
             guard let mount else {
-                throw VPhoneRemoteZip.Error.malformed("hdiutil attached nothing with a mount point")
+                throw VPhoneRemoteZip.Error.malformed("diskutil attached nothing with a mount point")
             }
             let source = URL(fileURLWithPath: mount).appending(
                 path: "System/Library/Filesystems/apfs.fs/Contents/Resources/apfs_sealvolume",
@@ -185,9 +186,10 @@ struct VPhoneFirmwareSealToolCommand: ParsableCommand {
                                                   ofItemAtPath: destination.path)
         }
         do {
-            try run("/usr/bin/hdiutil", ["detach", target])
+            try run("/usr/sbin/diskutil", ["eject", target])
         } catch {
-            try run("/usr/bin/hdiutil", ["detach", "-force", target])
+            try run("/usr/sbin/diskutil", ["unmountDisk", "force", target])
+            try run("/usr/sbin/diskutil", ["eject", target])
         }
         attached = false
         try copied.get()

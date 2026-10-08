@@ -2812,3 +2812,31 @@ persona-fetch authorization. Adding a temporary exception entitlement was
 verified ineffective on the running guest and has been removed. IDA analysis
 of this guest's launchd confirms the bootstrap lookup gate and name filters
 2, 3 and 12. See [evidence, implementation and validation](Guest/ios27_xcode_persona_lookup.md).
+
+## Host disk-image command migration (2026-10-08)
+
+The migration replaces `hdiutil` because macOS 27 marks it as deprecated.
+The system's `hdiutil(1)` manual recommends `diskutil image`, and command help
+prints deprecation warnings directing attach, detach and convert operations
+to `diskutil image attach`, `diskutil eject` and `diskutil image create from`.
+
+No guest binary patch or preset change. On macOS 15+, CFW install and kernel
+update, PCC GPU recovery, seal-tool extraction and Cryptex filesystem attachment
+use `diskutil image attach`. Writable conversion uses `diskutil image create
+from -format RAW`, which `diskutil(8)` identifies as the former UDRW format.
+There is no hdiutil fallback or new disk-image tool abstraction: calls stay in
+their existing functions. The macOS 15 `diskutil(8)` system manual already
+documents image attach, create and resize. Single-hyphen options
+preserve compatibility with older diskutil versions; conversion supplies
+`-source` on macOS 15 and a positional source on macOS 26+. Existing function
+names and CLI arguments are preserved. Eject uses `diskutil eject`; a busy image is
+retried after `diskutil unmountDisk force`, avoiding the newer `eject force`
+syntax on older systems. Attachment parsing retains the physical APFS store's
+parent disk even when a synthesized container is reported first, and keeps
+mount points containing spaces intact. PCC recovery tracks successful eject
+before deleting its temporary library instead of querying `hdiutil info`.
+
+`CryptexFileOpsTests`: all 12 existing tests pass. The
+`VPhone` bundle build and bundle admission pass on macOS 27.0.1 / Xcode 27.1.
+Real image attachment and execution on macOS 15 still require live validation;
+no VM disk is modified by the validation tests.
