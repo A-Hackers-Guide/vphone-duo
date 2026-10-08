@@ -40,12 +40,10 @@ enum VPhonePCCGPURecovery {
             romSource: VPhoneBundleOperations.defaultROMSource(),
             sepromSource: VPhoneBundleOperations.defaultSEPROMSource(),
         ), in: library)
+        var diskMayBeAttached = false
         let temporaryRestore = vm.url.appending(path: "iPhonePCC_Restore")
         defer {
-            let diskImage = vm.url.appendingPathComponent("Disk.img")
-            if let info = try? run("/usr/bin/hdiutil", ["info"]),
-               !info.contains(diskImage.path)
-            {
+            if !diskMayBeAttached {
                 try? fm.removeItem(at: temporaryLibrary)
             } else {
                 fputs("warning: PCC disk image may still be attached; left \(temporaryLibrary.path)\n", stderr)
@@ -98,6 +96,7 @@ enum VPhonePCCGPURecovery {
         try stageFromSystemDisk(
             vm.url.appending(path: "Disk.img"),
             into: restoreDirectory, expectedPlatformVersion: expectedPlatformVersion,
+            diskMayBeAttached: &diskMayBeAttached,
         )
     }
 
@@ -105,15 +104,17 @@ enum VPhonePCCGPURecovery {
         _ diskImage: URL,
         into restoreDirectory: URL,
         expectedPlatformVersion: String,
+        diskMayBeAttached: inout Bool,
     ) throws {
         let fm = FileManager.default
-        let attached = try run("/usr/bin/hdiutil", [
-            "attach", "-readonly", "-nomount", "-imagekey",
-            "diskimage-class=CRawDiskImage", diskImage.path,
+        // A failed attach can still leave a device. Only a successful eject
+        // permits deleting the temporary VM library.
+        diskMayBeAttached = true
+        let attached = try run("/usr/sbin/diskutil", [
+            "image", "attach", "-readOnly", "-noMount", diskImage.path,
         ])
-        // macOS 27 prints the synthesized APFS container before the image's own
-        // disk, so the first line is not the disk to detach later; take the disk
-        // that carries the store partition. See VPhoneCustomFirmwareInstaller.
+        // The synthesized APFS container can precede the image disk. Take
+        // the parent of the store partition, as the CFW installer does.
         let devices = attached.split(whereSeparator: \.isNewline).compactMap { line -> (device: String, type: String)? in
             let fields = line.split(whereSeparator: \.isWhitespace)
             guard fields.count >= 2, fields[0].hasPrefix("/dev/disk") else { return nil }
@@ -126,26 +127,35 @@ enum VPhonePCCGPURecovery {
             ?? devices.first?.device
         guard let baseDisk, baseDisk.hasPrefix("/dev/disk") else {
             if let range = attached.range(of: #"/dev/disk[0-9]+"#, options: .regularExpression) {
-                _ = try? run("/usr/bin/hdiutil", ["detach", "-force", String(attached[range])])
+                _ = try? run("/usr/sbin/diskutil", ["unmountDisk", "force", String(attached[range])])
+                if (try? run("/usr/sbin/diskutil", ["eject", String(attached[range])])) != nil {
+                    diskMayBeAttached = false
+                }
             }
-            throw Error.toolFailed("hdiutil", "could not attach the PCC disk image. Try again.")
+            throw Error.toolFailed("diskutil", "could not attach the PCC disk image. Try again.")
         }
         var mountToClean: URL?
         var diskAttached = true
         defer {
-            if diskAttached, (try? run("/usr/bin/hdiutil", ["detach", baseDisk])) == nil {
-                _ = try? run("/usr/bin/hdiutil", ["detach", "-force", baseDisk])
+            if diskAttached {
+                if (try? run("/usr/sbin/diskutil", ["eject", baseDisk])) != nil {
+                    diskMayBeAttached = false
+                } else if (try? run("/usr/sbin/diskutil", ["unmountDisk", "force", baseDisk])) != nil,
+                          (try? run("/usr/sbin/diskutil", ["eject", baseDisk])) != nil
+                {
+                    diskMayBeAttached = false
+                }
             }
             if let mountToClean {
                 do {
                     guard let mounts = fm.mountedVolumeURLs(
                         includingResourceValuesForKeys: nil, options: [],
                     ) else {
-                        throw Error.toolFailed("hdiutil", "could not verify detached volumes")
+                        throw Error.toolFailed("diskutil", "could not verify detached volumes")
                     }
                     let root = mountToClean.resolvingSymlinksInPath().path
                     guard !mounts.contains(where: { $0.resolvingSymlinksInPath().path == root }) else {
-                        throw Error.toolFailed("hdiutil", "PCC volume is still mounted")
+                        throw Error.toolFailed("diskutil", "PCC volume is still mounted")
                     }
                     try fm.removeItem(at: mountToClean)
                 } catch {
@@ -191,11 +201,13 @@ enum VPhonePCCGPURecovery {
         }
         mounted = false
         do {
-            try run("/usr/bin/hdiutil", ["detach", baseDisk])
+            try run("/usr/sbin/diskutil", ["eject", baseDisk])
         } catch {
-            try run("/usr/bin/hdiutil", ["detach", "-force", baseDisk])
+            try run("/usr/sbin/diskutil", ["unmountDisk", "force", baseDisk])
+            try run("/usr/sbin/diskutil", ["eject", baseDisk])
         }
         diskAttached = false
+        diskMayBeAttached = false
         print("[+] GPU driver staged from cloudOS restored by vphone-cli")
     }
 

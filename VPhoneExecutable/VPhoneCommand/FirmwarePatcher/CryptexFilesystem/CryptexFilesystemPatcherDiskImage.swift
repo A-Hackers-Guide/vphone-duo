@@ -1,6 +1,6 @@
 // CryptexFilesystemPatcherDiskImage.swift — Disk image attach, convert and copy helpers.
 //
-// Split out of CryptexFilesystemPatcher.swift. The hdiutil/diskutil layer: attaching and
+// Split out of CryptexFilesystemPatcher.swift. The diskutil layer: attaching and
 // detaching images, converting between RAW and UDRW, resizing, unmounting, and the
 // copyfile-based volume copy used to merge a cryptex into the target volume.
 
@@ -65,11 +65,12 @@ extension CryptexFilesystemPatcher {
     }
 
     func convertToRawImage(input: URL, output: URL) throws {
-        _ = try runProcess("/usr/sbin/diskutil", [
-            "image", "create", "from",
-            "--format", "RAW", input.path,
-            output.path,
-        ])
+        let arguments = if #available(macOS 26, *) {
+            ["image", "create", "from", "-format", "RAW", input.path, output.path]
+        } else {
+            ["image", "create", "from", "-format", "RAW", "-source", input.path, output.path]
+        }
+        _ = try runProcess("/usr/sbin/diskutil", arguments)
 
         // Resize to max. Asking diskutil how big it may get returns a plist, and
         // reading one value out of it used to be `/bin/sh -c "… | plutil -extract
@@ -77,11 +78,11 @@ extension CryptexFilesystemPatcher {
         // can read directly — and a pipeline whose stdout is also where diskutil's
         // own warnings land, so a noisy run produced a "size" that was a sentence.
         let sizes = try runProcess("/usr/sbin/diskutil", [
-            "image", "resize", "--plist", output.path,
+            "image", "resize", "-plist", output.path,
         ])
         let maxsize = try Self.maxResizeSize(fromDiskutilPlist: sizes)
         _ = try runProcess("/usr/sbin/diskutil", [
-            "image", "resize", "--size", maxsize, output.path,
+            "image", "resize", "-size", maxsize, output.path,
         ])
     }
 
@@ -114,19 +115,20 @@ extension CryptexFilesystemPatcher {
         if FileManager.default.fileExists(atPath: output.path) {
             try FileManager.default.removeItem(at: output)
         }
-        _ = try runProcess("/usr/bin/hdiutil", [
-            "convert",
-            input.path,
-            "-format", "UDRW",
-            "-o", output.path,
-        ])
+        // diskutil calls the former UDRW read-write format RAW.
+        let arguments = if #available(macOS 26, *) {
+            ["image", "create", "from", "-format", "RAW", input.path, output.path]
+        } else {
+            ["image", "create", "from", "-format", "RAW", "-source", input.path, output.path]
+        }
+        _ = try runProcess("/usr/sbin/diskutil", arguments)
     }
 
     func shrinkImage(dmg: URL) throws {
         _ = try runProcess("/usr/sbin/diskutil", [
             "image",
             "resize",
-            "--size", "min",
+            "-size", "min",
             dmg.path,
         ])
     }
@@ -138,18 +140,16 @@ extension CryptexFilesystemPatcher {
     /// attachImage returns the device and mount point
     func attachImage(path: URL, readonly: Bool = false, forceRW: Bool = false) throws -> (String, String) {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
         process.arguments = if readonly {
             [
-                "attach",
-                "-readonly",
-                "-plist",
+                "image", "attach",
+                "-readOnly",
                 path.path,
             ]
         } else {
             [
-                "attach",
-                "-plist",
+                "image", "attach",
                 path.path,
             ]
         }
@@ -168,27 +168,15 @@ extension CryptexFilesystemPatcher {
             throw ProcessError.failed(process.terminationStatus, output)
         }
 
-        let root: PlistDict
-        do {
-            root = try parsePlist(data: data)
-        } catch {
-            detachReportedImage(in: String(data: data, encoding: .utf8) ?? "")
-            throw error
-        }
-        guard let entries = root["system-entities"] as? [Any] else {
-            detachReportedImage(in: String(data: data, encoding: .utf8) ?? "")
-            throw FirmwareManifest.ManifestError.missingKey("system-entities")
-        }
-        for entry in entries {
-            guard let entry = entry as? PlistDict,
-                  let volumeKind = entry["volume-kind"] as? String,
-                  volumeKind == "apfs" || volumeKind == "hfs"
-            else {
+        let output = String(decoding: data, as: UTF8.self)
+        for line in output.split(whereSeparator: \.isNewline) {
+            let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            guard fields.count >= 3, fields[0].hasPrefix("/dev/disk"), fields[2].hasPrefix("/") else {
                 continue
             }
-            let device = entry["dev-entry"] as? String ?? ""
-            let mountPoint = entry["mount-point"] as? String ?? ""
-            guard !device.isEmpty, !mountPoint.isEmpty else { continue }
+            let device = fields[0]
+            let mountPoint = fields[2]
 
             attachedDevices.insert(device)
             if forceRW {
@@ -216,9 +204,10 @@ extension CryptexFilesystemPatcher {
 
     func detachImage(deviceNode: String) throws {
         do {
-            _ = try runProcess("/usr/bin/hdiutil", ["detach", deviceNode])
+            _ = try runProcess("/usr/sbin/diskutil", ["eject", deviceNode])
         } catch {
-            _ = try runProcess("/usr/bin/hdiutil", ["detach", "-force", deviceNode])
+            _ = try runProcess("/usr/sbin/diskutil", ["unmountDisk", "force", deviceNode])
+            _ = try runProcess("/usr/sbin/diskutil", ["eject", deviceNode])
         }
         attachedDevices.remove(deviceNode)
     }

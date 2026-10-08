@@ -1,6 +1,6 @@
 // CryptexFilesystemPatcherProcess.swift — Subprocess execution for the filesystem patcher.
 //
-// Split out of CryptexFilesystemPatcher.swift. Every external tool the merge drives — hdiutil,
+// Split out of CryptexFilesystemPatcher.swift. Every external tool the merge drives —
 // diskutil, ipsw, aa, cryptexctl, apfs_sealvolume — runs through runProcess, and ProcessError
 // is what it throws. What no longer runs through it: tar (VPhoneArchiveKit), and chmod, chown, ln
 // and find (CryptexFilesystemPatcherFileOps.swift).
