@@ -25,6 +25,7 @@ struct VPhoneVirtualMachineCommand: ParsableCommand {
             VPhoneVirtualMachineLaunchCommand.self,
             VPhoneVirtualMachineStopCommand.self,
             VPhoneVirtualMachineCreateCommand.self,
+            VPhoneVirtualMachineTemplateCommand.self,
             VPhoneVirtualMachineWriteManifestCommand.self,
         ],
     )
@@ -345,7 +346,7 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
         return edit
     }
 
-    private static func parseSwitch(_ value: String, option: String) throws -> Bool {
+    static func parseSwitch(_ value: String, option: String) throws -> Bool {
         switch value.lowercased() {
         case "on": return true
         case "off": return false
@@ -353,7 +354,7 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
         }
     }
 
-    private static func parseMode(_ s: String)
+    static func parseMode(_ s: String)
         throws -> VPhoneVirtualMachineManifest.NetworkConfig.NetworkMode
     {
         switch s.lowercased() {

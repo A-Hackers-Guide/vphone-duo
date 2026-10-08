@@ -5,6 +5,17 @@ import VPhonePatchKit
 // MARK: - Create Options
 
 public extension VPhoneVirtualMachineCreator {
+    /// Whether the new machine is cloned from a template.
+    enum TemplateUse: Equatable, Sendable {
+        /// The full pipeline into the machine itself, with keys of its own.
+        case none
+        /// Clone from the template whose key the options resolve to,
+        /// building it first when there is none.
+        case automatic
+        /// Clone from this template; no IPSW is needed.
+        case identifier(String)
+    }
+
     struct Options {
         public var name: String
         public var iphoneSource: String?
@@ -19,8 +30,18 @@ public extension VPhoneVirtualMachineCreator {
         public var cpuCount: UInt
         public var memoryMB: UInt64
         public var diskSizeGB: UInt64
+        /// Set on the new machine after it exists; nil keeps the default.
+        public var networkMode: VPhoneVirtualMachineManifest.NetworkConfig.NetworkMode?
+        public var unlocksAtStartup: Bool?
         public var verbosity: VPhoneVerbosity
         public var keepArtifacts: Bool
+        public var template: TemplateUse
+        /// The key fields named on the command line, checked against a
+        /// template given by identifier. Nil fields were not given.
+        public var templateRequest: VPhoneMachineTemplateRequest
+        /// Leave the first boot to the caller (Launchpad boots the machine
+        /// itself). A template is never booted either way.
+        public var skipsFirstBoot: Bool
 
         public init(
             name: String,
@@ -33,8 +54,13 @@ public extension VPhoneVirtualMachineCreator {
             cpuCount: UInt = 8,
             memoryMB: UInt64 = 8192,
             diskSizeGB: UInt64 = 64,
+            networkMode: VPhoneVirtualMachineManifest.NetworkConfig.NetworkMode? = nil,
+            unlocksAtStartup: Bool? = nil,
             verbosity: VPhoneVerbosity = .quiet,
             keepArtifacts: Bool = false,
+            template: TemplateUse = .none,
+            templateRequest: VPhoneMachineTemplateRequest = VPhoneMachineTemplateRequest(),
+            skipsFirstBoot: Bool = false,
         ) {
             self.name = name
             self.iphoneSource = iphoneSource
@@ -46,8 +72,13 @@ public extension VPhoneVirtualMachineCreator {
             self.cpuCount = cpuCount
             self.memoryMB = memoryMB
             self.diskSizeGB = diskSizeGB
+            self.networkMode = networkMode
+            self.unlocksAtStartup = unlocksAtStartup
             self.verbosity = verbosity
             self.keepArtifacts = keepArtifacts
+            self.template = template
+            self.templateRequest = templateRequest
+            self.skipsFirstBoot = skipsFirstBoot
         }
     }
 }

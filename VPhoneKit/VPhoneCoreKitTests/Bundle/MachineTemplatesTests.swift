@@ -1,0 +1,429 @@
+import Darwin
+import Foundation
+import Testing
+@testable import VPhoneCoreKit
+
+/// Templates on disk: adopting a machine, building and freezing one, cloning
+/// machines from it, and keeping it from ever booting. The temporary
+/// directory is on the boot volume, which is APFS, so clones are real
+/// `clonefile` copies.
+struct MachineTemplatesTests {
+    // MARK: - Fixtures
+
+    private struct Fixture {
+        let root: URL
+        let library: VPhoneLibrary
+        let rom: URL
+
+        func cleanUp() {
+            try? FileManager.default.removeItem(at: root)
+        }
+    }
+
+    private func makeFixture() throws -> Fixture {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        let rom = root.appendingPathComponent("rom.bin")
+        try Data([0xAA]).write(to: rom)
+        return Fixture(root: root, library: VPhoneLibrary(root: root.appendingPathComponent("machines")), rom: rom)
+    }
+
+    /// A stopped machine with the files a created one has.
+    @discardableResult
+    private func makeMachine(_ name: String, in fixture: Fixture, library: VPhoneLibrary? = nil) throws -> VPhoneBundle {
+        let bundle = try VPhoneBundleOperations.create(
+            .init(name: name, cpuCount: 4, memoryMB: 4096, diskSizeGB: 1, romSource: fixture.rom, sepromSource: fixture.rom),
+            in: library ?? fixture.library,
+        )
+        try Data([0xD1, 0x5C, 0x00, 0x01]).write(to: bundle.url.appendingPathComponent("Disk.img"))
+        try Data([0x5E, 0x90]).write(to: bundle.url.appendingPathComponent("SEPStorage"))
+        try Data([1, 2, 3]).write(to: bundle.url.appendingPathComponent("nvram.bin"))
+        try Data([4]).write(to: bundle.url.appendingPathComponent("udid-prediction.txt"))
+        try Data().write(to: bundle.url.appendingPathComponent("vphone.sock"))
+        let manifest = bundle.manifest.updating(
+            machineIdentifier: Data([9, 9]),
+            networkConfig: bundle.manifest.networkConfig.with(
+                macAddress: "aa:bb:cc:dd:ee:ff",
+                localHostName: .some(VPhoneNetworking.localHostName(forVMName: name)),
+            ),
+        )
+        try manifest.write(to: bundle.configURL)
+        return VPhoneBundle(url: bundle.url, manifest: manifest)
+    }
+
+    private func record(
+        _ key: VPhoneMachineTemplateKey = MachineTemplateKeyTests.key(),
+        source: String? = "src",
+        steps: VPhoneMachineTemplateSteps = VPhoneMachineTemplateSteps(),
+    ) -> VPhoneMachineTemplateRecord {
+        VPhoneMachineTemplateRecord(
+            key: key,
+            created: Date(timeIntervalSince1970: 1_800_000_000),
+            builtWithBundleVersion: "2.8.0",
+            sourceMachine: source,
+            steps: steps,
+        )
+    }
+
+    private func exists(_ url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: url.path)
+    }
+
+    // MARK: - Adopt
+
+    @Test func `adopt moves a stopped machine out of the library and freezes it`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let source = try makeMachine("src", in: fixture)
+        let disk = try Data(contentsOf: source.url.appendingPathComponent("Disk.img"))
+
+        let template = try VPhoneMachineTemplates.adopt(machineNamed: "src", in: fixture.library, record: record())
+
+        let key = MachineTemplateKeyTests.key()
+        #expect(template.identifier == key.identifier)
+        #expect(template.url == VPhoneMachineTemplates.url(of: key.identifier, in: fixture.library))
+        #expect(template.record.frozen)
+        #expect(template.record.frozenAt != nil)
+        #expect(!exists(source.url))
+        #expect(try Data(contentsOf: template.url.appendingPathComponent("Disk.img")) == disk)
+        // The stopped machine's stale socket does not travel.
+        #expect(!exists(template.url.appendingPathComponent("vphone.sock")))
+
+        // Gone from every listing of machines, present in the template listing.
+        #expect(try fixture.library.bundles().isEmpty)
+        let listing = try VPhoneMachineTemplates.list(in: fixture.library)
+        #expect(listing.templates.map(\.identifier) == [key.identifier])
+        #expect(listing.staging.isEmpty)
+        #expect(listing.damaged.isEmpty)
+        #expect(try VPhoneMachineTemplates.readRecord(inBundle: template.url) == template.record)
+    }
+
+    @Test func `adopt refuses a running machine and leaves it in place`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let source = try makeMachine("src", in: fixture)
+        let fd = open(source.url.appendingPathComponent("Disk.img").path, O_RDONLY)
+        #expect(fd >= 0)
+        defer { close(fd) }
+
+        #expect(throws: VPhoneBundleActivityError.running(name: "src", pids: [getpid()])) {
+            try VPhoneMachineTemplates.adopt(machineNamed: "src", in: fixture.library, record: record())
+        }
+        #expect(exists(source.url))
+        #expect(!exists(source.url.appendingPathComponent(VPhoneMachineTemplates.recordFileName)))
+        #expect(try VPhoneMachineTemplates.list(in: fixture.library).templates.isEmpty)
+    }
+
+    @Test func `adopt refuses a key that already has a template`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        try makeMachine("one", in: fixture)
+        let other = try makeMachine("two", in: fixture)
+        try VPhoneMachineTemplates.adopt(machineNamed: "one", in: fixture.library, record: record())
+
+        let identifier = MachineTemplateKeyTests.key().identifier
+        #expect(throws: VPhoneMachineTemplateError.alreadyExists(identifier)) {
+            try VPhoneMachineTemplates.adopt(machineNamed: "two", in: fixture.library, record: record())
+        }
+        #expect(exists(other.url))
+        #expect(!exists(other.url.appendingPathComponent(VPhoneMachineTemplates.recordFileName)))
+    }
+
+    @Test func `adopt refuses a machine with snapshots`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let source = try makeMachine("src", in: fixture)
+        try VPhoneMachineSnapshots.create("clean", of: source)
+
+        #expect(throws: VPhoneMachineTemplateError.hasSnapshots(machine: "src", count: 1)) {
+            try VPhoneMachineTemplates.adopt(machineNamed: "src", in: fixture.library, record: record())
+        }
+        #expect(exists(source.url))
+    }
+
+    @Test func `adopt refuses steps that do not match the key`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let source = try makeMachine("src", in: fixture)
+
+        #expect(throws: VPhoneMachineTemplateError.self) {
+            try VPhoneMachineTemplates.adopt(
+                machineNamed: "src",
+                in: fixture.library,
+                record: record(steps: .init(trimTier: "standard")),
+            )
+        }
+        #expect(exists(source.url))
+    }
+
+    // MARK: - Build and freeze
+
+    @Test func `a build is staged, records its steps, and freezes into place in one rename`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let key = MachineTemplateKeyTests.key(slimming: .init(trimTier: "standard"))
+        let lock = try VPhoneMachineTemplates.lock(key.identifier, in: fixture.library, wait: false)
+        defer { lock.release() }
+
+        let build = try VPhoneMachineTemplates.beginBuild(key, in: fixture.library)
+        #expect(build.stagingURL.lastPathComponent.hasPrefix(".building-\(key.identifier)-"))
+        #expect(build.bundleURL.path == build.stagingURL.appendingPathComponent(key.identifier).path)
+        try makeMachine(key.identifier, in: fixture, library: build.library)
+        try VPhoneMachineTemplates.writeRecord(record(key, source: "phone"), inBundle: build.bundleURL)
+
+        // Listed as a build in progress, never as a template or a machine.
+        var listing = try VPhoneMachineTemplates.list(in: fixture.library)
+        #expect(listing.templates.isEmpty)
+        #expect(listing.staging.map(\.name) == [build.stagingURL.lastPathComponent])
+        #expect(listing.staging.first?.identifier == key.identifier)
+        #expect(listing.staging.first?.isActive == true)
+        #expect(try fixture.library.bundles().isEmpty)
+        // A machine still being built may boot: the setup boot does.
+        #expect(VPhoneMachineTemplates.bootRefusal(bundleURL: build.bundleURL) == nil)
+
+        // The key promises trimming that has not happened yet.
+        #expect(throws: VPhoneMachineTemplateError.self) {
+            try VPhoneMachineTemplates.freeze(build)
+        }
+        #expect(try VPhoneMachineTemplates.readRecord(inBundle: build.bundleURL)?.frozen == false)
+
+        try VPhoneMachineTemplates.recordSteps(inBundle: build.bundleURL) { steps in
+            steps.trimTier = "standard"
+            steps.snapshotDeleted = true
+        }
+        let template = try VPhoneMachineTemplates.freeze(build)
+        #expect(template.url == VPhoneMachineTemplates.url(of: key.identifier, in: fixture.library))
+        #expect(template.record.frozen)
+        #expect(template.record.steps.snapshotDeleted)
+        #expect(!exists(build.stagingURL))
+        #expect(!exists(template.url.appendingPathComponent("vphone.sock")))
+        listing = try VPhoneMachineTemplates.list(in: fixture.library)
+        #expect(listing.templates.map(\.identifier) == [key.identifier])
+        #expect(listing.staging.isEmpty)
+
+        // Frozen means unchanging.
+        #expect(throws: VPhoneMachineTemplateError.frozen(identifier: key.identifier)) {
+            try VPhoneMachineTemplates.recordSteps(inBundle: template.url) { $0.setupDone = true }
+        }
+        #expect(throws: VPhoneMachineTemplateError.alreadyExists(key.identifier)) {
+            try VPhoneMachineTemplates.beginBuild(key, in: fixture.library)
+        }
+    }
+
+    @Test func `freeze refuses when the template appeared meanwhile and leaves the build unfrozen`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let key = MachineTemplateKeyTests.key()
+        let build = try VPhoneMachineTemplates.beginBuild(key, in: fixture.library)
+        try makeMachine(key.identifier, in: fixture, library: build.library)
+        try VPhoneMachineTemplates.writeRecord(record(key), inBundle: build.bundleURL)
+        // Another create won the race.
+        try makeMachine("other", in: fixture)
+        try VPhoneMachineTemplates.adopt(machineNamed: "other", in: fixture.library, record: record(key))
+
+        #expect(throws: VPhoneMachineTemplateError.alreadyExists(key.identifier)) {
+            try VPhoneMachineTemplates.freeze(build)
+        }
+        #expect(exists(build.bundleURL))
+        #expect(try VPhoneMachineTemplates.readRecord(inBundle: build.bundleURL)?.frozen == false)
+
+        try VPhoneMachineTemplates.abandon(build)
+        #expect(!exists(build.stagingURL))
+    }
+
+    @Test func `the build lock admits one holder and a leftover build can be deleted once it is released`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let key = MachineTemplateKeyTests.key()
+        let lock = try VPhoneMachineTemplates.lock(key.identifier, in: fixture.library, wait: false)
+        #expect(throws: VPhoneMachineTemplateError.busy(identifier: key.identifier)) {
+            try VPhoneMachineTemplates.lock(key.identifier, in: fixture.library, wait: false)
+        }
+        let build = try VPhoneMachineTemplates.beginBuild(key, in: fixture.library)
+        let name = build.stagingURL.lastPathComponent
+        #expect(throws: VPhoneMachineTemplateError.busy(identifier: key.identifier)) {
+            try VPhoneMachineTemplates.delete(name, in: fixture.library)
+        }
+
+        lock.release()
+        #expect(try VPhoneMachineTemplates.list(in: fixture.library).staging.first?.isActive == false)
+        try VPhoneMachineTemplates.delete(name, in: fixture.library)
+        #expect(!exists(build.stagingURL))
+        // And the lock can be taken again.
+        try VPhoneMachineTemplates.lock(key.identifier, in: fixture.library, wait: false).release()
+    }
+
+    // MARK: - Never booting
+
+    @Test func `a frozen template refuses to boot, by every route`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        try makeMachine("src", in: fixture)
+        let template = try VPhoneMachineTemplates.adopt(machineNamed: "src", in: fixture.library, record: record())
+
+        #expect(VPhoneMachineTemplates.bootRefusal(bundleURL: template.url) == .notBootable(identifier: template.identifier))
+        #expect(throws: VPhoneMachineTemplateError.notBootable(identifier: template.identifier)) {
+            var boot = VPhoneBootCommand(config: template.url.appendingPathComponent("config.plist"))
+            try boot.validate()
+        }
+        #expect(throws: VPhoneMachineTemplateError.notBootable(identifier: template.identifier)) {
+            var boot = VPhoneBootCommand(config: template.url.appendingPathComponent("config.plist"), dfu: true)
+            try boot.validate()
+        }
+        // A machine name never reaches into `.templates`.
+        for name in [".templates/\(template.identifier)", ".templates", "../machines/src"] {
+            #expect(throws: VPhoneLibraryError.invalidName(name)) {
+                try fixture.library.bundle(named: name)
+            }
+        }
+        // The same machine copied out by hand still carries its frozen record.
+        let copy = fixture.library.url(forName: "copy")
+        try FileManager.default.copyItem(at: template.url, to: copy)
+        #expect(VPhoneMachineTemplates.bootRefusal(bundleURL: copy) == .notBootable(identifier: template.identifier))
+    }
+
+    @Test func `a folder in templates without a record does not boot either, and an ordinary machine does`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let machine = try makeMachine("phone", in: fixture)
+        #expect(VPhoneMachineTemplates.bootRefusal(bundleURL: machine.url) == nil)
+
+        try VPhoneMachineTemplates.ensureDirectory(in: fixture.library)
+        let stray = VPhoneMachineTemplates.url(of: "0123456789ab", in: fixture.library)
+        try FileManager.default.copyItem(at: machine.url, to: stray)
+        #expect(VPhoneMachineTemplates.bootRefusal(bundleURL: stray) == .notBootable(identifier: "0123456789ab"))
+        // It is listed as damaged and can be deleted.
+        let listing = try VPhoneMachineTemplates.list(in: fixture.library)
+        #expect(listing.templates.isEmpty)
+        #expect(listing.damaged.map(\.name) == ["0123456789ab"])
+        try VPhoneMachineTemplates.delete("0123456789ab", in: fixture.library)
+        #expect(!exists(stray))
+    }
+
+    // MARK: - Clone
+
+    @Test func `a machine cloned from a template is ordinary, new, and takes config-only settings`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        try makeMachine("src", in: fixture)
+        let template = try VPhoneMachineTemplates.adopt(machineNamed: "src", in: fixture.library, record: record())
+        let templateConfig = try Data(contentsOf: template.url.appendingPathComponent("config.plist"))
+
+        let clone = try VPhoneMachineTemplates.cloneMachine(from: template, to: "phone-a", in: fixture.library)
+        #expect(clone.url == fixture.library.url(forName: "phone-a"))
+        #expect(try fixture.library.bundles().map(\.name) == ["phone-a"])
+        // A new identity, and no template record: it boots.
+        #expect(clone.manifest.machineIdentifier.isEmpty)
+        #expect(clone.manifest.networkConfig.macAddress.isEmpty)
+        #expect(!exists(clone.url.appendingPathComponent(VPhoneMachineTemplates.recordFileName)))
+        #expect(!exists(clone.url.appendingPathComponent("udid-prediction.txt")))
+        #expect(VPhoneMachineTemplates.bootRefusal(bundleURL: clone.url) == nil)
+        // The mDNS name derived from the machine the template came from follows to the clone.
+        #expect(clone.manifest.networkConfig.localHostName == VPhoneNetworking.localHostName(forVMName: "phone-a"))
+        // The state files made by the restore are the template's.
+        for name in ["Disk.img", "SEPStorage", "nvram.bin"] {
+            #expect(try Data(contentsOf: clone.url.appendingPathComponent(name))
+                == Data(contentsOf: template.url.appendingPathComponent(name)), "\(name)")
+        }
+
+        // What `vm create --template` sets afterwards, through `vm config`'s path.
+        let configured = try VPhoneBundleOperations.updateConfig(
+            bundleNamed: "phone-a",
+            in: fixture.library,
+            cpuCount: 2,
+            memoryMB: 3072,
+            networkMode: .tunnel,
+            unlocksAtStartup: true,
+        )
+        #expect(configured.manifest.cpuCount == 2)
+        #expect(configured.manifest.memorySize == 3072 * 1024 * 1024)
+        #expect(configured.manifest.networkConfig.mode == .tunnel)
+        #expect(configured.manifest.unlocksScreenAtStartup)
+        // The template is untouched.
+        #expect(try Data(contentsOf: template.url.appendingPathComponent("config.plist")) == templateConfig)
+
+        // A second clone beside the first, and both survive the template's deletion.
+        let second = try VPhoneMachineTemplates.cloneMachine(from: template, to: "phone-b", in: fixture.library)
+        #expect(throws: VPhoneLibraryError.alreadyExists(name: "phone-b")) {
+            try VPhoneMachineTemplates.cloneMachine(from: template, to: "phone-b", in: fixture.library)
+        }
+        try VPhoneMachineTemplates.delete(template.identifier, in: fixture.library)
+        #expect(!exists(template.url))
+        #expect(try fixture.library.bundles().map(\.name) == ["phone-a", "phone-b"])
+        #expect(try Data(contentsOf: second.url.appendingPathComponent("Disk.img")) == Data([0xD1, 0x5C, 0x00, 0x01]))
+    }
+
+    @Test func `a plain clone of a machine drops a template record`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let machine = try makeMachine("src", in: fixture)
+        try VPhoneMachineTemplates.writeRecord(record(), inBundle: machine.url)
+
+        let clone = try VPhoneBundleOperations.clone(bundleNamed: "src", to: "dst", in: fixture.library)
+        #expect(!exists(clone.url.appendingPathComponent(VPhoneMachineTemplates.recordFileName)))
+        #expect(clone.manifest.machineIdentifier == Data([9, 9]))
+    }
+
+    @Test func `a cloned template refuses to start while it is held open`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        try makeMachine("src", in: fixture)
+        let template = try VPhoneMachineTemplates.adopt(machineNamed: "src", in: fixture.library, record: record())
+        let fd = open(template.url.appendingPathComponent("SEPStorage").path, O_RDONLY)
+        #expect(fd >= 0)
+        defer { close(fd) }
+
+        #expect(throws: VPhoneBundleActivityError.running(name: template.identifier, pids: [getpid()])) {
+            try VPhoneMachineTemplates.cloneMachine(from: template, to: "phone", in: fixture.library)
+        }
+        #expect(!exists(fixture.library.url(forName: "phone")))
+    }
+
+    // MARK: - Lookup
+
+    @Test func `templates are found by identifier, unique prefix, or key`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        try makeMachine("one", in: fixture)
+        try makeMachine("two", in: fixture)
+        let first = try VPhoneMachineTemplates.adopt(machineNamed: "one", in: fixture.library, record: record())
+        let otherKey = MachineTemplateKeyTests.key(disk: 128)
+        let second = try VPhoneMachineTemplates.adopt(machineNamed: "two", in: fixture.library, record: record(otherKey))
+
+        #expect(try VPhoneMachineTemplates.template(first.identifier, in: fixture.library).url == first.url)
+        #expect(try VPhoneMachineTemplates.template(String(second.identifier.prefix(6)), in: fixture.library).url == second.url)
+        #expect(try VPhoneMachineTemplates.template(for: otherKey, in: fixture.library)?.url == second.url)
+        #expect(try VPhoneMachineTemplates.template(for: MachineTemplateKeyTests.key(disk: 32), in: fixture.library) == nil)
+        #expect(throws: VPhoneMachineTemplateError.notFound("ffffffffffff")) {
+            try VPhoneMachineTemplates.template("ffffffffffff", in: fixture.library)
+        }
+        for bad in ["abc", "../x", ".templates", "0123456789abcdef"] {
+            #expect(throws: VPhoneMachineTemplateError.invalidIdentifier(bad)) {
+                try VPhoneMachineTemplates.template(bad, in: fixture.library)
+            }
+        }
+    }
+
+    // MARK: - Staleness
+
+    @Test func `stale reasons name the series, the resolution and the drift`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        try makeMachine("src", in: fixture)
+        let key = MachineTemplateKeyTests.key()
+        let template = try VPhoneMachineTemplates.adopt(machineNamed: "src", in: fixture.library, record: record(key))
+
+        #expect(template.staleReasons(currentSeries: "2.8", freshKey: key).isEmpty)
+        // A fresh key for another series differs only in the series, which is reported once.
+        #expect(template.staleReasons(currentSeries: "2.9", freshKey: key).count == 1)
+
+        var changed = key
+        changed.bootChainPlanDigest = "abd"
+        let reasons = template.staleReasons(currentSeries: "2.8", freshKey: changed, driftedPatches: ["kernel-x"])
+        #expect(reasons.count == 2)
+        #expect(reasons[0].contains("boot-chain plan"))
+        #expect(reasons[1].contains("kernel-x"))
+        #expect(template.staleReasons(currentSeries: "2.8", freshKey: nil).count == 1)
+    }
+}

@@ -202,6 +202,31 @@ public enum VPhoneBundleOperations {
     ) throws -> VPhoneBundle {
         try requireValidName(newName)
         let source = try library.bundle(named: name)
+        return try clone(source, sourceName: name, to: newName, in: library, newIdentity: newIdentity, afterCopy: afterCopy)
+    }
+
+    /// Clones a machine folder that need not be in `library`, such as a
+    /// template in `.templates`, into `library` as `newName`. `sourceName` is
+    /// the name a derived mDNS name follows from.
+    public static func clone(
+        _ source: VPhoneBundle,
+        sourceName name: String,
+        to newName: String,
+        in library: VPhoneLibrary,
+        newIdentity: Bool,
+    ) throws -> VPhoneBundle {
+        try clone(source, sourceName: name, to: newName, in: library, newIdentity: newIdentity, afterCopy: {})
+    }
+
+    static func clone(
+        _ source: VPhoneBundle,
+        sourceName name: String,
+        to newName: String,
+        in library: VPhoneLibrary,
+        newIdentity: Bool,
+        afterCopy: () throws -> Void,
+    ) throws -> VPhoneBundle {
+        try requireValidName(newName)
         let src = source.url
         let dst = library.url(forName: newName)
         let fm = FileManager.default
@@ -246,8 +271,13 @@ public enum VPhoneBundleOperations {
     }
 
     /// Left out of every clone: snapshots record the source's history, not
-    /// the copy's, and the control socket is the stopped source's.
-    private static let droppedFromClone: Set<String> = [VPhoneMachineSnapshots.directoryName, "vphone.sock"]
+    /// the copy's, the control socket is the stopped source's, and a
+    /// template's record would make its clone a template that never boots.
+    private static let droppedFromClone: Set<String> = [
+        VPhoneMachineSnapshots.directoryName,
+        "vphone.sock",
+        VPhoneMachineTemplates.recordFileName,
+    ]
 
     /// The network settings a new-identity clone drops, described for display.
     /// Each would collide with the source's when both run: a fixed address,

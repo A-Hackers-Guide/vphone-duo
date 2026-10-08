@@ -17,6 +17,10 @@ vphone-cli vm create myphone \
 
 Creation runs prepare → firmware patch → online DFU restore → host-mounted CFW installation → first GUI boot. It needs network access for the restore ticket. The caller must provide root privileges for CFW installation; this bundle has no authorization dialog or privilege helper. The default virtual disk is 64 GB. `--keep-artifacts` retains the large prepared restore tree; omit it when disk space matters.
 
+By default that pipeline builds a [template](#templates) rather than the VM itself, and the VM is cloned from it. The next `vm create` for the same device, iOS and cloudOS builds, preset and disk size clones from the same template instead of restoring again. Pass `--no-template` to build the VM on its own, as before.
+
+`--cpu`, `--memory`, `--network` and `--unlock-at-startup` set those `vm config` settings on the new VM (defaults: 8 cores, 8192 MB, nat, off). `--skip-first-boot` leaves out the final boot, for a caller that boots the VM itself.
+
 `fw prepare` creates a temporary vphone VM, starts it in DFU, and restores the selected cloudOS IPSW using this project's restore backend. It mounts the restored System volume read-only, extracts the GPU bundle, then removes the temporary VM. This first restore supplies the GPU driver for the second, hybrid iPhone restore. The extracted bundle is cached per cloudOS build in `~/.vphone/gpu-drivers/`, so later machines on the same cloudOS skip the temporary restore. `vm create` and `fw prepare` also accept `--gpu-driver-bundle /path/to/AppleParavirtGPUMetalIOGPUFamily.bundle` to reuse a previously extracted bundle without the temporary restore. The CLI checks its iPhoneOS platform version against the selected cloudOS version. Each restore obtains its own ticket online.
 
 The build also ships an arm64e GPU compiler plugin in the bundle. `fw prepare` copies it into the staged GPU bundle before firmware patching and installation.
@@ -35,6 +39,35 @@ Closing the VM window, ⌘Q, `vm stop` and Control-C in the `vm launch` terminal
 ## Device name
 
 The guest shows the VM's name as its device name, in Xcode's device list and `xcrun devicectl list devices`, and cannot be renamed from inside the guest or from Finder, Xcode or `idevicename`: a rename there reports success and changes nothing. `vphone-vm` hands the name to the guest each time it connects to vphoned, a few seconds into every boot, and the guest keeps it for the next boot. After `vm rename`, Finder and `ideviceinfo` see the new name as soon as the machine is up; Xcode and `devicectl` read it when the device appears and may show the old name until the following boot. An existing machine moved to a bundle with this feature receives the guest library with its environment update and uses it from the boot after that. The guest's own name stays in its preferences, untouched. A VM name of more than 255 UTF-8 bytes, or with a control character, is not used, and the guest shows its own name. See `Research/Guest/device_name_pinning.md`.
+
+## Templates
+
+A template is a complete machine that is never booted, kept in `<library>/.templates/<id>/`. `vm create` without `--no-template` works out the template key from its options and the two IPSWs before anything is restored: the guest device, the iOS and cloudOS versions and builds, the patch preset and the boot-chain patches it resolves to, the bundle series (`2.8` for 2.8.x), the disk size, and what was trimmed from the guest (nothing yet). Then:
+
+- If a template with that key exists, the VM is cloned from it with a new identity, given the requested CPU, memory and network, and booted once to check vphoned. This takes seconds and needs neither root nor the IPSWs; nothing is downloaded.
+- Otherwise the full pipeline runs into a staging folder, `.templates/.building-<id>-<uuid>/`, without the first boot; the result is frozen and renamed to `.templates/<id>/` in one step, and the VM is cloned from it. A second `vm create` with the same key waits for the first instead of restoring a second copy. A failed build stays in its staging folder for inspection.
+
+```sh
+vphone-cli vm create phone-a --iphone-source … --cloudos-source …   # builds the template, clones phone-a
+vphone-cli vm create phone-b --iphone-source … --cloudos-source …   # clones phone-b, no restore
+vphone-cli vm create phone-c --template 3f2a91c0d4e7 --cpu 4 --memory 6144
+```
+
+`--template <id>` clones from a template by its identifier (or a unique prefix of four or more digits) and takes no IPSW options. `--device`, `--preset` and `--disk-size`, when given, must match the template's; a clone cannot change them. CPU, memory, screen and network are not part of the key.
+
+Every machine cloned from one template shares, with the template and with each other, its SEP root secret, its Data volume keys and the data the restore wrote. One clone could in principle decrypt another's Data volume. A VM that needs keys of its own, for example to sign in to Apple services for multi-device research, should be created with `--no-template`. Clones get a new ECID, UDID and MAC address on their first start, as with `vm clone --new-identity`, and share every unchanged block with the template on APFS: a new clone costs almost nothing until it starts writing.
+
+```sh
+vphone-cli vm template list              # id, key summary, STALE with the reasons
+vphone-cli vm template show <id> --json
+vphone-cli vm template adopt myphone     # freeze a stopped, newly created VM into a template
+vphone-cli vm template delete <id>
+```
+
+- **Stale.** A template is listed as stale when this `vphone-cli` belongs to another bundle series, when its preset now resolves to other boot-chain patches, or when its patch receipt disagrees with its plan. A stale template is never used: `vm create` with its key fails and names it. Delete it to have the next `vm create` build a new one.
+- **Adopt.** `vm template adopt <vm>` turns a stopped VM into a template, under the key its own records give (`restore-info.json`, `PatchPlan.plist`, `config.plist`, the disk image and Launchpad's `launchpad.json`). The VM leaves `vm list`. Adopt a VM straight after creating it: every clone inherits what its guest has done since its first boot. A VM with snapshots is refused, and so is one that would be stale unless `--force` is given.
+- **Never booted.** `vm launch` and `vphone-vm` refuse a template, in DFU too; no machine name reaches into `.templates`, so `vm launch`, `clone`, `export`, `rename` and `delete` cannot pick one up by accident. A template that booted would write first-boot state into the blocks every later clone inherits, and the clones made before it would stop sharing them.
+- **Deleting.** `vm template delete <id>` removes the template; machines cloned from it keep working. The blocks they still share with it are freed only when those machines change them or are deleted, so deleting a template frees less than its size while clones remain. Templates take disk space although `vm list` does not show them; look in `~/.vphone/machines/.templates`, keeping in mind that `du` counts a template and each of its clones in full.
 
 ## Manual stages
 

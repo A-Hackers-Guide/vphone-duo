@@ -63,24 +63,13 @@ enum VPhoneFirmwarePreparer {
             try fm.removeItem(at: staleOriginals)
         }
 
-        // Remote IPSWs go to one cache shared by every machine; keeping them
-        // inside the machine downloaded both again for each new one (#513).
-        // Local IPSWs are read in place and are never copied into the cache.
-        print("[*] Resolving iPhone IPSW...")
-        let phone = try resolve(
-            iPhoneSource, in: ipswCacheDirectory, connections: downloadConnections, label: "downloading iPhone IPSW",
+        let (phone, cloud, device) = try resolveSources(
+            iPhoneSource: iPhoneSource,
+            cloudOSSource: cloudOSSource,
+            ipswCacheDirectory: ipswCacheDirectory,
+            device: productType,
+            downloadConnections: downloadConnections,
         )
-        print("[*] Resolving cloudOS IPSW...")
-        let cloud = try resolve(
-            cloudOSSource, in: ipswCacheDirectory, connections: downloadConnections, label: "downloading cloudOS IPSW",
-        )
-        try VPhoneIPSWCache.checkPair(iPhone: phone, cloudOS: cloud)
-        let device = VPhoneIPSWCache.guestDevice(for: phone, preferring: productType) ?? .default
-        if let productType, VPhoneGuestDevice.named(productType) != device {
-            throw Error.deviceNotInSource(productType, available: phone.productTypes)
-        }
-        try checkIPhoneName(iPhoneSource, archive: phone, device: device)
-        print("[+] \(device.productType) \(phone.version) (\(phone.build)); cloudOS \(cloud.version) (\(cloud.build))")
 
         let name = device.restoreTreeName(version: phone.version, build: phone.build)
         let destination = bundle.url.appendingPathComponent(name)
@@ -155,6 +144,38 @@ enum VPhoneFirmwarePreparer {
         try fm.moveItem(at: phoneTree, to: destination)
         print("[+] Restore tree ready: \(destination.path)")
         try recordGuestDevice(device, in: bundle)
+    }
+
+    /// Finds both IPSWs, downloading a remote one into the shared cache, and
+    /// the guest device the iPhone IPSW gives, without extracting anything.
+    /// `vm create` calls it before `prepare` to learn the template key; the
+    /// second call finds both in place.
+    static func resolveSources(
+        iPhoneSource: String,
+        cloudOSSource: String,
+        ipswCacheDirectory: URL = VPhoneResources.ipswCacheDirectory(),
+        device productType: String? = nil,
+        downloadConnections: Int = VPhoneIPSWCache.defaultDownloadConnections,
+    ) throws -> (phone: VPhoneIPSWCache.Archive, cloud: VPhoneIPSWCache.Archive, device: VPhoneGuestDevice) {
+        // Remote IPSWs go to one cache shared by every machine; keeping them
+        // inside the machine downloaded both again for each new one (#513).
+        // Local IPSWs are read in place and are never copied into the cache.
+        print("[*] Resolving iPhone IPSW...")
+        let phone = try resolve(
+            iPhoneSource, in: ipswCacheDirectory, connections: downloadConnections, label: "downloading iPhone IPSW",
+        )
+        print("[*] Resolving cloudOS IPSW...")
+        let cloud = try resolve(
+            cloudOSSource, in: ipswCacheDirectory, connections: downloadConnections, label: "downloading cloudOS IPSW",
+        )
+        try VPhoneIPSWCache.checkPair(iPhone: phone, cloudOS: cloud)
+        let device = VPhoneIPSWCache.guestDevice(for: phone, preferring: productType) ?? .default
+        if let productType, VPhoneGuestDevice.named(productType) != device {
+            throw Error.deviceNotInSource(productType, available: phone.productTypes)
+        }
+        try checkIPhoneName(iPhoneSource, archive: phone, device: device)
+        print("[+] \(device.productType) \(phone.version) (\(phone.build)); cloudOS \(cloud.version) (\(cloud.build))")
+        return (phone, cloud, device)
     }
 
     /// Resolves one source, with a progress bar while it downloads. Launchpad

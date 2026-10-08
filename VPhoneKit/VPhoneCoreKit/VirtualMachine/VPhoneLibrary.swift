@@ -81,7 +81,12 @@ public struct VPhoneLibrary: Sendable {
         try scan().bundles
     }
 
+    /// Only a machine name reaches a folder: one path component that does not
+    /// start with `.`. So no command that takes a machine name can reach a
+    /// template in `.templates`, a staging folder, or anything outside the
+    /// library.
     public func bundle(named name: String) throws -> VPhoneBundle {
+        try VPhoneBundleOperations.requireValidName(name)
         let url = url(forName: name)
         guard FileManager.default.fileExists(
             atPath: url.appendingPathComponent("config.plist").path,
