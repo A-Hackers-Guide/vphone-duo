@@ -33,6 +33,9 @@ extension VPhoneGuestControl {
         )
         typealias Library = (name: String, data: Data, hash: String)
         let changed = try VPhoneGuestEnvironment.libraries.compactMap { name -> Library? in
+            if VPhoneGuestEnvironment.selectedLibraries.contains(name), guestHashes[name] == nil {
+                return nil
+            }
             let data = try Data(contentsOf: VPhoneGuestBinaries.resolve(name), options: .mappedIfSafe)
             let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
             return guestHashes[name] == hash ? nil : (name, data, hash)

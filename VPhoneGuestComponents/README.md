@@ -12,6 +12,7 @@ tweak filter plists, and the GPU provenance note:
 | Battery health fix | `batteryhealthfix/libbatteryhealthfix.dylib` |
 | DeviceHub fix | `devicehubfix/libdevicehubfix.dylib` |
 | Device name pin | `devicename/libdevicename.dylib` |
+| Virtual gyroscope | `gyroscope/libvphonegyro.dylib` |
 | Launchd hook | `launchhook/launchdhook-vphone.dylib` |
 | Process injection bridge | `systemhook/SystemHook-vphone.dylib` |
 | iOS 27 app registrar | `vpregister/vpregister` |
@@ -57,6 +58,13 @@ Apple GPU binary is stored in this directory, the archive, or the shipped app.
 
 See `Research/Guest/virtual_camera_transport.md` for the camera transport
 validation and the hook installation prerequisites.
+
+`system-backboardd-cfw-gyroscope` installs the optional gyro provider into
+`/usr/lib`. SystemHook loads it only in backboardd; it publishes a HID service
+using vphoned's `motion.gyroscope.set/get/clear` configuration. A live update
+replaces installed copies only and requests a reboot without restarting the
+UI daemon. `make test-gyroscope` checks its configuration transport. Guest
+CoreMotion acceptance is still pending; see `Research/Guest/virtual_gyroscope.md`.
 
 The virtio sound plugin is the CoreAudio half of the VM's virtio-snd device,
 which iOS ships no driver for. audiomxd loads it when the kernel publishes

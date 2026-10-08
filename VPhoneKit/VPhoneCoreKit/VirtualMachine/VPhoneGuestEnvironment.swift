@@ -18,5 +18,10 @@ public enum VPhoneGuestEnvironment {
         "libdevicename.dylib",
         "libprefsfix.dylib",
         "libsigninfix.dylib",
+        "libvphonegyro.dylib",
     ]
+
+    /// Selection installs/removes these. A live hash sync may replace an
+    /// installed copy, but must never reinstall a patch the user turned off.
+    public static let selectedLibraries: Set<String> = ["libvphonegyro.dylib"]
 }

@@ -57,6 +57,10 @@ char *vp_usb_set_serial(const char *serial, bool force, bool *changed);
 char *vp_usb_own_serial(void);
 
 #ifdef __OBJC__
+/// The configured radians/second and the injected HID provider's heartbeat.
+NSDictionary *vp_gyro_get(void);
+BOOL vp_gyro_set(double x, double y, double z, bool enabled);
+
 /// Snapshot-local nested accessibility tree, using actual private iOS child links.
 NSDictionary *vp_ax_hierarchy(int pid, int maxElements, int maxDepth, int timeoutMS);
 

@@ -140,6 +140,7 @@ enum GuestAPI {
                 "network_resolve",
                 "timezone",
                 "audio_host_latency",
+                "motion_gyroscope",
             ],
         ]
     }

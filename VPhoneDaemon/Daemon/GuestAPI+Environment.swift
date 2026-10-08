@@ -21,6 +21,7 @@ extension GuestAPI {
         "libdevicename.dylib",
         "libprefsfix.dylib",
         "libsigninfix.dylib",
+        "libvphonegyro.dylib",
     ]
     static let environmentStaging = "/var/root/Library/Caches/vphone-environment"
 
@@ -56,6 +57,9 @@ extension GuestAPI {
             let name = try string(entry, "name")
             guard environmentLibraries.contains(name) else {
                 throw GuestAPIError.invalidRequest("\(name) is not part of the vphone environment")
+            }
+            if name == "libvphonegyro.dylib", !FileManager.default.fileExists(atPath: "/usr/lib/" + name) {
+                throw GuestAPIError.invalidRequest("Enable the gyroscope patch with cfw install or cfw update-environment first")
             }
             let staged = URL(fileURLWithPath: environmentStaging + "/" + name)
             guard let data = try? Data(contentsOf: staged, options: .mappedIfSafe) else {
@@ -96,7 +100,10 @@ extension GuestAPI {
             "installed": names,
             "restarted_pids": restarted,
             // launchd loaded its hook at boot and keeps the old copy mapped.
-            "reboot_required": !rootReadOnly || names.contains("launchdhook-vphone.dylib"),
+            // backboardd owns the UI's HID connection. Do not restart it here:
+            // a new gyro hook (or SystemHook which loads it) needs a reboot.
+            "reboot_required": !rootReadOnly || names.contains("launchdhook-vphone.dylib")
+                || names.contains("libvphonegyro.dylib") || names.contains("SystemHook-vphone.dylib"),
             "root_read_only": rootReadOnly,
         ]
     }
