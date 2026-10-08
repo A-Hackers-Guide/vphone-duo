@@ -2513,10 +2513,15 @@ struct VPhoneCustomFirmwareInstaller {
 
     private func makeWorkDirectory() throws -> WorkDirectory {
         var template = Array("\(Self.workParent)/vphone-cfw.XXXXXXXX".utf8CString)
-        guard let created = mkdtemp(&template) else {
+        // mkdtemp returns a pointer into the template. `&template` lends only a
+        // temporary buffer that ends with the call, and the array is dead after
+        // it, so read the name while the buffer is still pinned.
+        let created = template.withUnsafeMutableBufferPointer { buffer in
+            mkdtemp(buffer.baseAddress!).map { String(cString: $0) }
+        }
+        guard let path = created else {
             throw ValidationError("Unable to create a private work folder in \(Self.workParent): \(String(cString: strerror(errno)))")
         }
-        let path = String(cString: created)
         // mkdtemp creates the folder 0700 for its caller, root. Re-check it
         // through a no-follow walk before mounting anything under it.
         let directory = try VPhoneConfinedDirectory.pin(absolutePath: path, requireOwner: 0)
