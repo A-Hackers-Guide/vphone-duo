@@ -101,6 +101,10 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
     let syncsHostLocation: Bool?
     /// The library `vm list` was run on. Not part of the JSON.
     var libraryRoot = ""
+    /// The guest's product type, such as iPad16,1, read by the library from
+    /// the machine folder. Not part of the JSON: `restoreInfo.device` is the
+    /// restore identity's model, the same for every guest.
+    var guestProductType: String?
 
     private enum CodingKeys: String, CodingKey {
         case name, cpuCount, memoryMB, diskSizeBytes, network, restoreInfo, customFirmwareInstalled, udid, unlocksAtStartup,
@@ -139,6 +143,35 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
     /// The table's iOS sort key; a machine not yet restored sorts first.
     var iosVersion: String {
         restoreInfo?.ios.version ?? ""
+    }
+
+    /// True for an iPad guest.
+    var isPad: Bool {
+        guestProductType?.hasPrefix("iPad") == true
+    }
+
+    /// The guest OS's name: iPadOS on an iPad.
+    var osName: String {
+        isPad ? "iPadOS" : "iOS"
+    }
+
+    /// config.plist's `guestProductType`, else the product type in the name
+    /// of the restore tree `fw prepare` keeps in `FirmwareOriginals`
+    /// (`iPhone17,3_…_Restore`, or `iPhoneOS_iPad16,1_…_Restore` for an iPad),
+    /// for configs written before the key.
+    static func guestProductType(in folder: URL) -> String? {
+        let config = NSDictionary(contentsOf: folder.appendingPathComponent("config.plist"))
+        if let type = config?["guestProductType"] as? String {
+            return type
+        }
+        let originals = folder.appendingPathComponent("FirmwareOriginals", isDirectory: true)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: originals.path)) ?? []
+        for name in names.sorted() where name.hasSuffix("_Restore") {
+            if let type = name.split(separator: "_").first(where: { $0.wholeMatch(of: /(iPhone|iPad)\d+,\d+/) != nil }) {
+                return String(type)
+            }
+        }
+        return nil
     }
 
     var networkDescription: String {
