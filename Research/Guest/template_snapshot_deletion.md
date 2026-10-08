@@ -108,12 +108,21 @@ snapshot, and calling it on one is a no-op. The template's final check should
 see `apfs.snapshots` return an empty list. No wait for TRIM is needed before
 shutdown.
 
+## Verified through vphoned
+
+On 2026-10-08 a fresh template (iPhone17,3 iOS 27.0 24A435, vphone 2.7.0
+local bundle with `com.apple.private.vfs.snapshot`) answered
+`apfs.snapshot.delete {"force":true}` on its first setup boot with the
+`orig-fs.disabled.rn-*` snapshot under `before` and `deleted` and empty
+`after`; `apfs.snapshots` was empty afterwards and after a reboot, which came
+back to the home screen with setup done. The reclaim could not be read off
+the host image this time: there was no offline trim, and the first boot was
+still writing about 2 GB while the snapshot went. The day before, the same call
+from a vphoned with only `com.apple.developer.vfs.snapshot` answered
+`not_permitted`.
+
 ## Not yet verified
 
-- The prototype carried all three vfs snapshot entitlements. vphoned has only
-  `com.apple.developer.vfs.snapshot`. If `apfs.snapshot.delete` answers
-  `not_permitted`, the next one to add is `com.apple.private.vfs.snapshot`.
-- The experiment ran on a clone that had completed Setup, not inside a full
-  template build, and no screenshot of the home screen was taken; boot health
-  was judged from vphoned, `setup.status`, `apps.list`, the process list and
-  crash logs.
+- The reclaim of a deletion made by vphoned inside a template build has not
+  been read off the host image; the 1.19 GB above comes from the prototype run
+  after an offline trim.
