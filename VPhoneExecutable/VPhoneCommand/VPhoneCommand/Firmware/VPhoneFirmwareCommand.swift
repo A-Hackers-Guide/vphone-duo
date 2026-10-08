@@ -1,6 +1,7 @@
 import ArgumentParser
 import FirmwarePatcher
 import Foundation
+import VPhoneArchiveKit
 import VPhoneCoreKit
 import VPhonePatchKit
 
@@ -221,6 +222,8 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
     var gpuDriverBundle: String?
     @Option(help: "Directory for downloaded IPSWs, shared by every VM (default: ~/.vphone/ipsws or $VPHONE_ROOT/ipsws)")
     var ipswCache: String?
+    @Option(help: "Connections each IPSW downloads over when its server answers range requests; 1 downloads it as one stream")
+    var downloadConnections = VPhoneIPSWCache.defaultDownloadConnections
     @Option(help: "iPhone version to resolve to an IPSW") var iphoneVersion: String?
     @Option(help: "iPhone build to resolve to an IPSW") var iphoneBuild: String?
     @Option(help: ArgumentHelp(
@@ -242,6 +245,9 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
         let needsCatalog = list || iphoneVersion != nil || iphoneBuild != nil
         if let device, VPhoneGuestDevice.named(device) == nil {
             throw ValidationError("vphone runs \(VPhoneGuestDevice.known.map(\.productType).joined(separator: ", ")) guests, not \(device).")
+        }
+        guard (1 ... 16).contains(downloadConnections) else {
+            throw ValidationError("--download-connections takes 1 to 16, not \(downloadConnections).")
         }
         let chosenDevice = device
         let device = device ?? VPhoneFirmwareCatalog.device
@@ -301,6 +307,7 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
             ipswCacheDirectory: ipswCache.map {
                 URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true)
             } ?? VPhoneResources.ipswCacheDirectory(),
+            downloadConnections: downloadConnections,
             device: chosenDevice,
             bundle: bundle,
             resources: resources,

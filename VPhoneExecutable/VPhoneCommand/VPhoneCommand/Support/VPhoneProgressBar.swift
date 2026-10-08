@@ -11,9 +11,9 @@ import Foundation
 /// stderr instead, at most a few per second.
 ///
 /// Unchecked Sendable so a transfer's callback can drive it from another
-/// thread: every caller reports serially (URLSession calls one task's
-/// delegate one at a time) and calls `finish()` only after the transfer has
-/// returned.
+/// thread: every caller reports serially (`VPhoneIPSWCache` reports one at a
+/// time even across several connections) and calls `finish()` only after the
+/// transfer has returned.
 final class VPhoneProgressBar: @unchecked Sendable {
     private enum Mode {
         case off, bar, lines

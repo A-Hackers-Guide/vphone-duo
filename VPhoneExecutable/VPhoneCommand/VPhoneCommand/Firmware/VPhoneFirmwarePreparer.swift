@@ -34,6 +34,7 @@ enum VPhoneFirmwarePreparer {
         cloudOSSource: String,
         gpuDriverBundle: URL? = nil,
         ipswCacheDirectory: URL = VPhoneResources.ipswCacheDirectory(),
+        downloadConnections: Int = VPhoneIPSWCache.defaultDownloadConnections,
         device productType: String? = nil,
         bundle: VPhoneBundle,
         resources: VPhoneResources,
@@ -66,9 +67,13 @@ enum VPhoneFirmwarePreparer {
         // inside the machine downloaded both again for each new one (#513).
         // Local IPSWs are read in place and are never copied into the cache.
         print("[*] Resolving iPhone IPSW...")
-        let phone = try resolve(iPhoneSource, in: ipswCacheDirectory, label: "downloading iPhone IPSW")
+        let phone = try resolve(
+            iPhoneSource, in: ipswCacheDirectory, connections: downloadConnections, label: "downloading iPhone IPSW",
+        )
         print("[*] Resolving cloudOS IPSW...")
-        let cloud = try resolve(cloudOSSource, in: ipswCacheDirectory, label: "downloading cloudOS IPSW")
+        let cloud = try resolve(
+            cloudOSSource, in: ipswCacheDirectory, connections: downloadConnections, label: "downloading cloudOS IPSW",
+        )
         try VPhoneIPSWCache.checkPair(iPhone: phone, cloudOS: cloud)
         let device = VPhoneIPSWCache.guestDevice(for: phone, preferring: productType) ?? .default
         if let productType, VPhoneGuestDevice.named(productType) != device {
@@ -155,10 +160,15 @@ enum VPhoneFirmwarePreparer {
     /// Resolves one source, with a progress bar while it downloads. Launchpad
     /// reads the bar as `progress` lines and shows the percentage on its
     /// firmware step (#590).
-    private static func resolve(_ source: String, in cacheDirectory: URL, label: String) throws -> VPhoneIPSWCache.Archive {
+    private static func resolve(
+        _ source: String,
+        in cacheDirectory: URL,
+        connections: Int,
+        label: String,
+    ) throws -> VPhoneIPSWCache.Archive {
         let bar = VPhoneProgressBar(label: label)
         let archive = try vphoneRunBlocking {
-            try await VPhoneIPSWCache.resolve(source, in: cacheDirectory) { done, total in
+            try await VPhoneIPSWCache.resolve(source, in: cacheDirectory, connections: connections) { done, total in
                 bar.update(done: done, total: total)
             }
         }
