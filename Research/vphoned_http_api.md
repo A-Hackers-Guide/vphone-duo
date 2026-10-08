@@ -247,6 +247,14 @@ correlate them by `id`. The socket also sends
 receive pong frames. JSON WebSocket frames are limited to 1 MiB after
 fragment reassembly.
 
+A command that fails can add fields to the error object (`command_failed`
+from `apps.remove_system` carries `results`; `apfs.snapshot.delete` carries
+`reason`, `errno` and `retryable`). The machine's `vphone.sock` passes them on:
+its `rpc` verb answers `{"ok":true,"result":{…}}`, or `{"ok":false,
+"error":"<message>","guest_error":{…}}` with vphoned's error object
+unchanged in `guest_error`; `error` stays the message string. `vphone-launchpad-cli
+guest rpc` prints that object as JSON on the last stderr line.
+
 SwiftNIO handles parsing, upgrade, masking, and backpressure. IcliKit 0.7.0
 owns general device operations. Each HTTP or WebSocket request runs independently
 on a concurrent worker queue, so a stalled system service does not block HID,

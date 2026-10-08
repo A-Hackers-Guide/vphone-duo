@@ -867,7 +867,14 @@ nonisolated enum VPhoneLaunchpadGuestSocket {
             throw VPhoneLaunchpadError("The machine sent a reply that could not be read. Try again.", detail: String(decoding: response.prefix(512), as: UTF8.self))
         }
         if let dictionary = json as? [String: Any], dictionary["ok"] as? Bool == false {
-            throw VPhoneLaunchpadError("The machine refused the request. Try again.", detail: dictionary["error"] as? String)
+            // Newer bundles add vphoned's whole error object to a refused
+            // rpc; its last line is that object as JSON, for scripts.
+            let guestError = (dictionary["guest_error"] as? [String: Any]).flatMap {
+                try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .withoutEscapingSlashes])
+            }
+            let detail = [dictionary["error"] as? String, guestError.map { String(decoding: $0, as: UTF8.self) }]
+                .compactMap(\.self).joined(separator: "\n")
+            throw VPhoneLaunchpadError("The machine refused the request. Try again.", detail: detail.isEmpty ? nil : detail)
         }
         return json
     }
