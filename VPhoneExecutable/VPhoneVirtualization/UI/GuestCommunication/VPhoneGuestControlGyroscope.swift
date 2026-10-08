@@ -4,7 +4,7 @@ import Foundation
 // MARK: - Gyroscope RPC
 
 extension VPhoneGuestControl {
-    func readGyroscope() async throws -> VPhoneGyroscopeReply {
+    func readGyroscope() async throws -> VPhoneMotionReply {
         guard guestCapabilities.contains("motion_gyroscope_toggle") else {
             throw ControlError.unsupportedCapability("motion_gyroscope_toggle")
         }
@@ -12,7 +12,7 @@ extension VPhoneGuestControl {
         return try gyroscopeReply(result)
     }
 
-    func setGyroscope(_ value: VPhoneGyroscopeConfiguration) async throws -> VPhoneGyroscopeReply {
+    func setGyroscope(_ value: VPhoneMotionConfiguration) async throws -> VPhoneMotionReply {
         guard guestCapabilities.contains("motion_gyroscope_toggle") else {
             throw ControlError.unsupportedCapability("motion_gyroscope_toggle")
         }
@@ -22,7 +22,7 @@ extension VPhoneGuestControl {
         return try gyroscopeReply(result)
     }
 
-    private func gyroscopeReply(_ result: [String: Any]) throws -> VPhoneGyroscopeReply {
+    private func gyroscopeReply(_ result: [String: Any]) throws -> VPhoneMotionReply {
         guard let enabled = result["enabled"] as? NSNumber,
               CFGetTypeID(enabled) == CFBooleanGetTypeID(),
               let x = result["x"] as? NSNumber, let y = result["y"] as? NSNumber, let z = result["z"] as? NSNumber,
@@ -30,8 +30,8 @@ extension VPhoneGuestControl {
                   CFGetTypeID($0) != CFBooleanGetTypeID() && $0.doubleValue.isFinite && abs($0.doubleValue) <= 1000
               })
         else { throw ControlError.protocolError("invalid gyroscope configuration") }
-        return VPhoneGyroscopeReply(
-            configuration: VPhoneGyroscopeConfiguration(enabled: enabled.boolValue, x: x.doubleValue, y: y.doubleValue, z: z.doubleValue),
+        return VPhoneMotionReply(
+            configuration: VPhoneMotionConfiguration(enabled: enabled.boolValue, x: x.doubleValue, y: y.doubleValue, z: z.doubleValue),
             providerRunning: result.bool("provider_running") ?? false,
         )
     }

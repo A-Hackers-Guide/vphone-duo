@@ -13,6 +13,7 @@ enum VPhoneGuestPanel: CaseIterable {
     case services
     case controls
     case gyroscope
+    case attitude
 
     /// The `/v1/health` capability an agent must report before the panel can
     /// talk to it. Older agents answer "Unknown method" for everything else.
@@ -24,6 +25,7 @@ enum VPhoneGuestPanel: CaseIterable {
         case .services: "services"
         case .controls: "display"
         case .gyroscope: "motion_gyroscope_toggle"
+        case .attitude: "motion_attitude"
         }
     }
 }
@@ -99,7 +101,7 @@ final class VPhoneGuestPanelsWindowController {
                 minSize: NSSize(width: 460, height: 400),
             ) { VPhoneControlsView(model: model) }
         case .gyroscope:
-            let model = VPhoneGyroscopeModel(
+            let model = VPhoneMotionModel(
                 read: { try await control.readGyroscope() },
                 write: { try await control.setGyroscope($0) },
             )
@@ -108,7 +110,20 @@ final class VPhoneGuestPanelsWindowController {
                 autosaveName: "vphone-panel-gyroscope",
                 size: NSSize(width: 440, height: 380),
                 minSize: NSSize(width: 400, height: 340),
-            ) { VPhoneGyroscopeView(model: model, connected: { control.isConnected }) }
+            ) { VPhoneMotionView(model: model, sensor: .gyroscope, connected: { control.isConnected }) }
+        case .attitude:
+            let model = VPhoneMotionModel(
+                ranges: VPhoneMotionSensor.attitude.ranges,
+                rejectionMessage: "Guest did not apply the attitude configuration",
+                read: { try await control.readAttitude() },
+                write: { try await control.setAttitude($0) },
+            )
+            return VPhoneGuestToolWindow(
+                title: String(localized: "Device Attitude", bundle: VPhoneLocalization.bundle),
+                autosaveName: "vphone-panel-attitude",
+                size: NSSize(width: 480, height: 440),
+                minSize: NSSize(width: 440, height: 400),
+            ) { VPhoneMotionView(model: model, sensor: .attitude, connected: { control.isConnected }) }
         }
     }
 }

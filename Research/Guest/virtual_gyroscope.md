@@ -47,8 +47,8 @@ provider. **Enumeration and dispatch do not prove CoreMotion acceptance.**
 
 ## Host panel
 
-The VM display app's **Motion Sensors → 3D Gyroscope** menu opens a native
-SwiftUI panel (Chinese: **运动传感器 → 3D 陀螺仪**). Each axis has a text field
+The VM display app's **Features → Motion Sensors → 3D Gyroscope** menu opens a native
+SwiftUI panel (Chinese: **功能 → 运动传感器 → 3D 陀螺仪**). Each axis has a text field
 and a 0.1 rad/s stepper. Valid edits are sent immediately; partial, non-finite
 and out-of-range text stays in the field with a validation message and is not
 sent. The checkbox enables/disables simulation without discarding axis values.
@@ -64,6 +64,10 @@ state, and stale acknowledgements never replace newer field text. Failed writes
 remain unsynced with a retry action. Closing the panel does not drop a write
 already accepted by the UI. The existing window controller retains the model
 and uses `isReleasedWhenClosed = false`.
+
+The shared `VPhoneMotionModel` / `VPhoneMotionView` also powers the independent
+degree-based attitude editor; see `virtual_attitude.md`. Gyro configuration
+remains raw rad/s and does not drive the attitude simulation.
 
 The model test harness (`zsh VPhoneExecutable/VPhoneVirtualization/Tests/run-gyroscope-tests.sh`)
 exercises delayed acknowledgements, coalescing, reset/disable while a write is

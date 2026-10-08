@@ -8,6 +8,7 @@ extension VPhoneMenuController {
         let menu = NSMenu(title: "Motion Sensors")
         menu.autoenablesItems = false
         menu.addItem(makePanelItem(.gyroscope, "3D Gyroscope", keyEquivalent: "", symbol: "gyroscope"))
+        menu.addItem(makePanelItem(.attitude, "Device Attitude", keyEquivalent: "", symbol: "rotate.3d"))
         item.submenu = menu
         return item
     }

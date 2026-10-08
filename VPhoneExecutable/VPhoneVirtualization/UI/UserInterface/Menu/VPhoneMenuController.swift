@@ -142,7 +142,6 @@ class VPhoneMenuController {
         // inspection and capture.
         mainMenu.addItem(buildDeviceMenu())
         mainMenu.addItem(buildFeaturesMenu())
-        mainMenu.addItem(buildMotionSensorsMenu())
         mainMenu.addItem(buildDataMenu())
         mainMenu.addItem(buildAppsMenu())
         mainMenu.addItem(buildDiagnosticsMenu())

@@ -243,7 +243,7 @@
 > change. Disabling the patch removes the added library; live environment
 > sync cannot reinstall an absent selected library. A provider/library update
 > needs a reboot, without silently restarting backboardd. The VM display app's
-> Motion Sensors → 3D Gyroscope panel sends valid three-axis edits immediately,
+> Features → Motion Sensors → 3D Gyroscope panel sends valid three-axis edits immediately,
 > with a simulation checkbox that retains values and a reset that zeros all
 > axes. `motion.gyroscope.set` accepts an optional Boolean `enabled` (default
 > true); the panel checks `motion_gyroscope_toggle` support. Writes serialize
@@ -262,8 +262,9 @@
 > notify state; apps receive radians, quaternion, matrix and matching gravity.
 > Disabling restores the native path; removing the library and relaunching apps
 > reverts injection. Live sync cannot reinstall an absent selected library.
-> Native host subscription tests and guest cross-compilation passed;
-> manual guest acceptance remains.
+> Features → Motion Sensors → Device Attitude provides live angle editing,
+> a simulation checkbox and zero reset. Native host subscription tests and
+> guest cross-compilation passed; manual guest acceptance remains.
 > Contract and validation: `Research/Guest/virtual_attitude.md`.
 
 > **Current launchd hook (2026-09-25; isolated VM verification):**

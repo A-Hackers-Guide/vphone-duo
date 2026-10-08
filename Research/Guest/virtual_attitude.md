@@ -1,6 +1,6 @@
 # Device attitude simulation
 
-## Core contract
+## Contract and panel
 
 vphoned capability `motion_attitude` exposes `motion.attitude.get`,
 `motion.attitude.set {roll,pitch,yaw,enabled?}` and `motion.attitude.clear`.
@@ -9,7 +9,11 @@ Set requires finite JSON numbers: roll/yaw in [-180,180] degrees, pitch in
 `enabled` must be a Boolean and defaults to true. Clear disables and zeros;
 set with enabled=false retains angles.
 
-RPC uses degrees; Core Motion uses radians. Zero is face-up, gravity (0,0,-1)
+**Features → Motion Sensors → Device Attitude** (Chinese:
+**功能 → 运动传感器 → 设备姿态**) offers immediate edits, a simulation checkbox
+and zero reset preserving the checkbox. The gyro panel is in the same submenu.
+Both share the serialized/coalesced writer and retry/reconnect model.
+UI/RPC use degrees; Core Motion uses radians. Zero is face-up, gravity (0,0,-1)
 g. Pitch is about X, roll about Y, yaw about Z: R = Rz(yaw) Rx(pitch) Ry(roll).
 Pitch ±90° makes Euler roll/yaw singular; quaternion/matrix remain well-defined.
 
@@ -67,12 +71,15 @@ configuration, packed-state boundaries, quaternion/matrix/gravity, copy,
 relative attitude and secure coding. Its real host Core Motion runtime test
 covers all start overloads, polling, callback delivery, live toggle, snapshots,
 interval setting, bounded backlog and suppression after stop, using a separate
-Darwin notification name. Catalogue tests cover version gating, blocking,
-preset reachability and manifest invariants.
+Darwin notification name. The shared editor harness
+`zsh VPhoneExecutable/VPhoneVirtualization/Tests/run-gyroscope-tests.sh` covers
+sequencing/retry/reconnect and attitude-specific bounds. Catalogue tests cover
+version gating, blocking, preset reachability and manifest invariants.
 
-2026-10-08: sample and live hook tests passed, and 55 catalogue/model tests
-in seven suites passed. The complete bundle built successfully; bundle
-admission and strict deep signature verification passed.
+2026-10-08: sample and live hook tests passed, shared editor tests passed,
+55 catalogue/model tests in seven suites passed, and the full VPhone Debug
+bundle built successfully. Bundle admission and strict deep signature verification
+passed; the built zh-Hans strings include 设备姿态 and 俯仰.
 
 Guest acceptance is manual, as requested: update guest, relaunch a consumer,
 enable simulation, compare polling/callback Euler radians, quaternion and

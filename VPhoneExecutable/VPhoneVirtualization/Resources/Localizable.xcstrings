@@ -1,6 +1,142 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Angles describe a stationary pose. Zero is face up. Enable simulation before launching the guest app." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Angles describe a stationary pose. Zero is face up. Enable simulation before launching the guest app."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "角度表示静止姿态。归零时屏幕朝上。请在启动来宾 App 前启用模拟。"
+          }
+        }
+      }
+    },
+    "Device Attitude" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Device Attitude"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备姿态"
+          }
+        }
+      }
+    },
+    "Enable the device attitude patch and relaunch the guest app." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enable the device attitude patch and relaunch the guest app."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请启用设备姿态补丁并重新启动来宾 App。"
+          }
+        }
+      }
+    },
+    "Guest did not apply the attitude configuration" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guest did not apply the attitude configuration"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来宾未应用设备姿态设定"
+          }
+        }
+      }
+    },
+    "Pitch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pitch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "俯仰"
+          }
+        }
+      }
+    },
+    "Roll" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Roll"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "横滚"
+          }
+        }
+      }
+    },
+    "Roll and yaw: -180 to 180°. Pitch: -90 to 90°." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Roll and yaw: -180 to 180°. Pitch: -90 to 90°."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "横滚和偏航：-180 到 180°。俯仰：-90 到 90°。"
+          }
+        }
+      }
+    },
+    "Yaw" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yaw"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "偏航"
+          }
+        }
+      }
+    },
     "%@ axis" : {
       "extractionState" : "manual",
       "localizations" : {

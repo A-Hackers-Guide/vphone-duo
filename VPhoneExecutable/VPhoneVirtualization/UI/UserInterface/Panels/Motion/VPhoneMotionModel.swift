@@ -1,23 +1,23 @@
 import Foundation
 import Observation
 
-struct VPhoneGyroscopeConfiguration: Equatable, Sendable {
+struct VPhoneMotionConfiguration: Equatable, Sendable {
     var enabled = false
     var x = 0.0
     var y = 0.0
     var z = 0.0
 }
 
-struct VPhoneGyroscopeReply: Sendable {
-    var configuration: VPhoneGyroscopeConfiguration
+struct VPhoneMotionReply: Sendable {
+    var configuration: VPhoneMotionConfiguration
     var providerRunning: Bool
 }
 
-// MARK: - Live Gyroscope Controls
+// MARK: - Live Motion Controls
 
 @MainActor
 @Observable
-final class VPhoneGyroscopeModel {
+final class VPhoneMotionModel {
     var enabled = false {
         didSet {
             guard !applyingGuest, enabled != oldValue else { return }
@@ -38,22 +38,29 @@ final class VPhoneGyroscopeModel {
     private(set) var providerRunning = false
     private(set) var error: String?
     private(set) var hasLocalChanges = false
-    private(set) var configuration = VPhoneGyroscopeConfiguration()
+    private(set) var configuration = VPhoneMotionConfiguration()
 
-    @ObservationIgnored private let read: @MainActor () async throws -> VPhoneGyroscopeReply
-    @ObservationIgnored private let write: @MainActor (VPhoneGyroscopeConfiguration) async throws -> VPhoneGyroscopeReply
+    @ObservationIgnored private let read: @MainActor () async throws -> VPhoneMotionReply
+    @ObservationIgnored private let write: @MainActor (VPhoneMotionConfiguration) async throws -> VPhoneMotionReply
     @ObservationIgnored private let locale: Locale
+    @ObservationIgnored private let ranges: [ClosedRange<Double>]
+    @ObservationIgnored private let rejectionMessage: String
     @ObservationIgnored private var applyingGuest = false
     @ObservationIgnored private var generation = 0
-    @ObservationIgnored private var pending: VPhoneGyroscopeConfiguration?
+    @ObservationIgnored private var pending: VPhoneMotionConfiguration?
     @ObservationIgnored private var writer: Task<Void, Never>?
 
     init(
         locale: Locale = .current,
-        read: @escaping @MainActor () async throws -> VPhoneGyroscopeReply,
-        write: @escaping @MainActor (VPhoneGyroscopeConfiguration) async throws -> VPhoneGyroscopeReply,
+        ranges: [ClosedRange<Double>] = [-1000 ... 1000, -1000 ... 1000, -1000 ... 1000],
+        rejectionMessage: String = "Guest did not apply the gyroscope configuration",
+        read: @escaping @MainActor () async throws -> VPhoneMotionReply,
+        write: @escaping @MainActor (VPhoneMotionConfiguration) async throws -> VPhoneMotionReply,
     ) {
         self.locale = locale
+        precondition(ranges.count == 3)
+        self.ranges = ranges
+        self.rejectionMessage = rejectionMessage
         self.read = read
         self.write = write
     }
@@ -64,22 +71,22 @@ final class VPhoneGyroscopeModel {
 
     // Computed key-path bindings let the steppers repair a partially typed axis.
     var xValue: Double {
-        get { number(xText) ?? configuration.x }
+        get { number(xText, range: ranges[0]) ?? configuration.x }
         set { xText = formatted(newValue) }
     }
     var yValue: Double {
-        get { number(yText) ?? configuration.y }
+        get { number(yText, range: ranges[1]) ?? configuration.y }
         set { yText = formatted(newValue) }
     }
     var zValue: Double {
-        get { number(zText) ?? configuration.z }
+        get { number(zText, range: ranges[2]) ?? configuration.z }
         set { zText = formatted(newValue) }
     }
 
-    private func number(_ text: String) -> Double? {
+    private func number(_ text: String, range: ClosedRange<Double>) -> Double? {
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: locale.decimalSeparator ?? ".", with: ".")
-        guard let value = Double(normalized), value.isFinite, abs(value) <= 1000 else { return nil }
+        guard let value = Double(normalized), value.isFinite, range.contains(value) else { return nil }
         return value
     }
 
@@ -87,9 +94,10 @@ final class VPhoneGyroscopeModel {
         value.formatted(.number.grouping(.never).precision(.fractionLength(0 ... 6)).locale(locale))
     }
 
-    private var parsedConfiguration: VPhoneGyroscopeConfiguration? {
-        guard let x = number(xText), let y = number(yText), let z = number(zText) else { return nil }
-        return VPhoneGyroscopeConfiguration(enabled: enabled, x: x, y: y, z: z)
+    private var parsedConfiguration: VPhoneMotionConfiguration? {
+        guard let x = number(xText, range: ranges[0]), let y = number(yText, range: ranges[1]),
+              let z = number(zText, range: ranges[2]) else { return nil }
+        return VPhoneMotionConfiguration(enabled: enabled, x: x, y: y, z: z)
     }
 
     private func axesChanged() {
@@ -97,7 +105,7 @@ final class VPhoneGyroscopeModel {
         enqueue(value)
     }
 
-    private func applyFields(_ value: VPhoneGyroscopeConfiguration) {
+    private func applyFields(_ value: VPhoneMotionConfiguration) {
         applyingGuest = true
         defer { applyingGuest = false }
         enabled = value.enabled
@@ -109,7 +117,7 @@ final class VPhoneGyroscopeModel {
 
     func reset() {
         guard canEdit else { return }
-        let zero = VPhoneGyroscopeConfiguration(enabled: enabled)
+        let zero = VPhoneMotionConfiguration(enabled: enabled)
         applyFields(zero)
         enqueue(zero)
     }
@@ -145,7 +153,7 @@ final class VPhoneGyroscopeModel {
         }
     }
 
-    private func enqueue(_ value: VPhoneGyroscopeConfiguration) {
+    private func enqueue(_ value: VPhoneMotionConfiguration) {
         guard canEdit else { return }
         configuration = value
         pending = value
@@ -175,7 +183,7 @@ final class VPhoneGyroscopeModel {
                 // The guest returns the persisted configuration, not merely
                 // transport success. Keep newer edits in the fields untouched.
                 guard reply.configuration == value else {
-                    error = "Guest did not apply the gyroscope configuration"
+                    error = rejectionMessage
                     pending = configuration
                     break
                 }
