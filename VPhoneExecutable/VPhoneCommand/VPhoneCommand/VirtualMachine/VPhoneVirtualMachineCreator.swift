@@ -336,6 +336,11 @@ public struct VPhoneVirtualMachineCreator {
                     builtWithBundleVersion: bundleVersion,
                     bootChainBundleVersion: bundleVersion,
                     sourceMachine: options.name,
+                    // So `vm template find` keys a later request without the
+                    // IPSWs, once they are deleted.
+                    sources: options.iphoneSource.flatMap { phone in
+                        options.cloudosSource.map { VPhoneMachineTemplateSources(iPhone: phone, cloudOS: $0) }
+                    },
                 ),
                 inBundle: bundle.url,
             )

@@ -1,6 +1,9 @@
 import ArgumentParser
+import Darwin
 import Foundation
+import VPhoneArchiveKit
 import VPhoneCoreKit
+import VPhonePatchKit
 
 // MARK: - Command group
 
@@ -28,6 +31,7 @@ struct VPhoneVirtualMachineTemplateCommand: ParsableCommand {
         subcommands: [
             VPhoneVirtualMachineTemplateListCommand.self,
             VPhoneVirtualMachineTemplateShowCommand.self,
+            VPhoneVirtualMachineTemplateFindCommand.self,
             VPhoneVirtualMachineTemplateSetupCommand.self,
             VPhoneVirtualMachineTemplateAdoptCommand.self,
             VPhoneVirtualMachineTemplateTrimCommand.self,
@@ -56,6 +60,8 @@ struct VPhoneMachineTemplateReport: Encodable {
     var machines: [String]
     var stale: Bool
     var staleReasons: [String]
+    /// The IPSW sources it was built from, when its build named them.
+    var sources: VPhoneMachineTemplateSources?
 
     init(_ template: VPhoneMachineTemplate, usage: [String: [String]]) {
         let record = template.record
@@ -72,6 +78,7 @@ struct VPhoneMachineTemplateReport: Encodable {
         machines = usage[template.identifier] ?? []
         staleReasons = VPhoneMachineTemplateKeys.staleReasons(template)
         stale = !staleReasons.isEmpty
+        sources = record.sources
     }
 }
 
@@ -184,6 +191,157 @@ struct VPhoneVirtualMachineTemplateShowCommand: ParsableCommand {
     }
 }
 
+// MARK: - find
+
+/// What `find --json` prints. `resolved` is false when neither the IPSWs nor
+/// a template's recorded sources give the builds, and then only `reason`
+/// follows.
+struct VPhoneMachineTemplateFindReport: Encodable {
+    var resolved = false
+    /// `ipsw` (read from the IPSWs, local or cached) or `template` (taken
+    /// from a template built from the same sources).
+    var resolvedBy: String?
+    var id: String?
+    var summary: String?
+    var key: VPhoneMachineTemplateKey?
+    /// The template with this key, current or stale.
+    var template: VPhoneMachineTemplateReport?
+    /// True when `template` is there and current: `vm create --template`
+    /// with `id` clones from it.
+    var usable = false
+    /// A create is building this key right now.
+    var building = false
+    var reason: String?
+}
+
+struct VPhoneVirtualMachineTemplateFindCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "find",
+        abstract: "Find the template a vm create with these options would clone from",
+        discussion: """
+        Resolves the template key the way vm create does, without downloading anything or \
+        changing the library, and reports whether that template exists and is current. The \
+        builds come from the IPSWs when they are local files or in the IPSW cache; otherwise \
+        from a template whose record says it was built from the same two sources, so a key \
+        still resolves after its IPSWs were deleted. When neither works the key is unresolved \
+        and a create would download the IPSWs.
+
+        --block and --allow are the per-patch overrides fw set-patches records; a machine \
+        built with them has a boot-chain digest of its own.
+        """,
+    )
+
+    @OptionGroup var lib: VPhoneLibraryOption
+    @Option(name: .shortAndLong, help: "iPhone IPSW URL or local path") var iphoneSource: String
+    @Option(name: .shortAndLong, help: "cloudOS IPSW URL or local path") var cloudosSource: String
+    @Option(help: "Directory for downloaded IPSWs (default: ~/.vphone/ipsws or $VPHONE_ROOT/ipsws)")
+    var ipswCache: String?
+    @Option(help: ArgumentHelp("Guest device, when the IPSW covers several models", valueName: "product-type"))
+    var device: String?
+    @Option(name: .customLong("preset"), help: "Patch preset (default standard)") var preset: String?
+    @Option(name: .shortAndLong, help: "Disk size (GB, default 64)") var diskSize: UInt64?
+    @Option(name: .customLong("block"), help: ArgumentHelp("A patch the preset turns on, turned off", valueName: "id"))
+    var blocked: [String] = []
+    @Option(name: .customLong("allow"), help: ArgumentHelp("A patch the preset leaves off, turned on", valueName: "id"))
+    var allowed: [String] = []
+    @OptionGroup(title: "Template slimming") var slimming: VPhoneTemplateSlimmingOptions
+    @Flag(name: .shortAndLong, help: "Emit JSON") var json = false
+
+    func run() throws {
+        if let device, VPhoneGuestDevice.named(device) == nil {
+            throw ValidationError("vphone runs \(VPhoneGuestDevice.known.map(\.productType).joined(separator: ", ")) guests, not \(device).")
+        }
+        let wanted = try slimming.resolve()
+        guard wanted.problems.isEmpty else {
+            throw ValidationError("No template can be built with this slimming: \(wanted.problems.joined(separator: "; ")).")
+        }
+        let library = lib.library
+        var report = VPhoneMachineTemplateFindReport()
+        if let builds = try resolveBuilds(in: library, report: &report) {
+            let key = try VPhoneMachineTemplateKeys.key(
+                device: builds.device,
+                ios: builds.ios,
+                cloudOS: builds.cloudOS,
+                preset: preset ?? VPhonePatchPreset.standardIdentifier,
+                blocked: blocked,
+                allowed: allowed,
+                diskSizeGB: diskSize ?? 64,
+                slimming: wanted,
+            )
+            report.resolved = true
+            report.id = key.identifier
+            report.summary = key.summary
+            report.key = key
+            let listing = try VPhoneMachineTemplates.list(in: library)
+            report.building = listing.staging.contains { $0.identifier == key.identifier && $0.isActive }
+            if let template = try VPhoneMachineTemplates.template(for: key, in: library) {
+                let found = VPhoneMachineTemplateReport(template, usage: VPhoneMachineTemplates.usage(in: library))
+                report.template = found
+                report.usable = !found.stale
+            }
+        }
+        if json {
+            try print(encodeJSON(report))
+            return
+        }
+        guard report.resolved, let id = report.id else {
+            print("unresolved: \(report.reason ?? "unknown")")
+            return
+        }
+        print("key:       \(id)  \(report.summary ?? "")")
+        print("builds:    from \(report.resolvedBy == "ipsw" ? "the IPSWs" : "a template built from the same sources")")
+        if let template = report.template {
+            print("template:  \(template.id)  \(template.stale ? "STALE" : "current"), "
+                + "\(VPhoneSystemTrim.formatBytes(template.allocatedBytes)) on disk")
+            for reason in template.staleReasons {
+                print("  stale: \(reason)")
+            }
+        } else {
+            print("template:  none\(report.building ? " (a create is building it)" : "")")
+        }
+    }
+
+    private struct Builds {
+        var device: String
+        var ios: VPhoneRestoreInfo.OSVersion
+        var cloudOS: VPhoneRestoreInfo.OSVersion
+    }
+
+    /// The device and builds, from the IPSWs when they are here, else from a
+    /// template built from the same sources; nil with `report.reason` set.
+    private func resolveBuilds(in library: VPhoneLibrary, report: inout VPhoneMachineTemplateFindReport) throws -> Builds? {
+        let cache = ipswCache.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true) }
+            ?? VPhoneResources.ipswCacheDirectory()
+        if let phone = try VPhoneIPSWCache.localArchive(iphoneSource, in: cache),
+           let cloud = try VPhoneIPSWCache.localArchive(cloudosSource, in: cache)
+        {
+            try VPhoneIPSWCache.checkPair(iPhone: phone, cloudOS: cloud)
+            let guest = VPhoneIPSWCache.guestDevice(for: phone, preferring: device) ?? .default
+            if let device, VPhoneGuestDevice.named(device) != guest {
+                throw ValidationError("The iPhone IPSW is for \(phone.productTypes.joined(separator: ", ")), not \(device).")
+            }
+            report.resolvedBy = "ipsw"
+            return Builds(
+                device: guest.productType,
+                ios: .init(version: phone.version, build: phone.build),
+                cloudOS: .init(version: cloud.version, build: cloud.build),
+            )
+        }
+        let sources = VPhoneMachineTemplateSources(iPhone: iphoneSource, cloudOS: cloudosSource)
+        if let template = VPhoneMachineTemplates.templates(builtFrom: sources, device: device, in: library).first {
+            let key = template.key
+            report.resolvedBy = "template"
+            return Builds(
+                device: key.device,
+                ios: .init(version: key.iOSVersion, build: key.iOSBuild),
+                cloudOS: .init(version: key.cloudOSVersion, build: key.cloudOSBuild),
+            )
+        }
+        report.reason = "the IPSWs are not downloaded and no template records these sources"
+        return nil
+    }
+}
+
 // MARK: - setup
 
 struct VPhoneVirtualMachineTemplateSetupCommand: ParsableCommand {
@@ -222,6 +380,8 @@ struct VPhoneVirtualMachineTemplateSetupCommand: ParsableCommand {
     var verboseCount: Int
 
     func run() throws {
+        // Each step's line as it starts, also through a pipe (Launchpad).
+        setvbuf(stdout, nil, _IOLBF, 0)
         let library = lib.library
         let resources = VPhoneResources.resolve()
         let verbosity = VPhoneVerbosity(count: verboseCount)
@@ -342,14 +502,30 @@ struct VPhoneVirtualMachineTemplateAdoptCommand: ParsableCommand {
         exists. --force adopts a machine whose boot chain was built by another bundle series \
         than this vphone-cli's, or whose patch receipt differs from its plan; such a template \
         is listed as stale.
+
+        --iphone-source and --cloudos-source record the IPSWs the machine was created from, \
+        so vm template find resolves a request from the same sources after they are deleted.
         """,
     )
 
     @OptionGroup var lib: VPhoneLibraryOption
     @Argument(help: "VM name") var name: String
     @Flag(help: "adopt even when the template would be stale") var force = false
+    @Option(name: .shortAndLong, help: "iPhone IPSW URL or path the machine was created from") var iphoneSource: String?
+    @Option(name: .shortAndLong, help: "cloudOS IPSW URL or path the machine was created from") var cloudosSource: String?
+    @Flag(name: .shortAndLong, help: "Emit the new template as JSON (as vm template show --json)") var json = false
+
+    func validate() throws {
+        if (iphoneSource == nil) != (cloudosSource == nil) {
+            throw ValidationError("Give both --iphone-source and --cloudos-source, or neither.")
+        }
+    }
 
     func run() throws {
+        // With --json, progress goes to stderr and stdout carries the report.
+        let say: (String) -> Void = json
+            ? { FileHandle.standardError.write(Data(($0 + "\n").utf8)) }
+            : { print($0) }
         let bundle = try lib.library.bundle(named: name)
         try VPhoneBundleActivity.requireStopped(bundle)
         let previous = try VPhoneMachineTemplates.readRecord(inBundle: bundle.url)
@@ -368,8 +544,11 @@ struct VPhoneVirtualMachineTemplateAdoptCommand: ParsableCommand {
                 throw ValidationError("VM '\(name)' would be a stale template: \(problems.joined(separator: "; ")). Pass --force to adopt it anyway.")
             }
             for problem in problems {
-                print("warning: \(problem)")
+                say("warning: \(problem)")
             }
+        }
+        let sources = iphoneSource.flatMap { phone in
+            cloudosSource.map { VPhoneMachineTemplateSources(iPhone: phone, cloudOS: $0) }
         }
         let record = VPhoneMachineTemplateRecord(
             key: recorded.key,
@@ -378,11 +557,16 @@ struct VPhoneVirtualMachineTemplateAdoptCommand: ParsableCommand {
             bootChainBundleVersion: recorded.bootChainBundleVersion,
             sourceMachine: name,
             steps: steps,
+            sources: sources ?? previous?.sources,
         )
         if let tree = VPhoneMachineTemplates.restoreTree(of: bundle) {
-            print("[*] Removing the restore tree \(tree)/: a template never keeps it")
+            say("[*] Removing the restore tree \(tree)/: a template never keeps it")
         }
         let template = try VPhoneMachineTemplates.adopt(machineNamed: name, in: lib.library, record: record)
+        if json {
+            try print(encodeJSON(VPhoneMachineTemplateReport(template, usage: VPhoneMachineTemplates.usage(in: lib.library))))
+            return
+        }
         print("adopted \(name) as template \(template.identifier)")
         print("  \(template.key.summary)")
         print("create machines from it with: vphone-cli vm create <name> --template \(template.identifier)")
@@ -422,6 +606,7 @@ struct VPhoneVirtualMachineTemplateTrimCommand: ParsableCommand {
     @Flag(name: .shortAndLong, help: "Emit JSON") var json = false
 
     func run() throws {
+        setvbuf(stdout, nil, _IOLBF, 0)
         let spec = try VPhoneSystemTrimSpec.parse(tier: tier, keptLanguages: keepLanguages)
         let library = lib.library
         let bundle: VPhoneBundle

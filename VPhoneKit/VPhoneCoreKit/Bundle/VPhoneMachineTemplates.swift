@@ -106,6 +106,27 @@ public struct VPhoneMachineTemplateSource: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: - Sources
+
+/// The IPSW sources a template was built from, as the create named them: a
+/// URL or a local path for each. `vm template find` matches a request
+/// against them, so a create finds its template after the IPSWs it came
+/// from were deleted, without downloading them again to read their builds.
+public struct VPhoneMachineTemplateSources: Codable, Equatable, Sendable {
+    public var iPhone: String
+    public var cloudOS: String
+
+    public init(iPhone: String, cloudOS: String) {
+        self.iPhone = iPhone
+        self.cloudOS = cloudOS
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case iPhone = "IPhone"
+        case cloudOS = "CloudOS"
+    }
+}
+
 // MARK: - Record
 
 /// `Template.plist`, in the template's machine folder.
@@ -124,6 +145,10 @@ public struct VPhoneMachineTemplateRecord: Codable, Equatable, Sendable {
     public var frozen: Bool
     public var frozenAt: Date?
     public var steps: VPhoneMachineTemplateSteps
+    /// The IPSWs it was built from, when the build named them; nil for a
+    /// template adopted without them. Not part of the key: two URLs of the
+    /// same build make the same template.
+    public var sources: VPhoneMachineTemplateSources?
 
     public init(
         key: VPhoneMachineTemplateKey,
@@ -134,6 +159,7 @@ public struct VPhoneMachineTemplateRecord: Codable, Equatable, Sendable {
         frozen: Bool = false,
         frozenAt: Date? = nil,
         steps: VPhoneMachineTemplateSteps = VPhoneMachineTemplateSteps(),
+        sources: VPhoneMachineTemplateSources? = nil,
     ) {
         identifier = key.identifier
         self.key = key
@@ -144,6 +170,7 @@ public struct VPhoneMachineTemplateRecord: Codable, Equatable, Sendable {
         self.frozen = frozen
         self.frozenAt = frozenAt.map(VPhoneMachineTemplates.wholeSeconds)
         self.steps = steps
+        self.sources = sources
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -156,6 +183,7 @@ public struct VPhoneMachineTemplateRecord: Codable, Equatable, Sendable {
         case frozen = "Frozen"
         case frozenAt = "FrozenAt"
         case steps = "Steps"
+        case sources = "Sources"
     }
 
     public init(from decoder: any Decoder) throws {
@@ -169,6 +197,7 @@ public struct VPhoneMachineTemplateRecord: Codable, Equatable, Sendable {
         frozen = try container.decodeIfPresent(Bool.self, forKey: .frozen) ?? false
         frozenAt = try container.decodeIfPresent(Date.self, forKey: .frozenAt)
         steps = try container.decodeIfPresent(VPhoneMachineTemplateSteps.self, forKey: .steps) ?? VPhoneMachineTemplateSteps()
+        sources = try container.decodeIfPresent(VPhoneMachineTemplateSources.self, forKey: .sources)
     }
 }
 
@@ -444,6 +473,22 @@ public enum VPhoneMachineTemplates {
             throw VPhoneMachineTemplateError.ambiguous(identifier, matches: matches.map(\.identifier))
         }
         return only
+    }
+
+    /// The frozen templates whose record says they were built from these two
+    /// sources, newest first. Their keys give the builds those sources hold,
+    /// so a request can be keyed without the IPSWs, which may have been
+    /// deleted since. A template for another `device` is left out when one
+    /// is named.
+    public static func templates(
+        builtFrom sources: VPhoneMachineTemplateSources,
+        device: String? = nil,
+        in library: VPhoneLibrary,
+    ) -> [VPhoneMachineTemplate] {
+        let templates = (try? list(in: library).templates) ?? []
+        return templates
+            .filter { $0.record.sources == sources && (device == nil || $0.key.device == device) }
+            .sorted { $0.record.created > $1.record.created }
     }
 
     /// The template whose key this is, if one is frozen.

@@ -563,4 +563,52 @@ struct MachineTemplatesTests {
         #expect(VPhoneMachineTemplates.readSource(inBundle: machine.url) == nil)
         #expect(VPhoneMachineTemplates.usage(in: fixture.library).isEmpty)
     }
+
+    // MARK: - Sources
+
+    @Test func `a record keeps the IPSW sources it was built from, and an older record has none`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let machine = try makeMachine("src", in: fixture)
+        var built = record()
+        built.sources = VPhoneMachineTemplateSources(iPhone: "https://example.invalid/iPhone17,3_27.0_24A435_Restore.ipsw", cloudOS: "/tmp/cloudos.ipsw")
+        try VPhoneMachineTemplates.writeRecord(built, inBundle: machine.url)
+        #expect(try VPhoneMachineTemplates.readRecord(inBundle: machine.url)?.sources == built.sources)
+        let plist = try String(contentsOf: machine.url.appendingPathComponent(VPhoneMachineTemplates.recordFileName), encoding: .utf8)
+        #expect(plist.contains("<key>Sources</key>"))
+        #expect(plist.contains("<key>IPhone</key>"))
+        #expect(plist.contains("<key>CloudOS</key>"))
+
+        // A record written before sources were kept reads as none.
+        try VPhoneMachineTemplates.writeRecord(record(), inBundle: machine.url)
+        #expect(try VPhoneMachineTemplates.readRecord(inBundle: machine.url)?.sources == nil)
+    }
+
+    @Test func `templates built from the same sources are found by them, newest first, per device`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let sources = VPhoneMachineTemplateSources(iPhone: "https://example.invalid/a.ipsw", cloudOS: "https://example.invalid/c")
+        try makeMachine("one", in: fixture)
+        try makeMachine("two", in: fixture)
+        try makeMachine("three", in: fixture)
+        var older = record()
+        older.sources = sources
+        let newer = VPhoneMachineTemplateRecord(
+            key: MachineTemplateKeyTests.key(disk: 128),
+            created: Date(timeIntervalSince1970: 1_900_000_000),
+            sourceMachine: "two",
+            sources: sources,
+        )
+        let other = VPhoneMachineTemplateRecord(key: MachineTemplateKeyTests.key(disk: 32), sourceMachine: "three")
+        let first = try VPhoneMachineTemplates.adopt(machineNamed: "one", in: fixture.library, record: older)
+        let second = try VPhoneMachineTemplates.adopt(machineNamed: "two", in: fixture.library, record: newer)
+        try VPhoneMachineTemplates.adopt(machineNamed: "three", in: fixture.library, record: other)
+
+        let found = VPhoneMachineTemplates.templates(builtFrom: sources, in: fixture.library)
+        #expect(found.map(\.identifier) == [second.identifier, first.identifier])
+        #expect(VPhoneMachineTemplates.templates(builtFrom: sources, device: "iPhone17,3", in: fixture.library).count == 2)
+        #expect(VPhoneMachineTemplates.templates(builtFrom: sources, device: "iPad16,1", in: fixture.library).isEmpty)
+        let elsewhere = VPhoneMachineTemplateSources(iPhone: "https://example.invalid/a.ipsw", cloudOS: "https://example.invalid/other")
+        #expect(VPhoneMachineTemplates.templates(builtFrom: elsewhere, in: fixture.library).isEmpty)
+    }
 }
