@@ -28,6 +28,7 @@ struct VPhoneLaunchpadApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("Downloaded IPSWs…") { model.present(.ipswCache) }
+                Button("Templates…") { model.present(.templates) }
             }
             CommandGroup(after: .appSettings) {
                 Button("Host Setup…") { model.present(.hostSetup) }

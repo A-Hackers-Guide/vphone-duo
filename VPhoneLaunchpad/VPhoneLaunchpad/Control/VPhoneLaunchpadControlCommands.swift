@@ -566,6 +566,8 @@ struct VPhoneLaunchpadControlCommands {
         if let preset = request.option("preset") {
             patches.preset = preset
         }
+        let usesTemplate = !request.flag("no-template")
+        let slimming = try Self.slimming(request, usesTemplate: usesTemplate)
         let options = try VPhoneLaunchpadCreationPipeline.Options(
             name: machine.name,
             libraryRoot: machine.libraryRoot,
@@ -579,8 +581,75 @@ struct VPhoneLaunchpadControlCommands {
             network: request.option("network") ?? "nat",
             patches: patches,
             keepArtifacts: request.flag("keep-artifacts"),
+            usesTemplate: usesTemplate,
+            slimming: slimming,
         )
         return library.create(options)
+    }
+
+    /// The template switches, refused where `vphone-cli vm create` refuses
+    /// them: with `--no-template`, after `--slim off`, `--accounts-off`
+    /// without the trimmed profile, an app outside the removable list.
+    private static func slimming(_ request: VPhoneLaunchpadControlRequest, usesTemplate: Bool) throws -> VPhoneLaunchpadSlimming {
+        func onOff(_ option: String) throws -> Bool? {
+            guard let value = request.option(option) else {
+                return nil
+            }
+            switch value {
+            case "on": return true
+            case "off": return false
+            default: throw VPhoneLaunchpadError("--\(option) takes on or off, not \(value).")
+            }
+        }
+        let parts = ["trim", "keep-languages", "service-profile", "remove-apps", "keep-apps"].filter { request.option($0) != nil }
+            + (request.flag("accounts-off") ? ["accounts-off"] : [])
+        if !usesTemplate, !parts.isEmpty || request.option("slim") != nil {
+            throw VPhoneLaunchpadError("The slimming switches shape a template; --no-template creates the machine without one.")
+        }
+        var slimming = VPhoneLaunchpadSlimming()
+        slimming.slim = try onOff("slim") ?? true
+        if !slimming.slim, !parts.isEmpty {
+            throw VPhoneLaunchpadError("--slim off turns slimming off; it cannot be combined with --\(parts.joined(separator: ", --")).")
+        }
+        if let trim = request.option("trim") {
+            guard let tier = VPhoneLaunchpadSlimming.TrimTier(rawValue: trim) else {
+                throw VPhoneLaunchpadError("--trim takes none, conservative or standard, not \(trim).")
+            }
+            slimming.trim = tier
+        }
+        if let languages = request.option("keep-languages") {
+            guard slimming.trim == .standard else {
+                throw VPhoneLaunchpadError("--keep-languages needs --trim standard.")
+            }
+            slimming.keptLanguages = languages
+        }
+        if let profile = request.option("service-profile") {
+            guard profile == "trimmed" || profile == "none" else {
+                throw VPhoneLaunchpadError("--service-profile takes trimmed or none, not \(profile).")
+            }
+            slimming.trimsServices = profile == "trimmed"
+        }
+        slimming.removesApps = try onOff("remove-apps") ?? true
+        if let kept = request.option("keep-apps") {
+            let identifiers = Set(VPhoneLaunchpadSlimming.languageList(kept))
+            let known = Set(VPhoneLaunchpadSlimming.removableApps.map(\.id))
+            let unknown = identifiers.subtracting(known)
+            guard unknown.isEmpty else {
+                throw VPhoneLaunchpadError("--keep-apps \(unknown.sorted().joined(separator: ",")): only apps removed by default can be kept (\(known.sorted().joined(separator: ", "))).")
+            }
+            guard slimming.removesApps else {
+                throw VPhoneLaunchpadError("--keep-apps has nothing to keep with --remove-apps off.")
+            }
+            slimming.keptApps = identifiers
+        }
+        slimming.accountsOff = request.flag("accounts-off")
+        if slimming.accountsOff, !slimming.trimsServices {
+            throw VPhoneLaunchpadError("--accounts-off needs --service-profile trimmed.")
+        }
+        if let problem = slimming.problem {
+            throw VPhoneLaunchpadError(problem)
+        }
+        return slimming
     }
 
     /// Streams the creation log and each step until the pipeline stops. The
@@ -606,7 +675,10 @@ struct VPhoneLaunchpadControlCommands {
             "bundle": pipeline.options.bundleVersion,
             "running": pipeline.isRunning,
             "log": pipeline.logFile.path,
-            "steps": VPhoneLaunchpadCreationPipeline.Step.allCases.map { step -> [String: Any] in
+            "template": pipeline.templateID ?? NSNull(),
+            "builtTemplate": pipeline.builtTemplate,
+            "buildMachine": pipeline.buildMachine?.name ?? NSNull(),
+            "steps": pipeline.steps.map { step -> [String: Any] in
                 var item: [String: Any] = ["step": "\(step)", "status": pipeline.status(step).rawValue]
                 if let duration = pipeline.durations[step] {
                     item["seconds"] = Int(duration)

@@ -42,7 +42,7 @@ The guest shows the VM's name as its device name, in Xcode's device list and `xc
 
 ## Templates
 
-A template is a complete machine kept in `<library>/.templates/<id>/`. It boots once while it is built, its setup boot, and never again once it is frozen. `vm create` without `--no-template` works out the template key from its options and the two IPSWs before anything is restored: the guest device, the iOS and cloudOS versions and builds, the patch preset and the boot-chain patches it resolves to, the bundle series (`2.8` for 2.8.x), the disk size, what is trimmed from the guest's System volume (`--trim`), and the slimming switches below. Then:
+A template is a complete machine kept in `<library>/.templates/<id>/`. It boots once while it is built, its setup boot, and never again once it is frozen. `vm create` without `--no-template` works out the template key from its options and the two IPSWs before anything is restored: the guest device, the iOS and cloudOS versions and builds, the patch preset and the boot-chain patches it resolves to, the bundle series (`2.9` for 2.9.x), the disk size, what is trimmed from the guest's System volume (`--trim`), and the slimming switches below. Then:
 
 - If a template with that key exists, the VM is cloned from it with a new identity, given the requested CPU, memory and network, and booted once to check vphoned. This takes seconds and needs neither root nor the IPSWs; nothing is downloaded.
 - Otherwise the full pipeline runs into a staging folder, `.templates/.building-<id>-<uuid>/`: `cfw install`, the offline trim, then the setup boot; the result is frozen and renamed to `.templates/<id>/` in one step, and the VM is cloned from it. The restore tree is removed before the freeze whatever `--keep-artifacts` says: a template never keeps it, because its ~11 GB would stay pinned for as long as the template lives and no clone can use it. `--keep-artifacts` keeps it only with `--no-template`, and `vm template adopt` removes it too. A second `vm create` with the same key waits for the first instead of restoring a second copy. A failed build stays in its staging folder for inspection.
@@ -94,23 +94,43 @@ Every step has a deadline. A failed step stops the VM, records nothing and leave
 | `--keep-apps <ids>` | none | Bundle IDs from that list to keep, comma-separated (`com.apple.findmy,com.apple.Passbook`). |
 | `--accounts-off` | off | Also turns off `akd`, `amsaccountsd` and `appleaccountd`. The guest then cannot sign in to an Apple Account. |
 
-Each choice is part of the key, so templates with different slimming live side by side and each serves only the creates that ask for it. Removed apps and the profile stay reversible on a clone: `apps.restore_system` puts an app back from its backup, and `services.profile.apply {"profile":"none"}` turns back on exactly what the profile turned off (both through `vphone-launchpad-cli guest rpc`).
+Each choice is part of the key, so templates with different slimming live side by side and each serves only the creates that ask for it. Removed apps and the profile stay reversible on a clone: `apps.restore_system` puts an app back from its backup, and `services.profile.apply {"profile":"none"}` turns back on exactly what the profile turned off (both through `vphone-launchpad-cli guest rpc`, or Guest System in Launchpad).
 
 What every clone inherits from the template: Setup done, the apps and services as the setup boot left them, the first-boot work installd and the indexers did, and the Data volume as of that boot. It does not inherit a device name: the template's pin is cleared, so a clone shows `iPhone` until its own VM connects and pins the clone's name. A new identity also means the Mac asks "Trust This Computer?" again.
 
 ### Finishing a VM as a template
 
-Launchpad builds a machine with its own pipeline and boots it once, leaving it at Setup. To turn such a machine (or any VM straight after creating it) into a template, stop it, trim it, give it the setup boot, and adopt it:
+To turn a VM straight after creating it into a template, stop it, trim it, give it the setup boot, and adopt it. This is what Launchpad does for a template it has to build (below):
 
 ```sh
 vphone-cli vm stop phone-src
 vphone-cli vm template trim phone-src --tier standard   # offline, no root; frees nothing until the setup boot
 vphone-cli vm template setup phone-src        # headless; --window to watch, slimming switches as for vm create
-vphone-cli vm template adopt phone-src        # key from its records and what the setup boot recorded
+vphone-cli vm template adopt phone-src --iphone-source … --cloudos-source …   # key from its records; the sources are recorded
 vphone-cli vm create phone-d --template <id> --skip-first-boot
 ```
 
+`--iphone-source` and `--cloudos-source` on `vm template adopt` record the IPSWs the VM was created from in its `Template.plist`, as a `vm create` that builds a template does. `--json` prints the new template as `vm template show --json` does.
+
 `vm template setup` refuses a running VM and a frozen template. It trims nothing itself: the tier `vm template trim` recorded is kept, and a `--trim` that names another tier is refused. On a VM it reports an app vphoned would not remove and leaves it out of the recorded steps, so the adopted key says what was really done. Given a `.building-…` name from `vm template list` (a `vm create` whose setup boot failed), it sets the build up to its key, which fixes the slimming, runs the offline trim first if the build stopped before it, and freezes it on success.
+
+### Finding a template
+
+`vm template find` answers what template a `vm create` with the same options would clone from, without downloading, restoring or changing anything:
+
+```sh
+vphone-cli vm template find --iphone-source … --cloudos-source … [--device …] [--preset …] [--disk-size …] [--block <id>] [--allow <id>] [slimming switches] --json
+```
+
+It works out the key as `vm create` does. The builds come from the IPSWs when they are local files or already in the IPSW cache, and otherwise from a template whose record names the same two sources, so the key still resolves once the IPSWs were deleted. `--block` and `--allow` are per-patch overrides as `fw set-patches` records them. The JSON has `resolved`, `resolvedBy` (`ipsw` or `template`), `id`, `summary`, `key`, `template` (the matching template as `vm template show --json` prints it, current or stale), `usable` (it exists and is current), `building` (a create holds its build lock) and, when unresolved, `reason`.
+
+### In Launchpad
+
+Launchpad 2.9 creates machines from templates by default. New Machine has a Slim System switch on its General page and the parts on its Template page: the trim tier and kept languages, the service profile, Apple Account, and which system apps go. Turning off Create from a template restores the machine on its own, as `--no-template` does, with keys of its own and without slimming.
+
+The creation runs `vm template find` first. When a current template matches, it clones the machine (`vm create --template <id> --skip-first-boot`) and boots it. When none does, it builds the template in a temporary machine of the same library, named `template-` and eight hex digits, with its usual steps (restore, then `cfw install` through the helper), then `vm template trim`, the headless `vm template setup` and `vm template adopt --iphone-source … --cloudos-source …`, and clones the machine from the result. Each is a step of its own with its duration, and a failed one shows the reason `vphone-cli` gave. Once it has built a template, the creation offers to delete the two IPSWs it came from; nothing is deleted without confirming.
+
+File > Templates… lists every library's templates with their machines, slimming, size and state, and deletes them. Guest System… (in a machine's Actions menu and inspector) switches a running machine's service profile and restores system apps the template removed. The inspector and the machine list show each machine's exclusive disk use, the blocks only it holds, beside what its files allocate.
 
 ### Shared secrets
 

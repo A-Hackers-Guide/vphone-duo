@@ -76,7 +76,13 @@ re-resolves with the template's own `PatchSelection.plist`.
 - `Template.plist`: `Identifier`, `Key`, `Created`, `BuiltWithBundleVersion`,
   `BootChainBundleVersion`, `SourceMachine` (the name a derived mDNS name
   follows from), `Frozen`, `FrozenAt`, `Steps` (`SnapshotDeleted`,
-  `SetupDone`, `ServiceProfile`, `ServiceGroups`, `RemovedApps`, `TrimTier`).
+  `SetupDone`, `ServiceProfile`, `ServiceGroups`, `RemovedApps`, `TrimTier`),
+  `Sources` (`IPhone`, `CloudOS`: the IPSW sources a `vm create` build or
+  `vm template adopt --iphone-source … --cloudos-source …` named; not part of
+  the key). `vm template find` resolves a request whose IPSWs are neither
+  local nor cached from a template recorded with the same sources
+  (`VPhoneMachineTemplates.templates(builtFrom:device:in:)`), so Launchpad
+  can offer to delete a template's IPSWs.
 - `TemplateSource.plist` in a machine cloned from a template: `Identifier`,
   `Cloned`. A plain `vm clone` keeps it (the copy shares the template's
   blocks too); `vm export` excludes it (an import shares nothing).
@@ -346,11 +352,27 @@ made after the latest one, as these clones were.
   A failure leaves the build; `vm template setup .building-…` runs the trim
   if the build stopped before it recorded one, retries the setup boot under
   the lock and freezes the build on success.
-- **Launchpad** (P5) builds a machine with its step-by-step pipeline, whose
-  first boot leaves it running at Setup; it stops it, runs
-  `vm template trim <name> --tier …`, `vm template setup <name> [switches]`,
-  `vm template adopt <name>`, then `vm create <name> --template <id>
-  --skip-first-boot` and its own first boot. `vm template trim` and
+- **Launchpad** (2.9, `VPhoneLaunchpadCreationPipeline`, steps in
+  `VPhoneLaunchpadCreationPlan`) first runs `vm template find --json` with
+  the request (IPSW sources, device, preset and per-patch overrides, disk
+  size, slimming switches). A usable template is cloned at once. Otherwise it
+  builds one in a temporary library machine `template-<8 hex>`: `vm new`,
+  `fw prepare`, `fw patch`, the DFU restore and `cfw install` through the
+  helper, without its own first boot; then `vm template trim <name> --tier …`
+  (left out for trim none), `vm template setup <name> [switches]` (headless),
+  `vm template adopt <name> --json --iphone-source … --cloudos-source …`, then
+  `vm create <name> --template <id> --skip-first-boot --cpu … --memory …
+  --network …` and its own first boot. An adopt refused because another
+  create saved the same key meanwhile falls back to that template and deletes
+  the build. The helper's root surface is unchanged: `cfw install` runs on
+  the temporary machine, a visible library machine, before it is adopted;
+  trim, setup and adopt run as the user. The setup boot's `vphone-vm` is
+  spawned by `vphone-cli`, itself a pipe child of Launchpad like the
+  pipeline's DFU boot, not through `vphone-launchpad-launcher`, so Launchpad
+  is its responsible process while it runs: a privacy prompt would be
+  Launchpad's own (it carries the microphone and location entitlements), and
+  quitting Launchpad interrupts the build, which the quit confirmation for a
+  running creation already covers. `vm template trim` and
   `vm template setup` on a library machine write an unfrozen `Template.plist`
   (key from its records) when it has none, and record their steps there.
   The setup boot trims nothing: it keeps the tier `vm template trim`

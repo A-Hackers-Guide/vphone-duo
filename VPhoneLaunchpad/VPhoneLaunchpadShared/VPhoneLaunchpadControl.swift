@@ -168,8 +168,9 @@ nonisolated struct VPhoneLaunchpadControlCommand: Sendable {
              summary: "The last lines of the console log (--kind create, dfu or patch for those logs)."),
         Self(name: "vm.create", arguments: ["name"], options: [
             "root", "bundle", "iphone-source", "cloudos-source", "device", "cpu", "memory", "disk-size", "network", "preset", "from",
-        ], flags: ["keep-artifacts", "no-wait"],
-        summary: "Create a machine through every step, as New Machine does, bound to --bundle (default: the default bundle). --from <step> retries a failed creation from that step."),
+            "slim", "trim", "keep-languages", "service-profile", "remove-apps", "keep-apps",
+        ], flags: ["keep-artifacts", "no-wait", "no-template", "accounts-off"],
+        summary: "Create a machine through every step, as New Machine does, bound to --bundle (default: the default bundle): cloned from a template, built first when missing, or restored on its own with --no-template. --slim, --trim, --keep-languages, --service-profile, --remove-apps, --keep-apps and --accounts-off shape the template, as in vphone-cli vm create. --from <step> retries a failed creation from that step."),
         Self(name: "vm.set-bundle", arguments: ["name", "version"], options: ["root"], flags: ["update-environment"],
              summary: "Bind a machine to another installed version; its host programs change at the next start. --update-environment also redeploys that version's guest environment into the stopped machine. The boot chain stays as created."),
         Self(name: "vm.leases", arguments: [], options: [], flags: ["release"],

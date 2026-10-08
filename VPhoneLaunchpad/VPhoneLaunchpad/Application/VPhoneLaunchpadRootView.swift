@@ -41,6 +41,8 @@ struct VPhoneLaunchpadRootView: View {
                         VPhoneLaunchpadInstallView()
                     case .ipswCache:
                         VPhoneLaunchpadIPSWCacheView()
+                    case .templates:
+                        VPhoneLaunchpadTemplatesView()
                     }
                 }
                 .environment(model)
