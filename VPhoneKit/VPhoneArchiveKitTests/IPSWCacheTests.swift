@@ -42,6 +42,95 @@ private final class ProgressReports: @unchecked Sendable {
     }
 }
 
+/// A server that answers range requests, as Apple's CDN does, and can close a
+/// connection partway through a segment or replace the file between requests.
+private final class RangeServer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var payload = Data()
+    private var etag = "\"v1\""
+    private var cutShortOnce: Set<Int64> = []
+    private var replaceAfterProbe = false
+    private var ranges: [String] = []
+
+    func reset(payload: Data, cutShortOnce: Set<Int64> = [], replaceAfterProbe: Bool = false) {
+        lock.withLock {
+            self.payload = payload
+            etag = "\"v1\""
+            self.cutShortOnce = cutShortOnce
+            self.replaceAfterProbe = replaceAfterProbe
+            ranges = []
+        }
+    }
+
+    var requestedRanges: [String] {
+        lock.withLock { ranges }
+    }
+
+    /// The response to `range` and `ifRange`, and whether to end it halfway.
+    func answer(range: String?, ifRange: String?) -> (status: Int, headers: [String: String], body: Data, cutShort: Bool) {
+        lock.withLock {
+            ranges.append(range ?? "")
+            let current = etag
+            if range == "bytes=0-0", replaceAfterProbe {
+                etag = "\"v2\""
+            }
+            guard let range, ifRange == nil || ifRange == current,
+                  let bounds = Self.bounds(range, size: payload.count)
+            else {
+                return (200, ["Content-Length": "\(payload.count)", "ETag": current], payload, false)
+            }
+            let body = payload.subdata(in: bounds.lowerBound ..< bounds.upperBound + 1)
+            let headers = [
+                "Content-Length": "\(body.count)",
+                "Content-Range": "bytes \(bounds.lowerBound)-\(bounds.upperBound)/\(payload.count)",
+                "ETag": current,
+            ]
+            let cutShort = cutShortOnce.remove(Int64(bounds.lowerBound)) != nil
+            return (206, headers, body, cutShort)
+        }
+    }
+
+    private static func bounds(_ range: String, size: Int) -> ClosedRange<Int>? {
+        guard range.hasPrefix("bytes=") else { return nil }
+        let parts = range.dropFirst(6).split(separator: "-")
+        guard parts.count == 2, let start = Int(parts[0]), let end = Int(parts[1]), start <= end, start < size else {
+            return nil
+        }
+        return start ... min(end, size - 1)
+    }
+}
+
+private final class RangeStubProtocol: URLProtocol {
+    static let server = RangeServer()
+
+    override class func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        let answer = Self.server.answer(
+            range: request.value(forHTTPHeaderField: "Range"),
+            ifRange: request.value(forHTTPHeaderField: "If-Range"),
+        )
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: answer.status,
+            httpVersion: "HTTP/1.1",
+            headerFields: answer.headers,
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        // Cut short: the connection closes after half the stated length.
+        client?.urlProtocol(self, didLoad: answer.cutShort ? answer.body.prefix(answer.body.count / 2) : answer.body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
 @Suite("IPSW cache", .serialized)
 struct IPSWCacheTests {
     private func fixture(in root: URL) throws -> URL {
@@ -203,6 +292,145 @@ struct IPSWCacheTests {
         )
         #expect(!FileManager.default.fileExists(atPath: abandoned.path))
         #expect(FileManager.default.fileExists(atPath: live.path))
+    }
+
+    // MARK: - Concurrent download
+
+    private func rangeSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RangeStubProtocol.self]
+        return URLSession(configuration: configuration)
+    }
+
+    private func randomPayload(_ count: Int) -> Data {
+        Data((0 ..< count).map { _ in UInt8.random(in: 0 ... 255) })
+    }
+
+    private func emptyFile(in root: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let file = root.appendingPathComponent("download.partial")
+        #expect(FileManager.default.createFile(atPath: file.path, contents: nil))
+        return file
+    }
+
+    /// Several connections write their segments into one file; the bytes must
+    /// land exactly where they belong, and progress must add up across them.
+    @Test func `segments over several connections reassemble the file`() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let payload = randomPayload(1_000_003)
+        RangeStubProtocol.server.reset(payload: payload)
+        let session = rangeSession()
+        defer { session.invalidateAndCancel() }
+        let file = try emptyFile(in: root)
+        let reports = ProgressReports()
+
+        try await VPhoneIPSWCache.download(
+            #require(URL(string: "https://example.invalid/input.ipsw")),
+            into: file,
+            session: session,
+            connections: 4,
+            segmentSize: 64 * 1024,
+            progress: { done, total in reports.append(done, total) },
+        )
+
+        #expect(try Data(contentsOf: file) == payload)
+        let ranges = RangeStubProtocol.server.requestedRanges
+        #expect(ranges.first == "bytes=0-0")
+        #expect(ranges.count == 1 + 16)
+        #expect(ranges.contains("bytes=983040-1000002"))
+        let values = reports.values
+        #expect(values.allSatisfy { $0.total == Int64(payload.count) })
+        #expect(values.last?.done == Int64(payload.count))
+        #expect(zip(values, values.dropFirst()).allSatisfy { $0.done < $1.done })
+    }
+
+    @Test func `a segment cut short resumes where it stopped`() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let payload = randomPayload(300_000)
+        RangeStubProtocol.server.reset(payload: payload, cutShortOnce: [100_000])
+        let session = rangeSession()
+        defer { session.invalidateAndCancel() }
+        let file = try emptyFile(in: root)
+
+        try await VPhoneIPSWCache.download(
+            #require(URL(string: "https://example.invalid/input.ipsw")),
+            into: file,
+            session: session,
+            connections: 3,
+            segmentSize: 100_000,
+            progress: nil,
+        )
+
+        #expect(try Data(contentsOf: file) == payload)
+        // Half of 100000-199999 arrived before the connection closed; only the rest is asked again.
+        #expect(RangeStubProtocol.server.requestedRanges.contains("bytes=150000-199999"))
+    }
+
+    /// If-Range carries the probe's ETag, so a file replaced on the server
+    /// fails the download instead of mixing two files' bytes.
+    @Test func `a file replaced during the download fails it`() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        RangeStubProtocol.server.reset(payload: randomPayload(200_000), replaceAfterProbe: true)
+        let session = rangeSession()
+        defer { session.invalidateAndCancel() }
+        let file = try emptyFile(in: root)
+
+        await #expect {
+            try await VPhoneIPSWCache.download(
+                #require(URL(string: "https://example.invalid/input.ipsw")),
+                into: file,
+                session: session,
+                connections: 2,
+                segmentSize: 50000,
+                progress: nil,
+            )
+        } throws: { error in
+            if case .changedDuringDownload? = error as? VPhoneIPSWCache.Error {
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    /// One connection, or a server that ignores ranges, downloads as one GET.
+    @Test func `one connection downloads the file as a single request`() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let payload = randomPayload(200_000)
+        RangeStubProtocol.server.reset(payload: payload)
+        let session = rangeSession()
+        defer { session.invalidateAndCancel() }
+        let file = try emptyFile(in: root)
+
+        try await VPhoneIPSWCache.download(
+            #require(URL(string: "https://example.invalid/input.ipsw")),
+            into: file,
+            session: session,
+            connections: 1,
+            segmentSize: 50000,
+            progress: nil,
+        )
+
+        #expect(try Data(contentsOf: file) == payload)
+        #expect(RangeStubProtocol.server.requestedRanges == [""])
+    }
+
+    @Test func `content range parses only a complete byte range`() {
+        func parse(_ value: String) -> [Int64]? {
+            let url = URL(string: "https://example.invalid/")!
+            let response = HTTPURLResponse(url: url, statusCode: 206, httpVersion: nil, headerFields: ["Content-Range": value])!
+            return VPhoneIPSWCache.contentRange(of: response).map { [$0.start, $0.end, $0.total] }
+        }
+        #expect(parse("bytes 0-0/12343857610") == [0, 0, 12_343_857_610])
+        #expect(parse("bytes 100-199/1000") == [100, 199, 1000])
+        #expect(parse("bytes 0-0/*") == nil)
+        #expect(parse("bytes */1000") == nil)
+        #expect(parse("bytes 10-5/1000") == nil)
+        #expect(parse("bytes 0-1000/1000") == nil)
     }
 
     // MARK: - Pairing
