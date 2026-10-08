@@ -42,10 +42,10 @@ The guest shows the VM's name as its device name, in Xcode's device list and `xc
 
 ## Templates
 
-A template is a complete machine that is never booted, kept in `<library>/.templates/<id>/`. `vm create` without `--no-template` works out the template key from its options and the two IPSWs before anything is restored: the guest device, the iOS and cloudOS versions and builds, the patch preset and the boot-chain patches it resolves to, the bundle series (`2.8` for 2.8.x), the disk size, and what was trimmed from the guest (nothing yet). Then:
+A template is a complete machine kept in `<library>/.templates/<id>/`. It boots once while it is built, its setup boot, and never again once it is frozen. `vm create` without `--no-template` works out the template key from its options and the two IPSWs before anything is restored: the guest device, the iOS and cloudOS versions and builds, the patch preset and the boot-chain patches it resolves to, the bundle series (`2.8` for 2.8.x), the disk size, and the slimming switches below. Then:
 
 - If a template with that key exists, the VM is cloned from it with a new identity, given the requested CPU, memory and network, and booted once to check vphoned. This takes seconds and needs neither root nor the IPSWs; nothing is downloaded.
-- Otherwise the full pipeline runs into a staging folder, `.templates/.building-<id>-<uuid>/`, without the first boot; the result is frozen and renamed to `.templates/<id>/` in one step, and the VM is cloned from it. A second `vm create` with the same key waits for the first instead of restoring a second copy. A failed build stays in its staging folder for inspection.
+- Otherwise the full pipeline runs into a staging folder, `.templates/.building-<id>-<uuid>/`, followed by the setup boot; the result is frozen and renamed to `.templates/<id>/` in one step, and the VM is cloned from it. A second `vm create` with the same key waits for the first instead of restoring a second copy. A failed build stays in its staging folder for inspection.
 
 ```sh
 vphone-cli vm create phone-a --iphone-source … --cloudos-source …   # builds the template, clones phone-a
@@ -53,20 +53,62 @@ vphone-cli vm create phone-b --iphone-source … --cloudos-source …   # clones
 vphone-cli vm create phone-c --template 3f2a91c0d4e7 --cpu 4 --memory 6144
 ```
 
-`--template <id>` clones from a template by its identifier (or a unique prefix of four or more digits) and takes no IPSW options. `--device`, `--preset` and `--disk-size`, when given, must match the template's; a clone cannot change them. CPU, memory, screen and network are not part of the key.
+`--template <id>` clones from a template by its identifier (or a unique prefix of four or more digits) and takes no IPSW options. `--device`, `--preset`, `--disk-size` and the slimming switches, when given, must match the template's; a clone cannot change them. CPU, memory, screen and network are not part of the key.
 
-Every machine cloned from one template shares, with the template and with each other, its SEP root secret, its Data volume keys and the data the restore wrote. One clone could in principle decrypt another's Data volume. A VM that needs keys of its own, for example to sign in to Apple services for multi-device research, should be created with `--no-template`. Clones get a new ECID, UDID and MAC address on their first start, as with `vm clone --new-identity`, and share every unchanged block with the template on APFS: a new clone costs almost nothing until it starts writing.
+### Setup boot and slimming
+
+The setup boot finishes the template the way every clone should start. It boots the template once and, through vphoned, in this order:
+
+1. deletes the `orig-fs.disabled.rn-*` APFS snapshot `cfw install` left (it holds about 20 MB, and every file trimmed from the System volume until it is gone);
+2. skips Setup Assistant (`setup.skip`);
+3. waits for first-boot work to settle (`setup.settle`, up to 10 minutes): installd expands the removable system apps on the first boot;
+4. removes the system apps (`apps.remove_system`, backups kept in the guest);
+5. applies the service profile (`services.profile.apply`), which includes turning off the sign-in follow-up daemons (`followupd`, `appleidsetupd`);
+6. reboots, then checks: no snapshot left, Setup done, none of the profile's services running, the removed apps gone, vphoned answering;
+7. clears the device name `vphone-vm` pinned for this boot, and shuts the guest down cleanly.
+
+Every step has a deadline. A failed step stops the VM, records nothing and leaves the build unfrozen; `vm create` names the step and how to retry it.
+
+| Switch | Default | Effect |
+| --- | --- | --- |
+| `--slim on\|off` | on | `off` keeps every app and service. The setup boot still runs: Setup is skipped and the snapshot deleted. |
+| `--service-profile trimmed\|none` | trimmed | vphoned's trimmed profile: about 140 launchd jobs off, the App Store daemons and sign-in follow-up among them. |
+| `--remove-apps on\|off` | on | Removes App Store, Home, TV, News, FaceTime, iTunes Store, Messages, Games, Find My and Wallet. Camera and Phone stay. |
+| `--keep-apps <ids>` | none | Bundle IDs from that list to keep, comma-separated (`com.apple.findmy,com.apple.Passbook`). |
+| `--accounts-off` | off | Also turns off `akd`, `amsaccountsd` and `appleaccountd`. The guest then cannot sign in to an Apple Account. |
+
+Each choice is part of the key, so templates with different slimming live side by side and each serves only the creates that ask for it. Removed apps and the profile stay reversible on a clone: `apps.restore_system` puts an app back from its backup, and `services.profile.apply {"profile":"none"}` turns back on exactly what the profile turned off (both through `vphone-launchpad-cli guest rpc`).
+
+What every clone inherits from the template: Setup done, the apps and services as the setup boot left them, the first-boot work installd and the indexers did, and the Data volume as of that boot. It does not inherit a device name: the template's pin is cleared, so a clone shows `iPhone` until its own VM connects and pins the clone's name. A new identity also means the Mac asks "Trust This Computer?" again.
+
+### Finishing a VM as a template
+
+Launchpad builds a machine with its own pipeline and boots it once, leaving it at Setup. To turn such a machine (or any VM straight after creating it) into a template, stop it, give it the setup boot, and adopt it:
+
+```sh
+vphone-cli vm stop phone-src
+vphone-cli vm template setup phone-src        # headless; --window to watch, slimming switches as for vm create
+vphone-cli vm template adopt phone-src        # key from its records and what the setup boot recorded
+vphone-cli vm create phone-d --template <id> --skip-first-boot
+```
+
+`vm template setup` refuses a running VM and a frozen template. On a VM it reports an app vphoned would not remove and leaves it out of the recorded steps, so the adopted key says what was really done. Given a `.building-…` name from `vm template list` (a `vm create` whose setup boot failed), it sets the build up to its key, which fixes the slimming, and freezes it on success.
+
+### Shared secrets
+
+Every machine cloned from one template shares, with the template and with each other, its SEP root secret, its Data volume keys and the data the restore and the setup boot wrote. One clone could in principle decrypt another's Data volume. A VM that needs keys of its own, for example to sign in to Apple services for multi-device research, should be created with `--no-template` (which takes no slimming switches). Clones get a new ECID, UDID and MAC address on their first start, as with `vm clone --new-identity`, and share every unchanged block with the template on APFS: a new clone costs almost nothing until it starts writing, and a slimmed template leaves it little first-boot work to write.
 
 ```sh
 vphone-cli vm template list              # id, key summary, STALE with the reasons
 vphone-cli vm template show <id> --json
+vphone-cli vm template setup myphone     # the setup boot, on a stopped VM
 vphone-cli vm template adopt myphone     # freeze a stopped, newly created VM into a template
 vphone-cli vm template delete <id>
 ```
 
-- **Stale.** A template is listed as stale when this `vphone-cli` belongs to another bundle series, when its preset now resolves to other boot-chain patches, or when its patch receipt disagrees with its plan. A stale template is never used: `vm create` with its key fails and names it. Delete it to have the next `vm create` build a new one.
-- **Adopt.** `vm template adopt <vm>` turns a stopped VM into a template, under the key its own records give (`restore-info.json`, `PatchPlan.plist`, `config.plist`, the disk image and Launchpad's `launchpad.json`). The VM leaves `vm list`. Adopt a VM straight after creating it: every clone inherits what its guest has done since its first boot. A VM with snapshots is refused, and so is one that would be stale unless `--force` is given.
-- **Never booted.** `vm launch` and `vphone-vm` refuse a template, in DFU too; no machine name reaches into `.templates`, so `vm launch`, `clone`, `export`, `rename` and `delete` cannot pick one up by accident. A template that booted would write first-boot state into the blocks every later clone inherits, and the clones made before it would stop sharing them.
+- **Stale.** A template is listed as stale when this `vphone-cli` belongs to another bundle series, when its key has an older format, when its preset now resolves to other boot-chain patches, or when its patch receipt disagrees with its plan. A stale template is never used: `vm create` with its key fails and names it. Delete it to have the next `vm create` build a new one.
+- **Adopt.** `vm template adopt <vm>` turns a stopped VM into a template, under the key its own records give (`restore-info.json`, `PatchPlan.plist`, `config.plist`, the disk image, Launchpad's `launchpad.json`, and the steps `vm template setup` recorded in its `Template.plist`). The VM leaves `vm list`. Adopt a VM straight after its setup boot: every clone inherits what its guest has done since. A VM with snapshots is refused, and so is one that would be stale unless `--force` is given.
+- **Never booted once frozen.** `vm launch` and `vphone-vm` refuse a frozen template, in DFU too; no machine name reaches into `.templates`, so `vm launch`, `clone`, `export`, `rename` and `delete` cannot pick one up by accident. A template that booted after being frozen would write state into the blocks every later clone inherits, and the clones made before it would stop sharing them.
 - **Deleting.** `vm template delete <id>` removes the template; machines cloned from it keep working. The blocks they still share with it are freed only when those machines change them or are deleted, so deleting a template frees less than its size while clones remain. Templates take disk space although `vm list` does not show them; look in `~/.vphone/machines/.templates`, keeping in mind that `du` counts a template and each of its clones in full.
 
 ## Manual stages

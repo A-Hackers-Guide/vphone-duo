@@ -246,6 +246,7 @@ public struct VPhoneVirtualMachineCreator {
             cloudOS: .init(version: sources.cloud.version, build: sources.cloud.build),
             preset: options.patchPreset,
             diskSizeGB: options.diskSizeGB,
+            slimming: options.slimming,
         )
         print("[*] Template key \(key.identifier): \(key.summary)")
 
@@ -278,9 +279,11 @@ public struct VPhoneVirtualMachineCreator {
     }
 
     /// Builds the template for `key` in a staging folder in `.templates` and
-    /// freezes it into place. The template is never booted. A failed build
-    /// is left in its staging folder for inspection; `vm template list`
-    /// shows it and `vm template delete` removes it.
+    /// freezes it into place. After `cfw install` the template boots once, its
+    /// setup boot, and never again once frozen. A failed build is left in its
+    /// staging folder for inspection; `vm template list` shows it,
+    /// `vm template setup` finishes one whose setup boot failed, and
+    /// `vm template delete` removes it.
     private func buildTemplate(
         _ key: VPhoneMachineTemplateKey,
         options: Options,
@@ -315,26 +318,38 @@ public struct VPhoneVirtualMachineCreator {
 
             try buildGuest(at: bundle.url, options: options, outputs: outputs)
 
-            // Offline trimming (after cfw install) and the setup boot record
-            // their work with VPhoneMachineTemplates.recordSteps here, before
-            // the freeze; freeze refuses steps that do not match the key.
+            // Offline file trimming runs inside the CFW install above and
+            // records Steps.TrimTier there (key.slimming.trimTier says which
+            // tier). The snapshot it cannot delete from the host goes in the
+            // setup boot's first step, which frees what the trim removed.
 
-            // The key the template's own records give must be the one it is
-            // filed under, or no later create (or adopt) would find it.
-            let recorded = try VPhoneMachineTemplateKeys.recorded(VPhoneBundle.load(at: bundle.url), slimming: key.slimming)
-            guard recorded.key == key else {
-                throw ValidationError(
-                    "The built template's records give another key than requested (\(key.differences(from: recorded.key).joined(separator: "; "))).",
+            if key.slimming.setupBoot {
+                print("\n=== Template setup boot ===")
+                // With a window, as the first-boot check: this is the guest's
+                // first boot (see runBootAnalysis).
+                try VPhoneTemplateSetupRun.run(
+                    bundleURL: bundle.url,
+                    plan: VPhoneTemplateSetupPlan(slimming: key.slimming, requiresEveryApp: true),
+                    launcher: requireLauncher(),
+                    resources: resources,
+                    headless: false,
+                    verbosity: options.verbosity,
                 )
             }
+
+            // freeze refuses steps that do not match the key.
+            try VPhoneTemplateBuildFinisher.requireRecordedKey(build, key: key)
             try outputs.handBack(build.stagingURL)
             let template = try VPhoneMachineTemplates.freeze(build)
             outputs.replace(build.stagingURL, with: template.url)
             print("[+] Template \(template.identifier) frozen at \(template.url.path)")
             return template
         } catch {
-            print("[-] Template build failed; left at \(build.stagingURL.path). "
-                + "Remove it with: vphone-cli vm template delete \(build.stagingURL.lastPathComponent)")
+            print("[-] Template build failed; left at \(build.stagingURL.path).")
+            if error is VPhoneTemplateSetupFailure {
+                print("    Retry its setup boot with: vphone-cli vm template setup \(build.stagingURL.lastPathComponent)")
+            }
+            print("    Remove it with: vphone-cli vm template delete \(build.stagingURL.lastPathComponent)")
             throw error
         }
     }

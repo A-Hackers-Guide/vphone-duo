@@ -32,7 +32,7 @@ struct MachineTemplateKeyTests {
         // A change here orphans every template on disk: raise currentFormatVersion instead.
         let key = Self.key()
         #expect(key.canonicalDescription == """
-        format=1
+        format=2
         device=iPhone17,3
         ios=27.0/24A435
         cloudos=26.4/23E5207q
@@ -43,9 +43,10 @@ struct MachineTemplateKeyTests {
         trim=none
         setup=0
         services=none
+        service-groups=
         removed-apps=
         """)
-        #expect(key.identifier == "a5f0340ef865")
+        #expect(key.identifier == "d56595ee396f")
         #expect(VPhoneMachineTemplateKey.isIdentifier(key.identifier))
     }
 
@@ -64,7 +65,7 @@ struct MachineTemplateKeyTests {
             change(&copy)
             variants.append(copy)
         }
-        vary { $0.formatVersion = 2 }
+        vary { $0.formatVersion = 3 }
         vary { $0.device = "iPad16,1" }
         vary { $0.iOSVersion = "27.0.1" }
         vary { $0.iOSBuild = "24A446" }
@@ -77,6 +78,7 @@ struct MachineTemplateKeyTests {
         vary { $0.slimming.trimTier = "standard" }
         vary { $0.slimming.setupBoot = true }
         vary { $0.slimming.serviceProfile = "trimmed" }
+        vary { $0.slimming.serviceGroups = ["accounts"] }
         vary { $0.slimming.removedApps = ["com.apple.tv"] }
 
         let identifiers = Set(variants.map(\.identifier) + [base.identifier])
@@ -131,6 +133,26 @@ struct MachineTemplateKeyTests {
         #expect(conflicts[0].hasPrefix("--device iPad16,1"))
         #expect(conflicts[1].hasPrefix("--preset experimental"))
         #expect(conflicts[2].hasPrefix("--disk-size 128"))
+
+        let slimmed = VPhoneTemplateSlimmingRequest.defaultSlimming
+        #expect(VPhoneMachineTemplateRequest(slimming: .none).conflicts(with: key).isEmpty)
+        let slimming = VPhoneMachineTemplateRequest(slimming: slimmed).conflicts(with: key)
+        #expect(slimming.count == 1)
+        #expect(slimming.first?.contains("slimming switches") == true)
+    }
+
+    @Test func `a format 1 key without service groups still reads`() throws {
+        // What P2 wrote: no ServiceGroups in the slimming dictionary.
+        let plist = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict>
+        <key>RemovedApps</key><array/><key>ServiceProfile</key><string>none</string>
+        <key>SetupBoot</key><false/><key>TrimTier</key><string>none</string>
+        </dict></plist>
+        """
+        let slimming = try PropertyListDecoder().decode(VPhoneMachineTemplateSlimming.self, from: Data(plist.utf8))
+        #expect(slimming == .none)
     }
 
     // MARK: - Coding

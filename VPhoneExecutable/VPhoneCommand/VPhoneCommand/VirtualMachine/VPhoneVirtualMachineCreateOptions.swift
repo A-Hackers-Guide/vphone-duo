@@ -40,8 +40,12 @@ public extension VPhoneVirtualMachineCreator {
         /// template given by identifier. Nil fields were not given.
         public var templateRequest: VPhoneMachineTemplateRequest
         /// Leave the first boot to the caller (Launchpad boots the machine
-        /// itself). A template is never booted either way.
+        /// itself). This is the clone's boot; a template boots only for its
+        /// setup boot, before it is frozen.
         public var skipsFirstBoot: Bool
+        /// What a template built for this create is slimmed of; part of the
+        /// key it is looked up by.
+        public var slimming: VPhoneMachineTemplateSlimming
 
         public init(
             name: String,
@@ -61,6 +65,7 @@ public extension VPhoneVirtualMachineCreator {
             template: TemplateUse = .none,
             templateRequest: VPhoneMachineTemplateRequest = VPhoneMachineTemplateRequest(),
             skipsFirstBoot: Bool = false,
+            slimming: VPhoneMachineTemplateSlimming = VPhoneTemplateSlimmingRequest.defaultSlimming,
         ) {
             self.name = name
             self.iphoneSource = iphoneSource
@@ -79,6 +84,7 @@ public extension VPhoneVirtualMachineCreator {
             self.template = template
             self.templateRequest = templateRequest
             self.skipsFirstBoot = skipsFirstBoot
+            self.slimming = slimming
         }
     }
 }

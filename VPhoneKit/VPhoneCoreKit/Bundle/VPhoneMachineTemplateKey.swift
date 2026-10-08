@@ -7,9 +7,10 @@ import Foundation
 /// key: a machine cloned from a trimmed template cannot get the files back,
 /// and one cloned from an untrimmed template does not lose them.
 ///
-/// Every field has a "nothing done" value, which is all this version builds.
-/// Offline file trimming (`trimTier`) and the setup boot (`setupBoot`,
-/// `serviceProfile`, `removedApps`) record their work here once they exist.
+/// Every field has a "nothing done" value. Offline file trimming records
+/// `trimTier`; the setup boot records `setupBoot`, `serviceProfile`,
+/// `serviceGroups` and `removedApps` (see `VPhoneTemplateSetupBoot`). What a
+/// `vm create` asks for comes from its switches (`VPhoneTemplateSlimmingRequest`).
 public struct VPhoneMachineTemplateSlimming: Codable, Equatable, Hashable, Sendable {
     /// The file-trimming tier applied to the System volume: `none`,
     /// `conservative`, `standard` or `aggressive`.
@@ -20,16 +21,26 @@ public struct VPhoneMachineTemplateSlimming: Codable, Equatable, Hashable, Senda
     /// The vphoned service profile applied during the setup boot: `none` or
     /// `trimmed`.
     public var serviceProfile: String
+    /// Optional service groups applied on top of the profile's defaults
+    /// (`accounts` for `--accounts-off`), sorted. Empty with profile `none`.
+    public var serviceGroups: [String]
     /// Bundle identifiers of the system apps removed during the setup boot,
     /// sorted.
     public var removedApps: [String]
 
     public static let none = VPhoneMachineTemplateSlimming()
 
-    public init(trimTier: String = "none", setupBoot: Bool = false, serviceProfile: String = "none", removedApps: [String] = []) {
+    public init(
+        trimTier: String = "none",
+        setupBoot: Bool = false,
+        serviceProfile: String = "none",
+        serviceGroups: [String] = [],
+        removedApps: [String] = [],
+    ) {
         self.trimTier = trimTier
         self.setupBoot = setupBoot
         self.serviceProfile = serviceProfile
+        self.serviceGroups = Array(Set(serviceGroups)).sorted()
         self.removedApps = Array(Set(removedApps)).sorted()
     }
 
@@ -37,7 +48,30 @@ public struct VPhoneMachineTemplateSlimming: Codable, Equatable, Hashable, Senda
         case trimTier = "TrimTier"
         case setupBoot = "SetupBoot"
         case serviceProfile = "ServiceProfile"
+        case serviceGroups = "ServiceGroups"
         case removedApps = "RemovedApps"
+    }
+
+    /// One phrase for listings: `trim none, setup boot, services trimmed+accounts, 10 apps removed`.
+    public var summary: String {
+        var services = serviceProfile
+        if !serviceGroups.isEmpty {
+            services += "+" + serviceGroups.joined(separator: "+")
+        }
+        return "trim \(trimTier), \(setupBoot ? "setup boot" : "no setup boot"), services \(services), "
+            + "\(removedApps.count) apps removed"
+    }
+
+    /// A key of format 1 has no `ServiceGroups`; it reads as none.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            trimTier: container.decode(String.self, forKey: .trimTier),
+            setupBoot: container.decode(Bool.self, forKey: .setupBoot),
+            serviceProfile: container.decode(String.self, forKey: .serviceProfile),
+            serviceGroups: container.decodeIfPresent([String].self, forKey: .serviceGroups) ?? [],
+            removedApps: container.decode([String].self, forKey: .removedApps),
+        )
     }
 }
 
@@ -60,7 +94,10 @@ public struct VPhoneMachineTemplateSlimming: Codable, Equatable, Hashable, Senda
 public struct VPhoneMachineTemplateKey: Codable, Equatable, Hashable, Sendable {
     /// Raised whenever a field is added or its meaning changes, so templates
     /// keyed by an older rule are never matched by a newer one.
-    public static let currentFormatVersion = 1
+    ///
+    /// - 1: the first templates (nothing slimmed, never booted).
+    /// - 2: `slimming.serviceGroups`; a create now asks for a setup boot.
+    public static let currentFormatVersion = 2
 
     public var formatVersion: Int
     /// The guest device's product type, as `fw prepare` picked it.
@@ -122,6 +159,7 @@ public struct VPhoneMachineTemplateKey: Codable, Equatable, Hashable, Sendable {
             "trim=\(slimming.trimTier)",
             "setup=\(slimming.setupBoot ? 1 : 0)",
             "services=\(slimming.serviceProfile)",
+            "service-groups=\(slimming.serviceGroups.sorted().joined(separator: ","))",
             "removed-apps=\(slimming.removedApps.sorted().joined(separator: ","))",
         ].joined(separator: "\n")
     }
@@ -190,6 +228,11 @@ public struct VPhoneMachineTemplateKey: Codable, Equatable, Hashable, Sendable {
         compare("setup boot", slimming.setupBoot ? "yes" : "no", other.slimming.setupBoot ? "yes" : "no")
         compare("service profile", slimming.serviceProfile, other.slimming.serviceProfile)
         compare(
+            "service groups",
+            slimming.serviceGroups.joined(separator: ",").ifEmpty("none"),
+            other.slimming.serviceGroups.joined(separator: ",").ifEmpty("none"),
+        )
+        compare(
             "removed apps",
             slimming.removedApps.joined(separator: ",").ifEmpty("none"),
             other.slimming.removedApps.joined(separator: ",").ifEmpty("none"),
@@ -200,7 +243,7 @@ public struct VPhoneMachineTemplateKey: Codable, Equatable, Hashable, Sendable {
     /// One line for listings.
     public var summary: String {
         "\(device) iOS \(iOSVersion) (\(iOSBuild)) / cloudOS \(cloudOSVersion) (\(cloudOSBuild)), "
-            + "\(patchPreset), \(diskSizeGB) GB, bundle \(bundleSeries), trim \(slimming.trimTier)"
+            + "\(patchPreset), \(diskSizeGB) GB, bundle \(bundleSeries), \(slimming.summary)"
     }
 
     // MARK: Coding
@@ -232,11 +275,19 @@ public struct VPhoneMachineTemplateRequest: Equatable, Sendable {
     public var device: String?
     public var patchPreset: String?
     public var diskSizeGB: UInt64?
+    /// The slimming the switches ask for, when any slimming switch was given.
+    public var slimming: VPhoneMachineTemplateSlimming?
 
-    public init(device: String? = nil, patchPreset: String? = nil, diskSizeGB: UInt64? = nil) {
+    public init(
+        device: String? = nil,
+        patchPreset: String? = nil,
+        diskSizeGB: UInt64? = nil,
+        slimming: VPhoneMachineTemplateSlimming? = nil,
+    ) {
         self.device = device
         self.patchPreset = patchPreset
         self.diskSizeGB = diskSizeGB
+        self.slimming = slimming
     }
 
     /// Each option that asks for something the template does not have, as a
@@ -251,6 +302,9 @@ public struct VPhoneMachineTemplateRequest: Equatable, Sendable {
         }
         if let diskSizeGB, diskSizeGB != key.diskSizeGB {
             lines.append("--disk-size \(diskSizeGB): the template's disk is \(key.diskSizeGB) GB, fixed by its restore")
+        }
+        if let slimming, slimming != key.slimming {
+            lines.append("the slimming switches ask for \(slimming.summary); the template has \(key.slimming.summary)")
         }
         return lines
     }

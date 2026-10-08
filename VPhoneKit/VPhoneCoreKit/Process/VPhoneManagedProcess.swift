@@ -148,6 +148,27 @@ public final class VPhoneManagedProcess: @unchecked Sendable {
         return process.terminationStatus
     }
 
+    public var isRunning: Bool {
+        process.isRunning
+    }
+
+    /// Everything the child wrote so far.
+    public var outputText: String {
+        box.snapshotText()
+    }
+
+    /// SIGINT, then waits up to `timeout` for the child to exit on its own.
+    /// True when it did; the caller decides what a child still running gets.
+    public func interrupt(waitingUpTo timeout: TimeInterval) -> Bool {
+        guard process.isRunning else { return true }
+        process.interrupt()
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return !process.isRunning
+    }
+
     /// `interrupt()` (SIGINT), then escalate to an unmaskable `SIGKILL` if
     /// the process is still running after a ~2 s grace period. `SIGKILL` (not
     /// `Process.terminate()`'s `SIGTERM`) is required here: a child that

@@ -21,6 +21,15 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         --no-template builds the VM on its own, with keys of its own, as before. \
         --template <id> clones from a template listed by vm template list.
 
+        A new template boots once before it is frozen (its setup boot): the orig-fs snapshot \
+        is deleted, Setup Assistant skipped, first-boot work waited for, the default system apps \
+        removed (App Store, Home, TV, News, FaceTime, iTunes Store, Messages, Games, Find My, \
+        Wallet; never Phone or Camera) and the trimmed service profile applied, then it reboots, \
+        is checked and shut down. Every clone starts at the Lock Screen with that state. \
+        --slim off keeps every app and service (Setup is still skipped); --service-profile, \
+        --remove-apps, --keep-apps and --accounts-off pick parts. Each choice is part of the key, \
+        so templates with different slimming live side by side.
+
         --cpu, --memory, --network and --unlock-at-startup are set on the new VM, whichever way \
         it is made.
         """,
@@ -57,6 +66,7 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
     var noTemplate = false
     @Flag(help: "Do not boot the new VM to check that vphoned answers")
     var skipFirstBoot = false
+    @OptionGroup(title: "Template slimming") var slimming: VPhoneTemplateSlimmingOptions
     @Flag(
         name: .customLong("keep-artifacts"),
         help: "Keep the prepared restore tree after installation. Downloaded IPSWs always stay in the IPSW cache.",
@@ -69,6 +79,10 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         if template != nil, noTemplate {
             throw ValidationError("--template and --no-template exclude each other.")
         }
+        if noTemplate, try !slimming.request.isEmpty {
+            throw ValidationError("The slimming switches shape a template; --no-template builds the VM without one.")
+        }
+        _ = try slimming.resolve()
         if template != nil {
             let firmware = [
                 ("--iphone-source", iphoneSource != nil),
@@ -140,8 +154,14 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
             verbosity: VPhoneVerbosity(count: verboseCount),
             keepArtifacts: keepArtifacts,
             template: templateUse,
-            templateRequest: VPhoneMachineTemplateRequest(device: device, patchPreset: preset, diskSizeGB: diskSize),
+            templateRequest: VPhoneMachineTemplateRequest(
+                device: device,
+                patchPreset: preset,
+                diskSizeGB: diskSize,
+                slimming: slimming.request.isEmpty ? nil : slimming.resolve(),
+            ),
             skipsFirstBoot: skipFirstBoot,
+            slimming: slimming.resolve(),
         ))
     }
 }

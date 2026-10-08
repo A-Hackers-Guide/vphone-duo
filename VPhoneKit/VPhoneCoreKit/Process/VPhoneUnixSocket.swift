@@ -18,8 +18,38 @@ public enum VPhoneUnixSocket {
         case connect(Int32)
     }
 
-    /// A connected descriptor, which the caller closes.
+    /// A connected descriptor, which the caller closes. A path too long for
+    /// `sun_path` is reached through ``withAddressablePath(_:_:)``.
     public static func connect(to path: String) -> Result<Int32, ConnectError> {
+        withAddressablePath(path) { connectDirectly(to: $0) }
+    }
+
+    /// The bytes `sun_path` holds, terminating NUL included.
+    public static let maximumPathLength = MemoryLayout.size(ofValue: sockaddr_un().sun_path)
+
+    /// Runs `body` with a path to the socket file at `path` that fits
+    /// `sun_path`: `path` itself when it does, otherwise the same file reached
+    /// through a symbolic link to its folder, in a private (0700) folder under
+    /// `/tmp` that is removed afterwards. The kernel follows the link, so a
+    /// socket bound or connected through it is the one at `path`. A template
+    /// being built lives deep in `.templates/.building-…/`, past the 104 bytes.
+    /// When no such folder can be made, `body` gets `path` and fails as before.
+    public static func withAddressablePath<T>(_ path: String, _ body: (String) throws -> T) rethrows -> T {
+        guard path.utf8CString.count > maximumPathLength else { return try body(path) }
+        var template = Array("/tmp/vphone.XXXXXX".utf8CString)
+        guard let created = mkdtemp(&template) else { return try body(path) }
+        let folder = String(cString: created)
+        let link = folder + "/d"
+        let target = (path as NSString).deletingLastPathComponent
+        defer {
+            unlink(link)
+            rmdir(folder)
+        }
+        guard symlink(target, link) == 0 else { return try body(path) }
+        return try body(link + "/" + (path as NSString).lastPathComponent)
+    }
+
+    private static func connectDirectly(to path: String) -> Result<Int32, ConnectError> {
         let bytes = path.utf8CString
         var address = sockaddr_un()
         guard bytes.count <= MemoryLayout.size(ofValue: address.sun_path) else {

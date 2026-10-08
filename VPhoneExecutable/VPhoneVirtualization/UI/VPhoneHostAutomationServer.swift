@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import ImageIO
+import VPhoneCoreKit
 
 // MARK: - Host Control Socket
 
@@ -109,27 +110,31 @@ class VPhoneHostAutomationServer {
             return
         }
 
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        let pathBytes = socketPath.utf8CString
-        guard pathBytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else {
-            print("[hostctl] socket path too long")
-            close(fd)
-            return
-        }
-        withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
-            ptr.withMemoryRebound(to: CChar.self, capacity: pathBytes.count) { dst in
-                for (i, byte) in pathBytes.enumerated() {
-                    dst[i] = byte
+        // A machine deep in the library (a template being built) has a path
+        // longer than sun_path; it is bound through a short link to its folder.
+        let bindResult: Int32? = VPhoneUnixSocket.withAddressablePath(socketPath) { path in
+            var addr = sockaddr_un()
+            addr.sun_family = sa_family_t(AF_UNIX)
+            let pathBytes = path.utf8CString
+            guard pathBytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else { return nil }
+            withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
+                ptr.withMemoryRebound(to: CChar.self, capacity: pathBytes.count) { dst in
+                    for (i, byte) in pathBytes.enumerated() {
+                        dst[i] = byte
+                    }
+                }
+            }
+            let addrLen = socklen_t(MemoryLayout<sockaddr_un>.size)
+            return withUnsafePointer(to: &addr) { ptr in
+                ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
+                    bind(fd, sockPtr, addrLen)
                 }
             }
         }
-
-        let addrLen = socklen_t(MemoryLayout<sockaddr_un>.size)
-        let bindResult = withUnsafePointer(to: &addr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                bind(fd, sockPtr, addrLen)
-            }
+        guard let bindResult else {
+            print("[hostctl] socket path too long")
+            close(fd)
+            return
         }
         guard bindResult == 0 else {
             print("[hostctl] bind failed: \(String(cString: strerror(errno)))")

@@ -17,6 +17,7 @@ public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
     /// down cleanly.
     public var setupDone: Bool
     public var serviceProfile: String
+    public var serviceGroups: [String]
     public var removedApps: [String]
     public var trimTier: String
 
@@ -24,12 +25,14 @@ public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
         snapshotDeleted: Bool = false,
         setupDone: Bool = false,
         serviceProfile: String = "none",
+        serviceGroups: [String] = [],
         removedApps: [String] = [],
         trimTier: String = "none",
     ) {
         self.snapshotDeleted = snapshotDeleted
         self.setupDone = setupDone
         self.serviceProfile = serviceProfile
+        self.serviceGroups = Array(Set(serviceGroups)).sorted()
         self.removedApps = Array(Set(removedApps)).sorted()
         self.trimTier = trimTier
     }
@@ -40,6 +43,7 @@ public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
             trimTier: trimTier,
             setupBoot: setupDone,
             serviceProfile: serviceProfile,
+            serviceGroups: serviceGroups,
             removedApps: removedApps,
         )
     }
@@ -48,6 +52,7 @@ public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
         case snapshotDeleted = "SnapshotDeleted"
         case setupDone = "SetupDone"
         case serviceProfile = "ServiceProfile"
+        case serviceGroups = "ServiceGroups"
         case removedApps = "RemovedApps"
         case trimTier = "TrimTier"
     }
@@ -57,6 +62,7 @@ public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
         snapshotDeleted = try container.decodeIfPresent(Bool.self, forKey: .snapshotDeleted) ?? false
         setupDone = try container.decodeIfPresent(Bool.self, forKey: .setupDone) ?? false
         serviceProfile = try container.decodeIfPresent(String.self, forKey: .serviceProfile) ?? "none"
+        serviceGroups = try container.decodeIfPresent([String].self, forKey: .serviceGroups) ?? []
         removedApps = try container.decodeIfPresent([String].self, forKey: .removedApps) ?? []
         trimTier = try container.decodeIfPresent(String.self, forKey: .trimTier) ?? "none"
     }
@@ -227,6 +233,11 @@ public struct VPhoneMachineTemplateBuild: Sendable {
     public let identifier: String
     /// `.templates/.building-<identifier>-<uuid>`.
     public let stagingURL: URL
+
+    public init(identifier: String, stagingURL: URL) {
+        self.identifier = identifier
+        self.stagingURL = stagingURL
+    }
     /// The library the machine folder is created in: the staging folder.
     public var library: VPhoneLibrary {
         VPhoneLibrary(root: stagingURL)
