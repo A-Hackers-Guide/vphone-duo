@@ -200,14 +200,17 @@ How it runs, without root:
    template or a folder directly in `.templates`, and a machine with a
    `TemplateSource.plist` (its blocks are the template's; deleting files would
    free nothing).
-2. `hdiutil attach -nomount -imagekey diskimage-class=CRawDiskImage Disk.img`
-   (`Disk.img` must be a regular single-link file, owned by the invoking user
-   under sudo).
-3. The `Apple_APFS` partition from the attach output, its
-   `APFSContainerReference` from `diskutil info -plist`, and the one volume
-   whose `Roles` contain `System` from `diskutil apfs list -plist`, after
-   checking the container's physical store is that partition. No slice
-   numbers.
+2. `diskutil image attach -noMount Disk.img` (`Disk.img` must be a regular
+   single-link file, owned by the invoking user under sudo). `diskutil` takes
+   no image-class key and needs none: it attaches the headerless image as raw
+   and, with `-noMount`, mounts none of its volumes. A failed attach is read
+   for a device all the same, and one is ejected.
+3. The `Apple_APFS` partition from the attach output (`<device>\t<content>`
+   lines; the synthesized container's `Apple_APFS_Container` and
+   `Apple_APFS_Volume` lines are skipped), its `APFSContainerReference`
+   from `diskutil info -plist`, and the one volume whose `Roles` contain
+   `System` from `diskutil apfs list -plist`, after checking the
+   container's physical store is that partition. No slice numbers.
 4. `diskutil mount -mountOptions nosuid,nodev,noowners,nobrowse -mountPoint
    <mkdtemp 0700 folder in /private/var/tmp>/system <volume>`. A user who
    attached the image may mount it this way; as root it works the same.
@@ -218,8 +221,9 @@ How it runs, without root:
    link at the leaf is deleted as a link, and each target must pass
    `VPhoneSystemTrimSpec.permits` first. Bytes removed are the `st_blocks` of
    what went, a second hard link counting as nothing; each entry is logged.
-7. Unmount (`force` as a fallback) and detach (`-force` as a fallback) on
-   every way out, then record `Steps.TrimTier`.
+7. Unmount (`force` as a fallback) and `diskutil eject` the image's disk (a
+   forced `diskutil unmountDisk` and a second eject as the fallback, the form
+   macOS 15 also accepts) on every way out, then record `Steps.TrimTier`.
 
 ### The snapshot dependency
 

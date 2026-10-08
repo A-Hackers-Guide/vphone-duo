@@ -5,7 +5,7 @@ import Testing
 
 /// The offline trim of a template's System volume: the tier lists, the path
 /// rules, applying a trim to a folder laid out like the volume, and reading
-/// the disk layout from `hdiutil` and `diskutil` output.
+/// the disk layout from `diskutil image attach` and `diskutil` output.
 struct SystemTrimTests {
     // MARK: - Lists
 
@@ -288,16 +288,24 @@ struct SystemTrimTests {
 
     // MARK: - Disk layout
 
-    @Test func `the attached disk and its APFS store come from hdiutil output`() {
-        let output = """
-        /dev/disk6          \tGUID_partition_scheme          \t
-        /dev/disk6s1        \tApple_APFS                     \t
-        /dev/disk7          \tEF57347C-0000-11AA-AA11-0030654\t
-        /dev/disk7s1        \t41504653-0000-11AA-AA11-0030654\t
-        """
+    @Test func `the attached disk and its APFS store come from diskutil image attach output`() {
+        // `diskutil image attach -noMount` of a guest Disk.img on macOS 27.0.1,
+        // byte for byte: the image's disk first, then the synthesized container.
+        let output = "/dev/disk8  \tGUID_partition_scheme\n/dev/disk8s1\tApple_APFS\n"
+            + "/dev/disk9  \tApple_APFS_Container\n"
+            + (1 ... 7).map { "/dev/disk9s\($0)\tApple_APFS_Volume\n" }.joined()
         let disks = VPhoneGuestDiskLayout.attachedDisks(fromAttachOutput: output)
-        #expect(disks.wholeDisk == "disk6")
-        #expect(disks.store == "disk6s1")
+        #expect(disks.wholeDisk == "disk8")
+        #expect(disks.store == "disk8s1")
+        // The container's lines first, as `hdiutil attach` printed them on
+        // macOS 27, still give the image's own disk.
+        let containerFirst = "/dev/disk9  \tApple_APFS_Container\n/dev/disk9s1\tApple_APFS_Volume\n"
+            + "/dev/disk8  \tGUID_partition_scheme\n/dev/disk8s1\tApple_APFS\n"
+        let reordered = VPhoneGuestDiskLayout.attachedDisks(fromAttachOutput: containerFirst)
+        #expect(reordered.wholeDisk == "disk8")
+        #expect(reordered.store == "disk8s1")
+        // Without the partition-scheme line the store's parent is the disk.
+        #expect(VPhoneGuestDiskLayout.attachedDisks(fromAttachOutput: "/dev/disk8s1\tApple_APFS\n").wholeDisk == "disk8")
         #expect(VPhoneGuestDiskLayout.attachedDisks(fromAttachOutput: "").wholeDisk == nil)
         #expect(VPhoneGuestDiskLayout.isDeviceName("disk12s3"))
         #expect(!VPhoneGuestDiskLayout.isDeviceName("/dev/disk1"))

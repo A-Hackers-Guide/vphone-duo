@@ -4,10 +4,10 @@ import Foundation
 import VPhoneCoreKit
 
 /// Offline trim of a stopped machine's guest System volume: attach its
-/// `Disk.img` without mounting, find the System-role volume, mount it
-/// read-write inside a private folder, delete the trim's entries
-/// (``VPhoneSystemTrimSpec/apply(to:log:)``), unmount and detach, then record
-/// the trim in the machine's `Template.plist` steps.
+/// `Disk.img` without mounting (`diskutil image attach -noMount`), find the
+/// System-role volume, mount it read-write inside a private folder, delete
+/// the trim's entries (``VPhoneSystemTrimSpec/apply(to:log:)``), unmount and
+/// eject, then record the trim in the machine's `Template.plist` steps.
 ///
 /// Root is not needed: an image attached by a user mounts for that user
 /// with `noowners`. A template build under sudo runs it as root all the
@@ -113,22 +113,24 @@ enum VPhoneMachineTemplateTrimmer {
             throw ValidationError("Cannot create \(mountPoint.path): \(String(cString: strerror(errno)))")
         }
 
-        let attached = try tool(
-            "/usr/bin/hdiutil",
-            ["attach", "-nomount", "-imagekey", "diskimage-class=CRawDiskImage", disk.path],
+        // `diskutil image attach` has no image-class key; it reads a headerless
+        // `Disk.img` as a raw image by itself. A failed attach can still leave
+        // a device, so its output is read before its exit status.
+        let attach = try VPhoneProcessRunner.runCapturing(
+            URL(fileURLWithPath: "/usr/sbin/diskutil"), ["image", "attach", "-noMount", disk.path],
         )
+        let attached = attach.stdout
         let disks = VPhoneGuestDiskLayout.attachedDisks(fromAttachOutput: attached)
-        guard let whole = disks.wholeDisk, VPhoneGuestDiskLayout.isDeviceName(whole) else {
-            if let range = attached.range(of: #"/dev/disk[0-9]+"#, options: .regularExpression) {
-                _ = try? tool("/usr/bin/hdiutil", ["detach", "-force", String(attached[range])])
-            }
-            throw VPhoneSystemTrimError.layout("hdiutil attached no disk image")
+        guard attach.succeeded, let whole = disks.wholeDisk, VPhoneGuestDiskLayout.isDeviceName(whole) else {
+            let leftover = disks.wholeDisk.flatMap { VPhoneGuestDiskLayout.isDeviceName($0) ? $0 : nil }
+                ?? attached.range(of: #"/dev/disk[0-9]+"#, options: .regularExpression).map { String(attached[$0]) }
+            if let leftover { eject(leftover) }
+            let detail = attach.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw VPhoneSystemTrimError.layout(attach.succeeded
+                ? "diskutil attached no disk image"
+                : "diskutil image attach failed (\(attach.exitCode)): \(detail)")
         }
-        defer {
-            if (try? tool("/usr/bin/hdiutil", ["detach", whole])) == nil {
-                _ = try? tool("/usr/bin/hdiutil", ["detach", "-force", whole])
-            }
-        }
+        defer { eject(whole) }
         guard let store = disks.store, VPhoneGuestDiskLayout.isDeviceName(store) else {
             throw VPhoneSystemTrimError.layout("the image on \(whole) has no APFS partition")
         }
@@ -162,14 +164,29 @@ enum VPhoneMachineTemplateTrimmer {
         }
     }
 
+    /// `diskutil eject`, and when that fails (a volume still busy), a forced
+    /// `unmountDisk` and a second eject: the `diskutil` form of `hdiutil
+    /// detach -force` that macOS 15 also accepts.
+    private static func eject(_ device: String) {
+        if (try? tool("/usr/sbin/diskutil", ["eject", device])) == nil {
+            _ = try? tool("/usr/sbin/diskutil", ["unmountDisk", "force", device])
+            _ = try? tool("/usr/sbin/diskutil", ["eject", device])
+        }
+    }
+
     /// A fresh 0700 folder under `/private/var/tmp`, named by `mkdtemp` so it
     /// cannot be predicted or claimed beforehand.
     private static func makeWorkDirectory() throws -> URL {
         var template = Array("/private/var/tmp/vphone-trim.XXXXXXXX".utf8CString)
-        guard let made = mkdtemp(&template) else {
+        // Read the name while the buffer mkdtemp returns a pointer into is
+        // still pinned; `&template` lends one that ends with the call (#628).
+        let made = template.withUnsafeMutableBufferPointer { buffer in
+            mkdtemp(buffer.baseAddress!).map { String(cString: $0) }
+        }
+        guard let made else {
             throw ValidationError("Cannot create a work folder in /private/var/tmp: \(String(cString: strerror(errno)))")
         }
-        return URL(fileURLWithPath: String(cString: made), isDirectory: true)
+        return URL(fileURLWithPath: made, isDirectory: true)
     }
 
     @discardableResult

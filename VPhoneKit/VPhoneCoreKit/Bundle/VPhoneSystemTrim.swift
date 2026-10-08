@@ -406,13 +406,15 @@ public extension VPhoneSystemTrim {
 
 // MARK: - Disk layout
 
-/// Reading `hdiutil attach` and `diskutil` output to find a guest image's
-/// System volume by its APFS role, not by slice number.
+/// Reading `diskutil image attach` and `diskutil` output to find a guest
+/// image's System volume by its APFS role, not by slice number.
 public enum VPhoneGuestDiskLayout {
     /// The attached image's whole disk and its APFS physical store, from
-    /// `hdiutil attach -nomount` output (`/dev/disk6  GUID_partition_scheme`,
-    /// `/dev/disk6s1  Apple_APFS`, and on macOS 27 the synthesized
-    /// container's own lines, which are neither).
+    /// `diskutil image attach -noMount` output: one `<device>\t<content>` line
+    /// per device (`/dev/disk8  \tGUID_partition_scheme`,
+    /// `/dev/disk8s1\tApple_APFS`), then the synthesized container's own
+    /// lines (`Apple_APFS_Container`, `Apple_APFS_Volume`), which are neither
+    /// and may also come first.
     public static func attachedDisks(fromAttachOutput output: String) -> (wholeDisk: String?, store: String?) {
         let devices = output.split(whereSeparator: \.isNewline).compactMap { line -> (device: String, type: String)? in
             let fields = line.split(whereSeparator: \.isWhitespace)
