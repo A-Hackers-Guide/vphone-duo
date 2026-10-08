@@ -12,6 +12,7 @@ final class VPhoneLaunchpadModel {
         case hostSetup
         case coreBundle
         case bundleInstall
+        case ipswCache
 
         var id: Self {
             self
@@ -22,6 +23,7 @@ final class VPhoneLaunchpadModel {
             case .hostSetup: String(localized: "Host Setup")
             case .coreBundle: String(localized: "Core Bundle")
             case .bundleInstall: String(localized: "Core Bundle Install")
+            case .ipswCache: String(localized: "Downloaded IPSWs")
             }
         }
     }

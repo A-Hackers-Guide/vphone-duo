@@ -26,7 +26,9 @@ struct VPhoneLaunchpadApp: App {
         // Nor is any saved: the window's frame is kept under its own name.
         .restorationBehavior(.disabled)
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                Button("Downloaded IPSWs…") { model.present(.ipswCache) }
+            }
             CommandGroup(after: .appSettings) {
                 Button("Host Setup…") { model.present(.hostSetup) }
                 Button("Core Bundle…") { model.present(.coreBundle) }

@@ -39,6 +39,8 @@ struct VPhoneLaunchpadRootView: View {
                         VPhoneLaunchpadCoreBundleView()
                     case .bundleInstall:
                         VPhoneLaunchpadInstallView()
+                    case .ipswCache:
+                        VPhoneLaunchpadIPSWCacheView()
                     }
                 }
                 .environment(model)

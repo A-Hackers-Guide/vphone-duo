@@ -141,6 +141,10 @@
                 }
                 await sheet(.export([labMachine]), "11-export", suffix)
                 await sheet(.console(path("research-01")), "12-console", suffix)
+                ipswSelection = ipswScan.ipsws[1].id
+                await panel(model, .ipswCache, "13-downloaded-ipsws", suffix)
+                ipswSelection = ipswScan.ipsws[0].id
+                await panel(model, .ipswCache, "13a-downloaded-ipsws-in-use", suffix)
             }
             NSApp.terminate(nil)
         }
@@ -324,6 +328,42 @@
             """
             return try? JSONDecoder().decode(VPhoneLaunchpadFirmwareCatalog.self, from: Data(json.utf8))
         }()
+
+        /// Stands in for the IPSW cache: the creation's source, IPSWs the
+        /// restored machines were made from, and one nothing uses.
+        static let ipswScan: VPhoneLaunchpadIPSWCache.Scan = {
+            let base = "https://updates.cdn-apple.com/example"
+            let cache = VPhoneLaunchpadIPSWCache.sharedDirectory
+            func file(_ source: String, _ size: Int64, facts: VPhoneLaunchpadIPSW? = nil) -> VPhoneLaunchpadIPSWFile {
+                let name = VPhoneLaunchpadIPSW.cacheName(for: URL(string: source)!)
+                return VPhoneLaunchpadIPSWFile(
+                    url: cache.appendingPathComponent(name),
+                    name: name,
+                    size: size,
+                    facts: facts ?? VPhoneLaunchpadIPSW(fileName: name),
+                    isDownloading: false,
+                )
+            }
+            let cloudOS = VPhoneLaunchpadIPSW(
+                version: "26.4", build: "23E224", productTypes: [],
+                deviceClasses: ["vresearch101ap", "vphone600ap"], fromManifest: true,
+            )
+            var scan = VPhoneLaunchpadIPSWCache.Scan(cacheDirectories: [cache])
+            scan.ipsws = [
+                file(creationOptions.iphoneSource, 9_835_120_455),
+                file("\(base)/iPhone17,3_26.6.2_23G90_Restore.ipsw", 9_612_301_228),
+                file("\(base)/iPhone17,3_26.4.2_23E261_Restore.ipsw", 9_401_877_310),
+                file("\(base)/iPad16,1,iPad16,2_26.6.2_23G90_Restore.ipsw", 8_903_455_119),
+                file(creationOptions.cloudOSSource, 14_220_648_901, facts: cloudOS),
+            ]
+            for machine in machines {
+                scan.productTypes[machine.path.url.path] = "iPhone17,3"
+            }
+            return scan
+        }()
+
+        /// The row the Downloaded IPSWs sheet opens with selected.
+        static var ipswSelection: String?
 
         static let creationOptions = VPhoneLaunchpadCreationPipeline.Options(
             name: "ios27-rc",
