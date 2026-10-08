@@ -17,8 +17,8 @@ import VPhonePatchKit
 
 @Suite("Bundled patch set catalogue")
 struct FirmwarePatchSetCatalogTests {
-    @Test func `Gyroscope follows selection and its deployment target`() throws {
-        let identifier = FirmwareGuestSystemPatchSet.gyroscope
+    @Test(arguments: [FirmwareGuestSystemPatchSet.gyroscope, FirmwareGuestSystemPatchSet.attitude])
+    func `Motion sensors follow selection and their deployment target`(identifier: String) throws {
         for base in ["18.6.2", "26.4", "27.0.1"] {
             let plan = try VPhonePatchPlan.resolve(
                 preset: FirmwarePatchSetCatalog.standardPreset,

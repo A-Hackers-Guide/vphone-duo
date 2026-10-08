@@ -19,6 +19,7 @@ extension GuestAPI {
             executeTimeZone,
             executeAudioLatency,
             executeGyroscope,
+            executeAttitude,
         ]
         for area in areas {
             if let result = try area(method, params) {

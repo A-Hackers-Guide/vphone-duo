@@ -154,6 +154,7 @@ static int vpExecve(const char *path, char *const argv[], char *const envp[]) {
 #define VP_CAMERA_DAEMON_HOOK "/usr/lib/libvcamcaptured.dylib"
 #define VP_CAMERA_APP_HOOK "/usr/lib/libcamfix.dylib"
 #define VP_GYROSCOPE_HOOK "/usr/lib/libvphonegyro.dylib"
+#define VP_ATTITUDE_HOOK "/usr/lib/libvphoneattitude.dylib"
 #define VP_AVFOUNDATION "/System/Library/Frameworks/AVFoundation.framework/AVFoundation"
 // The haptics fix rides the same route and needs no loader of its own. See
 // HapticsFix/libhapticsfix.c for what it answers and why SpringBoard is the
@@ -257,6 +258,8 @@ __attribute__((constructor)) static void vpLogProcess(void) {
     // above, so background AuthKit auth is untouched).
     if (vpIsAppPath(path))
         vpLoadLibrary("signin-fix", VP_SIGNIN_FIX);
+    if (vpIsAppPath(path))
+        vpLoadLibrary("attitude-hook", VP_ATTITUDE_HOOK);
     if (vpIsAppPath(path) && dlopen(VP_AVFOUNDATION, RTLD_LAZY | RTLD_NOLOAD))
         vpLoadLibrary("camera-hook", VP_CAMERA_APP_HOOK);
     const char *root = getenv("VPHONE_JB_ROOT");

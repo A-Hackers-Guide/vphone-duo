@@ -253,6 +253,19 @@
 > platform capability gate and optional IMU match still require guest proof.
 > Reveal evidence and manual acceptance: `Research/Guest/virtual_gyroscope.md`.
 
+> **Device attitude (2026-10-08; guest acceptance pending):**
+> `system-apps-cfw-attitude` in Guest System is selected by both presets on
+> iOS 18+. It adds `/usr/lib/libvphoneattitude.dylib`, loaded by SystemHook
+> into apps, with no system executable, kernel or DSC byte change. Public
+> CMMotionManager methods supply a stationary XArbitraryZVertical pose through
+> polling/callbacks. vphoned persists degrees and publishes one packed Darwin
+> notify state; apps receive radians, quaternion, matrix and matching gravity.
+> Disabling restores the native path; removing the library and relaunching apps
+> reverts injection. Live sync cannot reinstall an absent selected library.
+> Native host subscription tests and guest cross-compilation passed;
+> manual guest acceptance remains.
+> Contract and validation: `Research/Guest/virtual_attitude.md`.
+
 > **Current launchd hook (2026-09-25; isolated VM verification):**
 > `cfw install` now places `launchdhook-vphone.dylib` and a diagnostic
 > `SystemHook-vphone.dylib` in `/usr/lib`, links `/vh` to the launchd hook,

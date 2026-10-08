@@ -1,0 +1,279 @@
+#import "VPhoneAttitudeSample.h"
+#import "VPhoneAttitudeMotionManager.h"
+#import <objc/runtime.h>
+#include <notify.h>
+
+// MARK: - Shared configuration
+
+static NSRecursiveLock *configurationLock;
+static NSHashTable *sessions;
+static VPhoneAttitudeState configuration;
+static int notificationToken;
+static char sessionKey;
+
+static VPhoneAttitudeState VPhoneCurrentAttitude(void) {
+    [configurationLock lock];
+    VPhoneAttitudeState value = configuration;
+    [configurationLock unlock];
+    return value;
+}
+
+// Preserve the actual implementations, including calls they make to each other.
+static void (*startPolling)(id, SEL);
+static void (*startFramePolling)(id, SEL, CMAttitudeReferenceFrame);
+static void (*startCallback)(id, SEL, NSOperationQueue *, CMDeviceMotionHandler);
+static void (*startFrameCallback)(id, SEL, CMAttitudeReferenceFrame, NSOperationQueue *, CMDeviceMotionHandler);
+static void (*stopUpdates)(id, SEL);
+static void (*setInterval)(id, SEL, NSTimeInterval);
+static BOOL (*isAvailable)(id, SEL);
+static BOOL (*isActive)(id, SEL);
+static CMDeviceMotion *(*getMotion)(id, SEL);
+static CMAttitudeReferenceFrame (*getFrame)(id, SEL);
+static CMAttitudeReferenceFrame (*availableFrames)(id, SEL);
+
+@interface VPhoneAttitudeSession : NSObject
+@property (nonatomic, weak) id<VPhoneAttitudeMotionManager> manager;
+@property (nonatomic, strong) NSOperationQueue *deliveryQueue;
+@property (nonatomic, copy) CMDeviceMotionHandler handler;
+@property (nonatomic, strong) dispatch_source_t timer;
+@property (nonatomic, strong) CMDeviceMotion *latest;
+@property (nonatomic) CMAttitudeReferenceFrame frame;
+@property (nonatomic) BOOL active;
+@property (nonatomic) BOOL nativeActive;
+@property (nonatomic) BOOL invokingNative;
+@property (nonatomic) NSUInteger generation;
+@property (nonatomic, strong) NSNumber *queuedGeneration;
+- (void)refresh;
+- (void)reschedule;
+- (void)stop;
+@end
+
+@implementation VPhoneAttitudeSession
+- (BOOL)simulating {
+    return self.active && self.frame == CMAttitudeReferenceFrameXArbitraryZVertical && VPhoneCurrentAttitude().enabled;
+}
+- (void)reschedule {
+    @synchronized (self) {
+        double interval = self.manager.deviceMotionUpdateInterval;
+        if (!isfinite(interval) || interval <= 0) interval = 1.0 / 60;
+        uint64_t period = (uint64_t)(fmax(0.005, fmin(1, interval)) * NSEC_PER_SEC);
+        if (self.timer) dispatch_source_set_timer(self.timer, DISPATCH_TIME_NOW, period, NSEC_PER_MSEC);
+    }
+}
+- (void)tick {
+    @synchronized (self) {
+        if (![self simulating]) return;
+        self.latest = [[VPhoneAttitudeSample alloc] initWithState:VPhoneCurrentAttitude()
+            timestamp:NSProcessInfo.processInfo.systemUptime];
+        if (!self.handler || self.queuedGeneration) return;
+        NSUInteger generation = self.generation;
+        self.queuedGeneration = @(generation);
+        __weak VPhoneAttitudeSession *weakSelf = self;
+        [self.deliveryQueue addOperationWithBlock:^{
+            VPhoneAttitudeSession *session = weakSelf;
+            // Recheck on the app's queue: stop/restart/disable invalidates
+            // callbacks waiting behind a suspended or slow operation queue.
+            CMDeviceMotionHandler handler;
+            CMDeviceMotion *sample;
+            @synchronized (session) {
+                if (session.queuedGeneration.unsignedIntegerValue == generation) session.queuedGeneration = nil;
+                if (session.generation != generation || ![session simulating]) return;
+                handler = session.handler;
+                sample = session.latest;
+            }
+            if (handler) handler(sample, nil);
+        }];
+    }
+}
+- (void)refresh {
+    @synchronized (self) {
+        id<VPhoneAttitudeMotionManager> manager = self.manager;
+        if (!self.active || !manager) return;
+        BOOL needsNative = ![self simulating];
+        if (needsNative == self.nativeActive) return;
+        self.generation++;
+        self.queuedGeneration = nil;
+        self.latest = nil;
+        self.invokingNative = YES;
+        if (needsNative) {
+            if (self.handler) {
+                NSUInteger generation = self.generation;
+                __weak VPhoneAttitudeSession *weakSelf = self;
+                startFrameCallback(manager, @selector(startDeviceMotionUpdatesUsingReferenceFrame:toQueue:withHandler:),
+                    self.frame, self.deliveryQueue, ^(CMDeviceMotion *sample, NSError *error) {
+                        VPhoneAttitudeSession *session = weakSelf;
+                        CMDeviceMotionHandler handler;
+                        @synchronized (session) {
+                            if (!session.active || session.generation != generation || [session simulating]) return;
+                            handler = session.handler;
+                        }
+                        if (handler) handler(sample, error);
+                    });
+            } else {
+                startFramePolling(manager, @selector(startDeviceMotionUpdatesUsingReferenceFrame:), self.frame);
+            }
+        } else {
+            stopUpdates(manager, @selector(stopDeviceMotionUpdates));
+        }
+        self.nativeActive = needsNative;
+        self.invokingNative = NO;
+    }
+}
+- (void)startWithFrame:(CMAttitudeReferenceFrame)frame queue:(NSOperationQueue *)queue handler:(CMDeviceMotionHandler)handler {
+    @synchronized (self) {
+        [self stop];
+        self.frame = frame;
+        self.deliveryQueue = queue;
+        self.handler = handler;
+        self.active = YES;
+        // A timer also caches polling samples at the requested interval.
+        self.timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
+            dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0));
+        __weak VPhoneAttitudeSession *weakSelf = self;
+        dispatch_source_set_event_handler(self.timer, ^{ @autoreleasepool { [weakSelf tick]; } });
+        [self reschedule];
+        dispatch_resume(self.timer);
+        [self refresh];
+        [self tick];
+    }
+}
+- (void)stop {
+    @synchronized (self) {
+        self.active = NO;
+        self.generation++;
+        self.queuedGeneration = nil;
+        if (self.timer) dispatch_source_cancel(self.timer);
+        self.timer = nil;
+        self.latest = nil;
+        self.handler = nil;
+        self.deliveryQueue = nil;
+        self.invokingNative = YES;
+        stopUpdates(self.manager, @selector(stopDeviceMotionUpdates));
+        self.invokingNative = NO;
+        self.nativeActive = NO;
+    }
+}
+- (void)dealloc { if (_timer) dispatch_source_cancel(_timer); }
+@end
+
+static VPhoneAttitudeSession *VPhoneSession(id<VPhoneAttitudeMotionManager> manager) {
+    @synchronized (manager) {
+        VPhoneAttitudeSession *session = objc_getAssociatedObject(manager, &sessionKey);
+        if (!session) {
+            session = [VPhoneAttitudeSession new];
+            session.manager = manager;
+            objc_setAssociatedObject(manager, &sessionKey, session, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            [configurationLock lock];
+            [sessions addObject:session];
+            [configurationLock unlock];
+        }
+        return session;
+    }
+}
+
+// MARK: - CMMotionManager public entry points
+
+static void VPhoneStart(id manager, SEL selector) {
+    VPhoneAttitudeSession *session = VPhoneSession(manager);
+    @synchronized (session) {
+        if (session.invokingNative) { startPolling(manager, selector); return; }
+        [session startWithFrame:CMAttitudeReferenceFrameXArbitraryZVertical queue:nil handler:nil];
+    }
+}
+static void VPhoneStartFrame(id manager, SEL selector, CMAttitudeReferenceFrame frame) {
+    VPhoneAttitudeSession *session = VPhoneSession(manager);
+    @synchronized (session) {
+        if (session.invokingNative) { startFramePolling(manager, selector, frame); return; }
+        [session startWithFrame:frame queue:nil handler:nil];
+    }
+}
+static void VPhoneStartCallback(id manager, SEL selector, NSOperationQueue *queue, CMDeviceMotionHandler handler) {
+    VPhoneAttitudeSession *session = VPhoneSession(manager);
+    @synchronized (session) {
+        if (session.invokingNative) { startCallback(manager, selector, queue, handler); return; }
+        [session startWithFrame:CMAttitudeReferenceFrameXArbitraryZVertical queue:queue handler:handler];
+    }
+}
+static void VPhoneStartFrameCallback(id manager, SEL selector, CMAttitudeReferenceFrame frame,
+                                     NSOperationQueue *queue, CMDeviceMotionHandler handler) {
+    VPhoneAttitudeSession *session = VPhoneSession(manager);
+    @synchronized (session) {
+        if (session.invokingNative) { startFrameCallback(manager, selector, frame, queue, handler); return; }
+        [session startWithFrame:frame queue:queue handler:handler];
+    }
+}
+static void VPhoneStop(id manager, SEL selector) {
+    VPhoneAttitudeSession *session = VPhoneSession(manager);
+    @synchronized (session) {
+        if (session.invokingNative) { stopUpdates(manager, selector); return; }
+        [session stop];
+    }
+}
+static void VPhoneInterval(id manager, SEL selector, NSTimeInterval value) {
+    VPhoneAttitudeSession *session = VPhoneSession(manager);
+    @synchronized (session) { setInterval(manager, selector, value); [session reschedule]; }
+}
+static BOOL VPhoneAvailable(id manager, SEL selector) {
+    return VPhoneCurrentAttitude().enabled || isAvailable(manager, selector);
+}
+static BOOL VPhoneActive(id manager, SEL selector) {
+    VPhoneAttitudeSession *session = VPhoneSession(manager);
+    @synchronized (session) { return [session simulating] || isActive(manager, selector); }
+}
+static CMDeviceMotion *VPhoneMotion(id manager, SEL selector) {
+    VPhoneAttitudeSession *session = VPhoneSession(manager);
+    @synchronized (session) { return [session simulating] ? session.latest : getMotion(manager, selector); }
+}
+static CMAttitudeReferenceFrame VPhoneFrame(id manager, SEL selector) {
+    VPhoneAttitudeSession *session = VPhoneSession(manager);
+    @synchronized (session) { return [session simulating] ? session.frame : getFrame(manager, selector); }
+}
+static CMAttitudeReferenceFrame VPhoneFrames(id manager, SEL selector) {
+    CMAttitudeReferenceFrame frames = availableFrames(manager, selector);
+    return VPhoneCurrentAttitude().enabled ? frames | CMAttitudeReferenceFrameXArbitraryZVertical : frames;
+}
+
+static void VPhoneReadAttitude(void) {
+    uint64_t state = 0;
+    if (notify_get_state(notificationToken, &state) != NOTIFY_STATUS_OK) return;
+    [configurationLock lock];
+    configuration = VPhoneAttitudeUnpack(state);
+    NSArray *live = sessions.allObjects;
+    [configurationLock unlock];
+    for (VPhoneAttitudeSession *session in live) { [session refresh]; [session tick]; }
+}
+
+__attribute__((constructor)) static void VPhoneAttitudeInstall(void) {
+    @autoreleasepool {
+        configurationLock = [NSRecursiveLock new];
+        sessions = [NSHashTable weakObjectsHashTable];
+        dispatch_queue_t queue = dispatch_queue_create("com.vphone.motion.attitude", DISPATCH_QUEUE_SERIAL);
+        if (notify_register_dispatch(VP_ATTITUDE_NOTIFICATION, &notificationToken, queue,
+            ^(int token) { VPhoneReadAttitude(); }) != NOTIFY_STATUS_OK) return;
+        VPhoneReadAttitude();
+        Class cls = NSClassFromString(@"CMMotionManager");
+        // Validate the entire ABI before installing any part of the hook.
+        SEL selectors[] = {@selector(startDeviceMotionUpdates), @selector(startDeviceMotionUpdatesUsingReferenceFrame:),
+            @selector(startDeviceMotionUpdatesToQueue:withHandler:), @selector(startDeviceMotionUpdatesUsingReferenceFrame:toQueue:withHandler:),
+            @selector(stopDeviceMotionUpdates), @selector(setDeviceMotionUpdateInterval:), @selector(isDeviceMotionAvailable),
+            @selector(isDeviceMotionActive), @selector(deviceMotion), @selector(attitudeReferenceFrame)};
+        for (NSUInteger i = 0; i < sizeof(selectors)/sizeof(*selectors); i++)
+            if (!class_getInstanceMethod(cls, selectors[i])) return;
+        Method frames = class_getClassMethod(cls, @selector(availableAttitudeReferenceFrames));
+        if (!frames) return;
+#define VP_HOOK(methodName, replacement, original) \
+        original = (__typeof__(original))method_setImplementation(class_getInstanceMethod(cls, @selector(methodName)), (IMP)replacement)
+        VP_HOOK(startDeviceMotionUpdates, VPhoneStart, startPolling);
+        VP_HOOK(startDeviceMotionUpdatesUsingReferenceFrame:, VPhoneStartFrame, startFramePolling);
+        VP_HOOK(startDeviceMotionUpdatesToQueue:withHandler:, VPhoneStartCallback, startCallback);
+        VP_HOOK(startDeviceMotionUpdatesUsingReferenceFrame:toQueue:withHandler:, VPhoneStartFrameCallback, startFrameCallback);
+        VP_HOOK(stopDeviceMotionUpdates, VPhoneStop, stopUpdates);
+        VP_HOOK(setDeviceMotionUpdateInterval:, VPhoneInterval, setInterval);
+        VP_HOOK(isDeviceMotionAvailable, VPhoneAvailable, isAvailable);
+        VP_HOOK(isDeviceMotionActive, VPhoneActive, isActive);
+        VP_HOOK(deviceMotion, VPhoneMotion, getMotion);
+        VP_HOOK(attitudeReferenceFrame, VPhoneFrame, getFrame);
+#undef VP_HOOK
+        availableFrames = (__typeof__(availableFrames))method_setImplementation(frames, (IMP)VPhoneFrames);
+    }
+}

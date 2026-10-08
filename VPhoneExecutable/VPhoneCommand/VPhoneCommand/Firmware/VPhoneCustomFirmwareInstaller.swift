@@ -1004,11 +1004,12 @@ struct VPhoneCustomFirmwareInstaller {
         /// Whether the VM's plan (its guest half re-resolved from the current
         /// selection) turned this guest patch on. A VM with no plan gets every
         /// legacy patch, which is what it was restored with. New Settings-row
-        /// preferences and the gyroscope still require an explicit plan.
+        /// preferences and motion sensors still require an explicit plan.
         func on(_ identifier: String) -> Bool {
             guard let plan else {
                 return !FirmwareGuestSystemPatchSet.settingsRowPatches.contains(identifier)
                     && identifier != FirmwareGuestSystemPatchSet.gyroscope
+                    && identifier != FirmwareGuestSystemPatchSet.attitude
             }
             guard plan.isEnabled(identifier) else {
                 print("  [·] \(identifier): off in preset \(plan.presetIdentifier)")
@@ -1117,16 +1118,20 @@ struct VPhoneCustomFirmwareInstaller {
                 live.insert("system-launchdaemons-boot-environment")
             }
         }
-        isolate([FirmwareGuestSystemPatchSet.gyroscope]) {
-            let path = "usr/lib/libvphonegyro.dylib"
-            if on(FirmwareGuestSystemPatchSet.gyroscope) {
-                try system.replaceFile(path, fromFileAt: VPhoneGuestBinaries.resolve("libvphonegyro.dylib"),
-                                       mode: 0o755, owner: Self.guestOwner)
-                live.insert(FirmwareGuestSystemPatchSet.gyroscope)
-            } else {
-                // vphone owns this added file; removing it fully reverts the
-                // patch without modifying the original backboardd executable.
-                try system.removeItem(path)
+        for (identifier, library) in [
+            (FirmwareGuestSystemPatchSet.gyroscope, "libvphonegyro.dylib"),
+            (FirmwareGuestSystemPatchSet.attitude, "libvphoneattitude.dylib"),
+        ] {
+            isolate([identifier]) {
+                let path = "usr/lib/" + library
+                if on(identifier) {
+                    try system.replaceFile(path, fromFileAt: VPhoneGuestBinaries.resolve(library),
+                                           mode: 0o755, owner: Self.guestOwner)
+                    live.insert(identifier)
+                } else {
+                    // Removing vphone's added library reverts its injection.
+                    try system.removeItem(path)
+                }
             }
         }
 

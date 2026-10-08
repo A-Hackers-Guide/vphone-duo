@@ -22,6 +22,7 @@ extension GuestAPI {
         "libprefsfix.dylib",
         "libsigninfix.dylib",
         "libvphonegyro.dylib",
+        "libvphoneattitude.dylib",
     ]
     static let environmentStaging = "/var/root/Library/Caches/vphone-environment"
 
@@ -58,8 +59,8 @@ extension GuestAPI {
             guard environmentLibraries.contains(name) else {
                 throw GuestAPIError.invalidRequest("\(name) is not part of the vphone environment")
             }
-            if name == "libvphonegyro.dylib", !FileManager.default.fileExists(atPath: "/usr/lib/" + name) {
-                throw GuestAPIError.invalidRequest("Enable the gyroscope patch with cfw install or cfw update-environment first")
+            if ["libvphonegyro.dylib", "libvphoneattitude.dylib"].contains(name), !FileManager.default.fileExists(atPath: "/usr/lib/" + name) {
+                throw GuestAPIError.invalidRequest("Enable the motion sensor patch with cfw install or cfw update-environment first")
             }
             let staged = URL(fileURLWithPath: environmentStaging + "/" + name)
             guard let data = try? Data(contentsOf: staged, options: .mappedIfSafe) else {

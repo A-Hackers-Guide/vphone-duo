@@ -60,6 +60,8 @@ char *vp_usb_own_serial(void);
 /// The configured radians/second and the injected HID provider's heartbeat.
 NSDictionary *vp_gyro_get(void);
 BOOL vp_gyro_set(double x, double y, double z, bool enabled);
+NSDictionary *vp_attitude_get(void);
+BOOL vp_attitude_set(double roll, double pitch, double yaw, bool enabled);
 
 /// Snapshot-local nested accessibility tree, using actual private iOS child links.
 NSDictionary *vp_ax_hierarchy(int pid, int maxElements, int maxDepth, int timeoutMS);
