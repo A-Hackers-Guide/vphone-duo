@@ -37,8 +37,13 @@ public enum VPhoneUnixSocket {
     public static func withAddressablePath<T>(_ path: String, _ body: (String) throws -> T) rethrows -> T {
         guard path.utf8CString.count > maximumPathLength else { return try body(path) }
         var template = Array("/tmp/vphone.XXXXXX".utf8CString)
-        guard let created = mkdtemp(&template) else { return try body(path) }
-        let folder = String(cString: created)
+        // mkdtemp returns a pointer into the template, and `&template` lends
+        // only a buffer that ends with the call: read the name while it is
+        // still pinned.
+        let created = template.withUnsafeMutableBufferPointer { buffer in
+            mkdtemp(buffer.baseAddress!).map { String(cString: $0) }
+        }
+        guard let folder = created else { return try body(path) }
         let link = folder + "/d"
         let target = (path as NSString).deletingLastPathComponent
         defer {
