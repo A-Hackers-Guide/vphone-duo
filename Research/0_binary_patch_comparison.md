@@ -2840,3 +2840,12 @@ before deleting its temporary library instead of querying `hdiutil info`.
 `VPhone` bundle build and bundle admission pass on macOS 27.0.1 / Xcode 27.1.
 Real image attachment and execution on macOS 15 still require live validation;
 no VM disk is modified by the validation tests.
+
+## Flutter AOT executable-remap compatibility
+
+The existing guest SystemHook component has a guarded `vm_remap` fallback for
+an observed Flutter AOT callback layout whose returned RX permission disagrees
+with the actual read-only destination. The fallback creates a private RW copy,
+then changes it to RX; other calls pass through. No kernel patch or protection
+policy change is added. See `Research/Guest/flutter_aot_remap_compatibility.md`
+for exact guards, failure semantics, reproduction and validation limits.

@@ -38,8 +38,8 @@ LAUNCHHOOK := $(STAGE)/launchhook/launchdhook-vphone.dylib
 LAUNCHHOOK_SOURCES := $(wildcard LaunchHook/*.c) Shared/RootHideLoaderLinks.c
 LAUNCHHOOK_INCLUDES := $(wildcard LaunchHook/*.h LaunchHook/*.inc Shared/*.h)
 SYSTEMHOOK := $(STAGE)/systemhook/SystemHook-vphone.dylib
-SYSTEMHOOK_SOURCES := $(wildcard SystemHook/*.c) Shared/RootHideLoaderLinks.c
-SYSTEMHOOK_INCLUDES := $(wildcard SystemHook/*.h SystemHook/*.inc Shared/*.h)
+SYSTEMHOOK_SOURCES := $(wildcard SystemHook/*.c) $(wildcard FlutterRemapFix/*.c) Shared/RootHideLoaderLinks.c
+SYSTEMHOOK_INCLUDES := $(wildcard SystemHook/*.h SystemHook/*.inc FlutterRemapFix/*.h Shared/*.h)
 # libmis is not a framework and has no header; the iPhoneOS SDK does ship
 # libmis.tbd, so the interposed symbols bind two-level like any other import
 # rather than through flat dynamic lookup.
@@ -326,3 +326,20 @@ test-installcoordination-persona:
 	xcrun --sdk macosx clang -Wall -Wextra -Werror \
 		-o $(OUT)/InstallCoordinationPersonaTests Tests/InstallCoordinationPersonaTests.c
 	@$(OUT)/InstallCoordinationPersonaTests
+
+.PHONY: test-flutter-remap test-flutter-remap-repair
+test-flutter-remap:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -Wall -Wextra -Werror -o $(OUT)/FlutterRemapPolicyTests Tests/FlutterRemapPolicyTests.c
+	@$(OUT)/FlutterRemapPolicyTests
+
+test-flutter-remap-repair:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -Wall -Wextra -Werror -Wno-unused-function -o $(OUT)/FlutterRemapRepairTests Tests/FlutterRemapRepairTests.c
+	@$(OUT)/FlutterRemapRepairTests
+
+.PHONY: build-executable-remap-probe
+build-executable-remap-probe:
+	@mkdir -p $(OUT)
+	xcrun --sdk iphoneos swiftc -target arm64-apple-ios26.0 -O Tests/ExecutableRemapProbe.swift -module-cache-path $(OUT)/probe-module-cache -o $(OUT)/ExecutableRemapProbe
+	codesign --force --sign - --timestamp=none $(OUT)/ExecutableRemapProbe
