@@ -22,6 +22,8 @@ public enum FirmwareGuestSystemPatchSet {
     public static let installCoordinationPersona = "system-installcoordination_proxy-cfw-persona_lookup"
     public static let installCoordinationPersonaMarker = "/usr/lib/vphone-installcoordination-persona-lookup"
 
+    public static let locationdCohorting = "system-locationd-cfw-disable_auto_cohort"
+
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
 
     /// The bases where short-circuiting `checkTrustAndAuthorization` in the
@@ -45,6 +47,13 @@ public enum FirmwareGuestSystemPatchSet {
         name: "Guest System",
         summary: "Shared-cache policy gates, patched system daemons and the vphone guest payload",
         patches: [
+            VPhonePatchDeclaration(
+                identifier: locationdCohorting,
+                title: "locationd startup stability",
+                summary: "Uses independent location silos to avoid iOS 27 startup crashes and queue hangs on the research guest.",
+                target: .guestFile(path: "/" + CustomFirmwareLocationdCohorting.relativePath),
+                applicability: ios27,
+            ),
             // MARK: Shared Cache Policy
 
             VPhonePatchDeclaration(

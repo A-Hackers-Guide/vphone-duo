@@ -1,5 +1,19 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **iOS 27 locationd startup (2026-10-08):**
+> `system-locationd-cfw-disable_auto_cohort` disables only `CLAutoCohort` in
+> `System/Library/FeatureFlags/Domain/CoreLocation.plist`. The guest system set
+> selects it for iOS 27 only; `cfw install` and environment updates back up the
+> original plist and restore it when deselected. Independent location silos
+> avoid the startup queue hangs/PAC failures seen with automatic cohorts on
+> the cloudOS 26.4 research kernel. No executable or PAC instruction is patched.
+> On `loc27-iphone` (24A435), 20 locationd restarts and 5 cold boots answered
+> before watchdog recovery; restoring the original flag brought back repeated
+> launches and a watchdog kill. A fresh iPad16,1 24A446 guest reproduced the
+> same PAC failure with stock cohorts; with this change, another 20 restarts
+> and 5 cold boots passed, with no new crash reports or watchdog actions. See
+> [evidence and verification](Guest/locationd_27_0_1_startup_race.md).
+
 > **Patch sets and presets (2026-09-28):** every patch is now *declared*, and
 > selection happens before any byte is written. The declarations live in nine
 > bundled patch sets under `VPhoneExecutable/VPhoneCommand/FirmwarePatcher/PatchSets/`
