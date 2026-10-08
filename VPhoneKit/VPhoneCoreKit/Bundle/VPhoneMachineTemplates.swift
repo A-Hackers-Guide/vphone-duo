@@ -6,7 +6,7 @@ import Foundation
 /// What was done to a template's guest after `cfw install` and before it was
 /// frozen. Each later stage records its own work here while the template is
 /// still being built (see ``VPhoneMachineTemplates/recordSteps(inBundle:_:)``):
-/// offline trimming inside the CFW install sets `trimTier`, the setup boot sets
+/// the offline trim after the CFW install sets `trimTier`, the setup boot sets
 /// the rest. A template is frozen only when these match what its key promises.
 public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
     /// The guest's `orig-fs` APFS snapshot was deleted, so trimmed files free
@@ -37,6 +37,25 @@ public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
         self.trimTier = trimTier
     }
 
+    /// Why a template with these steps must not be frozen, or nothing.
+    ///
+    /// A trim with the `orig-fs` snapshot still in place is refused rather
+    /// than warned about: the snapshot keeps every deleted block, so such a
+    /// template costs exactly what an untrimmed one does while its clones
+    /// have lost the files, and its key would promise savings it never made.
+    /// Refusing keeps every frozen template either trimmed and smaller, or
+    /// untrimmed and whole.
+    public var problems: [String] {
+        var problems: [String] = []
+        if trimTier != "none", !snapshotDeleted {
+            problems.append(
+                "trim \(trimTier) frees nothing while the guest's orig-fs snapshot exists; "
+                    + "the setup boot deletes it (apfs.snapshot.delete)",
+            )
+        }
+        return problems
+    }
+
     /// The slimming these steps produced, as a key states it.
     public var slimming: VPhoneMachineTemplateSlimming {
         VPhoneMachineTemplateSlimming(
@@ -65,6 +84,25 @@ public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
         serviceGroups = try container.decodeIfPresent([String].self, forKey: .serviceGroups) ?? []
         removedApps = try container.decodeIfPresent([String].self, forKey: .removedApps) ?? []
         trimTier = try container.decodeIfPresent(String.self, forKey: .trimTier) ?? "none"
+    }
+}
+
+// MARK: - Source
+
+/// `TemplateSource.plist`, in a machine cloned from a template: which
+/// template it shares blocks with.
+public struct VPhoneMachineTemplateSource: Codable, Equatable, Sendable {
+    public var identifier: String
+    public var cloned: Date
+
+    public init(identifier: String, cloned: Date = Date()) {
+        self.identifier = identifier
+        self.cloned = VPhoneMachineTemplates.wholeSeconds(cloned)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case identifier = "Identifier"
+        case cloned = "Cloned"
     }
 }
 
@@ -304,8 +342,22 @@ public enum VPhoneMachineTemplates {
     /// Changes the build steps of a template that is still being built. A
     /// frozen template is refused: it is shared by its clones, and nothing
     /// may change it.
-    public static func recordSteps(inBundle url: URL, _ body: (inout VPhoneMachineTemplateSteps) -> Void) throws {
-        guard var record = try readRecord(inBundle: url) else {
+    ///
+    /// A machine without a record (one Launchpad is building in the library
+    /// before it adopts it) gets the unfrozen record `creating` returns
+    /// first; without `creating` it is refused.
+    public static func recordSteps(
+        inBundle url: URL,
+        creating: (() throws -> VPhoneMachineTemplateRecord)? = nil,
+        _ body: (inout VPhoneMachineTemplateSteps) -> Void,
+    ) throws {
+        var existing = try readRecord(inBundle: url)
+        if existing == nil, let creating {
+            existing = try creating()
+            existing?.frozen = false
+            existing?.frozenAt = nil
+        }
+        guard var record = existing else {
             throw VPhoneMachineTemplateError.notBeingBuilt(path: url.path)
         }
         guard !record.frozen else {
@@ -480,8 +532,10 @@ public enum VPhoneMachineTemplates {
 
     /// Marks the built machine frozen and moves it to `.templates/<identifier>`
     /// in one rename, so a listed template is always complete. Refused when
-    /// its steps did not produce what its key promises, or a template with
-    /// the identifier appeared meanwhile; the build is then left in place.
+    /// its steps did not produce what its key promises or left a trim without
+    /// its snapshot deletion (``VPhoneMachineTemplateSteps/problems``), or a
+    /// template with the identifier appeared meanwhile; the build is then
+    /// left in place. The restore tree is removed: templates never keep it.
     @discardableResult
     public static func freeze(_ build: VPhoneMachineTemplateBuild, now: Date = Date()) throws -> VPhoneMachineTemplate {
         guard var record = try readRecord(inBundle: build.bundleURL) else {
@@ -496,8 +550,12 @@ public enum VPhoneMachineTemplates {
                 differences: record.key.slimmingDifferences(from: record.steps.slimming),
             )
         }
+        guard record.steps.problems.isEmpty else {
+            throw VPhoneMachineTemplateError.incomplete(identifier: build.identifier, problems: record.steps.problems)
+        }
         let bundle = try VPhoneBundle.load(at: build.bundleURL)
         try VPhoneBundleActivity.requireStopped(bundle)
+        try removeRestoreTree(of: bundle)
         record.frozen = true
         record.frozenAt = Self.wholeSeconds(now)
         try writeRecord(record, inBundle: build.bundleURL)
@@ -530,8 +588,10 @@ public enum VPhoneMachineTemplates {
     ///
     /// Refused when the machine runs, has snapshots (a template carries no
     /// history, and they would keep their blocks for as long as it lives),
-    /// or a template with that key exists. On a failure the machine is left
-    /// as it was.
+    /// its steps fall short of the key or have problems, or a template with
+    /// that key exists. On a failure the machine is left as it was, except
+    /// that a restore tree it kept is removed before the rename: templates
+    /// never keep it.
     @discardableResult
     public static func adopt(
         machineNamed name: String,
@@ -563,11 +623,17 @@ public enum VPhoneMachineTemplates {
                 differences: record.key.slimmingDifferences(from: record.steps.slimming),
             )
         }
+        guard record.steps.problems.isEmpty else {
+            throw VPhoneMachineTemplateError.incomplete(identifier: record.identifier, problems: record.steps.problems)
+        }
         let destination = url(of: record.identifier, in: library)
         if isDirectory(destination) {
             throw VPhoneMachineTemplateError.alreadyExists(record.identifier)
         }
         try ensureDirectory(in: library)
+        // Gone even if the rename below fails: it is only ever rebuilt from
+        // the IPSW, and a template must not carry it.
+        try removeRestoreTree(of: bundle)
         record.frozen = true
         record.frozenAt = Self.wholeSeconds(now)
         try writeRecord(record, inBundle: bundle.url)
@@ -603,13 +669,108 @@ public enum VPhoneMachineTemplates {
         in library: VPhoneLibrary,
     ) throws -> VPhoneBundle {
         let source = try template.bundle()
-        return try VPhoneBundleOperations.clone(
+        let clone = try VPhoneBundleOperations.clone(
             source,
             sourceName: template.record.sourceMachine ?? template.identifier,
             to: newName,
             in: library,
             newIdentity: true,
         )
+        do {
+            try writeSource(VPhoneMachineTemplateSource(identifier: template.identifier), inBundle: clone.url)
+        } catch {
+            try? FileManager.default.removeItem(at: clone.url)
+            throw error
+        }
+        return clone
+    }
+
+    // MARK: Source
+
+    /// `TemplateSource.plist`, in a machine cloned from a template. A plain
+    /// `vm clone` of such a machine keeps it (the copy shares the template's
+    /// blocks too); an export leaves it out, since an imported machine
+    /// shares nothing with any template.
+    public static let sourceFileName = "TemplateSource.plist"
+
+    /// The template a machine was cloned from, or nil for a machine that was
+    /// not, or whose record cannot be read.
+    public static func readSource(inBundle url: URL) -> VPhoneMachineTemplateSource? {
+        let file = url.appendingPathComponent(sourceFileName)
+        guard VPhoneVirtualMachineManifest.fileKind(at: file) == .regularFile,
+              let data = try? Data(contentsOf: file),
+              let source = try? PropertyListDecoder().decode(VPhoneMachineTemplateSource.self, from: data),
+              VPhoneMachineTemplateKey.isIdentifier(source.identifier)
+        else { return nil }
+        return source
+    }
+
+    static func writeSource(_ source: VPhoneMachineTemplateSource, inBundle url: URL) throws {
+        let encoder = PropertyListEncoder()
+        encoder.outputFormat = .xml
+        let file = url.appendingPathComponent(sourceFileName)
+        try encoder.encode(source).write(to: file, options: .atomic)
+        try VPhoneHostFilePermissions.makeAccessible(at: file)
+    }
+
+    /// The machines of the library cloned from each template, by template
+    /// identifier, sorted by name. Templates adopted from such a machine
+    /// count too, under `.templates/<id>`: they share its blocks as well.
+    public static func usage(in library: VPhoneLibrary) -> [String: [String]] {
+        var users: [String: [String]] = [:]
+        for bundle in (try? library.bundles()) ?? [] {
+            if let source = readSource(inBundle: bundle.url) {
+                users[source.identifier, default: []].append(bundle.name)
+            }
+        }
+        for template in (try? list(in: library).templates) ?? [] {
+            if let source = readSource(inBundle: template.url), source.identifier != template.identifier {
+                users[source.identifier, default: []].append("\(directoryName)/\(template.identifier)")
+            }
+        }
+        return users.mapValues { $0.sorted() }
+    }
+
+    /// The template `source` names, when it still exists and nothing in the
+    /// library uses it any more: what `vm delete` reports after deleting a
+    /// machine cloned from it. Never deletes it.
+    public static func unusedTemplate(after source: VPhoneMachineTemplateSource?, in library: VPhoneLibrary) -> VPhoneMachineTemplate? {
+        guard let source,
+              let template = try? Self.template(source.identifier, in: library),
+              usage(in: library)[template.identifier, default: []].isEmpty
+        else { return nil }
+        return template
+    }
+
+    /// The bytes a folder's files take on disk (`st_blocks`), without
+    /// following links: what deleting it would free once nothing shares it.
+    public static func allocatedBytes(of url: URL) -> UInt64 {
+        var total: UInt64 = 0
+        let keys: [URLResourceKey] = [.totalFileAllocatedSizeKey, .isSymbolicLinkKey]
+        guard let walker = FileManager.default.enumerator(at: url, includingPropertiesForKeys: keys, options: []) else {
+            return 0
+        }
+        for case let file as URL in walker {
+            guard let values = try? file.resourceValues(forKeys: Set(keys)), values.isSymbolicLink != true else { continue }
+            total += UInt64(values.totalFileAllocatedSize ?? 0)
+        }
+        return total
+    }
+
+    // MARK: Restore tree
+
+    /// Templates never keep the restore tree: the ~11 GB of prepared
+    /// firmware a full `cfw install` reads would stay pinned for as long as
+    /// the template lives, and no clone can use it. `freeze` and `adopt`
+    /// remove it. Returns the folder's name, or nil when there was none.
+    @discardableResult
+    public static func removeRestoreTree(of bundle: VPhoneBundle) throws -> String? {
+        try VPhoneRestoreInfo.removeBuiltFirmware(fromBundle: bundle)
+    }
+
+    /// The restore tree's name in a machine folder, or nil.
+    public static func restoreTree(of bundle: VPhoneBundle) -> String? {
+        (try? VPhoneConfinedDirectory(root: bundle.url.path)).flatMap(VPhoneRestoreInfo.findRestoreDirectory(in:))
     }
 
     // MARK: Delete
@@ -727,6 +888,7 @@ public enum VPhoneMachineTemplateError: Error, Equatable {
     case notBeingBuilt(path: String)
     case hasSnapshots(machine: String, count: Int)
     case stepsDoNotMatchKey(identifier: String, differences: [String])
+    case incomplete(identifier: String, problems: [String])
     case conflicts(identifier: String, options: [String])
     case stale(identifier: String, reasons: [String])
     case failed(path: String, reason: String)
@@ -757,6 +919,8 @@ extension VPhoneMachineTemplateError: CustomStringConvertible, LocalizedError {
             "VM '\(machine)' has \(count) snapshot(s). A template carries no history: delete them with vm snapshot delete, then adopt it."
         case let .stepsDoNotMatchKey(identifier, differences):
             "Template \(identifier) was not built as its key says (\(differences.joined(separator: "; "))). It was not frozen."
+        case let .incomplete(identifier, problems):
+            "Template \(identifier) is not finished: \(problems.joined(separator: "; ")). It was not frozen."
         case let .conflicts(identifier, options):
             "Template \(identifier) cannot give this machine what was asked: \(options.joined(separator: "; ")). Use another template, or create the machine without one (--no-template)."
         case let .stale(identifier, reasons):

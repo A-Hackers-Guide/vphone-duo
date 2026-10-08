@@ -35,7 +35,7 @@ Everything a clone inherits and could not change without a restore:
 | boot-chain plan digest | the preset resolved against the two versions | `PatchPlan.plist` `EnabledPatches`, `Parameters` |
 | bundle series | this `vphone-cli`'s `Info.plist` | `launchpad.json` `bootChain`, else the `Guest` receipt part when `cfw install` wrote it, else this `vphone-cli` |
 | disk size (decimal GB) | `--disk-size` | `Disk.img` length |
-| slimming: trim tier, setup boot, service profile, service groups, removed apps | the slimming switches (below) | `Template.plist` steps `vm template setup` recorded, else nothing done |
+| slimming: trim, setup boot, service profile, service groups, removed apps | the slimming switches (below); the trim as `VPhoneSystemTrimSpec.keyValue` (`standard/1/en,zh,zh-Hans`) | `Template.plist` steps `vm template trim` and `vm template setup` recorded, else nothing done |
 | format version | 2 | 2 |
 
 The identifier is the first 12 hex digits of the SHA-256 of one
@@ -77,12 +77,25 @@ re-resolves with the template's own `PatchSelection.plist`.
   `BootChainBundleVersion`, `SourceMachine` (the name a derived mDNS name
   follows from), `Frozen`, `FrozenAt`, `Steps` (`SnapshotDeleted`,
   `SetupDone`, `ServiceProfile`, `ServiceGroups`, `RemovedApps`, `TrimTier`).
+- `TemplateSource.plist` in a machine cloned from a template: `Identifier`,
+  `Cloned`. A plain `vm clone` keeps it (the copy shares the template's
+  blocks too); `vm export` excludes it (an import shares nothing).
+  `VPhoneMachineTemplates.usage` maps each template to the machines (and
+  templates adopted from such machines) that carry its identifier. `vm
+  template list/show` print it with the template's allocated size; `vm delete`
+  of the last machine using a template that still exists prints a note to
+  delete it (`unusedTemplate(after:in:)`), never deleting it itself.
 - A build happens in `.building-<id>-<uuid>/<id>/` and is frozen by writing
   `Frozen = true` and one `renamex_np(RENAME_EXCL)` to `.templates/<id>`. A
   listed template is always complete; a race with another build of the same
   key fails the rename and leaves the build unfrozen.
 - `freeze` and `adopt` refuse unless `Steps` produced the slimming the key
-  promises.
+  promises, and refuse a trim whose `SnapshotDeleted` is false
+  (`VPhoneMachineTemplateSteps.problems`).
+- `freeze` and `adopt` remove the restore tree (`iPhone*_Restore`): a template
+  never keeps it. `vm create` removes it before the trim whatever
+  `--keep-artifacts` says and warns that the flag keeps it only with
+  `--no-template`; `adopt` says it removed it.
 - A clone drops `Template.plist`, `Snapshots/` and `vphone.sock`.
 
 ## Never booting once frozen
@@ -114,12 +127,14 @@ and `vm template setup` to the key's slimming:
 
 | Switches | trim | setup boot | services | groups | removed apps |
 | --- | --- | --- | --- | --- | --- |
-| none (`--slim on`) | `defaultTrimTier` (`none` until offline trim lands) | yes | trimmed | none | list C (10 apps) |
+| none (`--slim on`) | `defaultTrim`: `standard/1/en,zh,zh-Hans` | yes | trimmed | none | list C (10 apps) |
 | `--slim off` | none | yes | none | none | none |
 | `--service-profile none` | default | yes | none | none | list C |
 | `--remove-apps off` | default | yes | trimmed | none | none |
 | `--keep-apps a,b` | default | yes | trimmed | none | list C minus a, b |
 | `--accounts-off` | default | yes | trimmed | `accounts` | list C |
+| `--trim conservative` | `conservative/1` | yes | trimmed | none | list C |
+| `--keep-languages ja` | `standard/1/en,ja` | yes | trimmed | none | list C |
 
 List C: `com.apple.AppStore`, `Home`, `tv`, `news`, `facetime`, `MobileStore`,
 `MobileSMS`, `games`, `findmy`, `Passbook` (P0 and P1 verified each stays
@@ -127,7 +142,10 @@ removed across a respring and a reboot on 27.0). Camera stays for camera
 passthrough checks; Phone lives on the System volume and vphoned refuses it.
 Contradictions are refused, all at once: `--slim off` with any slimming
 switch, `--accounts-off` without the trimmed profile, `--keep-apps` naming an
-app outside list C or with `--remove-apps off`, an unknown tier or profile.
+app outside list C or with `--remove-apps off`, an unknown or reserved tier
+(`aggressive`), `--keep-languages` with a tier that removes no language data,
+an unknown profile. `--keep-languages` alone means `--trim standard` keeping
+those languages.
 `--no-template` takes no slimming switch; `--template <id>` takes them only to
 check them against the template.
 
@@ -144,6 +162,110 @@ The services the key promises are fixed per template, although vphoned can
 switch the profile on a running machine: a clone of a trimmed template starts
 trimmed without a reboot of its own, and `services.profile.apply none` undoes
 it on that clone.
+
+## Offline trim
+
+Code: `VPhoneKit/VPhoneCoreKit/Bundle/VPhoneSystemTrim.swift` (tiers, the
+versioned list, path rules, applying a trim to a volume root by descriptor,
+reading the disk layout) and
+`VPhoneExecutable/VPhoneCommand/VPhoneCommand/VirtualMachine/VPhoneMachineTemplateTrimmer.swift`
+(attach, mount, trim, unmount, detach, record). Tests:
+`VPhoneKit/VPhoneCoreKitTests/Bundle/SystemTrimTests.swift`.
+
+List version 1, paths relative to the System volume:
+
+| Tier | Entry | Selection |
+| --- | --- | --- |
+| conservative | `usr/standalone/update` | its contents (243 MB SU ramdisk, 114 MB baseband firmware) |
+| standard | `System/Library/PreinstalledAssetsV2/RequiredByOs/com_apple_MobileAsset_SharingDeviceAssets` | the folder |
+| standard | `System/Library/NanoTimeKit/FaceBundles` | its contents |
+| standard | `System/Library/LinguisticData` | children `RequiredAssets_<lang>.bundle` whose `<lang>` is not kept |
+| aggressive | reserved (other languages' `.lproj`, Health, some fonts) | refused: not validated |
+
+These are the deletions measured and booted on 2026-10-07/08 (see
+`Research/Guest/template_snapshot_deletion.md`). Never listed: the dyld
+shared cache and its `.symbols` (the CFW cache patcher resolves symbols from
+it), ML models, `/Applications`. Changing an entry raises
+`VPhoneSystemTrim.listVersion`.
+
+The key value is `<tier>/<list version>[/<kept languages>]`, `none` without
+trim. The kept languages default to `en,zh-Hans,zh` (`zh` is the bundle
+`zh-Hans` shares); English is always kept. A machine already trimmed takes
+only the same trim again, or a heavier tier after `conservative`
+(`VPhoneSystemTrimSpec.canFollow`).
+
+How it runs, without root:
+
+1. Refuse a running machine (`VPhoneBundleActivity.requireStopped`), a frozen
+   template or a folder directly in `.templates`, and a machine with a
+   `TemplateSource.plist` (its blocks are the template's; deleting files would
+   free nothing).
+2. `hdiutil attach -nomount -imagekey diskimage-class=CRawDiskImage Disk.img`
+   (`Disk.img` must be a regular single-link file, owned by the invoking user
+   under sudo).
+3. The `Apple_APFS` partition from the attach output, its
+   `APFSContainerReference` from `diskutil info -plist`, and the one volume
+   whose `Roles` contain `System` from `diskutil apfs list -plist`, after
+   checking the container's physical store is that partition. No slice
+   numbers.
+4. `diskutil mount -mountOptions nosuid,nodev,noowners,nobrowse -mountPoint
+   <mkdtemp 0700 folder in /private/var/tmp>/system <volume>`. A user who
+   attached the image may mount it this way; as root it works the same.
+5. Pin the mount point by descriptor, check `f_mntfromname` is the volume,
+   and refuse unless `System/Library/CoreServices/SystemVersion.plist` exists.
+6. Delete each entry through `VPhoneConfinedDirectory`: every component is
+   opened `O_NOFOLLOW`, a link on the way or a volume change is refused, a
+   link at the leaf is deleted as a link, and each target must pass
+   `VPhoneSystemTrimSpec.permits` first. Bytes removed are the `st_blocks` of
+   what went, a second hard link counting as nothing; each entry is logged.
+7. Unmount (`force` as a fallback) and detach (`-force` as a fallback) on
+   every way out, then record `Steps.TrimTier`.
+
+### The snapshot dependency
+
+The trimmed blocks stay allocated until the guest deletes the
+`orig-fs.disabled.rn-*` snapshot `cfw install` left; the host cannot (SIP,
+`-69863` even as root). Only the setup boot does it
+(`apfs.snapshot.delete`). Two rules follow:
+
+- `VPhoneMachineTemplateSlimming.problems`: a key with a trim but no setup
+  boot is refused before anything is built. Every key `vm create` resolves
+  has the setup boot (`--slim off` included), so this guards keys built by
+  hand; `--trim` defaults to `standard`.
+- `VPhoneMachineTemplateSteps.problems`: `freeze` and `adopt` refuse a trim
+  whose `SnapshotDeleted` is false. Refused rather than warned about: such a
+  template costs exactly what an untrimmed one does while its clones have
+  lost the files, and its key would promise savings it never made.
+
+### Measured
+
+2026-10-08, iPhone17,3 iOS 27.0 (24A435) / cloudOS 26.4, created by
+Launchpad (bundle 2.7.0 local, standard preset) and stopped after its first
+boot; `vm template trim p3-src --tier standard` from a build-directory
+`vphone-cli`, as the user, no root:
+
+| Entry | Removed | Bytes |
+| --- | --- | --- |
+| `usr/standalone/update` | 16 items | 361.7 MB |
+| `…/com_apple_MobileAsset_SharingDeviceAssets` | the folder | 237.6 MB |
+| `NanoTimeKit/FaceBundles` | 76 bundles | 147.9 MB |
+| `LinguisticData` | 57 `RequiredAssets_*` bundles (en, zh-Hans, zh kept) | 418.7 MB |
+| total | | 1.17 GB |
+
+The run took 4.7 s. `Disk.img` went from 35,977,296 to 35,977,880 blocks:
+the snapshot keeps everything, as expected. A second run removed nothing; a
+conservative trim afterwards and `aggressive` were refused, and so was
+`vm template adopt --force` (trim without snapshot deletion). The machine then
+booted through Launchpad to the Setup greeting with vphoned answering and 258
+apps registered, no panic. With P4's snapshot deletion the 2026-10-07
+prototype returned 1.19 GB for the same deletions
+(`Research/Guest/template_snapshot_deletion.md`).
+
+`vm delete` of the second of two machines cloned from a template printed
+`note: template 2246f982776c (~18.92 GB) is no longer used by any machine; …`;
+the first printed nothing, and `vm template list` showed `machines using it:
+p3-a, p3-b`, then `none`. The size is the template's allocated bytes,
+blocks it shares with other files included.
 
 ## Setup boot
 
@@ -187,7 +309,8 @@ On any failure the VM is killed, the failure names the step
 (`VPhoneTemplateSetupFailure`), and nothing is recorded:
 `recordSetupBoot` writes only a complete outcome (`SnapshotDeleted`,
 `SetupDone`, `ServiceProfile`, `ServiceGroups`, `RemovedApps`; `TrimTier` is
-left to the trim), so `freeze` keeps refusing the build.
+left to the trim, and the snapshot is gone before the trim's record is ever
+checked), so `freeze` keeps refusing the build.
 
 The device name: `vphone-vm` pins the guest's name to the machine's name
 (`device.name.set`) on every connect, and the pin lives in
@@ -212,19 +335,24 @@ made after the latest one, as these clones were.
 ## Lifecycle
 
 - **vm create** (default): key from the options and switches → lock →
-  restore and `cfw install` into the staging folder (offline file trimming
-  belongs inside `cfw install` and records `Steps.TrimTier`) → setup boot →
-  recorded key must equal the requested one → `freeze` → clone.
-  A setup boot failure leaves the build; `vm template setup .building-…`
-  retries it under the lock and freezes it on success.
+  restore and `cfw install` into the staging folder → restore tree removed →
+  offline trim (records `Steps.TrimTier`) → setup boot (step 0 deletes the
+  snapshot; records `SnapshotDeleted`, `SetupDone`, the profile, groups and
+  apps) → recorded key must equal the requested one → `freeze` → clone.
+  A failure leaves the build; `vm template setup .building-…` runs the trim
+  if the build stopped before it recorded one, retries the setup boot under
+  the lock and freezes the build on success.
 - **Launchpad** (P5) builds a machine with its step-by-step pipeline, whose
   first boot leaves it running at Setup; it stops it, runs
-  `vm template setup <name> [switches]`, then `vm template adopt <name>`,
-  then `vm create <name> --template <id> --skip-first-boot` and its own first
-  boot. `vm template setup` on a machine writes an unfrozen `Template.plist`
-  (key from its records) when it has none, and records the steps there.
+  `vm template trim <name> --tier …`, `vm template setup <name> [switches]`,
+  `vm template adopt <name>`, then `vm create <name> --template <id>
+  --skip-first-boot` and its own first boot. `vm template trim` and
+  `vm template setup` on a library machine write an unfrozen `Template.plist`
+  (key from its records) when it has none, and record their steps there.
+  The setup boot trims nothing: it keeps the tier `vm template trim`
+  recorded, and refuses a `--trim` that names another one.
 - `freeze` and `adopt` refuse a record whose steps did not produce the key's
-  slimming.
+  slimming, and a trim whose snapshot was not deleted.
 
 ## Staleness
 

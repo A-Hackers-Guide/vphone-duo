@@ -11,6 +11,13 @@ struct VPhoneTemplateSlimmingOptions: ParsableArguments {
         valueName: "on|off",
     ))
     var slim: String?
+    @Option(help: ArgumentHelp(
+        "System files the template deletes offline: standard (default) | conservative | none. Part of the template key; vm template trim describes the tiers",
+        valueName: "tier",
+    ))
+    var trim: String?
+    @Option(help: ArgumentHelp("Languages whose linguistic data --trim standard keeps (en is always kept)", valueName: "en,zh-Hans,zh"))
+    var keepLanguages: String?
     @Option(help: ArgumentHelp("Service profile the template applies: trimmed (default) | none", valueName: "profile"))
     var serviceProfile: String?
     @Option(help: ArgumentHelp("Remove the default system apps (App Store, TV, News, …): on (default) | off", valueName: "on|off"))
@@ -27,6 +34,8 @@ struct VPhoneTemplateSlimmingOptions: ParsableArguments {
         get throws {
             try VPhoneTemplateSlimmingRequest(
                 slim: slim.map { try VPhoneVirtualMachineConfigCommand.parseSwitch($0, option: "--slim") },
+                trimTier: trim,
+                keepLanguages: keepLanguages,
                 serviceProfile: serviceProfile,
                 removeApps: removeApps.map { try VPhoneVirtualMachineConfigCommand.parseSwitch($0, option: "--remove-apps") },
                 keepApps: keepApps,

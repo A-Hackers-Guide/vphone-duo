@@ -133,6 +133,12 @@ public struct VPhoneVirtualMachineCreator {
             }
             try cloneFromTemplate(template, options: options, outputs: outputs)
         case .automatic:
+            if options.keepArtifacts {
+                // A template never keeps it: ~11 GB pinned for the template's
+                // whole life, which no clone can use.
+                print("warning: --keep-artifacts keeps the restore tree only with --no-template; "
+                    + "a template build always removes it")
+            }
             let template = try templateForCreate(options, outputs: outputs)
             try cloneFromTemplate(template, options: options, outputs: outputs)
         }
@@ -164,7 +170,7 @@ public struct VPhoneVirtualMachineCreator {
         outputs.add(bundle.url)
         print("created \(bundle.url.path)")
 
-        try buildGuest(at: bundle.url, options: options, outputs: outputs)
+        try buildGuest(at: bundle.url, options: options, keepsRestoreTree: options.keepArtifacts, outputs: outputs)
         try applySettings(options)
         if !options.skipsFirstBoot {
             print("\n=== First boot check ===")
@@ -174,8 +180,13 @@ public struct VPhoneVirtualMachineCreator {
 
     /// `fw prepare`, `fw patch`, the restore and `cfw install` into the machine
     /// folder at `bundleURL`, which `vm new` made. Removes the restore tree
-    /// afterwards unless `--keep-artifacts`. Starts the guest only in DFU.
-    private func buildGuest(at bundleURL: URL, options: Options, outputs: VPhoneCreatedOutputs) throws {
+    /// afterwards unless `keepsRestoreTree`. Starts the guest only in DFU.
+    private func buildGuest(
+        at bundleURL: URL,
+        options: Options,
+        keepsRestoreTree: Bool,
+        outputs: VPhoneCreatedOutputs,
+    ) throws {
         let v = options.verbosity
         print("\n=== fw prepare ===")
         try runFWPrepare(options: options, bundleURL: bundleURL)
@@ -201,7 +212,7 @@ public struct VPhoneVirtualMachineCreator {
 
         // CFW install is the last consumer of the built restore tree (it copies
         // the SystemOS/AppOS cryptexes from it onto Disk.img); reclaim it now.
-        if !options.keepArtifacts, let bundle = try? VPhoneBundle.load(at: bundleURL),
+        if !keepsRestoreTree, let bundle = try? VPhoneBundle.load(at: bundleURL),
            let removed = try? VPhoneRestoreInfo.removeBuiltFirmware(fromBundle: bundle)
         {
             print("[+] Removed built firmware \(removed)/ to save space (--keep-artifacts to keep)")
@@ -234,6 +245,10 @@ public struct VPhoneVirtualMachineCreator {
             throw ValidationError("Specify both iPhone and cloudOS IPSW sources when running without a terminal.")
         }
         print("\n=== Template ===")
+        let slimming = Self.templateSlimming(options)
+        guard slimming.problems.isEmpty else {
+            throw ValidationError("Cannot build this template: \(slimming.problems.joined(separator: "; ")). Pass --trim none.")
+        }
         let sources = try VPhoneFirmwarePreparer.resolveSources(
             iPhoneSource: phoneSource,
             cloudOSSource: cloudSource,
@@ -246,7 +261,7 @@ public struct VPhoneVirtualMachineCreator {
             cloudOS: .init(version: sources.cloud.version, build: sources.cloud.build),
             preset: options.patchPreset,
             diskSizeGB: options.diskSizeGB,
-            slimming: options.slimming,
+            slimming: slimming,
         )
         print("[*] Template key \(key.identifier): \(key.summary)")
 
@@ -267,6 +282,15 @@ public struct VPhoneVirtualMachineCreator {
             return try requireCurrent(found)
         }
         return try buildTemplate(key, options: options, outputs: outputs)
+    }
+
+    /// What a template built for these options is slimmed by, part of its
+    /// key: the switches `VPhoneTemplateSlimmingRequest` resolved. `--slim off`
+    /// resolves to trim none. A trim without the setup boot is refused before
+    /// the build (`slimming.problems`): nothing else deletes the guest's
+    /// orig-fs snapshot, and without that a trim frees nothing.
+    static func templateSlimming(_ options: Options) -> VPhoneMachineTemplateSlimming {
+        options.slimming
     }
 
     private func requireCurrent(_ template: VPhoneMachineTemplate) throws -> VPhoneMachineTemplate {
@@ -316,13 +340,32 @@ public struct VPhoneVirtualMachineCreator {
                 inBundle: bundle.url,
             )
 
-            try buildGuest(at: bundle.url, options: options, outputs: outputs)
+            try buildGuest(at: bundle.url, options: options, keepsRestoreTree: false, outputs: outputs)
+            // A template never keeps the restore tree, whatever
+            // --keep-artifacts says; freeze removes it too, this says so.
+            if let tree = try VPhoneMachineTemplates.removeRestoreTree(of: VPhoneBundle.load(at: bundle.url)) {
+                print("[+] Removed built firmware \(tree)/ (a template never keeps it)")
+            }
 
-            // Offline file trimming runs inside the CFW install above and
-            // records Steps.TrimTier there (key.slimming.trimTier says which
-            // tier). The snapshot it cannot delete from the host goes in the
-            // setup boot's first step, which frees what the trim removed.
+            // Offline trim of the System volume, after cfw install. Each
+            // stage records its work with VPhoneMachineTemplates.recordSteps
+            // before the freeze; freeze refuses steps that do not match the
+            // key, and a trim whose orig-fs snapshot was not deleted.
+            let trim = try VPhoneSystemTrimSpec(keyValue: key.slimming.trimTier)
+            if trim.tier != .none {
+                print("\n=== Offline trim ===")
+                try VPhoneMachineTemplateTrimmer.trim(
+                    VPhoneBundle.load(at: bundle.url),
+                    label: key.identifier,
+                    spec: trim,
+                    newRecord: nil,
+                )
+            }
 
+            // The setup boot deletes the orig-fs snapshot first, which frees
+            // what the trim removed, then records snapshotDeleted, setupDone,
+            // the service profile and the removed apps. It leaves trimTier
+            // as the trim recorded it.
             if key.slimming.setupBoot {
                 print("\n=== Template setup boot ===")
                 // With a window, as the first-boot check: this is the guest's

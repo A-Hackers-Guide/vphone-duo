@@ -381,6 +381,9 @@ public enum VPhoneBundleOperations {
         VPhoneMachineSnapshots.directoryName,
         ".snapshot-revert-*",
         VPhoneDiskRebase.stagingPrefix + "*",
+        // An imported machine is a full copy that shares no block with the
+        // template its source was cloned from.
+        VPhoneMachineTemplates.sourceFileName,
     ]
 
     /// The directory holding each boot-chain file exactly as the restore tree laid

@@ -13,9 +13,12 @@ import Foundation
 public struct VPhoneTemplateSlimmingRequest: Equatable, Sendable {
     /// `--slim on|off`; nil is on.
     public var slim: Bool?
-    /// `--trim none|conservative|standard|aggressive` (offline file trim);
-    /// nil is ``defaultTrimTier`` when slimming.
+    /// `--trim none|conservative|standard` (offline file trim, see
+    /// ``VPhoneSystemTrimSpec``); nil is ``defaultTrim`` when slimming.
     public var trimTier: String?
+    /// `--keep-languages`: the languages a language-removing tier keeps.
+    /// Given alone it means the standard tier keeping these languages.
+    public var keepLanguages: String?
     /// `--service-profile none|trimmed`; nil is trimmed when slimming.
     public var serviceProfile: String?
     /// `--remove-apps on|off`; nil is on when slimming.
@@ -28,6 +31,7 @@ public struct VPhoneTemplateSlimmingRequest: Equatable, Sendable {
     public init(
         slim: Bool? = nil,
         trimTier: String? = nil,
+        keepLanguages: String? = nil,
         serviceProfile: String? = nil,
         removeApps: Bool? = nil,
         keepApps: [String] = [],
@@ -35,6 +39,7 @@ public struct VPhoneTemplateSlimmingRequest: Equatable, Sendable {
     ) {
         self.slim = slim
         self.trimTier = trimTier
+        self.keepLanguages = keepLanguages
         self.serviceProfile = serviceProfile
         self.removeApps = removeApps
         self.keepApps = keepApps
@@ -43,12 +48,18 @@ public struct VPhoneTemplateSlimmingRequest: Equatable, Sendable {
 
     // MARK: Defaults
 
-    /// The file-trim tier a slimmed template gets when `--trim` is not given.
-    /// Offline trimming is not built yet, so it is `none`; it becomes
-    /// `standard` with it.
-    public static let defaultTrimTier = "none"
+    /// The file trim a slimmed template gets when `--trim` is not given: the
+    /// standard tier keeping ``VPhoneSystemTrim/defaultKeptLanguages``. The
+    /// setup boot deletes the orig-fs snapshot, which is what frees it.
+    public static let defaultTrim = VPhoneSystemTrimSpec.standard
 
-    public static let trimTiers = ["none", "conservative", "standard", "aggressive"]
+    /// ``defaultTrim`` as the key stores it (`standard/1/en,zh,zh-Hans`).
+    public static var defaultTrimTier: String {
+        defaultTrim.keyValue
+    }
+
+    /// The tiers `--trim` takes. `aggressive` is reserved and refused.
+    public static let trimTiers = VPhoneSystemTrimTier.allCases.filter(\.isSupported).map(\.rawValue)
     public static let serviceProfiles = ["none", "trimmed"]
 
     /// The removable system apps a slimmed template drops (list C of the
@@ -89,8 +100,18 @@ public struct VPhoneTemplateSlimmingRequest: Equatable, Sendable {
     /// each other.
     public func resolve() throws -> VPhoneMachineTemplateSlimming {
         var problems: [String] = []
-        if let trimTier, !Self.trimTiers.contains(trimTier) {
-            problems.append("--trim must be one of \(Self.trimTiers.joined(separator: ", ")), not \(trimTier)")
+        // --keep-languages alone means the standard tier keeping them.
+        var trim = slim == false ? VPhoneSystemTrimSpec.none : Self.defaultTrim
+        let trimGiven = trimTier != nil || keepLanguages != nil
+        if trimGiven {
+            do {
+                trim = try VPhoneSystemTrimSpec.parse(
+                    tier: trimTier ?? VPhoneSystemTrimTier.standard.rawValue,
+                    keptLanguages: keepLanguages,
+                )
+            } catch {
+                problems.append(String(describing: error))
+            }
         }
         if let serviceProfile, !Self.serviceProfiles.contains(serviceProfile) {
             problems.append("--service-profile must be none or trimmed, not \(serviceProfile)")
@@ -105,7 +126,9 @@ public struct VPhoneTemplateSlimmingRequest: Equatable, Sendable {
 
         if slim == false {
             var contradicted: [String] = []
-            if let trimTier, trimTier != "none" { contradicted.append("--trim \(trimTier)") }
+            if trimGiven, trim.tier != .none {
+                contradicted.append(trimTier.map { "--trim \($0)" } ?? "--keep-languages")
+            }
             if serviceProfile == "trimmed" { contradicted.append("--service-profile trimmed") }
             if removeApps == true { contradicted.append("--remove-apps on") }
             if !keepApps.isEmpty { contradicted.append("--keep-apps") }
@@ -128,7 +151,7 @@ public struct VPhoneTemplateSlimmingRequest: Equatable, Sendable {
 
         let keep = Set(keepApps)
         return VPhoneMachineTemplateSlimming(
-            trimTier: slim == false ? "none" : trimTier ?? Self.defaultTrimTier,
+            trimTier: trim.keyValue,
             setupBoot: true,
             serviceProfile: profile,
             serviceGroups: accountsOff ? [Self.accountsGroup] : [],

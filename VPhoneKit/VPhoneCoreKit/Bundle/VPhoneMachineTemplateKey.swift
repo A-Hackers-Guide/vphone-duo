@@ -12,8 +12,9 @@ import Foundation
 /// `serviceGroups` and `removedApps` (see `VPhoneTemplateSetupBoot`). What a
 /// `vm create` asks for comes from its switches (`VPhoneTemplateSlimmingRequest`).
 public struct VPhoneMachineTemplateSlimming: Codable, Equatable, Hashable, Sendable {
-    /// The file-trimming tier applied to the System volume: `none`,
-    /// `conservative`, `standard` or `aggressive`.
+    /// The file trim applied to the System volume, as
+    /// ``VPhoneSystemTrimSpec/keyValue`` writes it: `none`, `conservative/1`,
+    /// `standard/1/en,zh,zh-Hans` (tier, list version, kept languages).
     public var trimTier: String
     /// Whether the template was booted once to finish Setup and first-boot
     /// work before it was frozen.
@@ -29,6 +30,16 @@ public struct VPhoneMachineTemplateSlimming: Codable, Equatable, Hashable, Senda
     public var removedApps: [String]
 
     public static let none = VPhoneMachineTemplateSlimming()
+
+    /// Why a template could not be built with this slimming, or nothing. A
+    /// trim needs the setup boot: only the guest can delete the `orig-fs`
+    /// snapshot that otherwise keeps every trimmed block (see
+    /// ``VPhoneMachineTemplateSteps/problems``).
+    public var problems: [String] {
+        trimTier != "none" && !setupBoot
+            ? ["trim \(trimTier) needs the setup boot, which deletes the guest's orig-fs snapshot; without it the trim frees nothing"]
+            : []
+    }
 
     public init(
         trimTier: String = "none",

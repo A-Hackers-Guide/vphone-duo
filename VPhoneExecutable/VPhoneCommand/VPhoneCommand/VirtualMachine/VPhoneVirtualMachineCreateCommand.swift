@@ -21,14 +21,18 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         --no-template builds the VM on its own, with keys of its own, as before. \
         --template <id> clones from a template listed by vm template list.
 
-        A new template boots once before it is frozen (its setup boot): the orig-fs snapshot \
-        is deleted, Setup Assistant skipped, first-boot work waited for, the default system apps \
+        After cfw install a new template's System volume is trimmed offline (--trim, standard \
+        by default; vm template trim describes the tiers). It then boots once before it is \
+        frozen (its setup boot): the orig-fs snapshot is deleted, which frees what the trim \
+        removed, Setup Assistant skipped, first-boot work waited for, the default system apps \
         removed (App Store, Home, TV, News, FaceTime, iTunes Store, Messages, Games, Find My, \
         Wallet; never Phone or Camera) and the trimmed service profile applied, then it reboots, \
         is checked and shut down. Every clone starts at the Lock Screen with that state. \
-        --slim off keeps every app and service (Setup is still skipped); --service-profile, \
-        --remove-apps, --keep-apps and --accounts-off pick parts. Each choice is part of the key, \
-        so templates with different slimming live side by side.
+        --slim off trims nothing and keeps every app and service (Setup is still skipped); \
+        --trim, --keep-languages, --service-profile, --remove-apps, --keep-apps and \
+        --accounts-off pick parts. Each choice is part of the key, so templates with different \
+        slimming live side by side. A template never keeps the restore tree: --keep-artifacts \
+        keeps it only with --no-template.
 
         --cpu, --memory, --network and --unlock-at-startup are set on the new VM, whichever way \
         it is made.

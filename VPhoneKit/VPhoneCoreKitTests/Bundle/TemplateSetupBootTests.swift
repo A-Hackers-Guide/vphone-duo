@@ -250,7 +250,11 @@ struct TemplateSetupBootTests {
         #expect(guest.pinnedName == nil)
         #expect(Set(outcome.durations.keys) == Set(VPhoneTemplateSetupStep.allCases))
 
-        let steps = outcome.applying(to: VPhoneMachineTemplateSteps())
+        // The offline trim records its tier before the setup boot, which
+        // leaves it alone.
+        let trimmed = VPhoneMachineTemplateSteps(trimTier: VPhoneTemplateSlimmingRequest.defaultTrimTier)
+        let steps = outcome.applying(to: trimmed)
+        #expect(steps.trimTier == trimmed.trimTier)
         #expect(steps.setupDone)
         #expect(steps.snapshotDeleted)
         #expect(steps.slimming == VPhoneTemplateSlimmingRequest.defaultSlimming)
@@ -274,7 +278,7 @@ struct TemplateSetupBootTests {
         let slimming = try VPhoneTemplateSlimmingRequest(accountsOff: true).resolve()
         let outcome = try run(guest, slimming: slimming).get()
         #expect(guest.groups.contains("accounts"))
-        #expect(outcome.applying(to: VPhoneMachineTemplateSteps()).slimming == slimming)
+        #expect(outcome.applying(to: VPhoneMachineTemplateSteps(trimTier: slimming.trimTier)).slimming == slimming)
     }
 
     @Test func `a busy snapshot deletion is retried`() throws {
@@ -470,6 +474,12 @@ struct TemplateSetupRecordingTests {
         }
         // Before the setup boot the key's promise is not kept.
         #expect(throws: VPhoneMachineTemplateError.self) { try VPhoneMachineTemplates.freeze(build) }
+        // The default trim runs first and records its tier; its snapshot is
+        // still there, so the build still does not freeze.
+        try VPhoneMachineTemplates.recordSteps(inBundle: build.bundleURL) {
+            $0.trimTier = VPhoneTemplateSlimmingRequest.defaultTrimTier
+        }
+        #expect(throws: VPhoneMachineTemplateError.self) { try VPhoneMachineTemplates.freeze(build) }
 
         try VPhoneMachineTemplates.recordSetupBoot(outcome(complete: true), inBundle: build.bundleURL)
         let record = try #require(try VPhoneMachineTemplates.readRecord(inBundle: build.bundleURL))
@@ -477,7 +487,7 @@ struct TemplateSetupRecordingTests {
         #expect(record.steps.snapshotDeleted)
         #expect(record.steps.serviceProfile == "trimmed")
         #expect(record.steps.removedApps.count == 10)
-        #expect(record.steps.trimTier == "none")
+        #expect(record.steps.trimTier == VPhoneTemplateSlimmingRequest.defaultTrimTier)
 
         let template = try VPhoneMachineTemplates.freeze(build)
         #expect(template.record.frozen)
@@ -503,15 +513,15 @@ struct TemplateSetupRecordingTests {
 
     @Test func `a file trim recorded before the setup boot survives it`() throws {
         var slimming = VPhoneTemplateSlimmingRequest.defaultSlimming
-        slimming.trimTier = "standard"
+        slimming.trimTier = "conservative/1"
         let (root, build, lock) = try makeBuild(slimming: slimming)
         defer {
             lock.release()
             try? FileManager.default.removeItem(at: root)
         }
-        try VPhoneMachineTemplates.recordSteps(inBundle: build.bundleURL) { $0.trimTier = "standard" }
+        try VPhoneMachineTemplates.recordSteps(inBundle: build.bundleURL) { $0.trimTier = "conservative/1" }
         try VPhoneMachineTemplates.recordSetupBoot(outcome(complete: true), inBundle: build.bundleURL)
-        #expect(try VPhoneMachineTemplates.freeze(build).record.steps.trimTier == "standard")
+        #expect(try VPhoneMachineTemplates.freeze(build).record.steps.trimTier == "conservative/1")
     }
 }
 

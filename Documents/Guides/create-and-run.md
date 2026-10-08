@@ -42,10 +42,10 @@ The guest shows the VM's name as its device name, in Xcode's device list and `xc
 
 ## Templates
 
-A template is a complete machine kept in `<library>/.templates/<id>/`. It boots once while it is built, its setup boot, and never again once it is frozen. `vm create` without `--no-template` works out the template key from its options and the two IPSWs before anything is restored: the guest device, the iOS and cloudOS versions and builds, the patch preset and the boot-chain patches it resolves to, the bundle series (`2.8` for 2.8.x), the disk size, and the slimming switches below. Then:
+A template is a complete machine kept in `<library>/.templates/<id>/`. It boots once while it is built, its setup boot, and never again once it is frozen. `vm create` without `--no-template` works out the template key from its options and the two IPSWs before anything is restored: the guest device, the iOS and cloudOS versions and builds, the patch preset and the boot-chain patches it resolves to, the bundle series (`2.8` for 2.8.x), the disk size, what is trimmed from the guest's System volume (`--trim`), and the slimming switches below. Then:
 
 - If a template with that key exists, the VM is cloned from it with a new identity, given the requested CPU, memory and network, and booted once to check vphoned. This takes seconds and needs neither root nor the IPSWs; nothing is downloaded.
-- Otherwise the full pipeline runs into a staging folder, `.templates/.building-<id>-<uuid>/`, followed by the setup boot; the result is frozen and renamed to `.templates/<id>/` in one step, and the VM is cloned from it. A second `vm create` with the same key waits for the first instead of restoring a second copy. A failed build stays in its staging folder for inspection.
+- Otherwise the full pipeline runs into a staging folder, `.templates/.building-<id>-<uuid>/`: `cfw install`, the offline trim, then the setup boot; the result is frozen and renamed to `.templates/<id>/` in one step, and the VM is cloned from it. The restore tree is removed before the freeze whatever `--keep-artifacts` says: a template never keeps it, because its ~11 GB would stay pinned for as long as the template lives and no clone can use it. `--keep-artifacts` keeps it only with `--no-template`, and `vm template adopt` removes it too. A second `vm create` with the same key waits for the first instead of restoring a second copy. A failed build stays in its staging folder for inspection.
 
 ```sh
 vphone-cli vm create phone-a --iphone-source … --cloudos-source …   # builds the template, clones phone-a
@@ -54,6 +54,21 @@ vphone-cli vm create phone-c --template 3f2a91c0d4e7 --cpu 4 --memory 6144
 ```
 
 `--template <id>` clones from a template by its identifier (or a unique prefix of four or more digits) and takes no IPSW options. `--device`, `--preset`, `--disk-size` and the slimming switches, when given, must match the template's; a clone cannot change them. CPU, memory, screen and network are not part of the key.
+
+### Offline trim
+
+After `cfw install`, a template build deletes system files the guest never needs from its System volume, offline, with the volume mounted on the host. `--trim` on `vm create` (default `standard`) and `--tier` on `vm template trim` pick the tier:
+
+| Tier | Deletes | About |
+| --- | --- | --- |
+| `none` | nothing | |
+| `conservative` | the contents of `usr/standalone/update` (software-update ramdisk, baseband firmware) | 0.35 GB |
+| `standard` | conservative, plus the AirPods/Beats pairing assets (`PreinstalledAssetsV2/RequiredByOs/com_apple_MobileAsset_SharingDeviceAssets`), the watch faces (`NanoTimeKit/FaceBundles`) and the `LinguisticData/RequiredAssets_*.bundle` of every language not kept | 1.2 GB |
+| `aggressive` | reserved: refused until it has been validated on a guest | |
+
+`--keep-languages` (default `en,zh-Hans,zh`; English is always kept) chooses the languages standard keeps. The tier, the version of the list and the kept languages are part of the template key (`standard/1/en,zh,zh-Hans`), so templates trimmed differently never match. Trimming cannot be undone: a clone cannot get the files back.
+
+The deleted files free nothing at first. The guest's original system snapshot (`orig-fs.disabled.rn-*`, left by `cfw install`) still holds every block, and the host cannot delete it, even as root. The setup boot deletes it as its first step, and only then is the space returned. So a trim is refused for a template that gets no setup boot, and a trimmed template is frozen or adopted only once its snapshot is gone. `vm template trim` needs no root, runs on a stopped machine that has not been cloned from a template, or on an unfinished `.building-…` folder, and refuses a frozen template.
 
 ### Setup boot and slimming
 
@@ -71,7 +86,9 @@ Every step has a deadline. A failed step stops the VM, records nothing and leave
 
 | Switch | Default | Effect |
 | --- | --- | --- |
-| `--slim on\|off` | on | `off` keeps every app and service. The setup boot still runs: Setup is skipped and the snapshot deleted. |
+| `--slim on\|off` | on | `off` trims nothing and keeps every app and service. The setup boot still runs: Setup is skipped and the snapshot deleted. |
+| `--trim none\|conservative\|standard` | standard | The offline trim above. |
+| `--keep-languages <list>` | `en,zh-Hans,zh` | The languages `--trim standard` keeps. |
 | `--service-profile trimmed\|none` | trimmed | vphoned's trimmed profile: about 140 launchd jobs off, the App Store daemons and sign-in follow-up among them. |
 | `--remove-apps on\|off` | on | Removes App Store, Home, TV, News, FaceTime, iTunes Store, Messages, Games, Find My and Wallet. Camera and Phone stay. |
 | `--keep-apps <ids>` | none | Bundle IDs from that list to keep, comma-separated (`com.apple.findmy,com.apple.Passbook`). |
@@ -83,16 +100,17 @@ What every clone inherits from the template: Setup done, the apps and services a
 
 ### Finishing a VM as a template
 
-Launchpad builds a machine with its own pipeline and boots it once, leaving it at Setup. To turn such a machine (or any VM straight after creating it) into a template, stop it, give it the setup boot, and adopt it:
+Launchpad builds a machine with its own pipeline and boots it once, leaving it at Setup. To turn such a machine (or any VM straight after creating it) into a template, stop it, trim it, give it the setup boot, and adopt it:
 
 ```sh
 vphone-cli vm stop phone-src
+vphone-cli vm template trim phone-src --tier standard   # offline, no root; frees nothing until the setup boot
 vphone-cli vm template setup phone-src        # headless; --window to watch, slimming switches as for vm create
 vphone-cli vm template adopt phone-src        # key from its records and what the setup boot recorded
 vphone-cli vm create phone-d --template <id> --skip-first-boot
 ```
 
-`vm template setup` refuses a running VM and a frozen template. On a VM it reports an app vphoned would not remove and leaves it out of the recorded steps, so the adopted key says what was really done. Given a `.building-…` name from `vm template list` (a `vm create` whose setup boot failed), it sets the build up to its key, which fixes the slimming, and freezes it on success.
+`vm template setup` refuses a running VM and a frozen template. It trims nothing itself: the tier `vm template trim` recorded is kept, and a `--trim` that names another tier is refused. On a VM it reports an app vphoned would not remove and leaves it out of the recorded steps, so the adopted key says what was really done. Given a `.building-…` name from `vm template list` (a `vm create` whose setup boot failed), it sets the build up to its key, which fixes the slimming, runs the offline trim first if the build stopped before it, and freezes it on success.
 
 ### Shared secrets
 
@@ -101,14 +119,20 @@ Every machine cloned from one template shares, with the template and with each o
 ```sh
 vphone-cli vm template list              # id, key summary, STALE with the reasons
 vphone-cli vm template show <id> --json
+vphone-cli vm template trim myphone --tier standard   # trim a stopped VM before adopting it
 vphone-cli vm template setup myphone     # the setup boot, on a stopped VM
 vphone-cli vm template adopt myphone     # freeze a stopped, newly created VM into a template
 vphone-cli vm template delete <id>
 ```
 
 - **Stale.** A template is listed as stale when this `vphone-cli` belongs to another bundle series, when its key has an older format, when its preset now resolves to other boot-chain patches, or when its patch receipt disagrees with its plan. A stale template is never used: `vm create` with its key fails and names it. Delete it to have the next `vm create` build a new one.
-- **Adopt.** `vm template adopt <vm>` turns a stopped VM into a template, under the key its own records give (`restore-info.json`, `PatchPlan.plist`, `config.plist`, the disk image, Launchpad's `launchpad.json`, and the steps `vm template setup` recorded in its `Template.plist`). The VM leaves `vm list`. Adopt a VM straight after its setup boot: every clone inherits what its guest has done since. A VM with snapshots is refused, and so is one that would be stale unless `--force` is given.
+- **Adopt.** `vm template adopt <vm>` turns a stopped VM into a template, under the key its own records give (`restore-info.json`, `PatchPlan.plist`, `config.plist`, the disk image, Launchpad's `launchpad.json`, and the steps `vm template trim` and `vm template setup` recorded in its `Template.plist`). The VM leaves `vm list`. Adopt a VM straight after its setup boot: every clone inherits what its guest has done since. A VM with snapshots is refused, and so is one that would be stale unless `--force` is given.
 - **Never booted once frozen.** `vm launch` and `vphone-vm` refuse a frozen template, in DFU too; no machine name reaches into `.templates`, so `vm launch`, `clone`, `export`, `rename` and `delete` cannot pick one up by accident. A template that booted after being frozen would write state into the blocks every later clone inherits, and the clones made before it would stop sharing them.
+- **Machines using it.** A machine cloned from a template records the template in `TemplateSource.plist`; a `vm clone` of it keeps the record (the copy shares the template's blocks too) and `vm export` leaves it out (an import shares nothing). `vm template list` and `show` list the machines using each template and its size on disk, and `vm info` shows a machine's template. When `vm delete` removes the last machine cloned from a template that still exists, it says so, and never deletes the template itself:
+
+  ```
+  note: template 3f2a91c0d4e7 (~17.40 GB) is no longer used by any machine; remove it with `vphone-cli vm template delete 3f2a91c0d4e7`
+  ```
 - **Deleting.** `vm template delete <id>` removes the template; machines cloned from it keep working. The blocks they still share with it are freed only when those machines change them or are deleted, so deleting a template frees less than its size while clones remain. Templates take disk space although `vm list` does not show them; look in `~/.vphone/machines/.templates`, keeping in mind that `du` counts a template and each of its clones in full.
 
 ## Manual stages

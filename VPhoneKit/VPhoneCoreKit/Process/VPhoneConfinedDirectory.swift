@@ -463,7 +463,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     /// Replace whatever is at `relative` with a symbolic link to `target`.
     public func createSymlink(target: String, at relative: String) throws {
         let (directory, leaf) = try parent(of: relative)
-        try Self.removeEntry(in: directory.descriptor, named: leaf, device: directory.device, path: relative)
+        _ = try Self.removeEntry(in: directory.descriptor, named: leaf, device: directory.device, path: relative)
         guard symlinkat(target, directory.descriptor, leaf) == 0 else {
             throw VPhoneConfinedDirectoryError.from(errno, relative)
         }
@@ -497,14 +497,17 @@ public final class VPhoneConfinedDirectory: Sendable {
     /// Remove `relative` and everything below it without following a link:
     /// a symbolic link is removed as a link. Absent is not an error. A folder
     /// on another volume (something still mounted) is refused, not emptied.
-    public func removeItem(_ relative: String) throws {
+    /// Returns the allocated bytes (`st_blocks`) of what was removed; a file
+    /// with a second hard link frees nothing and counts as nothing.
+    @discardableResult
+    public func removeItem(_ relative: String) throws -> UInt64 {
         let parent: (directory: VPhoneConfinedDirectory, leaf: String)
         do {
             parent = try self.parent(of: relative)
         } catch VPhoneConfinedDirectoryError.missing {
-            return
+            return 0
         }
-        try Self.removeEntry(in: parent.directory.descriptor, named: parent.leaf, device: device, path: relative)
+        return try Self.removeEntry(in: parent.directory.descriptor, named: parent.leaf, device: device, path: relative)
     }
 
     // MARK: - Tree copy
@@ -660,19 +663,20 @@ public final class VPhoneConfinedDirectory: Sendable {
         }
     }
 
-    private static func removeEntry(in parent: Int32, named name: String, device: dev_t, path: String) throws {
+    private static func removeEntry(in parent: Int32, named name: String, device: dev_t, path: String) throws -> UInt64 {
         var metadata = stat()
         guard fstatat(parent, name, &metadata, AT_SYMLINK_NOFOLLOW) == 0 else {
             if errno == ENOENT {
-                return
+                return 0
             }
             throw VPhoneConfinedDirectoryError.from(errno, path)
         }
+        let allocated = metadata.st_nlink <= 1 ? UInt64(max(metadata.st_blocks, 0)) * 512 : 0
         guard metadata.st_mode & S_IFMT == S_IFDIR else {
             guard unlinkat(parent, name, 0) == 0 || errno == ENOENT else {
                 throw VPhoneConfinedDirectoryError.from(errno, path)
             }
-            return
+            return allocated
         }
         guard metadata.st_dev == device else {
             throw VPhoneConfinedDirectoryError.crossesDevice(path)
@@ -692,12 +696,15 @@ public final class VPhoneConfinedDirectory: Sendable {
         if opened.st_mode & 0o700 != 0o700 {
             _ = fchmod(child, (opened.st_mode & 0o7777) | 0o700)
         }
+        // A directory's own blocks; its hard link count is its subfolder count.
+        var removed = UInt64(max(opened.st_blocks, 0)) * 512
         for entry in try entries(of: child, path: path) {
-            try removeEntry(in: child, named: entry, device: device, path: "\(path)/\(entry)")
+            removed += try removeEntry(in: child, named: entry, device: device, path: "\(path)/\(entry)")
         }
         guard unlinkat(parent, name, AT_REMOVEDIR) == 0 || errno == ENOENT else {
             throw VPhoneConfinedDirectoryError.from(errno, path)
         }
+        return removed
     }
 }
 

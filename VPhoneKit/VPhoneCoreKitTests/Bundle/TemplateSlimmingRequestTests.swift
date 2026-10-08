@@ -44,6 +44,30 @@ struct TemplateSlimmingRequestTests {
         }
     }
 
+    @Test func `the trim defaults to standard and is stored as its key value`() throws {
+        #expect(Request.defaultTrimTier == VPhoneSystemTrimSpec.standard.keyValue)
+        #expect(Request.defaultTrimTier == "standard/1/en,zh,zh-Hans")
+        #expect(try Request(trimTier: "conservative").resolve().trimTier == "conservative/1")
+        #expect(try Request(trimTier: "none").resolve().trimTier == "none")
+        // --keep-languages alone means the standard tier keeping them.
+        let japanese = try Request(keepLanguages: "ja").resolve()
+        #expect(japanese.trimTier == "standard/1/en,ja")
+        #expect(japanese.setupBoot)
+        #expect(!Request(keepLanguages: "ja").isEmpty)
+        #expect(Request.trimTiers == ["none", "conservative", "standard"])
+    }
+
+    @Test func `trim switches that cannot apply are refused`() {
+        for request in [
+            Request(trimTier: "aggressive"),
+            Request(trimTier: "conservative", keepLanguages: "ja"),
+            Request(trimTier: "standard", keepLanguages: "../x"),
+            Request(slim: false, keepLanguages: "ja"),
+        ] {
+            #expect(throws: VPhoneTemplateSlimmingError.self, "\(request)") { try request.resolve() }
+        }
+    }
+
     @Test func `parts can be turned off on their own`() throws {
         let noProfile = try Request(serviceProfile: "none").resolve()
         #expect(noProfile.serviceProfile == "none")
@@ -100,6 +124,8 @@ struct TemplateSlimmingRequestTests {
             Request(removeApps: false),
             Request(keepApps: ["com.apple.games"]),
             Request(accountsOff: true),
+            Request(trimTier: "conservative"),
+            Request(keepLanguages: "ja"),
         ]
         let identifiers = try Set(requests.map { try MachineTemplateKeyTests.key(slimming: $0.resolve()).identifier })
         #expect(identifiers.count == requests.count)

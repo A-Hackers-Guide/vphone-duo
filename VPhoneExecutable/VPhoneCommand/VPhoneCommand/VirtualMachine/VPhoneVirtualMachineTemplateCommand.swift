@@ -30,6 +30,7 @@ struct VPhoneVirtualMachineTemplateCommand: ParsableCommand {
             VPhoneVirtualMachineTemplateShowCommand.self,
             VPhoneVirtualMachineTemplateSetupCommand.self,
             VPhoneVirtualMachineTemplateAdoptCommand.self,
+            VPhoneVirtualMachineTemplateTrimCommand.self,
             VPhoneVirtualMachineTemplateDeleteCommand.self,
         ],
     )
@@ -48,10 +49,15 @@ struct VPhoneMachineTemplateReport: Encodable {
     var sourceMachine: String?
     var steps: VPhoneMachineTemplateSteps
     var diskSizeBytes: Int64
+    /// What the template's files take on disk (`st_blocks`): what deleting
+    /// it frees once no machine shares its blocks.
+    var allocatedBytes: UInt64
+    /// Machines cloned from it (their `TemplateSource.plist`), sorted.
+    var machines: [String]
     var stale: Bool
     var staleReasons: [String]
 
-    init(_ template: VPhoneMachineTemplate) {
+    init(_ template: VPhoneMachineTemplate, usage: [String: [String]]) {
         let record = template.record
         id = record.identifier
         path = template.url.path
@@ -62,6 +68,8 @@ struct VPhoneMachineTemplateReport: Encodable {
         sourceMachine = record.sourceMachine
         steps = record.steps
         diskSizeBytes = (try? template.bundle().diskSizeBytes) ?? 0
+        allocatedBytes = VPhoneMachineTemplates.allocatedBytes(of: template.url)
+        machines = usage[template.identifier] ?? []
         staleReasons = VPhoneMachineTemplateKeys.staleReasons(template)
         stale = !staleReasons.isEmpty
     }
@@ -97,7 +105,8 @@ struct VPhoneVirtualMachineTemplateListCommand: ParsableCommand {
 
     func run() throws {
         let listing = try VPhoneMachineTemplates.list(in: lib.library)
-        let reports = listing.templates.map(VPhoneMachineTemplateReport.init)
+        let usage = VPhoneMachineTemplates.usage(in: lib.library)
+        let reports = listing.templates.map { VPhoneMachineTemplateReport($0, usage: usage) }
         if json {
             try print(encodeJSON(VPhoneMachineTemplateListReport(
                 templates: reports,
@@ -115,6 +124,8 @@ struct VPhoneVirtualMachineTemplateListCommand: ParsableCommand {
         for report in reports {
             let state = report.stale ? "  STALE" : ""
             print("\(report.id)  \(report.key.summary)\(state)")
+            print("    \(VPhoneSystemTrim.formatBytes(report.allocatedBytes)) on disk; "
+                + "machines using it: \(report.machines.isEmpty ? "none" : report.machines.joined(separator: ", "))")
             for reason in report.staleReasons {
                 print("    stale: \(reason)")
             }
@@ -138,7 +149,10 @@ struct VPhoneVirtualMachineTemplateShowCommand: ParsableCommand {
     @Flag(name: .shortAndLong, help: "Emit JSON") var json = false
 
     func run() throws {
-        let report = try VPhoneMachineTemplateReport(VPhoneMachineTemplates.template(id, in: lib.library))
+        let report = try VPhoneMachineTemplateReport(
+            VPhoneMachineTemplates.template(id, in: lib.library),
+            usage: VPhoneMachineTemplates.usage(in: lib.library),
+        )
         if json {
             try print(encodeJSON(report))
             return
@@ -152,7 +166,8 @@ struct VPhoneVirtualMachineTemplateShowCommand: ParsableCommand {
         print("preset:    \(key.patchPreset)  boot chain \(key.bootChainPlanDigest.prefix(12))")
         print("bundle:    series \(key.bundleSeries), boot chain \(report.bootChainBundleVersion ?? "unknown"), "
             + "built with \(report.builtWithBundleVersion ?? "unknown")")
-        print("disk:      \(key.diskSizeGB) GB")
+        print("disk:      \(key.diskSizeGB) GB, \(VPhoneSystemTrim.formatBytes(report.allocatedBytes)) on disk")
+        print("machines:  \(report.machines.isEmpty ? "none" : report.machines.joined(separator: ", "))")
         print("slimming:  \(key.slimming.summary)")
         if !key.slimming.removedApps.isEmpty {
             print("removed:   \(key.slimming.removedApps.joined(separator: ","))")
@@ -185,15 +200,17 @@ struct VPhoneVirtualMachineTemplateSetupCommand: ParsableCommand {
         records nothing.
 
         A VM: stop it first (a machine Launchpad created sits at Setup after its first boot; that \
-        is fine). Then vm template adopt <name> freezes it with what this recorded. An app that \
-        will not go is reported and left out of the template's key.
+        is fine), and trim it with vm template trim beforehand: the snapshot deletion here is what \
+        frees the trimmed files, and this boot trims nothing. --trim, when given, must match the \
+        tier vm template trim recorded. Then vm template adopt <name> freezes it with what this \
+        recorded. An app that will not go is reported and left out of the template's key.
 
         A .building-… name from vm template list: a vm create whose template build failed. Its \
         key fixes the slimming, so switches that disagree are refused, every app must go, and on \
         success the template is frozen and vm create uses it.
 
         Slimming: --slim off skips the app removal and the service profile; the setup boot still \
-        skips Setup and deletes the snapshot.
+        skips Setup and deletes the snapshot, so a trim recorded before it is kept.
         """,
     )
 
@@ -220,10 +237,23 @@ struct VPhoneVirtualMachineTemplateSetupCommand: ParsableCommand {
         let bundle = try library.bundle(named: target)
         try VPhoneMachineTemplates.requireBootable(bundleURL: bundle.url)
         try VPhoneBundleActivity.requireStopped(bundle)
-        let wanted = try slimming.resolve()
-        if wanted.trimTier != "none" {
-            throw ValidationError("--trim applies to vm create: files are trimmed during its cfw install, before the setup boot.")
+        var wanted = try slimming.resolve()
+        // The setup boot trims nothing. A machine is trimmed beforehand by
+        // vm template trim, which records its tier; this boot's snapshot
+        // deletion is what frees it. --trim here only states what the caller
+        // expects that record to say.
+        let trimmed = try VPhoneMachineTemplates.readRecord(inBundle: bundle.url)?.steps.trimTier ?? "none"
+        let request = try slimming.request
+        if request.trimTier != nil || request.keepLanguages != nil, wanted.trimTier != trimmed {
+            throw ValidationError(
+                "\(target) is trimmed \(trimmed), not \(wanted.trimTier). The setup boot trims nothing: "
+                    + "stop it and run vm template trim \(target) first, or leave --trim out.",
+            )
         }
+        if trimmed == "none" {
+            print("note: \(target) is not trimmed; vm template trim \(target) before this boot frees about 1.2 GB")
+        }
+        wanted.trimTier = trimmed
         // Checked before booting: a machine adopt would refuse is not worth it.
         let recorded = try VPhoneMachineTemplateKeys.recorded(bundle)
         if let snapshots = try? VPhoneMachineSnapshots.list(of: bundle), !snapshots.isEmpty {
@@ -270,6 +300,16 @@ struct VPhoneVirtualMachineTemplateSetupCommand: ParsableCommand {
             guard wanted == record.key.slimming else {
                 throw ValidationError("\(target) is built to its key: \(record.key.slimming.summary). Leave the slimming switches out.")
             }
+        }
+        if record.steps.trimTier != record.key.slimming.trimTier {
+            // The build stopped in or before its offline trim: finish that
+            // first, as vm create would have, before the snapshot goes.
+            try VPhoneMachineTemplateTrimmer.trim(
+                VPhoneBundle.load(at: build.bundleURL),
+                label: target,
+                spec: VPhoneSystemTrimSpec(keyValue: record.key.slimming.trimTier),
+                newRecord: nil,
+            )
         }
         if !record.steps.setupDone {
             try VPhoneTemplateSetupRun.run(
@@ -339,10 +379,93 @@ struct VPhoneVirtualMachineTemplateAdoptCommand: ParsableCommand {
             sourceMachine: name,
             steps: steps,
         )
+        if let tree = VPhoneMachineTemplates.restoreTree(of: bundle) {
+            print("[*] Removing the restore tree \(tree)/: a template never keeps it")
+        }
         let template = try VPhoneMachineTemplates.adopt(machineNamed: name, in: lib.library, record: record)
         print("adopted \(name) as template \(template.identifier)")
         print("  \(template.key.summary)")
         print("create machines from it with: vphone-cli vm create <name> --template \(template.identifier)")
+    }
+}
+
+// MARK: - trim
+
+struct VPhoneVirtualMachineTemplateTrimCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "trim",
+        abstract: "Delete a trim tier's files from a stopped machine that is being built into a template",
+        discussion: """
+        Attaches the machine's Disk.img, mounts its guest System volume read-write (no root \
+        needed), deletes the tier's files and records the trim in its Template.plist, so \
+        vm template adopt keys the template by it. The target is a stopped VM of the library \
+        that will be adopted, or a .building-… folder from vm template list that no build holds.
+
+        Tiers: none; conservative (usr/standalone/update); standard (conservative, plus the \
+        AirPods/Beats pairing assets, the watch faces, and the linguistic data of languages not \
+        kept: --keep-languages, default en,zh-Hans,zh; English is always kept). aggressive is \
+        reserved and refused.
+
+        The deleted files stay allocated until the guest deletes its orig-fs snapshot during \
+        the template's setup boot, and a trimmed template is frozen only after that. Trimming \
+        cannot be undone: a machine already trimmed only takes the same trim again or a heavier \
+        one after conservative. Refused for a running machine, a frozen template, and a machine \
+        cloned from a template.
+        """,
+    )
+
+    @OptionGroup var lib: VPhoneLibraryOption
+    @Argument(help: "VM name, or a .building-… name from vm template list") var target: String
+    @Option(help: "Trim tier: none | conservative | standard") var tier = "standard"
+    @Option(help: ArgumentHelp("Languages whose linguistic data the standard tier keeps", valueName: "en,zh-Hans,zh"))
+    var keepLanguages: String?
+    @Flag(name: .shortAndLong, help: "Emit JSON") var json = false
+
+    func run() throws {
+        let spec = try VPhoneSystemTrimSpec.parse(tier: tier, keptLanguages: keepLanguages)
+        let library = lib.library
+        let bundle: VPhoneBundle
+        var newRecord: VPhoneMachineTemplateRecord?
+        if target.hasPrefix(".building-") {
+            guard let staging = try VPhoneMachineTemplates.list(in: library).staging.first(where: { $0.name == target }),
+                  let identifier = staging.identifier
+            else {
+                throw VPhoneMachineTemplateError.notFound(target)
+            }
+            guard !staging.isActive else {
+                throw VPhoneMachineTemplateError.busy(identifier: identifier)
+            }
+            bundle = try VPhoneBundle.load(at: staging.url.appendingPathComponent(identifier, isDirectory: true))
+        } else {
+            bundle = try library.bundle(named: target)
+            if try VPhoneMachineTemplates.readRecord(inBundle: bundle.url) == nil {
+                // Resolved before anything is deleted: a machine without a
+                // finished CFW install or its records cannot become a template.
+                let recorded = try VPhoneMachineTemplateKeys.recorded(bundle)
+                newRecord = VPhoneMachineTemplateRecord(
+                    key: recorded.key,
+                    builtWithBundleVersion: VPhoneBundleVersion.current(),
+                    bootChainBundleVersion: recorded.bootChainBundleVersion,
+                    sourceMachine: target,
+                )
+            }
+        }
+        let result = try VPhoneMachineTemplateTrimmer.trim(
+            bundle,
+            label: target,
+            spec: spec,
+            newRecord: newRecord,
+            log: { line in
+                if json {
+                    FileHandle.standardError.write(Data((line + "\n").utf8))
+                } else {
+                    print(line)
+                }
+            },
+        )
+        if json {
+            try print(encodeJSON(result))
+        }
     }
 }
 

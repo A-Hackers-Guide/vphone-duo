@@ -14,6 +14,9 @@ public struct VPhoneBundleReport: Codable, Equatable, Sendable {
     /// present, so a client can tell a bundle that knows the setting from one
     /// that does not.
     public let unlocksAtStartup: Bool
+    /// The template the machine was cloned from (`TemplateSource.plist`),
+    /// or nil.
+    public let template: String?
     /// Whether vphone-vm forwards the Mac's location to the guest. Always
     /// present, like `unlocksAtStartup`.
     public let syncsHostLocation: Bool
@@ -28,6 +31,7 @@ public struct VPhoneBundleReport: Codable, Equatable, Sendable {
         customFirmwareInstalled = VPhoneRestoreInfo.customFirmwareInstalled(inBundle: bundle)
         udid = VPhoneRestoreOperations.resolveUDID(bundle: bundle)
         unlocksAtStartup = bundle.manifest.unlocksScreenAtStartup
+        template = VPhoneMachineTemplates.readSource(inBundle: bundle.url)?.identifier
         syncsHostLocation = bundle.manifest.sharesHostLocation
     }
 }

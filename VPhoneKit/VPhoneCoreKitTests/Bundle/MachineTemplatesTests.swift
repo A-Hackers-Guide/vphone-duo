@@ -426,4 +426,141 @@ struct MachineTemplatesTests {
         #expect(reasons[1].contains("kernel-x"))
         #expect(template.staleReasons(currentSeries: "2.8", freshKey: nil).count == 1)
     }
+
+    // MARK: - Trim and the snapshot
+
+    @Test func `a trim without its snapshot deletion is never frozen or adopted`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let trim = VPhoneSystemTrimSpec.standard.keyValue
+        let key = MachineTemplateKeyTests.key(slimming: .init(trimTier: trim, setupBoot: true))
+        let build = try VPhoneMachineTemplates.beginBuild(key, in: fixture.library)
+        try makeMachine(key.identifier, in: fixture, library: build.library)
+        try VPhoneMachineTemplates.writeRecord(record(key), inBundle: build.bundleURL)
+        try VPhoneMachineTemplates.recordSteps(inBundle: build.bundleURL) {
+            $0.trimTier = trim
+            $0.setupDone = true
+        }
+
+        #expect(VPhoneMachineTemplateSteps(trimTier: trim).problems.count == 1)
+        #expect(throws: VPhoneMachineTemplateError.self) {
+            try VPhoneMachineTemplates.freeze(build)
+        }
+        #expect(try VPhoneMachineTemplates.readRecord(inBundle: build.bundleURL)?.frozen == false)
+
+        try VPhoneMachineTemplates.recordSteps(inBundle: build.bundleURL) { $0.snapshotDeleted = true }
+        #expect(try VPhoneMachineTemplates.freeze(build).record.steps.trimTier == trim)
+
+        // Adopt follows the same rule.
+        try makeMachine("src", in: fixture)
+        let adoptKey = MachineTemplateKeyTests.key(bootChain: "other", slimming: .init(trimTier: trim, setupBoot: true))
+        #expect(throws: VPhoneMachineTemplateError.self) {
+            try VPhoneMachineTemplates.adopt(
+                machineNamed: "src",
+                in: fixture.library,
+                record: record(adoptKey, steps: .init(setupDone: true, trimTier: trim)),
+            )
+        }
+        #expect(exists(fixture.library.url(forName: "src")))
+        #expect(VPhoneMachineTemplateSteps(snapshotDeleted: true, trimTier: trim).problems.isEmpty)
+        #expect(VPhoneMachineTemplateSteps().problems.isEmpty)
+    }
+
+    @Test func `a key asking for a trim needs the setup boot`() {
+        let trim = VPhoneSystemTrimSpec.standard.keyValue
+        #expect(VPhoneMachineTemplateSlimming(trimTier: trim).problems.count == 1)
+        #expect(VPhoneMachineTemplateSlimming(trimTier: trim, setupBoot: true).problems.isEmpty)
+        #expect(VPhoneMachineTemplateSlimming.none.problems.isEmpty)
+    }
+
+    @Test func `steps can be recorded on a library machine that has no record yet`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let machine = try makeMachine("src", in: fixture)
+        #expect(throws: VPhoneMachineTemplateError.notBeingBuilt(path: machine.url.path)) {
+            try VPhoneMachineTemplates.recordSteps(inBundle: machine.url) { $0.trimTier = "conservative/1" }
+        }
+        var frozen = record()
+        frozen.frozen = true
+        try VPhoneMachineTemplates.recordSteps(inBundle: machine.url, creating: { frozen }) { $0.trimTier = "conservative/1" }
+        let written = try #require(try VPhoneMachineTemplates.readRecord(inBundle: machine.url))
+        #expect(!written.frozen)
+        #expect(written.steps.trimTier == "conservative/1")
+        // It still boots: only a frozen record refuses.
+        #expect(VPhoneMachineTemplates.bootRefusal(bundleURL: machine.url) == nil)
+    }
+
+    // MARK: - Restore tree
+
+    @Test func `a template never keeps the restore tree`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let machine = try makeMachine("src", in: fixture)
+        let tree = machine.url.appendingPathComponent("iPhone17,3_27.0_24A435_Restore")
+        try FileManager.default.createDirectory(at: tree, withIntermediateDirectories: true)
+        try Data([1]).write(to: tree.appendingPathComponent("kernelcache"))
+        #expect(VPhoneMachineTemplates.restoreTree(of: machine) == tree.lastPathComponent)
+
+        let adopted = try VPhoneMachineTemplates.adopt(machineNamed: "src", in: fixture.library, record: record())
+        #expect(!exists(adopted.url.appendingPathComponent(tree.lastPathComponent)))
+        #expect(exists(adopted.url.appendingPathComponent("Disk.img")))
+
+        let key = MachineTemplateKeyTests.key(bootChain: "built")
+        let build = try VPhoneMachineTemplates.beginBuild(key, in: fixture.library)
+        let built = try makeMachine(key.identifier, in: fixture, library: build.library)
+        try FileManager.default.createDirectory(at: built.url.appendingPathComponent("iPhone17,3_27.0_24A435_Restore"), withIntermediateDirectories: true)
+        try VPhoneMachineTemplates.writeRecord(record(key), inBundle: build.bundleURL)
+        let frozen = try VPhoneMachineTemplates.freeze(build)
+        #expect(VPhoneMachineTemplates.restoreTree(of: try frozen.bundle()) == nil)
+    }
+
+    // MARK: - Source and usage
+
+    @Test func `clones record their template, plain clones keep it, and the last one leaving is noticed`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        try makeMachine("src", in: fixture)
+        try makeMachine("own", in: fixture)
+        let template = try VPhoneMachineTemplates.adopt(machineNamed: "src", in: fixture.library, record: record())
+        #expect(VPhoneMachineTemplates.readSource(inBundle: template.url) == nil)
+
+        let a = try VPhoneMachineTemplates.cloneMachine(from: template, to: "phone-a", in: fixture.library)
+        #expect(VPhoneMachineTemplates.readSource(inBundle: a.url)?.identifier == template.identifier)
+        #expect(VPhoneBundleReport(bundle: a).template == template.identifier)
+        #expect(try VPhoneBundleReport(bundle: fixture.library.bundle(named: "own")).template == nil)
+        // A plain clone of a clone shares the template's blocks too.
+        let b = try VPhoneBundleOperations.clone(bundleNamed: "phone-a", to: "phone-b", in: fixture.library, newIdentity: true)
+        #expect(VPhoneMachineTemplates.readSource(inBundle: b.url)?.identifier == template.identifier)
+        #expect(VPhoneMachineTemplates.usage(in: fixture.library) == [template.identifier: ["phone-a", "phone-b"]])
+        // An export leaves it out: an import shares nothing.
+        #expect(VPhoneBundleOperations.exportExcludePatterns.contains { fnmatch($0, VPhoneMachineTemplates.sourceFileName, 0) == 0 })
+
+        // Deleting one of two: still used.
+        let sourceA = VPhoneMachineTemplates.readSource(inBundle: a.url)
+        try VPhoneBundleOperations.delete(bundleNamed: "phone-a", in: fixture.library)
+        #expect(VPhoneMachineTemplates.unusedTemplate(after: sourceA, in: fixture.library) == nil)
+        // Deleting the last: noticed, and the template is still there.
+        let sourceB = VPhoneMachineTemplates.readSource(inBundle: b.url)
+        try VPhoneBundleOperations.delete(bundleNamed: "phone-b", in: fixture.library)
+        let unused = try #require(VPhoneMachineTemplates.unusedTemplate(after: sourceB, in: fixture.library))
+        #expect(unused.identifier == template.identifier)
+        #expect(exists(template.url))
+        #expect(VPhoneMachineTemplates.allocatedBytes(of: template.url) > 0)
+        // A machine that was never cloned, or a template already deleted: nothing to say.
+        #expect(VPhoneMachineTemplates.unusedTemplate(after: nil, in: fixture.library) == nil)
+        try VPhoneMachineTemplates.delete(template.identifier, in: fixture.library)
+        #expect(VPhoneMachineTemplates.unusedTemplate(after: sourceB, in: fixture.library) == nil)
+    }
+
+    @Test func `an unreadable or foreign source record is ignored`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let machine = try makeMachine("m", in: fixture)
+        let file = machine.url.appendingPathComponent(VPhoneMachineTemplates.sourceFileName)
+        try Data("junk".utf8).write(to: file)
+        #expect(VPhoneMachineTemplates.readSource(inBundle: machine.url) == nil)
+        try VPhoneMachineTemplates.writeSource(VPhoneMachineTemplateSource(identifier: "../../etc"), inBundle: machine.url)
+        #expect(VPhoneMachineTemplates.readSource(inBundle: machine.url) == nil)
+        #expect(VPhoneMachineTemplates.usage(in: fixture.library).isEmpty)
+    }
 }
