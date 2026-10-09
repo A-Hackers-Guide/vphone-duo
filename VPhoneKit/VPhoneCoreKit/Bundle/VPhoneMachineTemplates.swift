@@ -140,6 +140,21 @@ public struct VPhoneMachineTemplateSource: Codable, Equatable, Sendable {
     }
 }
 
+/// How a machine's ``VPhoneMachineTemplateSource`` stands to the template
+/// that has its identifier in the library now. `vm list --json` and `vm info
+/// --json` report it as `templateMatch`, and Launchpad's inspector shows it
+/// from there, so the match is decided only here
+/// (``VPhoneMachineTemplateSource/isClone(of:)``).
+public enum VPhoneMachineTemplateMatch: String, Codable, Equatable, Sendable {
+    /// Cloned from the template that has the identifier now.
+    case current
+    /// Cloned from an earlier build with the same key, since deleted.
+    case earlierBuild
+    /// No template has the identifier now (or its record cannot be read, so
+    /// `vm template list` does not list it).
+    case deleted
+}
+
 // MARK: - Sources
 
 /// The IPSW sources a template was built from, as the create named them: a
@@ -865,6 +880,13 @@ public enum VPhoneMachineTemplates {
               VPhoneMachineTemplateKey.isIdentifier(source.identifier)
         else { return nil }
         return source
+    }
+
+    /// Whether the template `source` names is still in `library` and is the
+    /// build the machine was cloned from.
+    public static func match(of source: VPhoneMachineTemplateSource, in library: VPhoneLibrary) -> VPhoneMachineTemplateMatch {
+        guard let template = try? template(source.identifier, in: library) else { return .deleted }
+        return source.isClone(of: template.record) ? .current : .earlierBuild
     }
 
     static func writeSource(_ source: VPhoneMachineTemplateSource, inBundle url: URL) throws {

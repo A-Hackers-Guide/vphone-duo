@@ -3,8 +3,9 @@ import Foundation
 // MARK: - Harness
 
 /// Checks the guest-independent parts of vphoned on the Mac: the service
-/// profile lists and bookkeeping, the first-boot settle verdict and the device
-/// name rule. `run-logic-tests.sh` builds this file with those sources.
+/// profile lists and bookkeeping, the first-boot settle verdict (data
+/// migration included) and the device name rule. `run-logic-tests.sh` builds
+/// this file with those sources.
 nonisolated(unsafe) var failures = 0
 nonisolated(unsafe) var checks = 0
 
@@ -24,12 +25,14 @@ func expectEqual<T: Equatable>(_ actual: T, _ expected: T, _ message: String = "
 enum LogicTests {
     static func main() {
         profileCatalog()
+        profileCatalog26()
         profileSelection()
         neverDisableEnforcement()
         reconciliation()
         noneRestoresOnlyRecorded()
         recordRoundTrip()
         settleVerdicts()
+        dataMigrationRecord()
         deviceNameRule()
         print("\(checks) checks, \(failures) failures")
         exit(failures == 0 ? 0 : 1)
@@ -51,8 +54,33 @@ enum LogicTests {
         expectEqual(groups.map(\.name), ["base", "app_store", "signin_followup", "accounts"])
         expectEqual(groups.filter(\.byDefault).map(\.name), ["base", "app_store", "signin_followup"])
         expect(GuestServiceProfile.base27.contains("com.apple.appstorecomponentsd"), "appstorecomponentsd is in base")
-        expect(GuestServiceProfile.groups(iosMajor: 26) == nil, "no list for iOS 26")
+        expect(GuestServiceProfile.groups(iosMajor: 25) == nil, "no list for iOS 25")
+        expect(GuestServiceProfile.groups(iosMajor: 28) == nil, "no list for iOS 28")
+        expect(GuestServiceProfile.groups(iosMajor: 26) != nil, "a list for iOS 26")
         expect(GuestServiceProfile.groups(iosMajor: 27) != nil, "a list for iOS 27")
+        expectEqual(GuestServiceProfile.supportedMajors, [26, 27])
+    }
+
+    static func profileCatalog26() {
+        let base26 = GuestServiceProfile.base26
+        expectEqual(base26.count, 131, "137 minus six 26.6.2 does not load")
+        expectEqual(Set(base26).count, base26.count, "no duplicates")
+        expect(Set(base26).isSubset(of: GuestServiceProfile.base27), "26 adds no label of its own")
+        expect(GuestServiceProfile.notLoadedOn26.isSubset(of: GuestServiceProfile.base27), "only 27 labels are left out")
+        expect(Set(base26).isDisjoint(with: GuestServiceProfile.notLoadedOn26), "what 26 does not load is left out")
+        for label in ["com.apple.cloudtelemetryd", "com.apple.hybridsearchd", "com.apple.safetyalertsd"] {
+            expect(!base26.contains(label), "\(label) is not in the 26 list")
+        }
+        let groups = GuestServiceProfile.groups26
+        expectEqual(groups.map(\.name), GuestServiceProfile.groups27.map(\.name), "same groups as 27")
+        expectEqual(groups.filter(\.byDefault).map(\.name), ["base", "app_store", "signin_followup"])
+        expectEqual(groups.first?.labels, base26, "base is the 26 list")
+        expectEqual(
+            groups.dropFirst().map(\.labels), GuestServiceProfile.groups27.dropFirst().map(\.labels),
+            "store, follow-up and account labels are the same on 26",
+        )
+        let all = groups.flatMap(\.labels)
+        expectEqual(Set(all).count, all.count, "no label is in two 26 groups")
     }
 
     static func profileSelection() {
@@ -74,8 +102,21 @@ enum LogicTests {
         expectEqual(allowed?.allowed, ["com.apple.weatherd"], "only catalog labels are reported as allowed")
         expect(allowed?.labels.contains("com.apple.weatherd") == false, "weatherd kept")
 
-        expectEqual(try? GuestServiceProfile.select(profile: "none", iosMajor: 26), GuestServiceProfile.Selection())
-        expectThrows(.unsupported(iosMajor: 26)) { try GuestServiceProfile.select(profile: "trimmed", iosMajor: 26) }
+        let trimmed26 = try? GuestServiceProfile.select(profile: "trimmed", iosMajor: 26)
+        expectEqual(trimmed26?.labels.count, 135, "26 trimmed = 131 + 2 store + 2 follow-up")
+        expectEqual(trimmed26?.groups, ["base", "app_store", "signin_followup"])
+        expect(trimmed26?.refused.isEmpty == true, "the 26 list names nothing never disabled")
+        expectEqual(
+            (try? GuestServiceProfile.select(profile: "trimmed", iosMajor: 26, extraGroups: ["accounts"]))?.labels.count,
+            138, "accounts adds three on 26",
+        )
+
+        expectEqual(try? GuestServiceProfile.select(profile: "none", iosMajor: 25), GuestServiceProfile.Selection())
+        expectThrows(.unsupported(iosMajor: 25)) { try GuestServiceProfile.select(profile: "trimmed", iosMajor: 25) }
+        expectEqual(
+            GuestServiceProfile.Failure.unsupported(iosMajor: 25).description,
+            "No trimmed service list for iOS 25; lists exist for iOS 26, 27",
+        )
         expectThrows(.unknownGroup("bogus")) {
             try GuestServiceProfile.select(profile: "trimmed", iosMajor: 27, extraGroups: ["bogus"])
         }
@@ -94,7 +135,7 @@ enum LogicTests {
     }
 
     static func neverDisableEnforcement() {
-        for group in GuestServiceProfile.groups27 {
+        for group in GuestServiceProfile.groups27 + GuestServiceProfile.groups26 {
             let overlap = Set(group.labels).intersection(GuestServiceProfile.neverDisable)
             expect(overlap.isEmpty, "\(group.name) names never-disabled \(overlap.sorted())")
         }
@@ -243,6 +284,47 @@ enum LogicTests {
         expectEqual(restarted.reasons, ["installd used 0.90 s CPU between polls"])
         let restartedIdle = GuestFirstBootSettle.evaluate([sample(0), sample(5, pid: 120, cpu: 0.05), sample(10, pid: 120, cpu: 0.06)], stablePolls: 3)
         expect(restartedIdle.settled, "a new, idle installd: \(restartedIdle.reasons)")
+
+        // Data migration holds the verdict back until the latest poll has it
+        // done; an unknown state (no build version) does not.
+        func migrating(_ time: Double, _ done: Bool?) -> Sample {
+            var polled = sample(time)
+            polled.dataMigrationDone = done
+            return polled
+        }
+        let pending = GuestFirstBootSettle.evaluate([migrating(0, false), migrating(5, false), migrating(10, false)], stablePolls: 3)
+        expectEqual(pending.reasons, ["data migration has not finished"])
+        let finished = GuestFirstBootSettle.evaluate([migrating(0, false), migrating(5, false), migrating(10, true)], stablePolls: 3)
+        expect(finished.settled, "migration done in the latest poll: \(finished.reasons)")
+        expect(GuestFirstBootSettle.evaluate([migrating(0, nil), migrating(5, nil), migrating(10, nil)], stablePolls: 3).settled, "unknown is not pending")
+        let stillStaging = GuestFirstBootSettle.evaluate([migrating(0, false), migrating(5, false), {
+            var polled = migrating(10, false)
+            polled.stagedSystemApps = 30
+            return polled
+        }()], stablePolls: 3)
+        expectEqual(stillStaging.reasons, ["staged_system_apps has 30 entries", "data migration has not finished"])
+    }
+
+    static func dataMigrationRecord() {
+        func done(_ build: String?, _ last: String?, _ results: String?, running: Bool = true) -> Bool? {
+            GuestFirstBootSettle.dataMigrationDone(
+                build: build, lastSystemVersion: last, lastResultsBuild: results, migratorRunning: running,
+            )
+        }
+        // A fresh restore: com.apple.migration is empty until DataMigrator ends.
+        expectEqual(done("24A435", nil, nil), false)
+        expectEqual(done("24A435", "24A435", "24A435"), true)
+        expectEqual(done("24A435", "24A435", nil), true)
+        expectEqual(done("24A435", nil, "24A435"), true)
+        expectEqual(done("24A435", "24A435", "24A435", running: false), true)
+        // The build changed (an update): the old record is not this build's.
+        expectEqual(done("24A446", "24A435", "24A435"), false)
+        // Nothing recorded and DataMigrator not running: unknown, never waited for.
+        expectEqual(done("24A435", nil, nil, running: false), nil)
+        expectEqual(done(nil, "24A435", "24A435"), nil)
+        expectEqual(done("", nil, nil), nil)
+        let migrator = "/System/Library/PrivateFrameworks/DataMigration.framework/XPCServices/com.apple.datamigrator.xpc/com.apple.datamigrator"
+        expect(migrator.hasSuffix(GuestFirstBootSettle.dataMigratorSuffix), "the path seen on 27.0")
     }
 
     // MARK: - Device Name

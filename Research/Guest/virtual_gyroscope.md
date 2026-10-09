@@ -38,10 +38,14 @@ Clear leaves the service and subscriptions alive and emits stationary samples.
 After a HID reset, the old service is cancelled and released only from its
 cancel handler, then a new service is registered after five seconds.
 
-`VPhoneGyroscopeStatus` is updated at configuration and service transitions and
-every two seconds. The RPC result includes `provider` and `provider_running`;
-the latter requires an enumerated service and a heartbeat younger than ten
-seconds. The status includes service ID, PID, report interval, dispatched event
+`VPhoneGyroscopeStatus` is updated at configuration and service transitions,
+and every two seconds while samples are dispatched (a client has set a report
+interval). The RPC result includes `provider` and `provider_running`; the
+latter requires an enumerated service and a running process with the status's
+PID, and while samples are dispatched also a status younger than ten seconds.
+Until 2026-10-09 the provider republished every two seconds regardless, so an
+idle guest's backboardd rewrote the preferences domain through cfprefsd 450
+times in 15 minutes. The status includes service ID, PID, report interval, dispatched event
 count, dispatch failures, last error, and the configuration consumed by the
 provider. **Enumeration and dispatch do not prove CoreMotion acceptance.**
 

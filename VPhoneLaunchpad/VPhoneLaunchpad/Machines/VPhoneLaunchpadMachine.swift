@@ -99,6 +99,14 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
     /// Whether vphone-vm forwards the Mac's location to the guest. Nil from a
     /// bundle older than the setting.
     let syncsHostLocation: Bool?
+    /// The template the machine was cloned from, or nil.
+    let template: String?
+    /// How `template` stands to the template with that identifier now:
+    /// `current`, `earlierBuild` or `deleted`. `vphone-cli` decides it
+    /// (`VPhoneMachineTemplateSource.isClone(of:)`), so Launchpad never reads
+    /// the template records itself. A String, so a value this Launchpad
+    /// does not know leaves the row out rather than failing the list.
+    let templateMatch: String?
     /// The library `vm list` was run on. Not part of the JSON.
     var libraryRoot = ""
     /// The guest's product type, such as iPad16,1, read by the library from
@@ -108,7 +116,7 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
 
     private enum CodingKeys: String, CodingKey {
         case name, cpuCount, memoryMB, diskSizeBytes, network, restoreInfo, customFirmwareInstalled, udid, unlocksAtStartup,
-             syncsHostLocation
+             syncsHostLocation, template, templateMatch
     }
 
     /// The inspector's firmware line. A restore whose CFW install never
@@ -130,6 +138,15 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
               let info = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         else { return false }
         return info["variant"] == nil
+    }
+
+    /// The inspector's Template row: nil for a machine not cloned from a
+    /// template, or when the bundle did not say how it matches.
+    var templateOrigin: VPhoneLaunchpadTemplateOrigin? {
+        guard let template, let match = templateMatch.flatMap(VPhoneLaunchpadTemplateOrigin.Match.init(rawValue:)) else {
+            return nil
+        }
+        return VPhoneLaunchpadTemplateOrigin(identifier: template, match: match)
     }
 
     var path: VPhoneLaunchpadMachinePath {
@@ -188,6 +205,30 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
     var addressDescription: String? {
         network.ipv4.map { "\($0.address)/\($0.prefixLength)" }
     }
+}
+
+/// The template a machine was cloned from, as `vm list --json` reports it
+/// (`template` and `templateMatch`).
+///
+/// The identifier names a key, and a template deleted and built again gets
+/// the same one, but a clone of the earlier build shares no block and no key
+/// with the new template. Which of the two a machine came from is
+/// `vphone-cli`'s call (`VPhoneMachineTemplateSource.isClone(of:)`), made
+/// from `TemplateSource.plist` and `Template.plist`, which Launchpad does not
+/// read.
+nonisolated struct VPhoneLaunchpadTemplateOrigin: Hashable, Sendable {
+    /// `VPhoneMachineTemplateMatch`.
+    enum Match: String, Hashable, Sendable {
+        /// Cloned from the template that has the identifier now.
+        case current
+        /// Cloned from an earlier build with the same key, since deleted.
+        case earlierBuild
+        /// No template has the identifier now.
+        case deleted
+    }
+
+    let identifier: String
+    let match: Match
 }
 
 // MARK: - fw catalog

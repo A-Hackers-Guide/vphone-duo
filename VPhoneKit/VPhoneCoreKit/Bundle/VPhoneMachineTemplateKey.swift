@@ -63,6 +63,30 @@ public struct VPhoneMachineTemplateSlimming: Codable, Equatable, Hashable, Senda
         case removedApps = "RemovedApps"
     }
 
+    /// This slimming for a guest of `iOSVersion`. `trimmed` is the service
+    /// list measured for the guest's iOS; vphoned has one only for
+    /// ``VPhoneTemplateSlimmingRequest/trimmedServiceProfileMajors`` and
+    /// refuses the profile elsewhere, after the restore and most of the setup
+    /// boot. So on another version (iOS 25 and earlier) the profile is `none`, in
+    /// the key as in the setup boot. Extra groups (`--accounts-off`) need the list and
+    /// are refused before anything is built.
+    public func fitted(toIOSVersion iOSVersion: String) throws -> Self {
+        guard serviceProfile == "trimmed",
+              let major = iOSVersion.split(separator: ".").first.flatMap({ Int($0) }),
+              !VPhoneTemplateSlimmingRequest.trimmedServiceProfileMajors.contains(major)
+        else { return self }
+        guard serviceGroups.isEmpty else {
+            let supported = VPhoneTemplateSlimmingRequest.trimmedServiceProfileMajors.map { "iOS \($0)" }.joined(separator: ", ")
+            throw VPhoneTemplateSlimmingError(problems: [
+                "service group(s) \(serviceGroups.joined(separator: ", ")) need the trimmed service list, "
+                    + "which vphoned has for \(supported), not iOS \(iOSVersion)",
+            ])
+        }
+        var fitted = self
+        fitted.serviceProfile = "none"
+        return fitted
+    }
+
     /// One phrase for listings: `trim none, setup boot, services trimmed+accounts, 10 apps removed`.
     public var summary: String {
         var services = serviceProfile

@@ -688,10 +688,16 @@ struct MachineTemplatesTests {
         let old = try VPhoneMachineTemplates.cloneMachine(from: first, to: "old", in: fixture.library)
         #expect(VPhoneMachineTemplates.readSource(inBundle: old.url)?.build == firstBuild)
         #expect(VPhoneMachineTemplates.usage(in: fixture.library) == [first.identifier: ["old"]])
+        // What `vm list --json` reports as `templateMatch`, and Launchpad shows.
+        func match(_ machine: VPhoneBundle) -> VPhoneMachineTemplateMatch? {
+            VPhoneBundleReport(bundle: machine).templateMatch
+        }
+        #expect(match(old) == .current)
 
         // Deleted and built again under the same identifier, with a new build.
         try VPhoneMachineTemplates.delete(first.identifier, in: fixture.library)
         #expect(VPhoneMachineTemplates.usage(in: fixture.library) == [first.identifier: ["old"]])
+        #expect(match(old) == .deleted)
         try makeMachine("src2", in: fixture)
         let second = try VPhoneMachineTemplates.adopt(machineNamed: "src2", in: fixture.library, record: record(source: "src2"))
         #expect(second.identifier == first.identifier)
@@ -700,6 +706,11 @@ struct MachineTemplatesTests {
 
         let new = try VPhoneMachineTemplates.cloneMachine(from: second, to: "new", in: fixture.library)
         #expect(VPhoneMachineTemplates.usage(in: fixture.library) == [second.identifier: ["new"]])
+        #expect(match(old) == .earlierBuild)
+        // The spelling Launchpad decodes.
+        let json = try String(decoding: JSONEncoder().encode(VPhoneBundleReport(bundle: old)), as: UTF8.self)
+        #expect(json.contains(#""templateMatch":"earlierBuild""#))
+        #expect(match(new) == .current)
         // Deleting the old build's clone says nothing about the new template;
         // deleting the new one's last clone does.
         let oldSource = VPhoneMachineTemplates.readSource(inBundle: old.url)
@@ -755,6 +766,8 @@ struct MachineTemplatesTests {
             VPhoneMachineTemplateSource(identifier: template.identifier, cloned: frozenAt + 1), inBundle: current.url,
         )
         #expect(VPhoneMachineTemplates.usage(in: fixture.library) == [template.identifier: ["current"]])
+        #expect(VPhoneBundleReport(bundle: earlier).templateMatch == .earlierBuild)
+        #expect(VPhoneBundleReport(bundle: current).templateMatch == .current)
     }
 
     @Test func `a record without a build reads, and a frozen one gets one`() throws {

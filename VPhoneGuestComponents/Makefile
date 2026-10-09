@@ -311,6 +311,11 @@ test-attitude:
 		-o $(OUT)/AttitudeHookTests Tests/AttitudeHookTests.m $(ATTITUDE_SOURCES) \
 		-framework Foundation -framework CoreMotion
 	@$(OUT)/AttitudeHookTests
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror -Wno-unused-parameter -IAttitude \
+		-DVP_ATTITUDE_NOTIFICATION='"com.vphone.motion.attitude.lock-order-test"' \
+		-o $(OUT)/AttitudeLockOrderTests Tests/AttitudeLockOrderTests.m $(ATTITUDE_SOURCES) \
+		-framework Foundation -framework CoreMotion
+	@$(OUT)/AttitudeLockOrderTests
 
 test-gyroscope:
 	@mkdir -p $(OUT)
@@ -359,6 +364,16 @@ test-vcam-prewarm:
 		-o $(OUT)/VCamPrewarmScanTests \
 		Tests/VCamPrewarmScanTests.c VCamCaptured/Prewarm/VCamPrewarmScan.c
 	@$(OUT)/VCamPrewarmScanTests
+
+# Host proof harness for the gate that runs cameracaptured's frame drive only
+# while a camera client exists.
+.PHONY: test-vcam-drive-gate
+test-vcam-drive-gate:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -O1 -Wall -Wextra -Werror -IVCamCaptured/Frames \
+		-o $(OUT)/VCamDriveGateTests \
+		Tests/VCamDriveGateTests.c VCamCaptured/Frames/VCamDriveGate.c
+	@$(OUT)/VCamDriveGateTests
 
 .PHONY: test-installcoordination-persona
 test-installcoordination-persona:

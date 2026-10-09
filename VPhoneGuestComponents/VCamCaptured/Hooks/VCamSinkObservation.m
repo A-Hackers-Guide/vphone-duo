@@ -1,3 +1,4 @@
+#include "VCamFrames.h"
 #include "VCamHooks.h"
 
 // MARK: - frame-sender endpoint observation
@@ -174,6 +175,7 @@ static void vcc_track_driven_sink(id sink) {
   if (!vcc_driven_sinks) vcc_driven_sinks = [NSHashTable weakObjectsHashTable];
   [vcc_driven_sinks addObject:sink];
   pthread_mutex_unlock(&vcc_driven_sinks_lock);
+  vcc_frame_drive_wake();
 }
 
 NSArray *vcc_driven_sinks_snapshot(void) {

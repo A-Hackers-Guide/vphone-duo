@@ -66,6 +66,16 @@ nonisolated struct VPhoneLaunchpadDiskAccess: Hashable, Sendable {
     var mayOpen: Bool {
         !isLaunched && !isHeld && !isBusy && !isLibraryBusy
     }
+
+    /// Whether the meter may open a template's files: no operation on a
+    /// whole library runs (a template deletion), and no creation is at a
+    /// step in `creationSteps` (the current step of each running one) that
+    /// saves or clones a template. Mapping the image of a template saved a
+    /// moment before made `vm create --template` refuse it as in use
+    /// (Launchpad 2.9.0, New Machine failed at its clone step).
+    static func templatesMayOpen(isLibraryBusy: Bool, creationSteps: [VPhoneLaunchpadCreationStep]) -> Bool {
+        !isLibraryBusy && !creationSteps.contains(where: \.needsTemplatesToItself)
+    }
 }
 
 // MARK: - Measuring

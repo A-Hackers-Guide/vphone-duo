@@ -16,6 +16,8 @@ struct BundleReportTests {
         #expect(report.cpuCount == 6)
         #expect(report.memoryMB == 4096)
         #expect(report.network.mode == .nat)
+        // Not cloned from a template.
+        #expect(report.template == nil && report.templateMatch == nil)
     }
 
     @Test func `carries network config`() throws {

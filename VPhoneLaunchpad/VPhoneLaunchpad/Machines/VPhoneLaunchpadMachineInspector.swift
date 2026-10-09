@@ -171,7 +171,7 @@ struct VPhoneLaunchpadMachineInspector: View {
                 if let udid = machine.udid {
                     value("UDID", udid)
                 }
-                if let origin = library.templateSources[machine.path] {
+                if let origin = machine.templateOrigin {
                     LabeledContent("Template") {
                         templateLabel(origin)
                             .textSelection(.enabled)

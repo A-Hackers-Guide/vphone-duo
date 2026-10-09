@@ -14,10 +14,21 @@ import Foundation
 /// - `staged_system_apps` is empty (or absent),
 /// - the number of registered apps did not change,
 /// - installd used less than `installdBusyCPUSeconds` of CPU between polls,
-///   or was not running.
+///   or was not running;
+/// - in the latest poll, data migration has finished for the running build.
 ///
 /// Measured on an iOS 27.0 template (P0, 2026-10-07): 92 s after `setup.skip`
-/// all three held.
+/// the first three held.
+///
+/// The app expansion is one plugin of the first boot's data migration
+/// (DataMigrator's `SystemAppMigrator`). The last plugin, `SpringBoard.migrator`,
+/// ran 26–67 s on 27.0 (2026-10-09). Until it ends, FrontBoard has not
+/// reached `FBSServiceMilestoneDataMigrationCompleted`: SpringBoard has not
+/// decided whether to run Setup, and ignores a relaunch request. DataMigrator
+/// then records the build in `com.apple.migration` (user mobile):
+/// `LastSystemVersion` and `DMLastMigrationResults.buildVersion`. Before the
+/// first migration the domain is empty. A template frozen before that point
+/// would make every clone migrate again.
 ///
 /// Nothing here touches the guest, so `VPhoneDaemon/Tests/run-logic-tests.sh`
 /// builds this file on the Mac.
@@ -38,6 +49,35 @@ enum GuestFirstBootSettle {
         /// installd's pid and CPU time, nil when it is not running.
         var installdPID: Int?
         var installdCPUSeconds: Double?
+        /// Whether data migration finished for the running build, nil when
+        /// that could not be told (no build version); only false holds the
+        /// verdict back.
+        var dataMigrationDone: Bool?
+    }
+
+    /// The domain and keys DataMigrator records a finished migration in.
+    static let migrationDomain = "com.apple.migration"
+    static let migrationLastSystemVersionKey = "LastSystemVersion"
+    static let migrationResultsKey = "DMLastMigrationResults"
+
+    /// DataMigrator's XPC service; it runs, holding its transactions, for
+    /// the whole migration.
+    static let dataMigratorSuffix = "/com.apple.datamigrator.xpc/com.apple.datamigrator"
+
+    /// Data migration has finished for `build` (`kern.osversion`) when
+    /// DataMigrator recorded it as the last system version or as the build of
+    /// its last results, and is still running while the record is missing and
+    /// DataMigrator runs. Nil when that cannot be told: the build is unknown,
+    /// or nothing is recorded and DataMigrator is not running (a guest that
+    /// records elsewhere then never waits for it).
+    static func dataMigrationDone(
+        build: String?, lastSystemVersion: String?, lastResultsBuild: String?, migratorRunning: Bool,
+    ) -> Bool? {
+        guard let build, !build.isEmpty else { return nil }
+        if lastSystemVersion == build || lastResultsBuild == build {
+            return true
+        }
+        return migratorRunning ? false : nil
     }
 
     struct Verdict: Equatable, Sendable {
@@ -90,6 +130,9 @@ enum GuestFirstBootSettle {
                 reasons.append(String(format: "installd used %.2f s CPU between polls", delta))
                 break
             }
+        }
+        if window.last?.dataMigrationDone == false {
+            reasons.append("data migration has not finished")
         }
         return Verdict(settled: reasons.isEmpty, reasons: reasons, installdCPUDelta: lastDelta)
     }

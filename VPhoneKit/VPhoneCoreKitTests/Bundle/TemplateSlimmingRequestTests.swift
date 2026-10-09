@@ -130,4 +130,47 @@ struct TemplateSlimmingRequestTests {
         let identifiers = try Set(requests.map { try MachineTemplateKeyTests.key(slimming: $0.resolve()).identifier })
         #expect(identifiers.count == requests.count)
     }
+
+    @Test func `the trimmed profile stays on the iOS versions vphoned has a service list for`() throws {
+        let slimming = try Request().resolve()
+        #expect(VPhoneTemplateSlimmingRequest.trimmedServiceProfileMajors == [26, 27])
+        for version in ["26.6.2", "26.0", "27.0", "27.0.1"] {
+            #expect(try slimming.fitted(toIOSVersion: version) == slimming)
+        }
+        let accounts = try Request(accountsOff: true).resolve()
+        #expect(try accounts.fitted(toIOSVersion: "26.6.2") == accounts)
+        #expect(try accounts.fitted(toIOSVersion: "27.0") == accounts)
+    }
+
+    @Test func `an iOS 26 key keeps the trimmed profile and differs from its untrimmed one`() throws {
+        let trimmed = try Request().resolve().fitted(toIOSVersion: "26.6.2")
+        let none = try Request(serviceProfile: "none").resolve().fitted(toIOSVersion: "26.6.2")
+        #expect(trimmed.serviceProfile == "trimmed")
+        #expect(none.serviceProfile == "none")
+        #expect(trimmed.trimTier == none.trimTier)
+        #expect(trimmed.removedApps == none.removedApps)
+        #expect(
+            try MachineTemplateKeyTests.key(slimming: trimmed).identifier
+                != MachineTemplateKeyTests.key(slimming: none).identifier,
+        )
+    }
+
+    @Test func `the trimmed profile becomes none on an iOS vphoned has no service list for`() throws {
+        let slimming = try Request().resolve()
+        let on25 = try slimming.fitted(toIOSVersion: "25.4")
+        #expect(on25.serviceProfile == "none")
+        #expect(on25.serviceGroups.isEmpty)
+        #expect(on25.trimTier == slimming.trimTier)
+        #expect(on25.removedApps == slimming.removedApps)
+        #expect(try on25.fitted(toIOSVersion: "25.4") == on25)
+        let none = try Request(serviceProfile: "none").resolve()
+        #expect(try none.fitted(toIOSVersion: "25.4") == none)
+        #expect(try none.fitted(toIOSVersion: "26.6.2") == none)
+    }
+
+    @Test func `accounts-off is refused on an iOS without the trimmed service list`() throws {
+        let slimming = try Request(accountsOff: true).resolve()
+        #expect(throws: VPhoneTemplateSlimmingError.self) { try slimming.fitted(toIOSVersion: "25.4") }
+        #expect(try slimming.fitted(toIOSVersion: "26.6.2") == slimming)
+    }
 }

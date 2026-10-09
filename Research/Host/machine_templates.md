@@ -113,7 +113,12 @@ re-resolves with the template's own `PatchSelection.plist`.
   rebuilt template counted the old build's clones as its users, in `vm
   template list/show`, Launchpad's "N machine(s) use it" and the delete notes
   (PR #633 retest, N1). `vm template list/show --json` add `build` and
-  `frozenAt`. `vm template list/show` print the users with the template's
+  `frozenAt`. `vm list --json` and `vm info --json` report each clone's
+  `template` and `templateMatch` (`current`, `earlierBuild` or `deleted`,
+  `VPhoneMachineTemplates.match`), and Launchpad's inspector shows that
+  instead of reading `TemplateSource.plist` and `Template.plist` itself (see
+  [Rules Launchpad shares with the CLI](#rules-launchpad-shares-with-the-cli)).
+  `vm template list/show` print the users with the template's
   allocated size; `vm delete` of the last machine cloned from the template
   that exists now prints a note to delete it (`unusedTemplate(after:in:)`;
   deleting a clone of an earlier build prints nothing), never deleting it
@@ -191,7 +196,8 @@ Launchpad mapping running machines' images about every 30 s, so a forced
 for the machine (starting, running, stopping), the last `lsof` names no other
 process for its disk, and Launchpad has no operation on it (a creation, a
 template build, an export, an install or update, a shutdown or stop) or on a
-whole library (an import, a template deletion). It asks again right before
+whole library (an import, a template deletion). Templates are opened unless a
+library-wide operation runs or a creation is saving or cloning one (below). It asks again right before
 each file is mapped, so a machine started during a pass is not opened. Any
 other machine keeps the ranges last mapped, and a stopped one is opened only
 when a file's size, mtime or ctime changed since then: once after each run.
@@ -213,16 +219,34 @@ image) is named and never signalled. Until 2026-10-09 `vm stop` SIGINTed every
 `lsof` holder when it found no `vphone-vm` and SIGKILLed every holder left
 after the timeout, so a stop that hit the meter's 0.1 s window could kill
 Launchpad (PR #633 retest, N2). `cfw install`, `update-environment` and
-`update-kernel` still refuse any other holder, as do clone, snapshot, revert,
-adopt, trim and the setup boot (`VPhoneBundleActivity.requireStopped`, over
+`update-kernel` still refuse any other holder, as do snapshot, revert, adopt,
+trim and the setup boot (`VPhoneBundleActivity.requireStopped`, over
 `Disk.img`, `SEPStorage` and `nvram.bin`): a file another process has open is
 not standing still. Their refusals name each holder (`process 900
 vphone-launchpad`) and say when none of them runs the VM, so a reader is not
 taken for a running machine.
 
+A clone (`vm clone`, and `vm create --template` cloning a template) only reads
+its source, so it waits out a holder that runs no machine: while every holder
+is such a process and the control socket is not live, each of its two checks
+(before and after the copy) asks again every 0.1 s for up to 2 s, then refuses
+as before (`requireStopped(_:waitingForReaders:)`). A VM process holding the
+source, or a live socket, refuses at once, so a clone still cannot take a
+machine that is running or starting; a template is never booted. Writes keep
+the strict check. In Launchpad 2.9.0 New Machine failed at its clone step with
+"VM '<id>' is in use: … open in process <pid> vphone-launchpad": the adopt
+step refreshed the machine list, the meter saw the new template folder, never
+mapped, and opened its `Disk.img` just as `vm create --template` checked it;
+retrying the step passed at once. Launchpad now also leaves every template
+unopened while a creation of its own is at its adopt or clone step
+(`VPhoneLaunchpadDiskAccess.templatesMayOpen`, asked before each file as
+above), and the wait covers a mapping that was already under way, or another
+reader, when the clone starts.
+
 Launchpad judges the holders `lsof` lists the same way
 (`VPhoneLaunchpadDiskHolder`, a copy of the `VPhoneProcessHolder` rule, since
-Launchpad does not link VPhoneCoreKit). Only a VM holder makes a machine
+Launchpad does not link VPhoneCoreKit; both are tested against one table, see
+[Rules Launchpad shares with the CLI](#rules-launchpad-shares-with-the-cli)). Only a VM holder makes a machine
 running. Until 2026-10-09 any holder did, so a `tail -f` on `Disk.img` showed
 the machine as running and `vphone-launchpad-cli vm start` refused it as
 "already running or busy" (PR #633 retest, L1). Any other holder leaves the
@@ -236,6 +260,61 @@ disk itself. The Launchpad CLI prints a note naming the holder.
 Blocks shared with a file outside the libraries (a `cp -c` copy elsewhere)
 count as the folder's own; the CLI's `vm template list/show` print only the
 allocated size.
+
+### Rules Launchpad shares with the CLI
+
+PR #633 left two rules written twice, once in VPhoneCoreKit for `vphone-cli`
+and once in Launchpad: which disk holder runs a machine, and whether a clone
+came from the template that has its identifier now. Launchpad does not link
+VPhoneCoreKit on purpose. It ships apart from `VPhone.bundle`, works with
+every bundle of its series, and drives each machine through the `vphone-cli`
+of the bundle that machine is bound to; VPhoneCoreKit is that bundle's
+implementation and changes with every bundle build. Linking it (or a slice
+of it, through a project reference from `VPhoneLaunchpad.xcodeproj` to
+`VPhoneKit.xcodeproj`) would compile Launchpad's build-time copy of the rule
+in place of the answer of the bundle it is talking to, and would pull the
+kit's package graph (ArgumentParser, libarchive) into Launchpad's build. It
+moves the copy into the linker rather than removing it. So, as of
+2026-10-09:
+
+- **Template match: asked of the CLI.** `vm list --json` already read each
+  machine's `TemplateSource.plist` (`template`), and Launchpad already runs it
+  every 5 s for each library. It now also reports `templateMatch`, decided by
+  `VPhoneMachineTemplateSource.isClone(of:)` against the template that
+  `VPhoneMachineTemplates.template(_:in:)` loads, and Launchpad only decodes
+  it (`VPhoneLaunchpadMachine.templateOrigin`). Launchpad no longer reads
+  either plist. The copy had already drifted: it took any frozen
+  `Template.plist` whose identifier matched its folder, while the CLI also
+  requires the key to match and the folder to load as a machine, so a
+  damaged template counted as present in Launchpad and as deleted in the CLI.
+  A bundle that does not report `templateMatch`, or reports a value this
+  Launchpad does not know, leaves the Template row out. 2.9 was not released
+  when the field was added, so it is part of the 2.9 series contract
+  (`minimumBundleComponents`), not a new series.
+- **Disk holder kind: one table, two copies.** Launchpad runs `lsof` itself
+  over every listed machine on each refresh, every second while it waits for
+  a machine it did not start to stop, and right before an operation that
+  needs the disk, and it leaves its own disk meter out by PID. Asking
+  `vphone-cli` would add a process and a library-wide `lsof` to every
+  `vphone-cli vm list` for a ten-line path test that is a host fact, not bundle data.
+  The two copies stay, and both are tested against
+  `VPhoneKit/VPhoneCoreKitTests/VirtualMachine/ProcessHolderKinds.json`:
+  `LaunchLayoutTests` checks `VPhoneProcessHolder.kind`, and
+  `VPhoneLaunchpad/Tests/TemplatesTests.sh` checks
+  `VPhoneLaunchpadDiskHolder.runsMachine` (running for `virtualMachine` and
+  `virtualizationService`). Changing either copy without the table, or the
+  table without both copies, fails a test.
+
+Other places where Launchpad reads the bundle's own files or repeats its
+values, found while doing this and left as they are: `config.plist`
+(`diskImage` for `lsof`, `guestProductType` with a `FirmwareOriginals`
+fallback, read in both `VPhoneLaunchpadMachine` and `VPhoneLaunchpadIPSWCache`),
+`restore-info.json` (`variant`, for the unfinished-install check that
+mirrors `vm launch`), the `.templates` layout for the disk meter, the
+`vm delete` note text (`VPhoneLaunchpadTemplateNotice`), and New Machine's
+removable apps and default languages, which repeat
+`VPhoneTemplateSlimmingRequest.defaultRemovedApps` and
+`VPhoneSystemTrim.defaultKeptLanguages`.
 
 ## Never booting once frozen
 
@@ -287,6 +366,21 @@ an unknown profile. `--keep-languages` alone means `--trim standard` keeping
 those languages.
 `--no-template` takes no slimming switch; `--template <id>` takes them only to
 check them against the template.
+
+`trimmed` is the service list measured for the guest's iOS, and vphoned has
+one for iOS 26 and 27 (`GuestServiceProfile.supportedMajors`, mirrored by
+`VPhoneTemplateSlimmingRequest.trimmedServiceProfileMajors`; see
+[`service_trimming.md`](../Guest/service_trimming.md#ios-26)). Elsewhere
+`services.profile.apply trimmed` refuses ("No trimmed service list for iOS
+25"), which would fail a build at service-profile, after the restore and most
+of the setup boot. So `VPhoneMachineTemplateSlimming.fitted(toIOSVersion:)`
+turns `trimmed` into `none` on such a version, where the key is made
+(`VPhoneMachineTemplateKeys.key`) and in `vm template setup`, and
+`--accounts-off`, whose group is part of the list, is refused there before
+anything is built. iOS 26 templates had `services none` until the 26 list
+existed (2026-10-09); they now take `trimmed` like iOS 27 ones, so their key
+changes and a 26 template built before is no longer found for a default
+create, only for `--service-profile none`.
 
 `--slim off` still has a setup boot: skipping Setup and waiting for
 first-boot work are not slimming. Without them every clone would start at the
@@ -425,20 +519,76 @@ setup boot is the guest's first boot). It talks to vphoned through
 | --- | --- | --- | --- |
 | connect | `ping` every second | 300 s | vphoned answers |
 | 0 snapshot | `apfs.snapshot.delete {force}` | 120 s | no `orig-fs.disabled.rn-*` in `remaining`/`after` (none to begin with is fine) |
-| a skip | `setup.skip {force}`, any refusal retried | 120 s | `setup_done` |
-| b settle | `setup.settle {timeout_s ≤ 110}` repeated | 600 s overall | `settled` |
+| a skip | `setup.skip {force}`, any refusal retried | 600 s | `setup_done` |
+| b settle | `setup.settle {timeout_s ≤ 30}` repeated, a progress line after each | 600 s overall | `settled` (system apps expanded and data migration finished) |
 | c apps | `apps.remove_system {bundle_ids, force}` | 300 s | every app `removed`, `absent` or `unregistered_stale` |
 | d/e profile | `services.profile.apply {profile, groups, force}`, `services.profile` | 180 s | no `failed`; the record holds `signin_followup` and the extra groups; followupd and appleidsetupd disabled |
-| f reboot | `processes.list` (launchd's `start_time`), `system.reboot {force}` | 300 s | vphoned answers with another launchd start time |
+| f reboot | `processes.list` (launchd's `start_time`), `system.reboot {force}`, then `ping` and `processes.list` (10 s timeout) every 3 s | 300 s | vphoned answers with another launchd start time |
 | f verify | `apfs.snapshots`, `setup.status`, `services.profile`, `apps.list`, `ping`, repeated | 120 s | no snapshot, Setup done, the profile recorded with `running` empty, no removed app listed |
+| crash reports | `logs.crashes`, `files.remove {path}` for each report under `/Logs/CrashReporter/` | 60 s | (a warning on failure) |
 | name | `device.name.set {}` | 30 s | (a warning on failure) |
 | g stop | SIGINT to `vphone-vm` | 60 s | it exits without "turning it off" (the guest shut down within its 15 s) |
 
 `setup.skip` is retried on any refusal: right after vphoned first answers on
 a guest that just finished its first boot, it failed with "Cannot allocate
-memory", then for 87 s with "relaunch action ignored and launchd stop failed:
-144 Requestor lacks required entitlement" (SpringBoard's restart), before it
-went through (p4-src, 27.0, 2026-10-08). The keys it writes are idempotent.
+memory". The keys it writes are idempotent.
+
+The setup boot is the guest's first boot, and the first boot's data migration
+runs until 60–180 s after the VM starts (`Research/Guest/setup_assistant_skip.md`,
+"The first boot after a restore"). Until it ends, SpringBoard has not decided
+whether to run Setup, and FrontBoard ignores the request to restart it. Until
+2026-10-09 `setup.skip` always restarted SpringBoard. FrontBoard ignored the
+relaunch, the `launchctl stop` fallback failed with "144 Requestor lacks
+required entitlement", and the step was retried until migration ended. That
+took 45–98 s of every build (p4-src 87 s on 2026-10-08; 49, 56, 63, 79 and
+98 s in later builds). vphoned now writes the keys and leaves SpringBoard alone
+while migration has not finished (`respring: {restarted: false, reason:
+"data_migration_pending"}`, logged as `SpringBoard left alone`). SpringBoard
+reads the keys when migration ends. The settle step waits for the end of
+migration (`data_migration_done`) as well as for the app expansion, so no
+later step, and no template frozen from the boot, can come before it. Before
+this change, that guarantee was only a side effect of the skip's retries:
+`staged_system_apps` empties 26–67 s before migration ends.
+
+This makes the steps report where the time goes, but it does not shorten the
+boot. The wait is the migration (`SpringBoard.migrator`, which waits for
+PosterBoard's poster migration), and every clone would otherwise repeat it.
+Right after it ends, LaunchServices drops 7 records (265 → 258 apps) and
+installd works for about 10 s, which the settle window covers before apps are
+removed. Measured on `ss-raw` (27.0, never booted, reverted from a snapshot
+between runs, 2026-10-09):
+
+| Run | vphoned | setup-skip | settle | VM start → remove-apps | migration end → remove-apps |
+| --- | --- | --- | --- | --- | --- |
+| A | before | 98 s (11 refusals) | 11 s | 114 s | — |
+| A2 | before | 56 s (6) | 10 s | 72 s | — |
+| A3 | before | 54 s (6) | 10 s | 70 s | 14 s |
+| N1 | after | 0 s | 64 s | 70 s | — |
+| N2 | after | 0 s | 80 s | 86 s | 15 s |
+| e2e (`vm create`, template 8e02beba26ce) | after | 0 s | 64 s | 69 s | — |
+
+2.9.0 failed every creation on a slower Mac (a MacBook Air, 2026-10-09):
+`setup.skip` was refused 14 times and its 120 s deadline ran out before data
+migration ended. vphoned now passes the skip at once, and the settle step
+waits for migration for up to 600 s, printing `waiting for the guest's
+first-boot data migration (N s)` after each call of at most 30 s. The skip's
+own deadline is 600 s too: a 2.9.0 vphoned (refused until migration ends)
+gets through, and its refusals print `waiting for the guest's first-boot data
+migration before SpringBoard can restart (N s)` at most every 30 s instead of
+one error line each.
+
+The migration's length varies between runs, and so does the boot. Measured
+from the end of migration, the old and the new flow both reach remove-apps
+about 15 s later. The reboot step took either about 10 s or about 33 s (4 of 6
+runs), with either vphoned. The guest's crash reports show why: a
+`panic-full` "initproc failed to start … Library not loaded:
+/usr/lib/libSystem.B.dylib … (no such file, no dyld cache)" right at a boot,
+after which the VM boots again. It happened on the setup boot's first boot
+(N3: a few seconds lost) and on the boot after its reboot (the e2e build: the
+33 s reboot). The cause is not known yet. Every run also left `duetexpertd`
+crash reports, every 10 s after the reboot ("Failed to initialize datavault
+for DuetExpertCenterAsset"), and one `PridePosterExtension` crash during
+migration.
 
 Retries: a call that did not reach vphoned (no socket, guest not connected,
 timeout) or that vphoned refused with `retryable: true` or `reason: busy`
@@ -487,6 +637,54 @@ The device name: `vphone-vm` pins the guest's name to the machine's name
 clone would show the template's name (its identifier, or the adopted
 machine's name) until its own VM connects, and its first DHCP lease would
 carry it (P1). The setup boot clears it last.
+
+The crash reports: every build's first boot after `cfw install` (the setup
+boot) writes a `panic-full-*.ips` of `initproc failed to start … Library not
+loaded: /usr/lib/libSystem.B.dylib … (no such file, no dyld cache)`. That
+panic is not the setup boot's. The restore reboots into the installed system
+before `cfw install` has copied the OS cryptex onto the System volume (vphone
+boots without the cryptex graft: every boot logs `cryptex1 sniff: ignition
+failed: 8`, then `dyld[1]: ignition disabled`), so launchd finds no dyld
+cache and the kernel panics; `vm create` and Launchpad wait for exactly that
+panic as the sign that the restore's reboot happened. iOS writes the report
+at the next boot, which is the setup boot, and the frozen template then gave
+every clone a kernel panic it never had, plus a dozen `duetexpertd` crashes
+(below). Matched by boot session UUID on 2026-10-09: `panic-full` reports in
+setup-boot and clone crash lists all name the session of the restore's
+post-restore boot in the `-dfu.log` (for example `A40A5DEA…` in
+`template-0fa581ca-dfu.log`, `AF2B2981…` in `template-9530cc5e-dfu.log`,
+written 2 s into that build's setup boot). A no-template machine gets the
+same report at its first boot. Console logs of installed guests showed no
+`panic(` in any boot: 0 in 35 boots of a trimmed, snapshot-deleted build, 19
+of a clone of a fixed template and 24 of a `--no-template` machine, by
+`system.reboot` and by `vm stop` + `vm start` (2026-10-09).
+
+After the verify step the setup boot lists the reports (`logs.crashes`) and
+deletes each one with `files.remove`; the report says `crash reports
+cleared: 13 crash report(s): duetexpertd ×11, SiriSearchFeedback ×1,
+panic-full ×1` (2026-10-09 build). A report it cannot delete is a warning, as
+the device name is.
+
+The reboot step's 33 s: `system.reboot` is answered at once, and the first
+`ping` a moment later can still reach the old vphoned; the `processes.list`
+sent after it reaches vphoned as launchd stops it and is never answered, so
+`vphone.sock`'s read timeout runs out. With the 30 s it had, the step took
+33 s instead of 9–10 s in 4 of 6 builds (2026-10-09), and replaying the same
+polling against a running guest hit it in 3 of 8 reboots (33.3–33.5 s). The
+poll's `processes.list` now uses `VPhoneTemplateSetupTimeouts.rebootPoll`
+(10 s): the same replay took at most 13.3 s, and a fresh boot answers within
+a few seconds.
+
+`duetexpertd` crashes about every 10 s from the first boot on every iOS 27.0
+guest, template or not (13 reports on a `--no-template` machine with no trim,
+no snapshot deletion and no service profile): `EXC_BREAKPOINT` in
+`ATXEnableMobileAssetDataVault` (AppPredictionInternal, from
+`_ATXInitializeInOwnerProcess`), "Failed to initialize datavault for
+DuetExpertCenterAsset". Neither the trim nor the slimming causes it; the
+trimmed profile turns `com.apple.duetexpertd` off, so it stops after the
+setup boot's reboot. The reports clones used to show were the template's
+first-boot ones; a clone of a template built with the cleanup had none after
+12 reboots and 6 cold starts. A machine without the profile keeps crashing.
 
 Measured on iPhone17,3 27.0 (24A435), 2026-10-08: Launchpad created
 `p4-src` (first boot at Setup), `vm template setup p4-src` took 2 min 16 s

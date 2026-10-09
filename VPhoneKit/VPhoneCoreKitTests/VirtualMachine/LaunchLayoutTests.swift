@@ -19,22 +19,35 @@ struct LaunchLayoutTests {
     private static let service = "/System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/"
         + "com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine"
 
-    @Test func `only vphone-vm and Virtualization's VM service count as running a machine`() {
-        let kind = VPhoneProcessHolder.kind(executablePath:)
-        #expect(kind("/Library/Application Support/vphone-launchpad/Bundles/2.9.0/VPhone.bundle/Contents/MacOS/vphone-vm") == .virtualMachine)
-        #expect(kind("/Users/me/vphone-cli/.build/XcodeBundle/Build/Products/Release/VPhone.bundle/Contents/MacOS/vphone-vm") == .virtualMachine)
-        #expect(kind(Self.service) == .virtualizationService)
-        // Processes that only open the disk.
-        #expect(kind("/Applications/vphone-launchpad.app/Contents/MacOS/vphone-launchpad") == .other)
-        #expect(kind("/System/Library/Frameworks/CoreServices.framework/Frameworks/Metadata.framework/Versions/A/Support/mds_stores") == .other)
-        #expect(kind("/usr/sbin/lsof") == .other)
-        #expect(kind("/Library/Application Support/vphone-launchpad/Bundles/2.9.0/VPhone.bundle/Contents/MacOS/vphone-cli") == .other)
-        // Another program that takes the service's name is not it.
-        #expect(kind("/tmp/com.apple.Virtualization.VirtualMachine") == .other)
-        #expect(kind("/tmp/vphone-vm-helper") == .other)
-        // A process that is gone or hidden is never signalled.
-        #expect(kind(nil) == .other)
-        #expect(kind("") == .other)
+    /// `ProcessHolderKinds.json`, beside this file: the cases Launchpad's
+    /// copy of the rule (`VPhoneLaunchpadDiskHolder.runsMachine`) is tested
+    /// against too, so neither copy can change alone.
+    struct HolderKindCase: Decodable {
+        let path: String?
+        let kind: String
+    }
+
+    static func holderKindCases() throws -> [HolderKindCase] {
+        struct Table: Decodable {
+            let cases: [HolderKindCase]
+        }
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("ProcessHolderKinds.json")
+        return try JSONDecoder().decode(Table.self, from: Data(contentsOf: url)).cases
+    }
+
+    @Test func `only vphone-vm and Virtualization's VM service count as running a machine`() throws {
+        let cases = try Self.holderKindCases()
+        #expect(cases.count >= 10)
+        for entry in cases {
+            let expected: VPhoneProcessHolder.Kind? = switch entry.kind {
+            case "virtualMachine": .virtualMachine
+            case "virtualizationService": .virtualizationService
+            case "other": .other
+            default: nil
+            }
+            #expect(expected != nil, "unknown kind \(entry.kind)")
+            #expect(VPhoneProcessHolder.kind(executablePath: entry.path) == expected, "\(entry.path ?? "nil")")
+        }
     }
 
     @Test func `holders split into the machine's processes and the rest, in PID order`() {

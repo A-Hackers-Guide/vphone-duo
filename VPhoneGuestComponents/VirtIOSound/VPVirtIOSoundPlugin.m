@@ -1228,21 +1228,25 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
 
 // MARK: ASDStream
 
-- (void)startStream {
-    dispatch_sync(_queue, ^{
-        if (self->_state == VPStreamStateIdle && ![self startDevice]) {
-            return;
-        }
-        if (self->_state != VPStreamStateRunning) {
-            [self resetCounters];
-            [self queueLead];
-        }
-        self->_state = VPStreamStateRunning;
-    });
-    if (!_timer) {
-        _timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _queue);
+/// The flush timer runs only while the stream does. audiomxd keeps its
+/// streams for its whole life, so a timer left running after the first
+/// sound woke an idle audiomxd 24 times a second, about 21,600 times in 15
+/// minutes with nothing playing. Arming and disarming happen on `_queue`,
+/// in the same blocks that change `_state`.
+- (void)armFlushTimer:(BOOL)armed {
+    dispatch_assert_queue(_queue);
+    if (armed) {
         dispatch_source_set_timer(_timer, dispatch_time(DISPATCH_TIME_NOW, kFlushIntervalNanoseconds),
             kFlushIntervalNanoseconds, kFlushIntervalNanoseconds / 10);
+    } else {
+        dispatch_source_set_timer(_timer, DISPATCH_TIME_FOREVER, 0, 0);
+    }
+}
+
+- (void)startStream {
+    if (!_timer) {
+        _timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _queue);
+        dispatch_source_set_timer(_timer, DISPATCH_TIME_FOREVER, 0, 0);
         __unsafe_unretained VPVirtIOSoundOutputStream *unretained = self;
         dispatch_source_set_event_handler(_timer, ^{
             if (unretained->_state == VPStreamStateRunning) {
@@ -1253,6 +1257,17 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
         });
         dispatch_resume(_timer);
     }
+    dispatch_sync(_queue, ^{
+        if (self->_state == VPStreamStateIdle && ![self startDevice]) {
+            return;
+        }
+        if (self->_state != VPStreamStateRunning) {
+            [self resetCounters];
+            [self queueLead];
+            [self armFlushTimer:YES];
+        }
+        self->_state = VPStreamStateRunning;
+    });
     [self installMixBlock];
     [super startStream];
 }
@@ -1266,6 +1281,8 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
         // A start the HAL never wrote after leaves no lead behind.
         atomic_store(&self->_mix.leadRequest, 0);
         [self submitPending:YES];
+        // Draining needs no flush: the device's returns end it.
+        [self armFlushTimer:NO];
         self->_state = VPStreamStateDraining;
         if (VPVirtIOSoundRingInFlight(&self->_ring) == 0) {
             [self stopDevice];

@@ -96,15 +96,29 @@ public struct VPhoneTemplateSetupTimeouts: Equatable, Sendable {
     /// few seconds; the first-boot check of `vm create` allows 300.
     public var connect: TimeInterval = 300
     public var snapshot: TimeInterval = 120
-    public var skipSetup: TimeInterval = 120
-    /// Overall, across `setup.settle` calls of at most 110 s each. P0 saw
-    /// 92 s after `setup.skip` on a guest whose apps were already expanded.
+    /// vphoned writes the keys at once. A vphoned that also has to restart
+    /// SpringBoard is refused until the first boot's data migration ends,
+    /// which took up to 98 s on a fast Mac and more than 120 s on a MacBook
+    /// Air, so the deadline is sized like the settle step's.
+    public var skipSetup: TimeInterval = 600
+    /// Overall, across `setup.settle` calls of at most `settleCallLimit`
+    /// seconds each. The first boot's data migration ended 60–180 s after
+    /// the VM started on a fast Mac (2026-10-09); a slow host takes longer.
     public var settle: TimeInterval = 600
+    /// How often a waiting step prints its progress.
+    public var progressInterval: TimeInterval = 30
     public var removeApps: TimeInterval = 300
     public var serviceProfile: TimeInterval = 180
     /// From `system.reboot` until vphoned of the new boot answers (P1: 20 s).
     public var reboot: TimeInterval = 300
+    /// One `processes.list` while waiting for the new boot. It answers within
+    /// a few seconds even right after a boot; one that reaches vphoned just
+    /// before the reboot stops it is never answered and holds the step for
+    /// this whole timeout (30 s made the step take 33 s instead of 10 s in
+    /// about a third of the setup boots).
+    public var rebootPoll: TimeInterval = 10
     public var verify: TimeInterval = 120
+    public var crashReports: TimeInterval = 60
     public var deviceName: TimeInterval = 30
     /// The VM gives the guest 15 s to shut down before turning it off.
     public var stop: TimeInterval = 60
@@ -134,12 +148,17 @@ public struct VPhoneTemplateSetupPlan: Equatable, Sendable {
     /// Clear the device name `vphone-vm` pinned during this boot, so a clone
     /// does not show the template's name before its own VM pins its name.
     public var clearsDeviceName: Bool
+    /// Delete the crash reports the template's own boots left (above all the
+    /// restore's pre-CFW `initproc failed` panic, written at the first boot
+    /// after CFW), so a clone does not start with reports of boots it never had.
+    public var clearsCrashReports: Bool
     public var timeouts: VPhoneTemplateSetupTimeouts
 
     public init(
         slimming: VPhoneMachineTemplateSlimming,
         requiresEveryApp: Bool,
         clearsDeviceName: Bool = true,
+        clearsCrashReports: Bool = true,
         timeouts: VPhoneTemplateSetupTimeouts = .standard,
     ) {
         serviceProfile = slimming.serviceProfile
@@ -147,6 +166,7 @@ public struct VPhoneTemplateSetupPlan: Equatable, Sendable {
         removedApps = slimming.removedApps
         self.requiresEveryApp = requiresEveryApp
         self.clearsDeviceName = clearsDeviceName
+        self.clearsCrashReports = clearsCrashReports
         self.timeouts = timeouts
     }
 }
@@ -169,6 +189,7 @@ public enum VPhoneTemplateSetupStep: String, CaseIterable, Sendable, CustomStrin
     case serviceProfile = "service-profile"
     case reboot
     case verify
+    case crashReports = "crash-reports"
     case deviceName = "device-name"
     case stop
 
@@ -183,6 +204,7 @@ public enum VPhoneTemplateSetupStep: String, CaseIterable, Sendable, CustomStrin
         case .serviceProfile: "d/e. apply the service profile"
         case .reboot: "f. reboot"
         case .verify: "f. verify after the reboot"
+        case .crashReports: "clear the crash reports"
         case .deviceName: "clear the pinned device name"
         case .stop: "g. shut down"
         }
@@ -225,6 +247,8 @@ public struct VPhoneTemplateSetupOutcome: Equatable, Sendable {
     /// Labels the profile owns after it was applied.
     public var servicesOwned = 0
     public var verified = false
+    /// Names of the crash reports deleted before the shutdown.
+    public var clearedCrashReports: [String] = []
     public var deviceNameCleared = false
     public var stoppedCleanly = false
     public var durations: [VPhoneTemplateSetupStep: TimeInterval] = [:]
@@ -317,8 +341,10 @@ public final class VPhoneTemplateSetupBoot {
     /// (step e), and the labels it must have turned off.
     public static let signInFollowUpGroup = "signin_followup"
     public static let signInFollowUpLabels = ["com.apple.appleidsetupd", "com.apple.followupd"]
-    /// `setup.settle` answers within 110 s; the host waits at most 120 s.
-    static let settleCallLimit = 110
+    /// One `setup.settle` call waits at most this long (vphoned's cap is
+    /// 110 s, the host's read timeout 120 s), so the step prints progress
+    /// between calls.
+    static let settleCallLimit = 30
 
     private let machine: VPhoneTemplateSetupMachine
     private let plan: VPhoneTemplateSetupPlan
@@ -369,6 +395,7 @@ public final class VPhoneTemplateSetupBoot {
             }
             try step(.reboot) { try reboot() }
             try step(.verify) { try verify() }
+            try step(.crashReports) { clearCrashReports() }
             try step(.deviceName) { clearDeviceName() }
             try step(.stop) {
                 running = false
@@ -419,23 +446,56 @@ public final class VPhoneTemplateSetupBoot {
             : "  deleted \(outcome.deletedSnapshots.joined(separator: ", "))")
     }
 
-    /// a. `setup.skip` writes purplebuddy's keys and restarts SpringBoard.
-    /// Right after vphoned first answers, SpringBoard and cfprefsd may not be
-    /// up yet: on a fresh 27.0 guest it failed with "Cannot allocate memory"
-    /// seconds into the boot, then for 87 s with SpringBoard's restart
-    /// refused ("Requestor lacks required entitlement"). It is idempotent, so
-    /// any refusal is retried until the deadline.
+    /// a. `setup.skip` writes purplebuddy's keys. On the setup boot (the
+    /// guest's first) data migration is still running: SpringBoard decides
+    /// whether to run Setup only when it ends, so vphoned leaves SpringBoard
+    /// alone and the step takes a moment. Before vphoned did that, it asked
+    /// FrontBoard to restart SpringBoard, which FrontBoard ignores until
+    /// migration ends, and the fallback `launchctl stop` failed with launchd
+    /// status 144 ("Requestor lacks required entitlement"); the step was
+    /// retried for 45–98 s, as long as migration had left. Waiting for
+    /// migration is now part of the settle step. Right after vphoned first
+    /// answers, cfprefsd may not be up yet ("Cannot allocate memory" seconds
+    /// into a fresh 27.0 boot). The skip is idempotent, so any refusal is
+    /// retried until the deadline.
     private func skipSetup() throws {
-        let result = try call("setup.skip", ["force": true], deadline: deadline(timeouts.skipSetup), retryingRefusals: true)
+        let start = clock.now()
+        var lastProgress = start
+        let result = try call(
+            "setup.skip", ["force": true], deadline: deadline(timeouts.skipSetup), retryingRefusals: true,
+        ) { [self] error in
+            // A vphoned that restarts SpringBoard is refused until data
+            // migration ends: report the wait, not every refusal.
+            guard Self.isSpringBoardRestartRefusal(error.message) else { return "  setup.skip: \(error.message); retrying" }
+            let now = clock.now()
+            guard now.timeIntervalSince(lastProgress) >= timeouts.progressInterval || lastProgress == start else { return nil }
+            lastProgress = now
+            return "  waiting for the guest's first-boot data migration before SpringBoard can restart (\(Int(now.timeIntervalSince(start))) s)"
+        }
         guard result["setup_done"] as? Bool == true else {
             throw StepError("setup.skip did not report setup_done")
         }
         outcome.setupSkipped = true
+        let respring = result["respring"] as? [String: Any]
+        if respring?["restarted"] as? Bool == false {
+            log("  SpringBoard left alone: \(respring?["reason"] as? String ?? "not restarted"); it reads the keys when data migration ends")
+        }
     }
 
-    /// b. `setup.settle` waits at most 110 s per call; it is called again
-    /// until the overall deadline.
+    /// The refusal of a SpringBoard restart FrontBoard ignored: 2.9.0's
+    /// "relaunch action ignored and launchd stop failed: 144 …", or the
+    /// later "… SpringBoard did not restart: …".
+    static func isSpringBoardRestartRefusal(_ message: String) -> Bool {
+        message.contains("relaunch action ignored") || message.contains("SpringBoard did not restart")
+    }
+
+    /// b. `setup.settle` waits at most `settleCallLimit` seconds per call;
+    /// it is called again until the overall deadline, printing what it waits
+    /// for in between. It settles once the system apps are expanded and data
+    /// migration has ended, which is also when SpringBoard reads the keys
+    /// `setup.skip` wrote.
     private func settle() throws {
+        let start = clock.now()
         let end = deadline(timeouts.settle)
         var reasons: [String] = []
         while true {
@@ -446,14 +506,27 @@ public final class VPhoneTemplateSetupBoot {
             }
             let wait = Int(min(Double(Self.settleCallLimit), max(10, remaining.rounded(.up))))
             let result = try call("setup.settle", ["timeout_s": wait], deadline: end, timeout: Double(wait) + 20)
+            let elapsed = Int(clock.now().timeIntervalSince(start))
             if result["settled"] as? Bool == true {
                 outcome.settled = true
-                log("  settled after \(result["elapsed_s"].map { "\($0)" } ?? "?") s")
+                log("  settled after \(elapsed) s")
                 return
             }
             reasons = strings(result["reasons"])
-            log("  not settled yet: \(reasons.joined(separator: "; "))")
+            log(Self.settleProgress(reasons, elapsed: elapsed))
         }
+    }
+
+    static let migrationReason = "data migration has not finished"
+
+    /// One progress line of the settle step.
+    static func settleProgress(_ reasons: [String], elapsed: Int) -> String {
+        let others = reasons.filter { $0 != migrationReason }
+        guard others.count < reasons.count else {
+            return "  waiting for first-boot work (\(elapsed) s): \(reasons.joined(separator: "; "))"
+        }
+        return "  waiting for the guest's first-boot data migration (\(elapsed) s)"
+            + (others.isEmpty ? "" : "; also \(others.joined(separator: "; "))")
     }
 
     /// c. `apps.remove_system` backs each container up, unregisters it and
@@ -579,7 +652,7 @@ public final class VPhoneTemplateSetupBoot {
         }
         while true {
             try checkMachine()
-            if machine.ping(), let after = try? machine.call("processes.list", params: [:], timeout: 30),
+            if machine.ping(), let after = try? machine.call("processes.list", params: [:], timeout: timeouts.rebootPoll),
                let marker = Self.bootMarker(after), marker != before
             {
                 return
@@ -671,6 +744,65 @@ public final class VPhoneTemplateSetupBoot {
         return problems
     }
 
+    /// The crash reports this machine's boots left go before it is frozen:
+    /// every clone would otherwise list them as its own. The first is always
+    /// a `panic-full` report of `initproc failed to start … libSystem.B.dylib
+    /// … (no dyld cache)`: the restore reboots into the installed system
+    /// before `cfw install` has put the dyld cache on the System volume, the
+    /// kernel records that panic, and iOS writes the report at the next
+    /// boot, which is the setup boot. Nothing in the template panicked.
+    /// Best effort: a report left behind is a warning.
+    private func clearCrashReports() {
+        guard plan.clearsCrashReports else { return }
+        let end = deadline(timeouts.crashReports)
+        do {
+            let reports = try (call("logs.crashes", [:], deadline: end)["crashes"] as? [[String: Any]] ?? [])
+                .compactMap { $0["path"] as? String }
+                .filter(Self.isCrashReport)
+            var left: [String] = []
+            for path in reports {
+                do {
+                    _ = try call("files.remove", ["path": path], deadline: end)
+                    outcome.clearedCrashReports.append((path as NSString).lastPathComponent)
+                } catch {
+                    left.append("\((path as NSString).lastPathComponent) (\(error))")
+                }
+            }
+            if !outcome.clearedCrashReports.isEmpty {
+                log("  cleared \(Self.summarizeCrashReports(outcome.clearedCrashReports))")
+            }
+            if !left.isEmpty {
+                let warning = "could not delete \(left.count) crash report(s): \(left.prefix(3).joined(separator: ", "))"
+                outcome.warnings.append(warning)
+                log("  warning: \(warning)")
+            }
+        } catch {
+            outcome.warnings.append("could not list the crash reports: \(error)")
+            log("  warning: could not list the crash reports: \(error)")
+        }
+    }
+
+    /// Only a report file in a CrashReporter folder: `logs.crashes` lists
+    /// nothing else; the check keeps `files.remove` off any other path it
+    /// might ever return.
+    public static func isCrashReport(_ path: String) -> Bool {
+        path.hasPrefix("/") && !path.contains("/../") && path.contains("/Logs/CrashReporter/")
+            && !path.hasSuffix("/")
+    }
+
+    /// `14 crash report(s): duetexpertd ×12, panic-full ×1, …`, by process.
+    public static func summarizeCrashReports(_ names: [String]) -> String {
+        var counts: [String: Int] = [:]
+        for name in names {
+            let stem = (name as NSString).deletingPathExtension
+            let process = stem.range(of: #"-\d{4}-\d{2}-\d{2}"#, options: .regularExpression)
+                .map { String(stem[..<$0.lowerBound]) } ?? stem
+            counts[process, default: 0] += 1
+        }
+        let parts = counts.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.map { "\($0.key) ×\($0.value)" }
+        return "\(names.count) crash report(s): \(parts.joined(separator: ", "))"
+    }
+
     /// `vphone-vm` pinned the device name to this machine's name on connect.
     /// A clone would carry that pin until its own VM pins its name, so the
     /// pin goes; the guest's own name (`iPhone`) shows in between.
@@ -717,6 +849,7 @@ public final class VPhoneTemplateSetupBoot {
         deadline: Date,
         timeout: TimeInterval = 60,
         retryingRefusals: Bool = false,
+        retryLine: ((VPhoneGuestCallError) -> String?)? = nil,
     ) throws -> [String: Any] {
         var attempts = 0
         while true {
@@ -728,7 +861,9 @@ public final class VPhoneTemplateSetupBoot {
                 guard clock.now().addingTimeInterval(timeouts.retryInterval) < deadline else {
                     throw StepError("\(method): \(error.message) (\(attempts) attempt(s))")
                 }
-                log("  \(method): \(error.message); retrying")
+                if let line = retryLine.map({ $0(error) }) ?? "  \(method): \(error.message); retrying" {
+                    log(line)
+                }
                 clock.sleep(timeouts.retryInterval)
             } catch let error as VPhoneGuestCallError {
                 // Kept whole for a caller that reads its detail.

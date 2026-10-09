@@ -74,17 +74,24 @@ enum APIWire {
 final class APIEventHub: @unchecked Sendable {
     private let lock = NSLock()
     private var channels: [ObjectIdentifier: Channel] = [:]
+    /// Called with true when the first subscriber arrives and false when the
+    /// last one leaves, outside the lock. Set once, before any client connects.
+    var onSubscribedChange: (@Sendable (Bool) -> Void)?
 
     func add(_ channel: Channel) {
         lock.lock()
+        let first = channels.isEmpty
         channels[ObjectIdentifier(channel)] = channel
         lock.unlock()
+        if first { onSubscribedChange?(true) }
     }
 
     func remove(_ channel: Channel) {
         lock.lock()
-        channels.removeValue(forKey: ObjectIdentifier(channel))
+        let removed = channels.removeValue(forKey: ObjectIdentifier(channel)) != nil
+        let last = removed && channels.isEmpty
         lock.unlock()
+        if last { onSubscribedChange?(false) }
     }
 
     func broadcast(name: String, data: [String: Any]) {

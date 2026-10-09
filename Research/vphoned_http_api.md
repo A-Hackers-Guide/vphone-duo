@@ -243,7 +243,9 @@ the same response shape; requests may complete out of order, so clients
 correlate them by `id`. The socket also sends
 `{ "type": "event", "event": "...", "data": { ... } }`. The initial event is
 `connected`; changes to screen, frontmost app, or low power mode emit
-`device.state`, and completed operations emit `operation.completed`. Ping frames
+`device.state` (vphoned checks them every three seconds while an event socket
+is open, and not at all otherwise), and completed operations emit
+`operation.completed`. Ping frames
 receive pong frames. JSON WebSocket frames are limited to 1 MiB after
 fragment reassembly.
 
@@ -314,7 +316,7 @@ request carries `"force": true`.
 | Bootstrap | `bootstrap.install {layout}`, `bootstrap.status`, `bootstrap.inspect`, `bootstrap.uninstall {jbroot, force}`, `bootstrap.firmware` (see above) |
 | Environment | `environment.status` (SHA-256 of each vphone library in `/usr/lib`, or null when absent, plus the staging directory), `environment.install {libraries: [{name, sha256}]}` (see below) |
 | Profile UDID | `udid.get`, `udid.set {udid}`, `udid.clear` — each returns `{udid, path}`, the UDID the guest gives its profile checks and the host (null: the guest's own) and the settings file it came from; `set` and `clear` also return `restarted_pids`, `usb_serial` and `usb_reenumerated` (see below) |
-| Setup Assistant | `setup.status` (`{pending, running, pid, setup_done, setup_version, current_version}`), `setup.skip` **force** (sets `SetupDone`, `SetupFinishedAllSteps` and `SetupVersion` in `com.apple.purplebuddy`, restarts SpringBoard, returns the status plus `respring`); `setup.settle {timeout_s?, poll_s?, stable_polls?}` (read-only wait for first-boot work, see below); `/v1/health` carries `setup_pending` — see `Research/Guest/setup_assistant_skip.md` |
+| Setup Assistant | `setup.status` (`{pending, running, pid, setup_done, setup_version, current_version, data_migration_done}`), `setup.skip` **force** (sets `SetupDone`, `SetupFinishedAllSteps` and `SetupVersion` in `com.apple.purplebuddy`, restarts SpringBoard, returns the status plus `respring`; while the first boot's data migration is still running it does not restart SpringBoard, which reads the keys when migration ends, and `respring` is `{restarted: false, reason: "data_migration_pending"}`; a restart FrontBoard ignored is refused with `reason: busy`, `retryable: true`, the keys already written); `setup.settle {timeout_s?, poll_s?, stable_polls?}` (read-only wait for first-boot work, see below); `/v1/health` carries `setup_pending` — see `Research/Guest/setup_assistant_skip.md` |
 
 `display.auto_lock` reads Settings' Auto-Lock (`maxInactivity` in profiled's
 `EffectiveUserSettings.plist`) and SpringBoard's `SBMinimumLockscreenIdleTime`.
@@ -452,12 +454,13 @@ with the same override as `services.disable`; launchd honors it from the next
 boot, so the guest has to restart. `apply {profile, groups?, allow?}`:
 
 - `profile: "trimmed"` disables the default groups of the list for the
-  guest's iOS major version (`base`, the 137 labels measured on iOS 27.0;
+  guest's iOS major version (`base`, the 137 labels measured on iOS 27.0, or
+  on iOS 26 the 131 of them 26.6.2 loads;
   `app_store`, appstored and itunesstored; `signin_followup`, followupd and
   appleidsetupd), plus the optional groups named in `groups` (`accounts`:
   akd, amsaccountsd, appleaccountd, after which the guest cannot sign in to an
-  Apple Account), minus the labels in `allow`. Only iOS 27 has a list; on
-  another version it fails with "No trimmed service list for iOS N".
+  Apple Account), minus the labels in `allow`. Only iOS 26 and 27 have a
+  list; on another version it fails with "No trimmed service list for iOS N".
 - `profile: "none"` turns back on only the labels the profile disabled, on any
   version.
 - A label already disabled by somebody else (the OTA block, a user in the
@@ -491,15 +494,23 @@ work has settled and returns, without changing anything
 1–30) and is settled when, over the last `stable_polls` polls (default 3,
 2–20), `/private/var/staged_system_apps` is empty or absent (installd expands
 the removable system apps from it on the first boot), the number of
-registered apps did not change, and installd used less than 0.2 s of CPU
-between polls or was not running. `timeout_s` defaults to 90 and is capped at
+registered apps did not change, installd used less than 0.2 s of CPU
+between polls or was not running, and in the latest poll data migration is
+not running: `com.apple.migration` for user mobile records
+`kern.osversion` as `LastSystemVersion` or as `DMLastMigrationResults`'s
+`buildVersion`, or, with neither recorded, DataMigrator's XPC service
+(`com.apple.datamigrator`) is not running. The domain is empty until a fresh
+restore's first migration ends. `timeout_s` defaults to 90 and is capped at
 110, because the host waits at most 120 s for one answer; a caller that needs
 longer calls again. A timeout is not an error: it returns `{settled, elapsed_s,
 polls, timeout_s, poll_s, stable_polls, reasons, signals}` with `settled:
 false` and `reasons` naming the conditions still unmet; `signals` holds
 `staged_system_apps` (entries, null when unreadable), `app_count`,
 `app_counts` (the window), `installd_pid`, `installd_cpu_seconds`,
-`installd_cpu_delta` and `setup_pending`.
+`installd_cpu_delta`, `setup_pending` and `data_migration_done` (`false`
+while the record is missing and DataMigrator runs; null when the build is
+unknown, or nothing is recorded and DataMigrator is not running, which does
+not hold the verdict back).
 
 `VPhoneDaemon/Tests/run-logic-tests.sh` builds the guest-independent parts of
 these three (the lists and their bookkeeping, the settle verdict, the device

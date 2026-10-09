@@ -32,13 +32,25 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
     var connectDelayPolls = 2
     var snapshotBusyAnswers = 0
     var skipFailures = 0
+    /// vphoned of 2026-10-09 on: the first boot's data migration is still
+    /// running, so `setup.skip` writes the keys and leaves SpringBoard alone.
+    var migrationPending = false
+    var skipFailureDetail: [String: Any] = ["code": "failed", "message": "Cannot allocate memory"]
     var unsettledAnswers = 1
+    /// How long one refused `setup.skip` takes in the guest (2.9.0's
+    /// vphoned waited 5 s for SpringBoard's pid to change).
+    var skipFailureSeconds: TimeInterval = 0
+    var unsettledReasons = ["staged_system_apps not empty"]
     var refusedApps: Set<String> = []
     /// Apps vphoned had to unregister more than once, as it reports them.
     var unregisterAttempts: [String: Int] = [:]
     var servicesKeepRunning = false
     var rebootNeverReturns = false
     var stopsCleanly = true
+    /// vphoned still answers the first ping after `system.reboot`, then takes
+    /// the `processes.list` that follows down with it, unanswered.
+    var dyingVphonedTakesAList = false
+    private var dyingVphoned = false
 
     // Guest state.
     var snapshots = ["orig-fs.disabled.rn-4EC2"]
@@ -53,6 +65,14 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
     var bootTime = 1000.0
     var downCalls = 0
     var pinnedName: String? = "p4-src"
+    /// The restore's pre-CFW panic report, written at the first boot after
+    /// CFW, and one daemon crash of the setup boot.
+    var crashReports = [
+        "/var/mobile/Library/Logs/CrashReporter/panic-full-2026-10-09-155009.000.ips",
+        "/var/mobile/Library/Logs/CrashReporter/duetexpertd-2026-10-09-155011.ips",
+    ]
+    var undeletableReports: Set<String> = []
+    var crashListRefused = false
 
     init(clock: FakeClock) {
         self.clock = clock
@@ -68,6 +88,9 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
 
     func ping() -> Bool {
         clock.sleep(0.1)
+        if dyingVphoned {
+            return true
+        }
         if connectDelayPolls > 0 {
             connectDelayPolls -= 1
             return false
@@ -85,9 +108,14 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
         VPhoneGuestCallError(kind: .refused, message: message, detail: detail)
     }
 
-    func call(_ method: String, params: [String: Any], timeout _: TimeInterval) throws -> [String: Any] {
+    func call(_ method: String, params: [String: Any], timeout: TimeInterval) throws -> [String: Any] {
         calls.append(method)
         clock.sleep(0.5)
+        if dyingVphoned, method == "processes.list" {
+            dyingVphoned = false
+            clock.sleep(timeout)
+            throw VPhoneGuestCallError(kind: .transport, message: "no answer from vphone.sock")
+        }
         if downCalls > 0 {
             throw VPhoneGuestCallError(kind: .transport, message: "guest not connected")
         }
@@ -106,17 +134,21 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
             #expect(params["force"] as? Bool == true)
             if skipFailures > 0 {
                 skipFailures -= 1
-                throw refused("Cannot allocate memory", ["code": "failed", "message": "Cannot allocate memory"])
+                clock.sleep(skipFailureSeconds)
+                throw refused(skipFailureDetail["message"] as? String ?? "", skipFailureDetail)
             }
             setupDone = true
-            return ["setup_done": true, "setup_version": 11]
+            let respring: [String: Any] = migrationPending
+                ? ["restarted": false, "reason": "data_migration_pending"]
+                : ["restarted": true, "method": "frontboard_relaunch", "previous_pid": 36, "pid": 551]
+            return ["setup_done": true, "setup_version": 11, "respring": respring]
         case "setup.settle":
             let wait = params["timeout_s"] as? Int ?? 90
-            #expect(wait <= 110)
+            #expect(wait <= 30)
             if unsettledAnswers > 0 {
                 unsettledAnswers -= 1
                 clock.sleep(TimeInterval(wait))
-                return ["settled": false, "reasons": ["staged_system_apps not empty"], "elapsed_s": wait]
+                return ["settled": false, "reasons": unsettledReasons, "elapsed_s": wait]
             }
             return ["settled": true, "elapsed_s": 10.2, "reasons": [String]()]
         case "apps.remove_system":
@@ -163,6 +195,7 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
         case "system.reboot":
             bootTime += 100
             downCalls = 3
+            dyingVphoned = dyingVphonedTakesAList
             if !servicesKeepRunning {
                 running = []
             }
@@ -171,6 +204,18 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
             return ["setup_done": setupDone, "pending": !setupDone]
         case "apps.list":
             return ["apps": installed.map { ["bundle_id": $0] }]
+        case "logs.crashes":
+            if crashListRefused {
+                throw refused("unknown method logs.crashes", ["code": "unknown_method"])
+            }
+            return ["crashes": crashReports.map { ["path": $0, "name": ($0 as NSString).lastPathComponent] }, "count": crashReports.count]
+        case "files.remove":
+            let path = params["path"] as? String ?? ""
+            if undeletableReports.contains(path) {
+                throw refused("Operation not permitted", ["code": "failed"])
+            }
+            crashReports.removeAll { $0 == path }
+            return ["path": path, "removed": true]
         case "device.name.set":
             pinnedName = params["name"] as? String
             return ["name": NSNull(), "changed": true]
@@ -235,7 +280,7 @@ struct TemplateSetupBootTests {
             "apps.remove_system", "services.profile.apply", "services.profile",
             "processes.list", "system.reboot", "processes.list",
             "apfs.snapshots", "setup.status", "services.profile", "apps.list",
-            "device.name.set",
+            "logs.crashes", "files.remove", "files.remove", "device.name.set",
         ]))
         // Nothing slims before Setup is skipped and first-boot work settled.
         let firstRemoval = try #require(guest.calls.firstIndex(of: "apps.remove_system"))
@@ -252,6 +297,8 @@ struct TemplateSetupBootTests {
         #expect(outcome.serviceProfile == "trimmed")
         #expect(outcome.deviceNameCleared)
         #expect(guest.pinnedName == nil)
+        #expect(guest.crashReports.isEmpty)
+        #expect(outcome.clearedCrashReports.count == 2)
         #expect(Set(outcome.durations.keys) == Set(VPhoneTemplateSetupStep.allCases))
 
         // The offline trim records its tier before the setup boot, which
@@ -301,6 +348,37 @@ struct TemplateSetupBootTests {
         #expect(outcome.setupSkipped)
     }
 
+    @Test func `setup skip during data migration leaves SpringBoard alone and says so`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.migrationPending = true
+        var lines: [String] = []
+        let boot = VPhoneTemplateSetupBoot(
+            machine: guest,
+            plan: VPhoneTemplateSetupPlan(slimming: VPhoneTemplateSlimmingRequest.defaultSlimming, requiresEveryApp: true),
+            clock: guest.clock,
+            log: { lines.append($0) },
+        )
+        let outcome = try boot.run()
+        #expect(guest.calls.count(where: { $0 == "setup.skip" }) == 1)
+        #expect(outcome.setupSkipped)
+        #expect(outcome.isComplete)
+        #expect(lines.contains { $0.contains("SpringBoard left alone: data_migration_pending") })
+        // The settle step, which waits for migration, still comes before any slimming.
+        #expect(inOrder(guest.calls, ["setup.skip", "setup.settle", "apps.remove_system"]))
+    }
+
+    @Test func `a SpringBoard restart vphoned reports as retryable is retried`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.skipFailures = 2
+        guest.skipFailureDetail = [
+            "code": "command_failed", "reason": "busy", "retryable": true,
+            "message": "Setup Assistant's keys are written, but SpringBoard did not restart: relaunch action ignored",
+        ]
+        let outcome = try run(guest).get()
+        #expect(guest.calls.count(where: { $0 == "setup.skip" }) == 3)
+        #expect(outcome.setupSkipped)
+    }
+
     @Test func `setup skip that keeps failing fails its step`() throws {
         let guest = FakeGuest(clock: FakeClock())
         guest.skipFailures = 1000
@@ -317,7 +395,7 @@ struct TemplateSetupBootTests {
         #expect(outcome.snapshotsGone)
     }
 
-    @Test func `settle is called again until it settles, each call within 110 s`() throws {
+    @Test func `settle is called again until it settles, each call within 30 s`() throws {
         let guest = FakeGuest(clock: FakeClock())
         guest.unsettledAnswers = 4
         let outcome = try run(guest).get()
@@ -335,8 +413,72 @@ struct TemplateSetupBootTests {
         #expect(!guest.stopped)
         #expect(!failure.outcome.isComplete)
         #expect(!guest.calls.contains("apps.remove_system"))
-        // Bounded: 600 s of 110 s calls.
-        #expect(guest.calls.count(where: { $0 == "setup.settle" }) <= 7)
+        // Bounded: 600 s of 30 s calls.
+        #expect(guest.calls.count(where: { $0 == "setup.settle" }) <= 21)
+    }
+
+    /// The slower Mac of the 2.9.0 report: data migration ran past the old
+    /// 120 s skip deadline. The skip now passes at once and the settle step
+    /// waits, printing progress, well past 120 s.
+    @Test func `a slow data migration is waited for in settle with progress, not failed`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.migrationPending = true
+        guest.unsettledAnswers = 10
+        guest.unsettledReasons = ["data migration has not finished"]
+        var lines: [String] = []
+        let boot = VPhoneTemplateSetupBoot(
+            machine: guest,
+            plan: VPhoneTemplateSetupPlan(slimming: VPhoneTemplateSlimmingRequest.defaultSlimming, requiresEveryApp: true),
+            clock: guest.clock,
+            log: { lines.append($0) },
+        )
+        let outcome = try boot.run()
+        #expect(outcome.isComplete)
+        #expect(try #require(outcome.durations[.settle]) > 300)
+        #expect(try #require(outcome.durations[.skipSetup]) < 5)
+        let progress = lines.filter { $0.hasPrefix("  waiting for the guest's first-boot data migration (") }
+        #expect(progress.count == 10)
+        #expect(progress.allSatisfy { !$0.contains(";") })
+        #expect(lines.contains { $0.hasPrefix("  settled after ") })
+    }
+
+    @Test func `settle progress names data migration first`() {
+        #expect(VPhoneTemplateSetupBoot.settleProgress(["data migration has not finished"], elapsed: 42)
+            == "  waiting for the guest's first-boot data migration (42 s)")
+        #expect(VPhoneTemplateSetupBoot.settleProgress(["staged_system_apps has 3 entries", "data migration has not finished"], elapsed: 12)
+            == "  waiting for the guest's first-boot data migration (12 s); also staged_system_apps has 3 entries")
+        #expect(VPhoneTemplateSetupBoot.settleProgress(["app count changed: 250 → 258"], elapsed: 70)
+            == "  waiting for first-boot work (70 s): app count changed: 250 → 258")
+    }
+
+    /// 2.9.0's vphoned restarts SpringBoard in every skip and is refused
+    /// until migration ends: 14 refusals (about 130 s) failed the step on the
+    /// MacBook Air. Now the step outlasts them and reports the wait every 30 s
+    /// instead of every refusal.
+    @Test func `a 2_9_0 vphoned refused until migration ends passes the skip step`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.skipFailures = 30
+        guest.skipFailureSeconds = 5.5
+        guest.skipFailureDetail = [
+            "code": "failed",
+            "message": "relaunch action ignored and launchd stop failed: 144 Requestor lacks required entitlement",
+        ]
+        var lines: [String] = []
+        let boot = VPhoneTemplateSetupBoot(
+            machine: guest,
+            plan: VPhoneTemplateSetupPlan(slimming: VPhoneTemplateSlimmingRequest.defaultSlimming, requiresEveryApp: true),
+            clock: guest.clock,
+            log: { lines.append($0) },
+        )
+        let outcome = try boot.run()
+        #expect(outcome.isComplete)
+        let skip = try #require(outcome.durations[.skipSetup])
+        #expect(skip > 250 && skip < 600)
+        #expect(!lines.contains { $0.contains("144") })
+        let progress = lines.filter { $0.contains("waiting for the guest's first-boot data migration before SpringBoard can restart") }
+        // The first refusal, then one line per 30 s at most.
+        #expect(progress.count >= 2 && progress.count <= Int(skip / 30) + 1, "\(progress)")
+        #expect(progress.first?.hasSuffix(" s)") == true, "\(progress)")
     }
 
     @Test func `a refused app fails a build whose key promises it`() throws {
@@ -462,6 +604,21 @@ struct TemplateSetupBootTests {
         #expect(guest.killed)
     }
 
+    @Test func `a list the reboot leaves unanswered holds the step only for the poll timeout`() throws {
+        let quick = try run(FakeGuest(clock: FakeClock())).get()
+        let guest = FakeGuest(clock: FakeClock())
+        guest.dyingVphonedTakesAList = true
+        let outcome = try run(guest).get()
+        let base = try #require(quick.durations[.reboot])
+        let stalled = try #require(outcome.durations[.reboot])
+        // One poll timeout more than an undisturbed reboot, not the 30 s that
+        // made the live step take 33 s.
+        #expect(stalled - base >= VPhoneTemplateSetupTimeouts.standard.rebootPoll)
+        #expect(stalled - base < VPhoneTemplateSetupTimeouts.standard.rebootPoll + 5)
+        #expect(VPhoneTemplateSetupTimeouts.standard.rebootPoll <= 10)
+        #expect(outcome.isComplete)
+    }
+
     @Test func `services still running after the reboot fail verification`() throws {
         let guest = FakeGuest(clock: FakeClock())
         guest.servicesKeepRunning = true
@@ -494,6 +651,72 @@ struct TemplateSetupBootTests {
         #expect(VPhoneTemplateSetupBoot.bootMarker(["processes": [["pid": 1, "start_time": 12.5]]]) == 12.5)
         #expect(VPhoneTemplateSetupBoot.bootMarker(["processes": [["pid": 2, "start_time": 12.5]]]) == nil)
         #expect(VPhoneTemplateSetupBoot.bootMarker([:]) == nil)
+    }
+
+    @Test func `the restore's panic report and the setup boot's crashes are cleared after the reboot`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        let outcome = try run(guest).get()
+        #expect(guest.crashReports.isEmpty)
+        #expect(outcome.clearedCrashReports == [
+            "panic-full-2026-10-09-155009.000.ips", "duetexpertd-2026-10-09-155011.ips",
+        ])
+        // After the reboot, so the reports of both boots go; before the shutdown.
+        let reboot = try #require(guest.calls.firstIndex(of: "system.reboot"))
+        let listing = try #require(guest.calls.firstIndex(of: "logs.crashes"))
+        #expect(reboot < listing)
+        #expect(outcome.warnings.isEmpty)
+    }
+
+    @Test func `a crash report that cannot be cleared is a warning, not a failure`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.undeletableReports = ["/var/mobile/Library/Logs/CrashReporter/duetexpertd-2026-10-09-155011.ips"]
+        let outcome = try run(guest).get()
+        #expect(outcome.isComplete)
+        #expect(outcome.clearedCrashReports == ["panic-full-2026-10-09-155009.000.ips"])
+        #expect(outcome.warnings.contains { $0.contains("could not delete 1 crash report(s)") })
+
+        let unlisted = FakeGuest(clock: FakeClock())
+        unlisted.crashListRefused = true
+        let second = try run(unlisted).get()
+        #expect(second.isComplete)
+        #expect(second.warnings.contains { $0.contains("could not list the crash reports") })
+        #expect(!unlisted.calls.contains("files.remove"))
+    }
+
+    @Test func `a setup boot told to keep the crash reports leaves them`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        let boot = VPhoneTemplateSetupBoot(
+            machine: guest,
+            plan: VPhoneTemplateSetupPlan(
+                slimming: VPhoneTemplateSlimmingRequest.defaultSlimming,
+                requiresEveryApp: true,
+                clearsCrashReports: false,
+            ),
+            clock: guest.clock,
+            log: { _ in },
+        )
+        let outcome = try boot.run()
+        #expect(outcome.isComplete)
+        #expect(guest.crashReports.count == 2)
+        #expect(!guest.calls.contains("logs.crashes"))
+    }
+
+    @Test func `only report files in a CrashReporter folder are deleted`() {
+        #expect(VPhoneTemplateSetupBoot.isCrashReport("/var/mobile/Library/Logs/CrashReporter/panic-full-2026-10-09-155009.000.ips"))
+        #expect(VPhoneTemplateSetupBoot.isCrashReport("/private/var/mobile/Library/Logs/CrashReporter/Retired/x.ips"))
+        #expect(!VPhoneTemplateSetupBoot.isCrashReport("/var/mobile/Library/Logs/CrashReporter/"))
+        #expect(!VPhoneTemplateSetupBoot.isCrashReport("/var/mobile/Library/Logs/CrashReporter/../../Preferences/x.plist"))
+        #expect(!VPhoneTemplateSetupBoot.isCrashReport("/var/mobile/Library/Preferences/com.apple.x.plist"))
+        #expect(!VPhoneTemplateSetupBoot.isCrashReport("Logs/CrashReporter/x.ips"))
+    }
+
+    @Test func `cleared reports are summarized by process, most first`() {
+        let names = [
+            "duetexpertd-2026-10-09-155011.ips", "duetexpertd-2026-10-09-155020.ips",
+            "panic-full-2026-10-09-155009.000.ips", "SiriSearchFeedback-2026-10-09-151008.ips",
+        ]
+        #expect(VPhoneTemplateSetupBoot.summarizeCrashReports(names)
+            == "4 crash report(s): duetexpertd ×2, SiriSearchFeedback ×1, panic-full ×1")
     }
 }
 

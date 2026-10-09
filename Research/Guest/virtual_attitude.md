@@ -46,6 +46,36 @@ captures and cancellation prevent a timer retaining a released manager.
 Enabling/disabling an existing subscription switches between simulation and
 retained native implementations, including native availability when disabled.
 
+### Lock order
+
+"Apps" are paths containing `.app/`, so SpringBoard
+(`/System/Library/CoreServices/SpringBoard.app/SpringBoard`) loads the hook
+too. Core Motion's `-[CMMotionManager setDeviceMotionUpdateInterval:]` (and
+other methods) hop synchronously to its `com.apple.CoreMotion.MotionThread`,
+and blocks on that thread call the public getters, such as
+`isDeviceMotionActive`, on the same manager. The first version held the
+session lock around the native setter and took it again in the getters. On
+iOS 26.6.2 that froze SpringBoard on every boot after data migration: the main
+thread builds the Home Screen's parallax (`SBRootFolderView
+_updateParallaxSettings` → `_UIMotionEffectCoreMotionEventProvider init`),
+which sets the interval, while the MotionThread waits in `VPhoneActive`. The
+screen stayed black, Setup.app was killed by its 20 s launch watchdog waiting
+for SpringBoard, any vphoned call that needs SpringBoard (`screen.unlock`,
+`apps.foreground`, a respring) hung, and template setup boots failed at
+setup-skip. 27.0's setter has the same synchronous hop, so the order matters
+there as well even though no 27.0 boot was seen to hang.
+
+The rule since: no hooked getter waits for a lock that a caller of a native
+method may hold. `active`, `frame` and `latest` are atomic and the getters
+read them without the session lock; the setter calls the native method before
+it takes the lock; sessions are found through the associated object and
+created under a private `os_unfair_lock`, never `@synchronized` on the manager.
+`AttitudeLockOrderTests` (part of `make test-attitude`) replaces the native
+setter, start and stop with stand-ins that wait for a second thread calling
+the getters, and fails without the rule.
+
+### Configuration transport
+
 vphoned serializes publication/readback and persists one dictionary,
 `VPhoneAttitudeConfiguration`, in mobile's `com.apple.backboardd` preferences.
 It packs angles and enabled in one 64-bit Darwin notification state,

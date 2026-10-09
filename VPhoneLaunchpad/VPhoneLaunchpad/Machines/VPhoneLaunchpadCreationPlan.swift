@@ -58,6 +58,13 @@ nonisolated enum VPhoneLaunchpadCreationStep: Int, CaseIterable, Identifiable, C
     var needsRoot: Bool {
         self == .installCFW || self == .applyGuestPatches
     }
+
+    /// The step moves a build into `.templates` or clones a template, and
+    /// the clone refuses a template another process holds open. The disk
+    /// meter leaves templates alone meanwhile (`VPhoneLaunchpadDiskAccess`).
+    var needsTemplatesToItself: Bool {
+        self == .adoptTemplate || self == .cloneTemplate
+    }
 }
 
 // MARK: - Plan

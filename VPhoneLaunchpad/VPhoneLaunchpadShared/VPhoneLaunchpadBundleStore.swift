@@ -84,7 +84,9 @@ nonisolated enum VPhoneLaunchpadNames {
     /// `--work-parent` on `cfw install`, `update-environment` and
     /// `update-kernel`, which the helper passes, and `vm template
     /// find|trim|setup|adopt --json|list --json|delete` and `vm create
-    /// --template --skip-first-boot`, which New Machine and Templates run.
+    /// --template --skip-first-boot`, which New Machine and Templates run,
+    /// and `template` and `templateMatch` in `vm list --json`, which a
+    /// machine's inspector shows.
     private static let minimumBundleComponents = (2, 9, 0)
     static let minimumBundleVersion =
         "\(minimumBundleComponents.0).\(minimumBundleComponents.1).\(minimumBundleComponents.2)"

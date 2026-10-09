@@ -192,17 +192,22 @@ public enum VPhoneBundleOperations {
     }
 
     /// `afterCopy` runs between the copy and the second running check, so
-    /// tests can start the source while it is being copied.
+    /// tests can start the source while it is being copied. `readerWait` is
+    /// how long each check waits out holders that do not run the source.
     static func clone(
         bundleNamed name: String,
         to newName: String,
         in library: VPhoneLibrary,
         newIdentity: Bool,
+        readerWait: TimeInterval = VPhoneBundleActivity.readerWait,
         afterCopy: () throws -> Void,
     ) throws -> VPhoneBundle {
         try requireValidName(newName)
         let source = try library.bundle(named: name)
-        return try clone(source, sourceName: name, to: newName, in: library, newIdentity: newIdentity, afterCopy: afterCopy)
+        return try clone(
+            source, sourceName: name, to: newName, in: library, newIdentity: newIdentity,
+            readerWait: readerWait, afterCopy: afterCopy,
+        )
     }
 
     /// Clones a machine folder that need not be in `library`, such as a
@@ -224,6 +229,7 @@ public enum VPhoneBundleOperations {
         to newName: String,
         in library: VPhoneLibrary,
         newIdentity: Bool,
+        readerWait: TimeInterval = VPhoneBundleActivity.readerWait,
         afterCopy: () throws -> Void,
     ) throws -> VPhoneBundle {
         try requireValidName(newName)
@@ -237,7 +243,12 @@ public enum VPhoneBundleOperations {
         // copying anything, and again after it: the source may have started
         // while it was copied (off APFS that takes minutes), and the copy may
         // then hold state files from different moments.
-        try VPhoneBundleActivity.requireStopped(source)
+        //
+        // A clone only reads the source, so a holder that runs no machine
+        // (Launchpad's disk meter mapping a template that just appeared) is
+        // waited out for up to `readerWait` instead of failing the clone. A
+        // VM process holding the source, or its live socket, refuses at once.
+        try VPhoneBundleActivity.requireStopped(source, waitingForReaders: readerWait)
 
         // Roll back a half-made copy, so a retry with the same name is not
         // blocked by the alreadyExists check.
@@ -257,7 +268,7 @@ public enum VPhoneBundleOperations {
                 }
             }
             try afterCopy()
-            try VPhoneBundleActivity.requireStopped(source)
+            try VPhoneBundleActivity.requireStopped(source, waitingForReaders: readerWait)
             var clone = try VPhoneBundle.load(at: dst)
             if newIdentity {
                 clone = try resetIdentity(of: clone, clonedFrom: name)

@@ -62,6 +62,12 @@ public struct VPhoneTemplateSlimmingRequest: Equatable, Sendable {
     public static let trimTiers = VPhoneSystemTrimTier.allCases.filter(\.isSupported).map(\.rawValue)
     public static let serviceProfiles = ["none", "trimmed"]
 
+    /// The iOS major versions vphoned has a `trimmed` service list for, as
+    /// `GuestServiceProfile.supportedMajors` in the guest says. On any other
+    /// version `services.profile.apply trimmed` refuses, so a template there
+    /// takes `none` (``VPhoneMachineTemplateSlimming/fitted(toIOSVersion:)``).
+    public static let trimmedServiceProfileMajors = [26, 27]
+
     /// The removable system apps a slimmed template drops (list C of the
     /// template trim plan), each verified to stay removed across a respring
     /// and a reboot on iOS 27.0. Camera stays for camera passthrough checks;

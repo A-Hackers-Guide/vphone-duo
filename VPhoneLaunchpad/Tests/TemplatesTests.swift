@@ -489,61 +489,27 @@ struct TemplatesTests {
     // MARK: - Template of a machine
 
     /// Retest L2: a template deleted and built again keeps its identifier,
-    /// so the inspector matches a machine to the build, as `vphone-cli` does.
+    /// so the inspector shows which build a machine came from. `vphone-cli`
+    /// decides it and `vm list --json` reports it as `templateMatch`
+    /// (`VPhoneMachineTemplates.match` in VPhoneCoreKit, tested there);
+    /// Launchpad only decodes it.
     static func templateOrigins() throws {
-        typealias Origin = VPhoneLaunchpadTemplateOrigin
+        func machine(_ fields: String) throws -> VPhoneLaunchpadMachine {
+            let json = #"{"name":"e2e-a","cpuCount":8,"memoryMB":8192,"diskSizeBytes":64000000000,"network":{"mode":"nat","macAddress":"9a:84:18:78:7a:31"}"#
+                + fields + "}"
+            return try JSONDecoder().decode(VPhoneLaunchpadMachine.self, from: Data(json.utf8))
+        }
         let id = "3c16c372ca03"
-        let frozen = Date(timeIntervalSince1970: 1_791_453_600)
-        let template = Origin.Template(identifier: id, build: "B2", created: frozen.addingTimeInterval(-3600), frozenAt: frozen)
-
-        // Both records name a build: the build decides, not the dates.
-        let current = Origin.Source(identifier: id, build: "B2", cloned: frozen.addingTimeInterval(60))
-        precondition(Origin(current, template: template).match == .current, "Current build")
-        let earlier = Origin.Source(identifier: id, build: "B1", cloned: frozen.addingTimeInterval(60))
-        precondition(Origin(earlier, template: template).match == .earlierBuild, "Earlier build, cloned after the new one froze")
-        precondition(Origin(earlier, template: template).identifier == id, "Identifier kept")
-
-        // A clone record from before builds were recorded: the dates decide.
-        let legacyAfter = Origin.Source(identifier: id, cloned: frozen)
-        precondition(Origin(legacyAfter, template: template).match == .current, "Legacy clone at or after FrozenAt")
-        let legacyBefore = Origin.Source(identifier: id, cloned: frozen.addingTimeInterval(-1))
-        precondition(Origin(legacyBefore, template: template).match == .earlierBuild, "Legacy clone before FrozenAt")
-        // A legacy template on the other side, with no FrozenAt: Created.
-        let legacyTemplate = Origin.Template(identifier: id, created: frozen)
-        precondition(Origin(current, template: legacyTemplate).match == .current, "Build on one side only, cloned after Created")
-        precondition(Origin(legacyBefore, template: legacyTemplate).match == .earlierBuild, "Cloned before Created")
-
-        precondition(Origin(current, template: nil).match == .deleted, "Template missing")
-        precondition(!Origin.isClone(current, of: Origin.Template(identifier: "52b1fcc75e0c", build: "B2", created: frozen)), "Another identifier")
-
-        // Read from the folders, as the library does.
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("templates-origin-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let machine = root.appendingPathComponent("e2e-a", isDirectory: true)
-        let templateFolder = root.appendingPathComponent(".templates/\(id)", isDirectory: true)
-        try FileManager.default.createDirectory(at: machine, withIntermediateDirectories: true)
-        func write(_ plist: [String: Any], to file: URL) throws {
-            try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(to: file)
+        for match in [VPhoneLaunchpadTemplateOrigin.Match.current, .earlierBuild, .deleted] {
+            let origin = try machine(#","template":"\#(id)","templateMatch":"\#(match.rawValue)""#).templateOrigin
+            precondition(origin == VPhoneLaunchpadTemplateOrigin(identifier: id, match: match), "\(match): \(String(describing: origin))")
         }
-        func read() -> Origin? {
-            Origin.read(machine: machine, libraryRoot: root.path)
-        }
-        precondition(read() == nil, "Not a clone")
-        try write(["Identifier": id, "Build": "B1", "Cloned": frozen.addingTimeInterval(60)], to: machine.appendingPathComponent("TemplateSource.plist"))
-        precondition(read() == Origin(identifier: id, match: .deleted), "Template folder missing: \(String(describing: read()))")
-        try FileManager.default.createDirectory(at: templateFolder, withIntermediateDirectories: true)
-        let record: [String: Any] = ["Identifier": id, "Build": "B2", "Created": frozen, "Frozen": true, "FrozenAt": frozen]
-        try write(record, to: templateFolder.appendingPathComponent("Template.plist"))
-        precondition(read()?.match == .earlierBuild, "Rebuilt template")
-        try write(record.merging(["Build": "B1"]) { $1 }, to: templateFolder.appendingPathComponent("Template.plist"))
-        precondition(read()?.match == .current, "Same build")
-        try write(record.merging(["Build": "B1", "Frozen": false]) { $1 }, to: templateFolder.appendingPathComponent("Template.plist"))
-        precondition(read()?.match == .deleted, "A template never frozen is not listed")
-        try write(["Identifier": id, "Cloned": frozen.addingTimeInterval(-60)], to: machine.appendingPathComponent("TemplateSource.plist"))
-        try write(record.merging(["Build": "B1"]) { $1 }, to: templateFolder.appendingPathComponent("Template.plist"))
-        precondition(read()?.match == .earlierBuild, "Legacy record read without Build, cloned before FrozenAt")
-        try write(["Identifier": id], to: machine.appendingPathComponent("TemplateSource.plist"))
-        precondition(read() == nil, "No Cloned: unreadable, as the CLI decodes it")
+        let plain = try machine("")
+        precondition(plain.templateOrigin == nil, "Not a clone")
+        let unsaid = try machine(#","template":"\#(id)""#)
+        precondition(unsaid.template == id && unsaid.templateOrigin == nil, "A bundle that does not say how it matches")
+        let unknown = try machine(#","template":"\#(id)","templateMatch":"later""#)
+        precondition(unknown.templateOrigin == nil, "A match this Launchpad does not know leaves the row out")
         print("Template origin tests passed")
     }
 
@@ -576,6 +542,16 @@ struct TemplatesTests {
         precondition(!Access(isBusy: true).mayOpen, "Created, exported, installed into, stopped")
         precondition(!Access(isLibraryBusy: true).mayOpen, "An import or template deletion")
         precondition(!Access(isLaunched: true, isHeld: true).mayOpen, "Running")
+
+        // Templates are left alone while a creation saves or clones one: the
+        // clone refuses a template the meter holds open (2.9.0, New Machine
+        // failed at its clone step right after the template was saved).
+        precondition(Step.allCases.filter(\.needsTemplatesToItself) == [.adoptTemplate, .cloneTemplate], "Save and clone")
+        precondition(Access.templatesMayOpen(isLibraryBusy: false, creationSteps: []), "Nothing runs")
+        precondition(Access.templatesMayOpen(isLibraryBusy: false, creationSteps: [.restore, .setUpTemplate, .firstBoot]), "Other steps")
+        precondition(!Access.templatesMayOpen(isLibraryBusy: false, creationSteps: [.adoptTemplate]), "Saving a template")
+        precondition(!Access.templatesMayOpen(isLibraryBusy: false, creationSteps: [.restore, .cloneTemplate]), "Cloning a template")
+        precondition(!Access.templatesMayOpen(isLibraryBusy: true, creationSteps: []), "A template deletion")
 
         typealias Meter = VPhoneLaunchpadDiskMeter
         // An unchanged file is never opened, whatever else holds.
@@ -668,6 +644,27 @@ struct TemplatesTests {
 
         precondition(!Holder(pid: 1, executablePath: nil).runsMachine && !Holder(pid: 1, executablePath: "").runsMachine,
                      "An unknown process never runs a machine")
+        // The table the CLI's `VPhoneProcessHolder.kind` is tested against.
+        struct Table: Decodable {
+            struct Case: Decodable {
+                let path: String?
+                let kind: String
+            }
+
+            let cases: [Case]
+        }
+        let tableURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("VPhoneKit/VPhoneCoreKitTests/VirtualMachine/ProcessHolderKinds.json")
+        guard let tableData = try? Data(contentsOf: tableURL), let table = try? JSONDecoder().decode(Table.self, from: tableData) else {
+            preconditionFailure("Cannot read \(tableURL.path)")
+        }
+        precondition(table.cases.count >= 10, "The shared table has its cases: \(table.cases.count)")
+        for entry in table.cases {
+            precondition(["virtualMachine", "virtualizationService", "other"].contains(entry.kind), "Unknown kind \(entry.kind)")
+            let runs = Holder(pid: 1, executablePath: entry.path).runsMachine
+            precondition(runs == (entry.kind != "other"), "\(entry.path ?? "nil") is \(entry.kind), runsMachine is \(runs)")
+        }
         precondition(Holder(pid: 1, executablePath: nil).description == "1 unknown", "An unknown process by name")
         // The real lookup, on this process.
         let me = Holder(pid: getpid(), executablePath: Holder.executablePath(of: getpid()))

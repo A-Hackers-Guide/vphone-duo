@@ -8,8 +8,10 @@ import Foundation
 /// load the job at the next boot. Nothing changes until the guest restarts;
 /// `launchctl stop` and `unload` return launchd status 144 on the guest.
 ///
-/// `trimmed` is the set measured on an iOS 27.0 iPhone guest: memory −29%,
-/// idle host CPU −26%, idle host writes −60%, with no vphone feature lost.
+/// `trimmed` is the set measured on an iOS 27.0 iPhone guest (memory −29%,
+/// idle host CPU −26%, idle host writes −60%) and mapped onto iOS 26.6.2
+/// (memory −30%, idle host CPU −39%, idle host writes −94%), with no vphone
+/// feature lost on either.
 /// `none` turns back on only what the profile turned off, which it records in
 /// `recordPath`; a job somebody else disabled (the OTA block, a user in the
 /// Services panel) is never touched. See `Research/Guest/service_trimming.md`.
@@ -34,38 +36,48 @@ enum GuestServiceProfile {
     }
 
     /// The groups for an iOS major version, nil where no list was measured.
-    /// iOS 26 and iPadOS guests have none yet.
+    /// Both lists were measured on iPhone guests.
     static func groups(iosMajor: Int) -> [Group]? {
-        iosMajor == 27 ? groups27 : nil
+        switch iosMajor {
+        case 26: groups26
+        case 27: groups27
+        default: nil
+        }
     }
 
-    static let supportedMajors = [27]
+    static let supportedMajors = [26, 27]
+
+    /// `base` plus the groups every version shares: the store, sign-in
+    /// follow-up and account daemons have the same labels on 26 and 27.
+    static func catalog(base: [String]) -> [Group] {
+        [
+            Group(
+                name: "base", byDefault: true,
+                summary: "Siri and intelligence, Find My, Wallet/NFC/SE, Watch, Home, health coaching, Maps background, "
+                    + "iCloud/iMessage sync, ads and recommendations, telemetry, accessory firmware, OTA",
+                labels: base,
+            ),
+            Group(
+                name: "app_store", byDefault: true,
+                summary: "App Store and iTunes Store daemons, off with the store apps; appstorecomponentsd is in base",
+                labels: ["com.apple.appstored", "com.apple.itunesstored"],
+            ),
+            Group(
+                name: "signin_followup", byDefault: true,
+                summary: "Sign-in follow-up and Apple Account setup prompts; apply after first-boot work has settled",
+                labels: ["com.apple.appleidsetupd", "com.apple.followupd"],
+            ),
+            Group(
+                name: "accounts", byDefault: false,
+                summary: "Apple Account daemons; with these off the guest cannot sign in to an Apple Account",
+                labels: ["com.apple.akd", "com.apple.amsaccountsd", "com.apple.appleaccountd"],
+            ),
+        ]
+    }
 
     // MARK: - iOS 27
 
-    static let groups27: [Group] = [
-        Group(
-            name: "base", byDefault: true,
-            summary: "Siri and intelligence, Find My, Wallet/NFC/SE, Watch, Home, health coaching, Maps background, "
-                + "iCloud/iMessage sync, ads and recommendations, telemetry, accessory firmware, OTA",
-            labels: base27,
-        ),
-        Group(
-            name: "app_store", byDefault: true,
-            summary: "App Store and iTunes Store daemons, off with the store apps; appstorecomponentsd is in base",
-            labels: ["com.apple.appstored", "com.apple.itunesstored"],
-        ),
-        Group(
-            name: "signin_followup", byDefault: true,
-            summary: "Sign-in follow-up and Apple Account setup prompts; apply after first-boot work has settled",
-            labels: ["com.apple.appleidsetupd", "com.apple.followupd"],
-        ),
-        Group(
-            name: "accounts", byDefault: false,
-            summary: "Apple Account daemons; with these off the guest cannot sign in to an Apple Account",
-            labels: ["com.apple.akd", "com.apple.amsaccountsd", "com.apple.appleaccountd"],
-        ),
-    ]
+    static let groups27 = catalog(base: base27)
 
     /// Appendix A of the 2026-10-07 measurement on `svctest-a` (iPhone, 27.0
     /// 24A435): 137 LaunchDaemons that were loaded at boot and stayed unloaded
@@ -208,6 +220,25 @@ enum GuestServiceProfile {
         "com.apple.weatherd",
         "com.apple.wifianalyticsd",
         "com.apple.wirelessinsightsd",
+    ]
+
+    // MARK: - iOS 26
+
+    static let groups26 = catalog(base: base26)
+
+    /// The iOS 27 list mapped onto iPhone 26.6.2 (23G90), measured on `t26-a`
+    /// (2026-10-09): every label of `base27` that 26 loads at boot, under the
+    /// same name. Of the four jobs only 26 has, the one that runs,
+    /// `com.apple.timesync.audioclocksyncd`, stays on: off, it saved no host
+    /// CPU. The never-disabled set needed nothing new for 26.
+    static let base26: [String] = base27.filter { !notLoadedOn26.contains($0) }
+
+    /// `base27` labels 26.6.2 does not load: five its launchd.plist does not
+    /// have, and safetyalertsd, which it limits to hardware a guest is not.
+    static let notLoadedOn26: Set<String> = [
+        "com.apple.cloudtelemetryd", "com.apple.hybridsearchd", "com.apple.libsqlite3.dbtelemetryd",
+        "com.apple.speechmaintenanced", "com.apple.visualintelligenced",
+        "com.apple.safetyalertsd",
     ]
 
     // MARK: - Never Disabled

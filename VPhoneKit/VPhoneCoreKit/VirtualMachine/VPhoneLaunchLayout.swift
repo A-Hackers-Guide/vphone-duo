@@ -117,6 +117,11 @@ public struct VPhoneProcessHolder: Equatable, Sendable, CustomStringConvertible 
     /// installed bundle has its own copy. The VM service counts only from
     /// inside Virtualization.framework, so another program that takes its name
     /// is still `other`.
+    ///
+    /// Launchpad, which does not link this kit, judges the holders its own
+    /// `lsof` finds with a copy (`VPhoneLaunchpadDiskHolder.runsMachine`).
+    /// Both are tested against `VPhoneCoreKitTests/VirtualMachine/
+    /// ProcessHolderKinds.json`: change the table and both copies together.
     public static func kind(executablePath: String?) -> Kind {
         guard let executablePath, !executablePath.isEmpty else { return .other }
         let components = (executablePath as NSString).pathComponents

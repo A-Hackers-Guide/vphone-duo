@@ -1,4 +1,3 @@
-import CryptoKit
 import Darwin
 import Foundation
 import Virtualization
@@ -64,6 +63,8 @@ final class VPhoneGuestControl {
     private(set) var guestIPAddress: String?
     private(set) var guestIOSVersion: String?
     @ObservationIgnored var guestBinaryURL: URL?
+    /// The bundled vphoned's hash, kept between probes (VPhoneFileDigestCache).
+    @ObservationIgnored private var guestBinaryDigest = VPhoneFileDigestCache()
     @ObservationIgnored var onConnect: (([String]) -> Void)?
     @ObservationIgnored var onDisconnect: (() -> Void)?
     /// What en0 should be configured as, from the manifest. Applied on every
@@ -200,17 +201,16 @@ final class VPhoneGuestControl {
                 throw ControlError.protocolError("incompatible guest API")
             }
             if let binary = guestBinaryURL,
+               let hash = guestBinaryDigest.sha256(of: binary),
+               hash != info["binary_hash"] as? String,
                let data = try? Data(contentsOf: binary, options: .mappedIfSafe)
             {
-                let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-                if hash != info["binary_hash"] as? String {
-                    print("[control] updating vphoned over HTTP...")
-                    try await createDirectory(path: "/var/root/Library/Caches")
-                    try await uploadFile(path: "/var/root/Library/Caches/vphoned.next", data: data)
-                    _ = try await call("agent.apply_update", params: ["sha256": hash])
-                    setDisconnected()
-                    return
-                }
+                print("[control] updating vphoned over HTTP...")
+                try await createDirectory(path: "/var/root/Library/Caches")
+                try await uploadFile(path: "/var/root/Library/Caches/vphoned.next", data: data)
+                _ = try await call("agent.apply_update", params: ["sha256": hash])
+                setDisconnected()
+                return
             }
             // The probe repeats every few seconds; assign only changes so
             // observing windows do not redraw on every probe.

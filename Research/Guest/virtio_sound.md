@@ -68,6 +68,15 @@ A virtio stream is released when CoreAudio stops and the last transfer has come
 back, so an idle guest does not keep the host audio device running and the host
 microphone is open only while the guest records.
 
+The speaker's 1/24 s flush timer is armed in `startStream` and disarmed when
+`stopStream` starts the drain; draining needs no flush, since the device's
+returns end it. Until 2026-10-09 the timer was created at the first start and
+never stopped, so after the first sound of a boot audiomxd woke 24 times a
+second with nothing playing: 21,700–22,500 wakeups and 1.8–2.6 s of CPU per 15
+idle minutes on an iPhone 27.0 guest, against under 1,000 wakeups and 0.1 s
+with the timer disarmed (see
+[`service_trimming.md`](service_trimming.md#idle-cost-of-vphones-own-components)).
+
 The input side (the macOS plugin's receive path, why the microphone is a
 second device named `Digital Mic`, what VirtualAudio needed, and what is
 verified so far) is in `virtio_sound_microphone.md`.

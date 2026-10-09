@@ -84,6 +84,14 @@ enum VPhoneMachineTemplateKeys {
             blocked: blocked,
             allowed: allowed,
         )
+        // The slimming this iOS can take: `trimmed` is `none` where vphoned
+        // has no service list (VPhoneMachineTemplateSlimming.fitted).
+        let fitted: VPhoneMachineTemplateSlimming
+        do {
+            fitted = try slimming.fitted(toIOSVersion: ios.version)
+        } catch let error as VPhoneTemplateSlimmingError {
+            throw ValidationError(error.description)
+        }
         return VPhoneMachineTemplateKey(
             device: device,
             iOSVersion: ios.version,
@@ -97,7 +105,7 @@ enum VPhoneMachineTemplateKeys {
             ),
             bundleSeries: series,
             diskSizeGB: diskSizeGB,
-            slimming: slimming,
+            slimming: fitted,
         )
     }
 

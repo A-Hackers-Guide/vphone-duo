@@ -61,12 +61,14 @@ extension GuestAPI {
                 "installd_cpu_seconds": latest.installdCPUSeconds.map { $0 as Any } ?? NSNull(),
                 "installd_cpu_delta": verdict.installdCPUDelta.map { $0 as Any } ?? NSNull(),
                 "setup_pending": setupAssistantPending(),
+                "data_migration_done": latest.dataMigrationDone.map { $0 as Any } ?? NSNull(),
             ] as [String: Any],
         ]
     }
 
     private static func firstBootSample(time: Double) -> GuestFirstBootSettle.Sample {
         var sample = GuestFirstBootSettle.Sample(time: time)
+        sample.dataMigrationDone = dataMigrationDone()
         let staged = GuestFirstBootSettle.stagedSystemAppsPath
         if !FileManager.default.fileExists(atPath: staged) {
             sample.stagedSystemApps = 0

@@ -186,8 +186,8 @@ void cfx_install_preview_layer_hooks(void) {
 //
 // Fallback: scan UIApplication's windows for any AVCaptureVideoPreviewLayer
 // (or subclass) and adopt them. Covers a private layer class that never
-// goes through the hooks above. Runs once a second; cheap if no windows
-// match.
+// goes through the hooks above. Runs once a second once a vcam session runs;
+// cheap if no windows match.
 
 static void cfx_walk_layers(CALayer *layer, NSMutableArray *out) {
   if (!layer) return;
@@ -239,17 +239,21 @@ static void cfx_scan_preview_layers(void) {
 }
 
 static dispatch_source_t cfx_scan_timer = NULL;
+// Started by the first running vcam session (Session/CamFixSessionGuards.m).
+// Callers run on any thread; the timer is created once.
 void cfx_start_scan_timer(void) {
-  if (cfx_scan_timer) return;
-  dispatch_queue_t q = dispatch_get_main_queue();
-  cfx_scan_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, q);
-  dispatch_source_set_timer(cfx_scan_timer,
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    cfx_scan_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
+                                            dispatch_get_main_queue());
+    dispatch_source_set_timer(cfx_scan_timer,
                               dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)),
                               1000000000ull,
                               100000000ull);
-  dispatch_source_set_event_handler(cfx_scan_timer, ^{
-    @autoreleasepool { cfx_scan_preview_layers(); }
+    dispatch_source_set_event_handler(cfx_scan_timer, ^{
+      @autoreleasepool { cfx_scan_preview_layers(); }
+    });
+    dispatch_resume(cfx_scan_timer);
+    cfxlog(@"scan timer armed (1 Hz)");
   });
-  dispatch_resume(cfx_scan_timer);
-  cfxlog(@"scan timer armed (1 Hz)");
 }
