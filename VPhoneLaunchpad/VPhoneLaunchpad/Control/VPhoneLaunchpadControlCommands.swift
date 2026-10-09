@@ -475,6 +475,10 @@ struct VPhoneLaunchpadControlCommands {
 
         let pipeline: VPhoneLaunchpadCreationPipeline
         if let from = request.option("from") {
+            // A retry runs with the options the creation started with.
+            guard request.values("block").isEmpty, request.values("allow").isEmpty else {
+                throw VPhoneLaunchpadError("--from retries with the patches the creation started with; --block and --allow cannot change them.")
+            }
             guard let step = VPhoneLaunchpadCreationPipeline.Step.allCases.first(where: { from == "\($0)" }) else {
                 let steps = VPhoneLaunchpadCreationPipeline.Step.allCases.map { "\($0)" }.joined(separator: ", ")
                 throw VPhoneLaunchpadError("--from takes one of: \(steps).")
@@ -562,10 +566,7 @@ struct VPhoneLaunchpadControlCommands {
             }
             return value
         }
-        var patches = VPhoneLaunchpadPatchSelection()
-        if let preset = request.option("preset") {
-            patches.preset = preset
-        }
+        let (patches, guestPatches) = try await Self.patches(request, commandLine: commandLine, emit: emit)
         let usesTemplate = !request.flag("no-template")
         let slimming = try Self.slimming(request, usesTemplate: usesTemplate)
         let options = try VPhoneLaunchpadCreationPipeline.Options(
@@ -580,11 +581,62 @@ struct VPhoneLaunchpadControlCommands {
             diskSizeGB: number("disk-size", 64),
             network: request.option("network") ?? "nat",
             patches: patches,
+            guestPatches: guestPatches,
             keepArtifacts: request.flag("keep-artifacts"),
             usesTemplate: usesTemplate,
             slimming: slimming,
         )
         return library.create(options)
+    }
+
+    /// The preset and the per-patch overrides of `--block` and `--allow`,
+    /// split as New Machine splits them: the bundle's catalog for the preset
+    /// says which patches it turns on and which lie outside the boot chain.
+    /// The boot-chain overrides go into the template's key and build; the
+    /// guest ones are applied to the clone in Apply Guest Patches.
+    private static func patches(
+        _ request: VPhoneLaunchpadControlRequest,
+        commandLine: VPhoneLaunchpadCommandLine,
+        emit: Emit,
+    ) async throws -> (VPhoneLaunchpadPatchSelection, guest: Set<String>) {
+        var selection = VPhoneLaunchpadPatchSelection()
+        if let preset = request.option("preset") {
+            selection.preset = preset
+        }
+        let block = request.values("block")
+        let allow = request.values("allow")
+        guard !block.isEmpty || !allow.isEmpty else {
+            return (selection, [])
+        }
+        let catalog = try await VPhoneLaunchpadPatchCatalog.read(using: commandLine, machine: nil, preset: selection.preset)
+        let overrides: VPhoneLaunchpadPatchOverrides
+        do {
+            overrides = try VPhoneLaunchpadPatchOverrides.requested(
+                preset: selection.preset,
+                block: block,
+                allow: allow,
+                declared: Set(catalog.patches.map(\.identifier)),
+                inPreset: Set(catalog.patches.filter(\.inPreset).map(\.identifier)),
+                guest: Set(catalog.patches.filter { !$0.isBootChain }.map(\.identifier)),
+            )
+        } catch {
+            throw VPhoneLaunchpadError(error.message)
+        }
+        selection.blocked = overrides.blocked
+        selection.allowed = overrides.allowed
+        let unchanged = Set(block + allow).subtracting(overrides.blocked).subtracting(overrides.allowed)
+        if !unchanged.isEmpty {
+            emit("note: preset \(selection.preset) already has \(unchanged.sorted().joined(separator: ", ")) that way")
+        }
+        let essentialOff = selection.bootEssentialOff(in: catalog).map(\.identifier)
+        if !essentialOff.isEmpty {
+            emit("warning: \(essentialOff.count) boot-essential patch(es) are off — the machine may not boot: \(essentialOff.joined(separator: ", "))")
+        }
+        let bootChain = overrides.bootChainBlocked.map { "-\($0)" } + overrides.bootChainAllowed.map { "+\($0)" }
+        let guest = overrides.blocked.intersection(overrides.guestPatches).map { "-\($0)" }
+            + overrides.allowed.intersection(overrides.guestPatches).map { "+\($0)" }
+        emit("patches: preset \(selection.preset); boot chain \(bootChain.isEmpty ? "as the preset" : bootChain.sorted().joined(separator: " ")); guest \(guest.isEmpty ? "as the preset" : guest.sorted().joined(separator: " "))")
+        return (selection, overrides.guestPatches)
     }
 
     /// The template switches, refused where `vphone-cli vm create` refuses
@@ -680,6 +732,13 @@ struct VPhoneLaunchpadControlCommands {
             // Only once Find Template has decided to build: a creation that
             // clones a template it found never makes this machine.
             "buildMachine": pipeline.plan.buildingName ?? NSNull(),
+            "patches": [
+                "preset": pipeline.options.patches.preset,
+                "blocked": pipeline.options.patches.blocked.sorted(),
+                "allowed": pipeline.options.patches.allowed.sorted(),
+                // Applied to the clone; the others went into the template.
+                "guest": pipeline.options.guestPatches.sorted(),
+            ],
             "steps": pipeline.steps.map { step -> [String: Any] in
                 var item: [String: Any] = ["step": "\(step)", "status": pipeline.status(step).rawValue]
                 if let duration = pipeline.durations[step] {

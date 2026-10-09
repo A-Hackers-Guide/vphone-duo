@@ -170,6 +170,40 @@ struct TemplatesTests {
         precondition(!VPhoneLaunchpadTemplateCommands.find(request).contains("--block"), "Guest-only overrides find the plain template")
         let none = VPhoneLaunchpadPatchOverrides(preset: "experimental", guestPatches: ["dyld-cfw-camera"])
         precondition(!none.hasGuestOverrides && !none.hasBootChainOverrides, "A guest patch not overridden is no override")
+
+        // vphone-launchpad-cli vm create --block/--allow, reduced as fw
+        // set-patches reduces them and split as New Machine splits them.
+        let declared: Set = ["ibss-cfw-serial_label", "system-debugserver-cfw-install", "dyld-cfw-camera", "kernel-exp-x", "kernel-boot-y"]
+        let inPreset: Set = ["ibss-cfw-serial_label", "system-debugserver-cfw-install", "kernel-boot-y"]
+        let guest: Set = ["system-debugserver-cfw-install", "dyld-cfw-camera"]
+        func requested(_ block: [String], _ allow: [String]) throws(VPhoneLaunchpadPatchOverrides.RequestError) -> VPhoneLaunchpadPatchOverrides {
+            try VPhoneLaunchpadPatchOverrides.requested(preset: "standard", block: block, allow: allow, declared: declared, inPreset: inPreset, guest: guest)
+        }
+        let cli = try? requested(["system-debugserver-cfw-install", "ibss-cfw-serial_label", "dyld-cfw-camera"], ["kernel-exp-x", "kernel-boot-y"])
+        // Blocking one the preset leaves off, or allowing one it turns on,
+        // changes nothing and is not kept.
+        precondition(cli?.blocked == ["system-debugserver-cfw-install", "ibss-cfw-serial_label"], "Blocked: \(String(describing: cli?.blocked))")
+        precondition(cli?.allowed == ["kernel-exp-x"], "Allowed: \(String(describing: cli?.allowed))")
+        precondition(cli?.guestPatches == ["system-debugserver-cfw-install"], "Guest: \(String(describing: cli?.guestPatches))")
+        precondition(cli?.bootChainBlocked == ["ibss-cfw-serial_label"] && cli?.bootChainAllowed == ["kernel-exp-x"], "Boot chain")
+        // The retest's case: one guest patch blocked finds the plain template
+        // and is applied to the clone.
+        let debugserver = try? requested(["system-debugserver-cfw-install"], [])
+        precondition(debugserver.map { !$0.hasBootChainOverrides && $0.hasGuestOverrides } == true, "Guest only from the CLI")
+        precondition(debugserver.map { $0.setPatchesArguments(includingGuest: true) }
+            == ["--preset", "standard", "--block", "system-debugserver-cfw-install"], "Clone's set-patches")
+        do {
+            _ = try requested(["no-such-patch"], [])
+            preconditionFailure("An unknown patch is refused")
+        } catch {
+            precondition(error == .unknown(["no-such-patch"]) && error.message.contains("No patch declares no-such-patch"), error.message)
+        }
+        do {
+            _ = try requested(["kernel-boot-y"], ["kernel-boot-y"])
+            preconditionFailure("Blocked and allowed is refused")
+        } catch {
+            precondition(error == .contradictory(["kernel-boot-y"]), error.message)
+        }
         print("Patch override tests passed")
     }
 

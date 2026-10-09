@@ -113,7 +113,7 @@ version while a machine is bound to it; rebind or delete those machines first.
 | `vm list` | Machines in every library with run state, Core Bundle and log path |
 | `vm start <name> [--headless] [--wait]` / `vm stop <name>` | Launch with the machine's bundle, or stop; `--wait` waits for vphoned. Stop asks the guest to shut down (vphoned `system.shutdown`) and waits up to 30 s; when the guest cannot be asked or does not stop, it ends the virtual machine as before |
 | `vm wait <name>` / `vm log <name> [--kind create\|dfu\|patch]` | Wait for vphoned; read a console log |
-| `vm create <name> [--bundle <version>] [...] [--device <product-type>] [--no-template \| --slim on\|off --trim … --keep-languages … --service-profile … --remove-apps … --keep-apps … --accounts-off] [--from <step>]` | The New Machine pipeline, bound to `--bundle` or the default: cloned from a template, built first when missing (2.9), or restored on its own with `--no-template`; the slimming switches are `vphone-cli vm create`'s. `--device` makes an iPad guest, `--from` retries from a step (`findTemplate` … `firstBoot`); the result names the template and whether this creation built it |
+| `vm create <name> [--bundle <version>] [...] [--device <product-type>] [--preset <preset>] [--block <patch>]... [--allow <patch>]... [--no-template \| --slim on\|off --trim … --keep-languages … --service-profile … --remove-apps … --keep-apps … --accounts-off] [--from <step>]` | The New Machine pipeline, bound to `--bundle` or the default: cloned from a template, built first when missing (2.9), or restored on its own with `--no-template`; the slimming switches are `vphone-cli vm create`'s. `--block`/`--allow` (repeatable) turn one patch of the preset off or on, as New Machine's patch list and `vphone-cli fw set-patches` do (see below). `--device` makes an iPad guest, `--from` retries from a step (`findTemplate` … `firstBoot`) with the options the creation started with; the result names the template, whether this creation built it, and the patches it used |
 | `vm set-bundle <name> <version> [--update-environment]` | Bind a machine to another installed version. `--update-environment` also redeploys that version's guest environment and needs a stopped machine |
 | `vm leases [--release]` | DHCP leases on the shared NAT network and the machine that owns each. `--release` frees the ones no machine in any library uses, through the helper (see [Networking](networking.md#addresses-held-by-old-macs)) |
 | `cfw install <name>` | Install CFW into a stopped machine with its own bundle, through the helper. The helper puts temporary work files on the VM library's external volume when applicable. |
@@ -123,6 +123,33 @@ version while a machine is bound to it; rebind or delete those machines first.
 | `guest rpc <name> <method> [params]` | Any vphoned method, see `Research/vphoned_http_api.md`. When vphoned refuses it, the last stderr line is its error object as JSON (`code`, `message`, `results`, `reason` …) |
 | `guest unlock <name> [--passcode <code>] [--timeout <seconds>]` | Turn the screen on and unlock the guest, whatever state it was in (vphoned `screen.unlock`). `--passcode` is needed only when the guest has one |
 | `exec [--bundle <version>] <vphone-cli arguments>` | Run the default bundle's `vphone-cli`, or that version's, streaming its output. `--bundle` must come first |
+
+### Patch overrides in `vm create`
+
+`--block <patch>` and `--allow <patch>` take the identifiers `vphone-cli fw
+patches` lists (`vphone-launchpad-cli exec fw patches --preset <preset>`),
+once per patch. Launchpad reads that catalog from the creation's bundle,
+refuses an identifier no patch set declares or one both blocked and allowed,
+and keeps only what differs from the preset, as `fw set-patches` does. It
+then splits them the way New Machine does:
+
+- Boot-chain patches (AVPBooter, iBSS, iBEC, LLB, TXM, kernelcache,
+  DeviceTree …) are part of the template's key: Find Template looks for a
+  template built with them, and a template build records them with `fw
+  set-patches` before `fw patch`.
+- Guest patches stay out of the template. The clone records them with `fw
+  set-patches`, and the Apply Guest Patches step writes them with `cfw
+  update-environment` through the helper before the first boot. A guest
+  override alone therefore reuses the plain template.
+
+```sh
+vphone-launchpad-cli vm create rt-e --block system-debugserver-cfw-install
+```
+
+The result's `patches` object holds the preset, the `blocked` and `allowed`
+overrides and the `guest` ones applied to the clone. With `--no-template`
+every override goes into the machine's own restore. `--from` refuses
+`--block` and `--allow`: a retry keeps the creation's patches.
 
 Machine commands take `--root <library>` when two libraries hold a machine
 with the same name. `guest` commands and `--wait` go through the machine's

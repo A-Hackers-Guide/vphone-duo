@@ -286,6 +286,47 @@ nonisolated struct VPhoneLaunchpadPatchOverrides: Hashable, Sendable {
         !blocked.isDisjoint(with: guestPatches) || !allowed.isDisjoint(with: guestPatches)
     }
 
+    /// Overrides asked for by name (`vphone-launchpad-cli vm create --block
+    /// … --allow …`), checked and reduced as `vphone-cli fw set-patches`
+    /// does: a patch no set declares, or one both blocked and allowed, is
+    /// refused, and only differences from the preset are kept. `declared`,
+    /// `inPreset` and `guest` (the patches outside the boot chain) come from
+    /// the bundle's catalog for `preset`.
+    static func requested(
+        preset: String,
+        block: [String],
+        allow: [String],
+        declared: Set<String>,
+        inPreset: Set<String>,
+        guest: Set<String>,
+    ) throws(RequestError) -> Self {
+        let unknown = Set(block + allow).subtracting(declared)
+        guard unknown.isEmpty else {
+            throw .unknown(unknown.sorted())
+        }
+        let contradictory = Set(block).intersection(allow)
+        guard contradictory.isEmpty else {
+            throw .contradictory(contradictory.sorted())
+        }
+        let blocked = Set(block).intersection(inPreset)
+        let allowed = Set(allow).subtracting(inPreset)
+        return Self(preset: preset, blocked: blocked, allowed: allowed, guestPatches: blocked.union(allowed).intersection(guest))
+    }
+
+    nonisolated enum RequestError: Error, Equatable {
+        case unknown([String])
+        case contradictory([String])
+
+        var message: String {
+            switch self {
+            case let .unknown(patches):
+                "No patch declares \(patches.joined(separator: ", ")). Run exec fw patches for the identifiers."
+            case let .contradictory(patches):
+                "\(patches.joined(separator: ", ")) cannot be both blocked and allowed."
+            }
+        }
+    }
+
     /// `fw set-patches` arguments without the machine. Each run writes the
     /// whole record, so the clone's run repeats the boot-chain overrides it
     /// already has from its template.

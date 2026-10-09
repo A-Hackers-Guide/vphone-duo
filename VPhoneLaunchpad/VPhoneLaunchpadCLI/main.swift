@@ -39,96 +39,6 @@ func fail(_ message: String, detail: String? = nil) -> Never {
     exit(1)
 }
 
-func parse(_ words: [String], foreground: inout Bool) -> VPhoneLaunchpadControlRequest {
-    // Two words name a grouped command ("vm start"), one word the others.
-    var rest = words
-    var command: VPhoneLaunchpadControlCommand?
-    if rest.count >= 2, let grouped = VPhoneLaunchpadControlCommand.named("\(rest[0]).\(rest[1])") {
-        command = grouped
-        rest.removeFirst(2)
-    } else if let single = VPhoneLaunchpadControlCommand.named(rest[0]) {
-        command = single
-        rest.removeFirst()
-    }
-    guard let command else {
-        let group = VPhoneLaunchpadControlCommand.all.filter { $0.name.hasPrefix("\(words[0]).") }
-        if !group.isEmpty {
-            fail("\(words[0]) needs a command.", detail: group.map { "  \($0.usage)" }.joined(separator: "\n"))
-        }
-        fail("unknown command \(words.prefix(2).joined(separator: " ")). Run vphone-launchpad-cli help.")
-    }
-    var request = VPhoneLaunchpadControlRequest(command: command.name)
-    // exec hands everything after it to vphone-cli untouched, except a
-    // leading --bundle that picks whose vphone-cli runs.
-    if command.name == "exec" {
-        if let first = rest.first, first == "--bundle" || first.hasPrefix("--bundle=") {
-            rest.removeFirst()
-            if first == "--bundle" {
-                guard !rest.isEmpty else {
-                    fail("--bundle needs a value.")
-                }
-                request.options["bundle"] = rest.removeFirst()
-            } else {
-                request.options["bundle"] = String(first.dropFirst("--bundle=".count))
-            }
-        }
-        request.arguments = rest
-        return request
-    }
-
-    var positional: [String] = []
-    var index = 0
-    while index < rest.count {
-        let word = rest[index]
-        index += 1
-        if word == "--" {
-            positional += rest[index...]
-            break
-        }
-        guard word.hasPrefix("--"), word.count > 2 else {
-            positional.append(word)
-            continue
-        }
-        var name = String(word.dropFirst(2))
-        var value: String?
-        if let equals = name.firstIndex(of: "=") {
-            value = String(name[name.index(after: equals)...])
-            name = String(name[..<equals])
-        }
-        if name == "foreground", value == nil {
-            foreground = true
-        } else if command.flags.contains(name), value == nil {
-            request.options[name] = "true"
-        } else if command.options.contains(name) {
-            if value == nil, index < rest.count {
-                value = rest[index]
-                index += 1
-            }
-            guard let value else {
-                fail("--\(name) needs a value.")
-            }
-            request.options[name] = value
-        } else {
-            fail("unknown option --\(name).", detail: "usage: vphone-launchpad-cli \(command.usage)")
-        }
-    }
-
-    // A trailing `...` argument may be empty.
-    let named = command.takesRest ? command.arguments.count - 1 : command.arguments.count
-    guard positional.count >= named, command.takesRest || positional.count == named else {
-        fail("wrong number of arguments.", detail: "usage: vphone-launchpad-cli \(command.usage)")
-    }
-    // The app runs elsewhere; a relative path means nothing to it.
-    if command.name == "bundle.install-local" {
-        positional[0] = URL(fileURLWithPath: positional[0]).standardizedFileURL.path
-    }
-    if let root = request.options["root"] {
-        request.options["root"] = URL(fileURLWithPath: root).standardizedFileURL.path
-    }
-    request.arguments = positional
-    return request
-}
-
 // MARK: - Connection
 
 func connectControl() -> Int32? {
@@ -196,7 +106,12 @@ if words.isEmpty || ["help", "-h", "--help"].contains(words[0]) {
     exit(words.isEmpty ? 1 : 0)
 }
 
-let request = parse(words, foreground: &foreground)
+let request: VPhoneLaunchpadControlRequest
+do {
+    request = try VPhoneLaunchpadControlRequest.parse(words, foreground: &foreground)
+} catch {
+    fail(error.message, detail: error.detail)
+}
 let fd = connectControl() ?? launchAndConnect(foreground: foreground)
 
 guard var line = try? JSONEncoder().encode(request) else {
