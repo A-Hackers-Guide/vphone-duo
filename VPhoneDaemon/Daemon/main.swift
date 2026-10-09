@@ -98,12 +98,25 @@ do {
         .wait()
     vp_native_confirm_cached_binary()
     NSLog("vphoned: HTTP/WebSocket API listening on vsock 1339")
-    try server.closeFuture.wait()
+    server.closeFuture.whenComplete { _ in
+        DispatchQueue.main.async {
+            try? group.syncShutdownGracefully()
+            try? filePool.syncShutdownGracefully()
+            _ = eventPublisher
+            exit(0)
+        }
+    }
 } catch {
     NSLog("vphoned: HTTP/WebSocket API failed: %@", String(describing: error))
     exit(1)
 }
 
-try? group.syncShutdownGracefully()
-try? filePool.syncShutdownGracefully()
-_ = eventPublisher
+// The main thread runs the main run loop instead of waiting on the server.
+// UIPasteboard learns there that another process changed the clipboard; with
+// the main thread blocked, vphoned kept the clipboard as it first read it and
+// asked pasted for items of a generation it had already dropped, so a copy
+// made in a guest app never reached the host.
+// The timer only keeps the run loop from returning while nothing else is
+// scheduled on it.
+RunLoop.main.add(Timer(fire: .distantFuture, interval: 0, repeats: false) { _ in }, forMode: .default)
+RunLoop.main.run()
