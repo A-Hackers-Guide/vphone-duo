@@ -171,11 +171,10 @@ struct VPhoneLaunchpadMachineInspector: View {
                 if let udid = machine.udid {
                     value("UDID", udid)
                 }
-                if let template = library.templateSources[machine.path] {
+                if let origin = library.templateSources[machine.path] {
                     LabeledContent("Template") {
-                        Text(verbatim: template)
+                        templateLabel(origin)
                             .textSelection(.enabled)
-                            .help(String(localized: "Created from this template. It shares the template's SEP root secret and Data volume keys with every machine created from it."))
                     }
                 }
                 value(
@@ -457,6 +456,24 @@ struct VPhoneLaunchpadMachineInspector: View {
                 .truncationMode(.middle)
                 .textSelection(.enabled)
                 .help(value)
+        }
+    }
+
+    /// The template's identifier. A clone of an earlier build of the same
+    /// key, or of a deleted template, says so, and shares no key with the
+    /// template that has the identifier now.
+    @ViewBuilder
+    private func templateLabel(_ origin: VPhoneLaunchpadTemplateOrigin) -> some View {
+        switch origin.match {
+        case .current:
+            Text(verbatim: origin.identifier)
+                .help(String(localized: "Created from this template. It shares the template's SEP root secret and Data volume keys with every machine created from it."))
+        case .earlierBuild:
+            Text("\(origin.identifier) (earlier build, deleted)")
+                .help(String(localized: "Created from an earlier build of this template, since deleted. It shares its SEP root secret and Data volume keys only with the machines created from that build, not with the template that has this identifier now or the machines created from it."))
+        case .deleted:
+            Text("\(origin.identifier) (deleted)")
+                .help(String(localized: "Created from this template, which was deleted. It shares the template's SEP root secret and Data volume keys with every machine created from it."))
         }
     }
 

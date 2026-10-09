@@ -987,6 +987,142 @@
         }
       }
     },
+    "Created from an earlier build of this template, since deleted. It shares its SEP root secret and Data volume keys only with the machines created from that build, not with the template that has this identifier now or the machines created from it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Created from an earlier build of this template, since deleted. It shares its SEP root secret and Data volume keys only with the machines created from that build, not with the template that has this identifier now or the machines created from it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このテンプレートの以前のビルドから作成されました。そのビルドは削除されています。SEP ルートシークレットと Data ボリュームの鍵はそのビルドから作成したマシンとだけ共有し、現在この識別子を持つテンプレートやそこから作成したマシンとは共有しません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 템플릿의 이전 빌드에서 생성되었으며, 그 빌드는 삭제되었습니다. SEP 루트 시크릿과 Data 볼륨 키는 그 빌드에서 만든 머신과만 공유하며, 현재 이 식별자를 가진 템플릿이나 그 템플릿에서 만든 머신과는 공유하지 않습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Được tạo từ một bản dựng trước của mẫu này, bản dựng đó đã bị xóa. Máy ảo chỉ dùng chung bí mật gốc SEP và khóa ổ Data với các máy ảo tạo từ bản dựng đó, không dùng chung với mẫu hiện mang mã định danh này hay các máy ảo tạo từ mẫu đó."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从此模板较早的一次构建创建，该构建已被删除。它只与从那次构建创建的虚拟机共享 SEP 根密钥和 Data 卷密钥，不与现在使用此标识符的模板及从其创建的虚拟机共享。"
+          }
+        }
+      }
+    },
+    "Created from this template, which was deleted. It shares the template's SEP root secret and Data volume keys with every machine created from it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Created from this template, which was deleted. It shares the template's SEP root secret and Data volume keys with every machine created from it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このテンプレートから作成されました。テンプレートは削除されています。テンプレートの SEP ルートシークレットと Data ボリュームの鍵を、このテンプレートから作成したすべてのマシンと共有しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 템플릿에서 생성되었으며, 템플릿은 삭제되었습니다. 템플릿의 SEP 루트 시크릿과 Data 볼륨 키를 이 템플릿에서 만든 모든 머신과 공유합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Được tạo từ mẫu này, mẫu đó đã bị xóa. Máy ảo dùng chung bí mật gốc SEP và khóa ổ Data của mẫu với mọi máy ảo tạo từ mẫu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从此模板创建，该模板已被删除。它与从该模板创建的每台虚拟机共享模板的 SEP 根密钥和 Data 卷密钥。"
+          }
+        }
+      }
+    },
+    "%@ (earlier build, deleted)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (earlier build, deleted)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（以前のビルド、削除済み）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@(이전 빌드, 삭제됨)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (bản dựng trước, đã xóa)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（较早的构建，已删除）"
+          }
+        }
+      }
+    },
+    "%@ (deleted)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (deleted)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（削除済み）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@(삭제됨)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (đã xóa)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（已删除）"
+          }
+        }
+      }
+    },
     "Delete IPSWs…" : {
       "localizations" : {
         "en" : {

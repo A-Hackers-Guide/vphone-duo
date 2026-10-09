@@ -12,6 +12,7 @@ struct TemplatesTests {
         try templateList()
         try templateFind()
         notices()
+        try templateOrigins()
         try await diskUsage()
     }
 
@@ -482,6 +483,67 @@ struct TemplatesTests {
         precondition(VPhoneLaunchpadTemplateNotice.parse(["note: template ../x (~1 GB) is no longer used by any machine"], libraryRoot: "/lib") == nil,
                      "Only a template identifier")
         print("Delete note tests passed")
+    }
+
+    // MARK: - Template of a machine
+
+    /// Retest L2: a template deleted and built again keeps its identifier,
+    /// so the inspector matches a machine to the build, as `vphone-cli` does.
+    static func templateOrigins() throws {
+        typealias Origin = VPhoneLaunchpadTemplateOrigin
+        let id = "3c16c372ca03"
+        let frozen = Date(timeIntervalSince1970: 1_791_453_600)
+        let template = Origin.Template(identifier: id, build: "B2", created: frozen.addingTimeInterval(-3600), frozenAt: frozen)
+
+        // Both records name a build: the build decides, not the dates.
+        let current = Origin.Source(identifier: id, build: "B2", cloned: frozen.addingTimeInterval(60))
+        precondition(Origin(current, template: template).match == .current, "Current build")
+        let earlier = Origin.Source(identifier: id, build: "B1", cloned: frozen.addingTimeInterval(60))
+        precondition(Origin(earlier, template: template).match == .earlierBuild, "Earlier build, cloned after the new one froze")
+        precondition(Origin(earlier, template: template).identifier == id, "Identifier kept")
+
+        // A clone record from before builds were recorded: the dates decide.
+        let legacyAfter = Origin.Source(identifier: id, cloned: frozen)
+        precondition(Origin(legacyAfter, template: template).match == .current, "Legacy clone at or after FrozenAt")
+        let legacyBefore = Origin.Source(identifier: id, cloned: frozen.addingTimeInterval(-1))
+        precondition(Origin(legacyBefore, template: template).match == .earlierBuild, "Legacy clone before FrozenAt")
+        // A legacy template on the other side, with no FrozenAt: Created.
+        let legacyTemplate = Origin.Template(identifier: id, created: frozen)
+        precondition(Origin(current, template: legacyTemplate).match == .current, "Build on one side only, cloned after Created")
+        precondition(Origin(legacyBefore, template: legacyTemplate).match == .earlierBuild, "Cloned before Created")
+
+        precondition(Origin(current, template: nil).match == .deleted, "Template missing")
+        precondition(!Origin.isClone(current, of: Origin.Template(identifier: "52b1fcc75e0c", build: "B2", created: frozen)), "Another identifier")
+
+        // Read from the folders, as the library does.
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("templates-origin-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let machine = root.appendingPathComponent("e2e-a", isDirectory: true)
+        let templateFolder = root.appendingPathComponent(".templates/\(id)", isDirectory: true)
+        try FileManager.default.createDirectory(at: machine, withIntermediateDirectories: true)
+        func write(_ plist: [String: Any], to file: URL) throws {
+            try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(to: file)
+        }
+        func read() -> Origin? {
+            Origin.read(machine: machine, libraryRoot: root.path)
+        }
+        precondition(read() == nil, "Not a clone")
+        try write(["Identifier": id, "Build": "B1", "Cloned": frozen.addingTimeInterval(60)], to: machine.appendingPathComponent("TemplateSource.plist"))
+        precondition(read() == Origin(identifier: id, match: .deleted), "Template folder missing: \(String(describing: read()))")
+        try FileManager.default.createDirectory(at: templateFolder, withIntermediateDirectories: true)
+        let record: [String: Any] = ["Identifier": id, "Build": "B2", "Created": frozen, "Frozen": true, "FrozenAt": frozen]
+        try write(record, to: templateFolder.appendingPathComponent("Template.plist"))
+        precondition(read()?.match == .earlierBuild, "Rebuilt template")
+        try write(record.merging(["Build": "B1"]) { $1 }, to: templateFolder.appendingPathComponent("Template.plist"))
+        precondition(read()?.match == .current, "Same build")
+        try write(record.merging(["Build": "B1", "Frozen": false]) { $1 }, to: templateFolder.appendingPathComponent("Template.plist"))
+        precondition(read()?.match == .deleted, "A template never frozen is not listed")
+        try write(["Identifier": id, "Cloned": frozen.addingTimeInterval(-60)], to: machine.appendingPathComponent("TemplateSource.plist"))
+        try write(record.merging(["Build": "B1"]) { $1 }, to: templateFolder.appendingPathComponent("Template.plist"))
+        precondition(read()?.match == .earlierBuild, "Legacy record read without Build, cloned before FrozenAt")
+        try write(["Identifier": id], to: machine.appendingPathComponent("TemplateSource.plist"))
+        precondition(read() == nil, "No Cloned: unreadable, as the CLI decodes it")
+        print("Template origin tests passed")
     }
 
     // MARK: - Disk use
