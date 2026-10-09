@@ -200,11 +200,26 @@ after the App Store bundle is gone; disable them too (`services.disable`, as in
 `ota_software_update_block.md`) for no store traffic. Keep `storekitd` — apps
 the researcher installs may link StoreKit.
 
-### Still worth a single verb
+### One verb: `apps.remove_system`
 
-A vphoned `apps.remove_system` (backup → `apps.unregister` → remove container →
-respring) would fold the durable sequence into one call instead of four RPCs
-with the re-stage foot-gun between them. Not built yet.
+vphoned now folds the durable sequence into one call:
+`apps.remove_system {"bundle_ids":[…],"force":true}` reads each app's current
+container from the live app list, backs the whole container up to
+`/private/var/db/vphoned/removed-system-apps/<bundle_id>.container` with a
+manifest beside it, unregisters the app, removes the container and resprings
+once. The backup directory is root-only (0700) and on the Data volume, like
+the bundle containers, so the backup is an APFS clone that costs next to
+nothing and the restore is a rename. The first version of the verb used
+`/private/var/mobile/Library/removed-system-apps`, the hand recipe's
+directory; `/private/var/mobile` is the User volume, so those backups were full
+copies and their restore failed with EXDEV. Backups there are still listed
+(`legacy: true`) and restored, by a copy that keeps owners, modes, extended
+attributes and flags, after which the legacy copy is removed. It refuses apps outside `/private/var/containers/Bundle/Application/<UUID>/`
+(Phone and the rest of `/Applications`). `apps.restore_system` moves a backup
+back to its original UUID path and registers it, and `apps.removed_system`
+lists the backups. icli's `apps.register` refuses Apple's apps since 0.7.17, so
+the hand recipe's revert step above no longer works through it. See
+`Research/vphoned_http_api.md`, "Removable system apps and APFS snapshots".
 
 ## Open items
 

@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import ImageIO
+import VPhoneCoreKit
 
 // MARK: - Host Control Socket
 
@@ -33,7 +34,10 @@ import ImageIO
 ///   {"t":"type","text":"Hello"}                 → set guest clipboard
 ///   {"t":"ping"}                                → vphoned request/response
 ///   {"t":"rpc","method":"input.type","params":{"text":"ls\n"}}
-///                                               → any vphoned method; its result is in `"result"`
+///                                               → any vphoned method; its result is in `"result"`.
+///                                                 When vphoned refuses it, `"error"` is the message
+///                                                 and `"guest_error"` vphoned's whole error object
+///                                                 (`code`, `message`, `results`, `reason`, `errno` …)
 ///   {"t":"network"}                             → the NIC's state, in `"result"`
 ///   {"t":"network","link":"down"}               → unplug (`up` replugs); not saved
 ///
@@ -106,27 +110,31 @@ class VPhoneHostAutomationServer {
             return
         }
 
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        let pathBytes = socketPath.utf8CString
-        guard pathBytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else {
-            print("[hostctl] socket path too long")
-            close(fd)
-            return
-        }
-        withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
-            ptr.withMemoryRebound(to: CChar.self, capacity: pathBytes.count) { dst in
-                for (i, byte) in pathBytes.enumerated() {
-                    dst[i] = byte
+        // A machine deep in the library (a template being built) has a path
+        // longer than sun_path; it is bound through a short link to its folder.
+        let bindResult: Int32? = VPhoneUnixSocket.withAddressablePath(socketPath) { path in
+            var addr = sockaddr_un()
+            addr.sun_family = sa_family_t(AF_UNIX)
+            let pathBytes = path.utf8CString
+            guard pathBytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else { return nil }
+            withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
+                ptr.withMemoryRebound(to: CChar.self, capacity: pathBytes.count) { dst in
+                    for (i, byte) in pathBytes.enumerated() {
+                        dst[i] = byte
+                    }
+                }
+            }
+            let addrLen = socklen_t(MemoryLayout<sockaddr_un>.size)
+            return withUnsafePointer(to: &addr) { ptr in
+                ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
+                    bind(fd, sockPtr, addrLen)
                 }
             }
         }
-
-        let addrLen = socklen_t(MemoryLayout<sockaddr_un>.size)
-        let bindResult = withUnsafePointer(to: &addr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                bind(fd, sockPtr, addrLen)
-            }
+        guard let bindResult else {
+            print("[hostctl] socket path too long")
+            close(fd)
+            return
         }
         guard bindResult == 0 else {
             print("[hostctl] bind failed: \(String(cString: strerror(errno)))")
@@ -241,7 +249,13 @@ class VPhoneHostAutomationServer {
                 guard let params = (json["params"] ?? [String: Any]()) as? [String: Any] else {
                     return Self.reply(ok: false, error: "rpc params must be an object")
                 }
-                let result = try await connectedControl().callAfterQueuedInput(method, params: params)
+                let result: [String: Any]
+                do {
+                    result = try await connectedControl().rpcAfterQueuedInput(method, params: params)
+                } catch let failure as VPhoneGuestControl.GuestRPCFailure {
+                    // `error` stays the message older clients read.
+                    return Self.reply(ok: false, error: failure.message, guestError: failure.body)
+                }
                 let wantRPCScreen = json["screen"] as? Bool ?? false
                 let image = wantRPCScreen ? await settledCompactScreenshot(delayMs: screenDelay) : nil
                 return Self.reply(ok: true, image: image, result: result)
@@ -496,10 +510,14 @@ class VPhoneHostAutomationServer {
         error: String? = nil,
         image: String? = nil,
         result: [String: Any]? = nil,
+        guestError: [String: Any]? = nil,
     ) -> Data {
         var dict: [String: Any] = ["ok": ok]
         if let result {
             dict["result"] = result
+        }
+        if let guestError {
+            dict["guest_error"] = guestError
         }
         if let path {
             dict["path"] = path

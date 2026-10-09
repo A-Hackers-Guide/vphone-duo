@@ -122,17 +122,21 @@ enum GuestAPI {
                 "ui_inspection",
                 "processes",
                 "services",
+                "service_profile",
                 "logs",
                 "network_capture",
                 "app_details",
+                "system_app_removal",
                 "system_control",
                 "system_shutdown",
                 "file_tools",
+                "apfs_snapshots",
                 "files_app_drop",
                 "packages",
                 "environment_update",
                 "udid_override",
                 "setup_skip",
+                "setup_settle",
                 "network_ipv4",
                 "network_hostname",
                 "device_name",
@@ -159,7 +163,7 @@ enum GuestAPI {
             return try takeScreenshot(base64: true, nativeResolution: true)
         case "apps.list":
             let filter = params["filter"] as? String ?? "all"
-            let apps = try listApps()["apps"] as? [[String: Any]] ?? []
+            let apps = try listedApps()
             let running = try runningApps()["apps"] as? [[String: Any]] ?? []
             let pids = Dictionary(
                 uniqueKeysWithValues: running.compactMap { app -> (String, Int)? in
@@ -481,6 +485,15 @@ enum GuestAPI {
             return enriched
         }
         return result
+    }
+
+    /// The LaunchServices records `apps.list` reports: those with a bundle
+    /// identifier. `setup.settle` counts this list, not icli's `count`, which
+    /// was one higher than `apps.list` on an iOS 27 guest.
+    static func listedApps() throws -> [[String: Any]] {
+        (try listApps()["apps"] as? [[String: Any]] ?? []).filter {
+            !(($0["bundle_id"] as? String) ?? "").isEmpty
+        }
     }
 
     static func jailbreakInfo() -> [String: Any] {

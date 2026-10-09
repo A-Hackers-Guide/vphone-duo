@@ -409,9 +409,9 @@ public final class FirmwarePipeline {
     /// that conflicts with another or needs a newer PatchKit is refused without its
     /// code ever running.
     ///
-    /// Internal rather than private so the tests can resolve a preset naming an
-    /// external set without a restore tree to patch.
-    func resolvePlan(iOSBase: VPhoneVersion?, cloudOS: VPhoneVersion?) throws -> VPhonePatchPlan? {
+    /// Public so the tests and `vm create`'s template key can resolve a preset,
+    /// external sets included, without a restore tree to patch.
+    public func resolvePlan(iOSBase: VPhoneVersion?, cloudOS: VPhoneVersion?) throws -> VPhonePatchPlan? {
         guard let preset else { return nil }
 
         var available = patchSets

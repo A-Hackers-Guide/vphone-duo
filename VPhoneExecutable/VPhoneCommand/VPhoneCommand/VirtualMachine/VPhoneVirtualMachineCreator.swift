@@ -1,6 +1,7 @@
 import ArgumentParser
 import FirmwarePatcher
 import Foundation
+import VPhoneArchiveKit
 import VPhoneCoreKit
 import VPhoneRestore
 
@@ -72,13 +73,15 @@ public struct VPhoneVirtualMachineCreator {
     private let library: VPhoneLibrary
     private let resources: VPhoneResources
     /// How to start the guest. A create boots in DFU and once for verification,
-    /// so the AMFI probe runs once before the multi-stage create pipeline.
-    private let launcher: VPhoneGuestLaunchPlanner
+    /// so the AMFI probe runs once before the multi-stage create pipeline. Nil
+    /// only for a clone from a named template whose first boot is skipped,
+    /// which starts no guest.
+    private let launcher: VPhoneGuestLaunchPlanner?
 
     public init(
         library: VPhoneLibrary,
         resources: VPhoneResources,
-        launcher: VPhoneGuestLaunchPlanner,
+        launcher: VPhoneGuestLaunchPlanner?,
     ) {
         self.library = library
         self.resources = resources
@@ -87,48 +90,73 @@ public struct VPhoneVirtualMachineCreator {
 
     // MARK: - run
 
+    /// Creates the machine one of three ways (`Options.template`): the full
+    /// pipeline into the machine itself (`--no-template`); a clone of the
+    /// template the options resolve to, built first into `.templates` when
+    /// there is none (the default); or a clone of a template named by its
+    /// identifier. A clone takes a fraction of a second and needs neither
+    /// root nor an IPSW.
     public func run(_ options: Options) throws {
-        let v = options.verbosity
-        let invokingUser = VPhoneInvokingUser.current
         // Fail fast on a nested-VM host — PV=3 guest boot can't nest, and the whole
         // create pipeline (download + patch + restore) is wasted otherwise. Mirrors
         // the host preflight that precedes VM launch.
-        if Self.isNestedVMHost() {
+        let startsGuest: Bool = switch options.template {
+        case .identifier: !options.skipsFirstBoot
+        case .none, .automatic: true
+        }
+        if startsGuest, Self.isNestedVMHost() {
             throw VPhoneVirtualMachineCreationError.nestedVirtualization
         }
 
+        try VPhoneBundleOperations.requireValidName(options.name)
         let bundleURL = library.url(forName: options.name)
         // Check before the fixup below is armed: an existing directory, possibly
         // planted by another account, must never be walked as root.
         if FileManager.default.fileExists(atPath: bundleURL.path) {
             throw VPhoneLibraryError.alreadyExists(name: options.name)
         }
-        let ownedOutputs = [bundleURL]
-        // Set only once this run has created the bundle directory itself.
-        var createdBundle = false
-        var ownershipRestored = false
-        var permissionsRestored = false
-        defer {
-            if let invokingUser, !ownershipRestored {
-                for output in ownedOutputs where createdBundle {
-                    do { try invokingUser.restoreOwnership(at: output) } catch {
-                        fputs("warning: could not restore ownership of \(output.path): \(error)\n", stderr)
-                    }
-                }
-                try? invokingUser.restoreOwnerOfDirectory(at: library.root)
-                try? invokingUser.restoreOwnerOfDirectory(at: VPhoneResources.userDataRoot())
+        let outputs = VPhoneCreatedOutputs(library: library)
+        defer { outputs.finishBestEffort() }
+
+        switch options.template {
+        case .none:
+            try createIndependent(options, outputs: outputs)
+        case let .identifier(identifier):
+            let template = try VPhoneMachineTemplates.template(identifier, in: library)
+            let conflicts = options.templateRequest.conflicts(with: template.key)
+            guard conflicts.isEmpty else {
+                throw VPhoneMachineTemplateError.conflicts(identifier: template.identifier, options: conflicts)
             }
-            if !permissionsRestored {
-                for output in ownedOutputs where createdBundle {
-                    do { try VPhoneHostFilePermissions.makeAccessible(at: output) } catch {
-                        fputs("warning: could not set permissions on \(output.path): \(error)\n", stderr)
-                    }
-                }
-                try? VPhoneHostFilePermissions.makeDirectoryAccessible(at: library.root)
-                try? VPhoneHostFilePermissions.makeDirectoryAccessible(at: VPhoneResources.userDataRoot())
+            // Named on purpose, so used; but not silently.
+            for reason in VPhoneMachineTemplateKeys.staleReasons(template) {
+                print("warning: template \(template.identifier) is stale: \(reason)")
             }
+            try cloneFromTemplate(template, options: options, outputs: outputs)
+        case .automatic:
+            if options.keepArtifacts {
+                // A template never keeps it: ~11 GB pinned for the template's
+                // whole life, which no clone can use.
+                print("warning: --keep-artifacts keeps the restore tree only with --no-template; "
+                    + "a template build always removes it")
+            }
+            let template = try templateForCreate(options, outputs: outputs)
+            try cloneFromTemplate(template, options: options, outputs: outputs)
         }
 
+        try outputs.finish()
+        print("\n=== Done ===")
+        if options.skipsFirstBoot {
+            print("CFW VM created; its first boot was skipped. Guest user environment is untouched.")
+        } else {
+            print("CFW VM created; vphoned connected. Guest user environment is untouched.")
+        }
+    }
+
+    // MARK: - Without a template
+
+    /// The full pipeline into the machine itself: `vm new`, firmware, restore,
+    /// CFW and the first boot check. What `vm create` always did.
+    private func createIndependent(_ options: Options, outputs: VPhoneCreatedOutputs) throws {
         print("\n=== vm new ===")
         let spec = VPhoneBundleOperations.NewBundleConfiguration(
             name: options.name,
@@ -139,9 +167,27 @@ public struct VPhoneVirtualMachineCreator {
             sepromSource: VPhoneBundleOperations.defaultSEPROMSource(),
         )
         let bundle = try VPhoneBundleOperations.create(spec, in: library)
-        createdBundle = true
+        outputs.add(bundle.url)
         print("created \(bundle.url.path)")
 
+        try buildGuest(at: bundle.url, options: options, keepsRestoreTree: options.keepArtifacts, outputs: outputs)
+        try applySettings(options)
+        if !options.skipsFirstBoot {
+            print("\n=== First boot check ===")
+            try runBootAnalysis(bundleURL: bundle.url, verbosity: options.verbosity)
+        }
+    }
+
+    /// `fw prepare`, `fw patch`, the restore and `cfw install` into the machine
+    /// folder at `bundleURL`, which `vm new` made. Removes the restore tree
+    /// afterwards unless `keepsRestoreTree`. Starts the guest only in DFU.
+    private func buildGuest(
+        at bundleURL: URL,
+        options: Options,
+        keepsRestoreTree: Bool,
+        outputs: VPhoneCreatedOutputs,
+    ) throws {
+        let v = options.verbosity
         print("\n=== fw prepare ===")
         try runFWPrepare(options: options, bundleURL: bundleURL)
 
@@ -157,9 +203,7 @@ public struct VPhoneVirtualMachineCreator {
         // installer only accepts a VM folder, Disk.img and restore tree owned
         // by the invoking user. Hand this run's own bundle back first (the
         // same descriptor-relative walk as the final fixup).
-        if let invokingUser {
-            try invokingUser.restoreOwnership(at: bundleURL)
-        }
+        try outputs.handBack(bundleURL)
         print("\n=== CFW install (host-mount) ===")
         try runCustomFirmwareInstall(
             options: options,
@@ -168,30 +212,252 @@ public struct VPhoneVirtualMachineCreator {
 
         // CFW install is the last consumer of the built restore tree (it copies
         // the SystemOS/AppOS cryptexes from it onto Disk.img); reclaim it now.
-        if !options.keepArtifacts, let bundle = try? VPhoneBundle.load(at: bundleURL),
+        if !keepsRestoreTree, let bundle = try? VPhoneBundle.load(at: bundleURL),
            let removed = try? VPhoneRestoreInfo.removeBuiltFirmware(fromBundle: bundle)
         {
             print("[+] Removed built firmware \(removed)/ to save space (--keep-artifacts to keep)")
         }
+    }
 
-        print("\n=== First boot check ===")
-        try runBootAnalysis(bundleURL: bundleURL, verbosity: v)
-        if let invokingUser {
-            for output in ownedOutputs {
-                try invokingUser.restoreOwnership(at: output)
+    /// The settings `vm config` would set, on the new machine.
+    private func applySettings(_ options: Options) throws {
+        let bundle = try VPhoneBundleOperations.updateConfig(
+            bundleNamed: options.name,
+            in: library,
+            cpuCount: options.cpuCount,
+            memoryMB: options.memoryMB,
+            networkMode: options.networkMode,
+            unlocksAtStartup: options.unlocksAtStartup,
+        )
+        let manifest = bundle.manifest
+        print("[+] \(bundle.name): \(manifest.cpuCount) CPU, \(manifest.memorySize / (1024 * 1024)) MB, "
+            + "network \(manifest.networkConfig.mode.rawValue), unlock at startup \(manifest.unlocksScreenAtStartup ? "on" : "off")")
+    }
+
+    // MARK: - Templates
+
+    /// The template a create with these options clones from: the one their
+    /// key names, or a new one built into `.templates` first. A second create
+    /// with the same key waits for a build in progress instead of restoring
+    /// a second copy.
+    private func templateForCreate(_ options: Options, outputs: VPhoneCreatedOutputs) throws -> VPhoneMachineTemplate {
+        guard let phoneSource = options.iphoneSource, let cloudSource = options.cloudosSource else {
+            throw ValidationError("Specify both iPhone and cloudOS IPSW sources when running without a terminal.")
+        }
+        print("\n=== Template ===")
+        let slimming = Self.templateSlimming(options)
+        guard slimming.problems.isEmpty else {
+            throw ValidationError("Cannot build this template: \(slimming.problems.joined(separator: "; ")). Pass --trim none.")
+        }
+        // Resolved as vm template find resolves it: from the IPSWs when they
+        // are local or cached, else from a template recorded with the same
+        // sources. Nothing is downloaded unless no template matches and one
+        // has to be built.
+        let builds = try VPhoneMachineTemplateKeys.resolveBuilds(
+            iPhoneSource: phoneSource,
+            cloudOSSource: cloudSource,
+            cache: options.ipswCacheDirectory,
+            device: options.device,
+            in: library,
+        )
+        if let builds {
+            let key = try VPhoneMachineTemplateKeys.key(
+                device: builds.device,
+                ios: builds.ios,
+                cloudOS: builds.cloudOS,
+                preset: options.patchPreset,
+                diskSizeGB: options.diskSizeGB,
+                slimming: slimming,
+            )
+            if let found = try VPhoneMachineTemplates.template(for: key, in: library) {
+                print("[*] Template key \(key.identifier): \(key.summary)")
+                if builds.origin == .template, let source = builds.template {
+                    print("[*] Builds from template \(source), recorded with the same IPSW sources; nothing downloaded")
+                }
+                return try requireCurrent(found)
             }
-            try invokingUser.restoreOwnerOfDirectory(at: library.root)
-            try invokingUser.restoreOwnerOfDirectory(at: VPhoneResources.userDataRoot())
         }
-        ownershipRestored = true
-        for output in ownedOutputs {
-            try VPhoneHostFilePermissions.makeAccessible(at: output)
+
+        // A build: it needs the IPSWs, so they are downloaded now when they
+        // are not here, and the key is taken from them.
+        let sources = try VPhoneFirmwarePreparer.resolveSources(
+            iPhoneSource: phoneSource,
+            cloudOSSource: cloudSource,
+            ipswCacheDirectory: options.ipswCacheDirectory,
+            device: options.device,
+        )
+        let key = try VPhoneMachineTemplateKeys.key(
+            device: sources.device.productType,
+            ios: .init(version: sources.phone.version, build: sources.phone.build),
+            cloudOS: .init(version: sources.cloud.version, build: sources.cloud.build),
+            preset: options.patchPreset,
+            diskSizeGB: options.diskSizeGB,
+            slimming: slimming,
+        )
+        print("[*] Template key \(key.identifier): \(key.summary)")
+
+        if let found = try VPhoneMachineTemplates.template(for: key, in: library) {
+            return try requireCurrent(found)
         }
-        try VPhoneHostFilePermissions.makeDirectoryAccessible(at: library.root)
-        try VPhoneHostFilePermissions.makeDirectoryAccessible(at: VPhoneResources.userDataRoot())
-        permissionsRestored = true
-        print("\n=== Done ===")
-        print("CFW VM created; vphoned connected. Guest user environment is untouched.")
+        let lock: VPhoneMachineTemplateLock
+        do {
+            lock = try VPhoneMachineTemplates.lock(key.identifier, in: library, wait: false)
+        } catch VPhoneMachineTemplateError.busy {
+            print("[*] Another create is building template \(key.identifier); waiting for it...")
+            lock = try VPhoneMachineTemplates.lock(key.identifier, in: library, wait: true)
+        }
+        defer { lock.release() }
+        outputs.addDirectory(VPhoneMachineTemplates.directory(in: library))
+        // Built by the create that held the lock before this one.
+        if let found = try VPhoneMachineTemplates.template(for: key, in: library) {
+            return try requireCurrent(found)
+        }
+        return try buildTemplate(key, options: options, outputs: outputs)
+    }
+
+    /// What a template built for these options is slimmed by, part of its
+    /// key: the switches `VPhoneTemplateSlimmingRequest` resolved. `--slim off`
+    /// resolves to trim none. A trim without the setup boot is refused before
+    /// the build (`slimming.problems`): nothing else deletes the guest's
+    /// orig-fs snapshot, and without that a trim frees nothing.
+    static func templateSlimming(_ options: Options) -> VPhoneMachineTemplateSlimming {
+        options.slimming
+    }
+
+    private func requireCurrent(_ template: VPhoneMachineTemplate) throws -> VPhoneMachineTemplate {
+        let reasons = VPhoneMachineTemplateKeys.staleReasons(template)
+        guard reasons.isEmpty else {
+            throw VPhoneMachineTemplateError.stale(identifier: template.identifier, reasons: reasons)
+        }
+        print("[+] Using template \(template.identifier), built \(template.record.created.formatted(.iso8601))")
+        return template
+    }
+
+    /// Builds the template for `key` in a staging folder in `.templates` and
+    /// freezes it into place. After `cfw install` the template boots once, its
+    /// setup boot, and never again once frozen. A failed build is left in its
+    /// staging folder for inspection; `vm template list` shows it,
+    /// `vm template setup` finishes one whose setup boot failed, and
+    /// `vm template delete` removes it.
+    private func buildTemplate(
+        _ key: VPhoneMachineTemplateKey,
+        options: Options,
+        outputs: VPhoneCreatedOutputs,
+    ) throws -> VPhoneMachineTemplate {
+        print("\n=== Template build \(key.identifier) ===")
+        let build = try VPhoneMachineTemplates.beginBuild(key, in: library)
+        outputs.add(build.stagingURL)
+        do {
+            // The template keeps the default hardware; the machine cloned from
+            // it gets the requested CPU, memory and network.
+            let spec = VPhoneBundleOperations.NewBundleConfiguration(
+                name: key.identifier,
+                cpuCount: 8,
+                memoryMB: 8192,
+                diskSizeGB: options.diskSizeGB,
+                romSource: VPhoneBundleOperations.defaultROMSource(),
+                sepromSource: VPhoneBundleOperations.defaultSEPROMSource(),
+            )
+            let bundle = try VPhoneBundleOperations.create(spec, in: build.library)
+            print("created \(bundle.url.path)")
+            let bundleVersion = VPhoneBundleVersion.current()
+            try VPhoneMachineTemplates.writeRecord(
+                VPhoneMachineTemplateRecord(
+                    key: key,
+                    builtWithBundleVersion: bundleVersion,
+                    bootChainBundleVersion: bundleVersion,
+                    sourceMachine: options.name,
+                    // So `vm template find` keys a later request without the
+                    // IPSWs, once they are deleted.
+                    sources: options.iphoneSource.flatMap { phone in
+                        options.cloudosSource.map { VPhoneMachineTemplateSources(iPhone: phone, cloudOS: $0) }
+                    },
+                ),
+                inBundle: bundle.url,
+            )
+
+            try buildGuest(at: bundle.url, options: options, keepsRestoreTree: false, outputs: outputs)
+            // A template never keeps the restore tree, whatever
+            // --keep-artifacts says; freeze removes it too, this says so.
+            if let tree = try VPhoneMachineTemplates.removeRestoreTree(of: VPhoneBundle.load(at: bundle.url)) {
+                print("[+] Removed built firmware \(tree)/ (a template never keeps it)")
+            }
+
+            // Offline trim of the System volume, after cfw install. Each
+            // stage records its work with VPhoneMachineTemplates.recordSteps
+            // before the freeze; freeze refuses steps that do not match the
+            // key, and a trim whose orig-fs snapshot was not deleted.
+            let trim = try VPhoneSystemTrimSpec(keyValue: key.slimming.trimTier)
+            if trim.tier != .none {
+                print("\n=== Offline trim ===")
+                try VPhoneMachineTemplateTrimmer.trim(
+                    VPhoneBundle.load(at: bundle.url),
+                    label: key.identifier,
+                    spec: trim,
+                    newRecord: nil,
+                )
+            }
+
+            // The setup boot deletes the orig-fs snapshot first, which frees
+            // what the trim removed, then records snapshotDeleted, setupDone,
+            // the service profile and the removed apps. It leaves trimTier
+            // as the trim recorded it.
+            if key.slimming.setupBoot {
+                print("\n=== Template setup boot ===")
+                // With a window, as the first-boot check: this is the guest's
+                // first boot (see runBootAnalysis).
+                try VPhoneTemplateSetupRun.run(
+                    bundleURL: bundle.url,
+                    plan: VPhoneTemplateSetupPlan(slimming: key.slimming, requiresEveryApp: true),
+                    launcher: requireLauncher(),
+                    resources: resources,
+                    headless: false,
+                    verbosity: options.verbosity,
+                )
+            }
+
+            // freeze refuses steps that do not match the key.
+            try VPhoneTemplateBuildFinisher.requireRecordedKey(build, key: key)
+            try outputs.handBack(build.stagingURL)
+            let template = try VPhoneMachineTemplates.freeze(build)
+            outputs.replace(build.stagingURL, with: template.url)
+            print("[+] Template \(template.identifier) frozen at \(template.url.path)")
+            return template
+        } catch {
+            print("[-] Template build failed; left at \(build.stagingURL.path).")
+            if error is VPhoneTemplateSetupFailure {
+                print("    Retry its setup boot with: vphone-cli vm template setup \(build.stagingURL.lastPathComponent)")
+            }
+            print("    Remove it with: vphone-cli vm template delete \(build.stagingURL.lastPathComponent)")
+            throw error
+        }
+    }
+
+    /// The new machine, cloned from `template` with a new identity, given the
+    /// requested settings and booted once to check vphoned answers.
+    private func cloneFromTemplate(_ template: VPhoneMachineTemplate, options: Options, outputs: VPhoneCreatedOutputs) throws {
+        print("\n=== Clone from template \(template.identifier) ===")
+        let clone = try VPhoneMachineTemplates.cloneMachine(from: template, to: options.name, in: library)
+        outputs.add(clone.url)
+        do {
+            try applySettings(options)
+        } catch {
+            try? FileManager.default.removeItem(at: clone.url)
+            throw error
+        }
+        print("[+] \(clone.name) cloned from template \(template.identifier) with a new identity "
+            + "(it shares SEP and Data volume keys with every machine from this template)")
+        if !options.skipsFirstBoot {
+            print("\n=== First boot check ===")
+            try runBootAnalysis(bundleURL: clone.url, verbosity: options.verbosity)
+        }
+    }
+
+    private func requireLauncher() throws -> VPhoneGuestLaunchPlanner {
+        guard let launcher else {
+            throw ValidationError("This create starts the guest, but vphone-vm was not resolved.")
+        }
+        return launcher
     }
 
     // MARK: - trace
@@ -285,7 +551,7 @@ public struct VPhoneVirtualMachineCreator {
         print("[*] Starting DFU boot in background...")
         // Guest serial is never teed during `vm create` (echo: false); the
         // managed process still reads it internally for panic/prompt matching.
-        let (dfuExe, dfuArgs) = launcher.plan(["--config", configURL.path, "--dfu"])
+        let (dfuExe, dfuArgs) = try requireLauncher().plan(["--config", configURL.path, "--dfu"])
         trace("spawn \(dfuExe.path) \(dfuArgs.joined(separator: " ")) (guest serial: off)", v)
         let dfu = VPhoneManagedProcess(dfuExe, dfuArgs, cwd: bundleURL, echo: false)
         try dfu.start()
@@ -445,7 +711,7 @@ public struct VPhoneVirtualMachineCreator {
         // finish setup before vphoned accepts a connection. A headless first
         // boot timed out on 26.6.2, while the same disk reached vphoned in
         // GUI mode; later headless boots then connected normally.
-        let (vmExe, vmArgs) = launcher.plan(["--config", configURL.path])
+        let (vmExe, vmArgs) = try requireLauncher().plan(["--config", configURL.path])
         trace("spawn \(vmExe.path) \(vmArgs.joined(separator: " ")) (guest serial: off)", v)
         let vm = VPhoneManagedProcess(vmExe, vmArgs, cwd: bundleURL, echo: false)
         try vm.start()
@@ -472,5 +738,90 @@ public struct VPhoneVirtualMachineCreator {
         }
         print("[-] Boot analysis timeout (300s); stopping VM.")
         throw VPhoneVirtualMachineCreationError.bootAnalysisTimeout
+    }
+}
+
+// MARK: - VPhoneCreatedOutputs
+
+/// The folders a create made, handed back to the invoking user (under sudo)
+/// and made accessible like every other host VM artifact, on every way out.
+///
+/// Only folders this run created are listed, so an existing directory,
+/// possibly planted by another account, is never walked as root. `finish()`
+/// is the strict pass at the end; `finishBestEffort()` runs from a `defer`
+/// and warns instead, for whatever `finish()` did not get to.
+private final class VPhoneCreatedOutputs {
+    private let invokingUser = VPhoneInvokingUser.current
+    private var outputs: [URL] = []
+    private var directories: [URL]
+    private var ownershipRestored = false
+    private var permissionsRestored = false
+
+    init(library: VPhoneLibrary) {
+        directories = [library.root, VPhoneResources.userDataRoot()]
+    }
+
+    func add(_ url: URL) {
+        outputs.append(url)
+    }
+
+    /// A folder that moved: a template build renamed into place.
+    func replace(_ old: URL, with new: URL) {
+        outputs = outputs.map { $0 == old ? new : $0 }
+    }
+
+    /// A shared directory this run may have created, such as `.templates`.
+    func addDirectory(_ url: URL) {
+        if !directories.contains(url) {
+            directories.insert(url, at: directories.count - 1)
+        }
+    }
+
+    /// Gives one output back to the invoking user now, ahead of the CFW
+    /// install, which accepts only a folder its caller owns.
+    func handBack(_ url: URL) throws {
+        try invokingUser?.restoreOwnership(at: url)
+    }
+
+    func finish() throws {
+        if let invokingUser {
+            for output in outputs {
+                try invokingUser.restoreOwnership(at: output)
+            }
+            for directory in directories {
+                try invokingUser.restoreOwnerOfDirectory(at: directory)
+            }
+        }
+        ownershipRestored = true
+        for output in outputs {
+            try VPhoneHostFilePermissions.makeAccessible(at: output)
+        }
+        for directory in directories {
+            try VPhoneHostFilePermissions.makeDirectoryAccessible(at: directory)
+        }
+        permissionsRestored = true
+    }
+
+    func finishBestEffort() {
+        if let invokingUser, !ownershipRestored {
+            for output in outputs {
+                do { try invokingUser.restoreOwnership(at: output) } catch {
+                    fputs("warning: could not restore ownership of \(output.path): \(error)\n", stderr)
+                }
+            }
+            for directory in directories {
+                try? invokingUser.restoreOwnerOfDirectory(at: directory)
+            }
+        }
+        if !permissionsRestored {
+            for output in outputs {
+                do { try VPhoneHostFilePermissions.makeAccessible(at: output) } catch {
+                    fputs("warning: could not set permissions on \(output.path): \(error)\n", stderr)
+                }
+            }
+            for directory in directories {
+                try? VPhoneHostFilePermissions.makeDirectoryAccessible(at: directory)
+            }
+        }
     }
 }

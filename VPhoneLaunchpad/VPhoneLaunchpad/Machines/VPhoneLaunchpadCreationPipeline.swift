@@ -11,9 +11,26 @@ import Observation
 /// VPhoneVirtualMachineCreator: the device identity file, 90 recovery probes,
 /// up to 30 seconds for the post-restore panic, 5 seconds before CFW, and up
 /// to 300 seconds for vphoned to answer on first boot.
+///
+/// By default the machine is cloned from a template (`VPhoneLaunchpadCreationPlan`
+/// lists the steps). A template that is missing is built first in a
+/// temporary machine of the same library, by the same restore steps, then
+/// `vm template trim`, `vm template setup` and `vm template adopt`. The
+/// helper's root surface stays `cfw install`: it runs on that temporary
+/// machine before it is adopted, and the trim, the setup boot and the adopt
+/// run as the user. The setup boot's `vphone-vm` is started by `vphone-cli`,
+/// a child of Launchpad like the DFU boot, not through the launcher, so it
+/// is Launchpad's responsibility while it runs, headless.
+///
+/// The template is built with the boot-chain patch overrides only. Guest
+/// patch overrides are recorded on the clone with `fw set-patches` and
+/// written by `cfw update-environment`, through the helper like `cfw
+/// install`, before its first boot.
 @MainActor
 @Observable
 final class VPhoneLaunchpadCreationPipeline {
+    typealias Step = VPhoneLaunchpadCreationStep
+
     struct Options: Sendable {
         var name: String
         /// The canonical library the machine is created in.
@@ -32,52 +49,46 @@ final class VPhoneLaunchpadCreationPipeline {
         var network: String
         /// The preset and per-patch overrides the boot chain is built with.
         var patches: VPhoneLaunchpadPatchSelection
+        /// The overrides of `patches` the guest half of an install writes,
+        /// as the bundle's catalog places them.
+        var guestPatches: Set<String> = []
         var keepArtifacts: Bool
+        /// Clone the machine from a template (built first when missing).
+        /// Off restores the machine on its own, with SEP and Data volume keys
+        /// of its own.
+        var usesTemplate = true
+        var slimming = VPhoneLaunchpadSlimming()
 
         var machine: VPhoneLaunchpadMachinePath {
             VPhoneLaunchpadMachinePath(libraryRoot: libraryRoot, name: name)
         }
-    }
 
-    enum Step: Int, CaseIterable, Identifiable, Comparable {
-        case create
-        case prepare
-        case patch
-        case bootDFU
-        case waitDFU
-        case restore
-        case stopDFU
-        case installCFW
-        case firstBoot
-
-        var id: Int {
-            rawValue
+        var patchOverrides: VPhoneLaunchpadPatchOverrides {
+            VPhoneLaunchpadPatchOverrides(
+                preset: patches.preset,
+                blocked: patches.blocked,
+                allowed: patches.allowed,
+                guestPatches: guestPatches,
+            )
         }
 
-        static func < (lhs: Step, rhs: Step) -> Bool {
-            lhs.rawValue < rhs.rawValue
-        }
-
-        var title: String {
-            switch self {
-            case .create: String(localized: "Create machine")
-            case .prepare: String(localized: "Download and prepare firmware")
-            case .patch: String(localized: "Patch boot chain")
-            case .bootDFU: String(localized: "Boot into DFU")
-            case .waitDFU: String(localized: "Wait for DFU")
-            case .restore: String(localized: "Restore")
-            case .stopDFU: String(localized: "Stop machine")
-            case .installCFW: String(localized: "Install custom firmware")
-            case .firstBoot: String(localized: "First boot")
-            }
-        }
-
-        var needsRoot: Bool {
-            self == .installCFW
+        /// The template key's options: the boot-chain overrides only.
+        var templateRequest: VPhoneLaunchpadTemplateCommands.Request {
+            VPhoneLaunchpadTemplateCommands.Request(
+                iphoneSource: iphoneSource,
+                cloudOSSource: cloudOSSource,
+                device: device,
+                preset: patches.preset,
+                blocked: patchOverrides.bootChainBlocked,
+                allowed: patchOverrides.bootChainAllowed,
+                diskSizeGB: diskSizeGB,
+                slimming: slimming,
+            )
         }
     }
 
     let options: Options
+    private(set) var plan: VPhoneLaunchpadCreationPlan
     private(set) var statuses: [Step: VPhoneLaunchpadStatus] = [:]
     private(set) var durations: [Step: TimeInterval] = [:]
     private(set) var current: Step?
@@ -85,6 +96,18 @@ final class VPhoneLaunchpadCreationPipeline {
     /// downloading. Each of the two IPSWs counts from zero; a cached one and
     /// a Core Bundle that reports no progress leave it nil.
     private(set) var downloadFraction: Double?
+    /// The setup boot's own step while it runs (`b. wait for first-boot
+    /// work`), from its `[setup]` lines.
+    private(set) var setupStage: String?
+    /// The template the machine is cloned from, once found or adopted.
+    private(set) var template: VPhoneLaunchpadTemplate?
+    private(set) var templateID: String?
+    /// The id Find Template computed for these options, which the adopt
+    /// must save the build under.
+    private(set) var expectedTemplateID: String?
+    /// True when this creation built the template it cloned from, rather
+    /// than finding one.
+    private(set) var builtTemplate = false
     /// The creation log. The sheet shows it in a terminal; the model keeps
     /// only the last few lines, for error details.
     private let log: VPhoneLaunchpadLogWriter
@@ -105,6 +128,12 @@ final class VPhoneLaunchpadCreationPipeline {
         library: VPhoneLaunchpadMachineLibrary,
     ) {
         self.options = options
+        plan = VPhoneLaunchpadCreationPlan(
+            name: options.name,
+            buildName: options.usesTemplate ? VPhoneLaunchpadCreationPlan.newBuildName() : nil,
+            slimming: options.slimming,
+            appliesGuestPatches: options.usesTemplate && options.patchOverrides.hasGuestOverrides,
+        )
         self.bundles = bundles
         self.helper = helper
         self.library = library
@@ -115,8 +144,19 @@ final class VPhoneLaunchpadCreationPipeline {
         log.url
     }
 
+    /// The machine asked for.
     var machine: VPhoneLaunchpadMachinePath {
         options.machine
+    }
+
+    /// The temporary machine a template is built in, while this creation
+    /// may build one.
+    var buildMachine: VPhoneLaunchpadMachinePath? {
+        plan.buildName.map { VPhoneLaunchpadMachinePath(libraryRoot: options.libraryRoot, name: $0) }
+    }
+
+    var steps: [Step] {
+        plan.steps
     }
 
     var isFinished: Bool {
@@ -129,13 +169,18 @@ final class VPhoneLaunchpadCreationPipeline {
 
     /// The step a retry starts from: the one that failed.
     var failedStep: Step? {
-        Step.allCases.first { statuses[$0] == .failed }
+        steps.first { statuses[$0] == .failed }
+    }
+
+    /// The machine a step works on.
+    private func path(for step: Step) -> VPhoneLaunchpadMachinePath {
+        VPhoneLaunchpadMachinePath(libraryRoot: options.libraryRoot, name: plan.machineName(for: step))
     }
 
     /// `fw patch`, as both the step's log line and the run build it. One array so
     /// the command the sheet shows cannot drift from the command that runs.
-    private var patchArguments: [String] {
-        ["fw", "patch", options.name] + options.patches.presetArguments
+    private func patchArguments(_ name: String) -> [String] {
+        ["fw", "patch", name] + options.patches.presetArguments
     }
 
     private var deviceArguments: [String] {
@@ -143,27 +188,46 @@ final class VPhoneLaunchpadCreationPipeline {
     }
 
     func command(for step: Step) -> String {
-        let name = options.name
+        let name = plan.machineName(for: step)
+        let template = templateID ?? "<id>"
         return switch step {
+        case .findTemplate: VPhoneLaunchpadTemplateCommands.find(options.templateRequest).joined(separator: " ")
         case .create: "vm new \(name) --cpu \(options.cpuCount) --memory \(options.memoryMB) --disk-size \(options.diskSizeGB)"
         case .prepare: (["fw", "prepare", name] + deviceArguments).joined(separator: " ")
-        case .patch: patchArguments.joined(separator: " ")
+        case .patch: patchArguments(name).joined(separator: " ")
         case .bootDFU: "vm launch \(name) --dfu"
         case .waitDFU: "recovery-probe --ecid …"
         case .restore: "restore \(name)"
         case .stopDFU: "vm stop \(name)"
         case .installCFW: "cfw install \(name)"
+        case .trimTemplate: (VPhoneLaunchpadTemplateCommands.trim(name, options.slimming) ?? []).joined(separator: " ")
+        case .setUpTemplate: VPhoneLaunchpadTemplateCommands.setup(name, options.slimming).joined(separator: " ")
+        case .adoptTemplate: "vm template adopt \(name) --json --iphone-source … --cloudos-source …"
+            + (expectedTemplateID.map { " --expect \($0)" } ?? "")
+        case .cloneTemplate: VPhoneLaunchpadTemplateCommands.clone(
+                name, template: template, cpuCount: options.cpuCount, memoryMB: options.memoryMB, network: options.network,
+            ).joined(separator: " ")
+        case .applyGuestPatches: VPhoneLaunchpadTemplateCommands.setPatches(name, options.patchOverrides, includingGuest: true)
+            .joined(separator: " ") + "; cfw update-environment \(name)"
         case .firstBoot: "vm launch \(name)"
         }
     }
 
     // MARK: - Control
 
-    func start(from first: Step = .create) {
-        guard !isRunning else {
+    func start(from first: Step? = nil) {
+        guard !isRunning, let first = first ?? steps.first else {
             return
         }
         failure = nil
+        // Find again decides what follows it.
+        if first <= .findTemplate {
+            plan.foundTemplate = nil
+            templateID = nil
+            expectedTemplateID = nil
+            template = nil
+            builtTemplate = false
+        }
         for step in Step.allCases where step >= first {
             statuses[step] = .pending
             durations[step] = nil
@@ -181,10 +245,12 @@ final class VPhoneLaunchpadCreationPipeline {
             isRunning = false
             current = nil
             downloadFraction = nil
+            setupStage = nil
             dfu?.terminate()
             dfu = nil
         }
-        for step in Step.allCases where step >= first {
+        var next: Step? = first
+        while let step = next {
             current = step
             statuses[step] = .running
             let began = Date()
@@ -209,11 +275,16 @@ final class VPhoneLaunchpadCreationPipeline {
                         ?? VPhoneLaunchpadError(String(localized: "\(step.title) failed."), detail: error.localizedDescription)
                 }
                 append("✕ \(failure?.message ?? step.title)")
+                if let detail = failure?.detail, plan.buildsTemplate(step) || step == .findTemplate || step == .cloneTemplate || step == .applyGuestPatches {
+                    append("  \(detail.replacingOccurrences(of: "\n", with: "\n  "))")
+                }
                 await library?.refresh()
                 return
             }
+            // Read after the step: Find Template decides what follows.
+            next = plan.step(after: step)
         }
-        if !options.keepArtifacts {
+        if !options.keepArtifacts, !plan.usesTemplate {
             await removeRestoreFiles()
         }
         append("● \(options.name) is ready.")
@@ -222,7 +293,8 @@ final class VPhoneLaunchpadCreationPipeline {
     /// Removes the `iPhone*_Restore` tree once the machine has booted, as
     /// `cfw install` does without `--keep-artifacts`. Only a real folder is
     /// removed; a link by that name is left alone. A failure here does not
-    /// fail the creation.
+    /// fail the creation. A template build needs none of this: adopting it
+    /// removes the tree.
     private func removeRestoreFiles() async {
         let bundle = machine.url
         let lines = await Task.detached { () -> [String] in
@@ -268,9 +340,10 @@ final class VPhoneLaunchpadCreationPipeline {
         guard let commandLine = bundles.commandLine(version: version) else {
             throw VPhoneLaunchpadError(String(localized: "VPhone.bundle \(version) is not installed."))
         }
-        let name = options.name
-        let library = machine.libraryArguments
-        let bundle = machine.url
+        let target = path(for: step)
+        let name = target.name
+        let library = target.libraryArguments
+        let bundle = target.url
         let log = log
         let output: @Sendable (String) -> Void = { line in log.write(line) }
 
@@ -283,21 +356,44 @@ final class VPhoneLaunchpadCreationPipeline {
             try await commandLine.runChecked(arguments, onLine: onLine, onProgress: onProgress)
         }
 
+        /// For the template steps: a failure names the step and carries the
+        /// line `vphone-cli` ended with, which says why.
+        func runReporting(
+            _ arguments: [String],
+            onLine: @escaping @Sendable (String) -> Void = output,
+        ) async throws -> VPhoneLaunchpadCommandResult {
+            onLine("$ \(VPhoneLaunchpadCommandLine.display(arguments))")
+            let result = try await commandLine.run(arguments, onLine: onLine)
+            try Task.checkCancellation()
+            guard result.succeeded else {
+                let reason = VPhoneLaunchpadTemplateCommands.failureLine(result.lines)
+                throw VPhoneLaunchpadError(
+                    String(localized: "\(step.title) failed."),
+                    detail: [reason, result.tail].compactMap(\.self).joined(separator: "\n\n"),
+                )
+            }
+            return result
+        }
+
         switch step {
+        case .findTemplate:
+            try await findTemplate(runReporting)
+
         case .create:
             try await run(["vm", "new", name, "--cpu", String(options.cpuCount),
                            "--memory", String(options.memoryMB), "--disk-size", String(options.diskSizeGB)] + library)
             // The folder exists now. Every later command, here and after
             // creation, runs with the version recorded in it.
             do {
-                try self.library?.bind(machine, VPhoneLaunchpadMachineBinding(bundle: version, bootChain: version))
+                try self.library?.bind(target, VPhoneLaunchpadMachineBinding(bundle: version, bootChain: version))
             } catch {
                 throw VPhoneLaunchpadError(
                     String(localized: "Unable to record the Core Bundle of \(name)."),
                     detail: error.localizedDescription,
                 )
             }
-            if options.network != "nat" {
+            // A template keeps the default network; its clone gets this one.
+            if options.network != "nat", !plan.usesTemplate {
                 try await run(["vm", "config", name, "--network", options.network] + library)
             }
             await self.library?.refresh()
@@ -322,16 +418,23 @@ final class VPhoneLaunchpadCreationPipeline {
             // lines reach the log. The creation log starts over on a retry, so
             // the patch output is also kept in a log of its own for later
             // diagnosis.
-            let patchLog = VPhoneLaunchpadLogWriter(url: VPhoneLaunchpadMachineLibrary.consoleLog(machine, suffix: "-patch"))
-            patchLog.write("# \(options.name), \(Date().formatted(.iso8601)), Core Bundle \(version)")
+            let patchLog = VPhoneLaunchpadLogWriter(url: VPhoneLaunchpadMachineLibrary.consoleLog(target, suffix: "-patch"))
+            patchLog.write("# \(name), \(Date().formatted(.iso8601)), Core Bundle \(version)")
             let tee: @Sendable (String) -> Void = { line in
                 log.write(line)
                 patchLog.write(line)
             }
-            if options.patches.hasOverrides {
-                try await run(["fw", "set-patches", name] + options.patches.setPatchesArguments + library, onLine: tee)
+            // A template build takes the boot-chain overrides only: they are
+            // what its key holds. The guest ones go to the clone.
+            let overrides = options.patchOverrides
+            let includesGuest = !plan.usesTemplate
+            if includesGuest ? options.patches.hasOverrides : overrides.hasBootChainOverrides {
+                try await run(
+                    VPhoneLaunchpadTemplateCommands.setPatches(name, overrides, includingGuest: includesGuest) + library,
+                    onLine: tee,
+                )
             }
-            try await run(patchArguments + library, onLine: tee)
+            try await run(patchArguments(name) + library, onLine: tee)
 
         case .bootDFU:
             let arguments = ["vm", "launch", name, "--dfu"] + library
@@ -339,7 +442,7 @@ final class VPhoneLaunchpadCreationPipeline {
             dfuPanicked = false
             dfu = try commandLine.start(
                 arguments,
-                logFile: VPhoneLaunchpadMachineLibrary.consoleLog(machine, suffix: "-dfu"),
+                logFile: VPhoneLaunchpadMachineLibrary.consoleLog(target, suffix: "-dfu"),
             ) { [weak self] line in
                 log.write("dfu  \(line)")
                 if Self.isPanic(line) {
@@ -399,18 +502,182 @@ final class VPhoneLaunchpadCreationPipeline {
                 libraryRoot: Self.canonicalPath(URL(fileURLWithPath: options.libraryRoot, isDirectory: true)),
                 // The restore tree stays until first boot succeeds, so a
                 // failed boot can still be restored again without preparing
-                // the firmware anew. `removeRestoreFiles()` reclaims it then.
+                // the firmware anew. `removeRestoreFiles()` reclaims it then;
+                // for a template build, adopting it does.
                 keepArtifacts: true,
                 onLine: output,
             )
             guard status == 0 else {
                 throw VPhoneLaunchpadError(String(localized: "Unable to install custom firmware. Check the log for details."), detail: log.tail)
             }
-            self.library?.recordGuestEnvironment(machine, version)
+            self.library?.recordGuestEnvironment(target, version)
+
+        case .trimTemplate:
+            try await stopIfRunning(target, commandLine: commandLine)
+            if let arguments = VPhoneLaunchpadTemplateCommands.trim(name, options.slimming) {
+                _ = try await runReporting(arguments + library)
+            }
+
+        case .setUpTemplate:
+            try await stopIfRunning(target, commandLine: commandLine)
+            // `[setup] b. wait for first-boot work`: the stage the sheet shows.
+            let stage: @Sendable (String) -> Void = { [weak self] line in
+                log.write(line)
+                guard line.hasPrefix("[setup] ") else { return }
+                let text = String(line.dropFirst("[setup] ".count))
+                Task { @MainActor in self?.setupStage = text }
+            }
+            defer { setupStage = nil }
+            _ = try await runReporting(VPhoneLaunchpadTemplateCommands.setup(name, options.slimming) + library, onLine: stage)
+
+        case .adoptTemplate:
+            try await adoptTemplate(target, runReporting, commandLine: commandLine)
+
+        case .cloneTemplate:
+            guard let templateID else {
+                throw VPhoneLaunchpadError(String(localized: "No template to create the machine from. Retry from Find Template."))
+            }
+            _ = try await runReporting(VPhoneLaunchpadTemplateCommands.clone(
+                name, template: templateID, cpuCount: options.cpuCount, memoryMB: options.memoryMB, network: options.network,
+            ) + library)
+            bindClone(target, version: version)
+            await self.library?.refresh()
+            self.library?.selection = [target]
+
+        case .applyGuestPatches:
+            try await stopIfRunning(target, commandLine: commandLine)
+            try await run(VPhoneLaunchpadTemplateCommands.setPatches(name, options.patchOverrides, includingGuest: true) + library)
+            output("$ vphone-cli cfw update-environment \(name)")
+            let status = try await helper.updateGuestEnvironment(
+                bundleVersion: version,
+                machineName: name,
+                libraryRoot: Self.canonicalPath(URL(fileURLWithPath: options.libraryRoot, isDirectory: true)),
+                onLine: output,
+            )
+            guard status == 0 else {
+                throw VPhoneLaunchpadError(String(localized: "Unable to apply the guest patches. Check the log for details."), detail: log.tail)
+            }
+            self.library?.recordGuestEnvironment(target, version)
 
         case .firstBoot:
             try await firstBoot()
         }
+    }
+
+    // MARK: - Template steps
+
+    /// `vm template find`: a usable template skips the build. A stale one
+    /// with the same key would make the adopt fail at the end, so it is
+    /// reported at once.
+    private func findTemplate(
+        _ run: ([String], @escaping @Sendable (String) -> Void) async throws -> VPhoneLaunchpadCommandResult,
+    ) async throws {
+        let log = log
+        let result = try await run(
+            VPhoneLaunchpadTemplateCommands.find(options.templateRequest) + options.machine.libraryArguments,
+            { line in log.write(line) },
+        )
+        guard let data = result.jsonData, let found = try? VPhoneLaunchpadTemplateFind.decode(data) else {
+            throw VPhoneLaunchpadError(String(localized: "Unable to read the template search."), detail: result.tail)
+        }
+        expectedTemplateID = found.id
+        if found.usable, let id = found.id {
+            templateID = id
+            template = found.template
+            builtTemplate = false
+            plan.foundTemplate = true
+            append("● using template \(id)\(found.template.map { ", \($0.machines.count) machine(s) use it" } ?? "")")
+            return
+        }
+        if let stale = found.template {
+            throw VPhoneLaunchpadError(
+                String(localized: "An outdated template has the key this machine needs."),
+                detail: String(localized: "Delete template \(stale.id) in Templates, then retry. Machines created from it keep working.")
+                    + "\n" + stale.staleReasons.joined(separator: "\n"),
+            )
+        }
+        if found.building {
+            throw VPhoneLaunchpadError(
+                String(localized: "Another creation is building this template."),
+                detail: String(localized: "Retry once it has finished; the machine is then created from that template."),
+            )
+        }
+        plan.foundTemplate = false
+        append("● no template yet (\(found.reason ?? found.id ?? "")); building one in \(plan.buildName ?? "")")
+    }
+
+    /// `vm template adopt`, expecting the id Find Template computed: a build
+    /// that came out with another key (an app its setup boot could not
+    /// remove) fails here, saying why, instead of being saved under an id no
+    /// later creation finds. When another creation saved the same template
+    /// first, this build is not needed: it is deleted and that template used.
+    private func adoptTemplate(
+        _ target: VPhoneLaunchpadMachinePath,
+        _ run: ([String], @escaping @Sendable (String) -> Void) async throws -> VPhoneLaunchpadCommandResult,
+        commandLine: VPhoneLaunchpadCommandLine,
+    ) async throws {
+        let log = log
+        let output: @Sendable (String) -> Void = { line in log.write(line) }
+        // Find could not compute the key while the IPSWs were not downloaded
+        // and no template recorded them; the restore has downloaded them.
+        if expectedTemplateID == nil {
+            let again = try? await commandLine.run(
+                VPhoneLaunchpadTemplateCommands.find(options.templateRequest) + target.libraryArguments,
+                recordInHistory: false,
+            )
+            expectedTemplateID = again?.jsonData.flatMap { try? VPhoneLaunchpadTemplateFind.decode($0) }?.id
+        }
+        do {
+            let result = try await run(VPhoneLaunchpadTemplateCommands.adopt(
+                target.name, iphoneSource: options.iphoneSource, cloudOSSource: options.cloudOSSource, expect: expectedTemplateID,
+            ) + target.libraryArguments, output)
+            guard let data = result.jsonData, let adopted = try? VPhoneLaunchpadTemplate.decoder().decode(VPhoneLaunchpadTemplate.self, from: data)
+            else {
+                throw VPhoneLaunchpadError(String(localized: "Unable to read the saved template."), detail: result.tail)
+            }
+            templateID = adopted.id
+            template = adopted
+            builtTemplate = true
+            append("● template \(adopted.id) saved")
+        } catch {
+            let again = try? await commandLine.run(
+                VPhoneLaunchpadTemplateCommands.find(options.templateRequest) + target.libraryArguments,
+                recordInHistory: false,
+            )
+            guard let data = again?.jsonData, let found = try? VPhoneLaunchpadTemplateFind.decode(data), found.usable, let id = found.id else {
+                throw error
+            }
+            append("● template \(id) was saved by another creation meanwhile; removing \(target.name)")
+            _ = try? await commandLine.run(["vm", "delete", target.name, "--force"] + target.libraryArguments)
+            templateID = id
+            template = found.template
+            builtTemplate = false
+        }
+        await library?.refresh()
+    }
+
+    /// The clone carries the template's `launchpad.json`, if Launchpad built
+    /// it; it runs with this creation's bundle either way. A template the CLI
+    /// built has none: its record names the bundles.
+    private func bindClone(_ target: VPhoneLaunchpadMachinePath, version: String) {
+        var binding = VPhoneLaunchpadMachineBinding.load(target) ?? VPhoneLaunchpadMachineBinding(
+            bundle: version,
+            bootChain: template?.bootChainBundleVersion,
+            guestEnvironment: template?.builtWithBundleVersion,
+        )
+        binding.bundle = version
+        try? library?.bind(target, binding)
+    }
+
+    /// The trim and the setup boot need the build stopped; a retry may find
+    /// it started since.
+    private func stopIfRunning(_ target: VPhoneLaunchpadMachinePath, commandLine: VPhoneLaunchpadCommandLine) async throws {
+        guard let library, await library.isMachineRunning(target) else {
+            return
+        }
+        let arguments = ["vm", "stop", target.name, "--timeout", "20"] + target.libraryArguments
+        append("$ \(VPhoneLaunchpadCommandLine.display(arguments))")
+        try await commandLine.runChecked(arguments, onLine: { [log] line in log.write(line) })
     }
 
     /// Boots with a window, as `vm create` does, and waits for vphoned to
@@ -542,40 +809,111 @@ final class VPhoneLaunchpadCreationPipeline {
     }
 }
 
+
 #if DEBUG
     extension VPhoneLaunchpadCreationPipeline {
-        /// Running the restore, failed while preparing firmware, or partway
-        /// through downloading an IPSW.
-        func applyPreview(failed: Bool = false, downloading: Double? = nil) {
+        enum PreviewState {
+            /// Restoring the machine itself, without a template.
+            case restoring
+            /// Failed while preparing firmware.
+            case failed
+            /// Partway through downloading an IPSW.
+            case downloading(Double)
+            /// Building a template: in its setup boot.
+            case settingUpTemplate
+            /// Built a template, cloned the machine and booted it.
+            case builtTemplate
+            /// Found a template and cloned from it.
+            case clonedFromTemplate
+            /// Cloned from a template, writing guest patch overrides into
+            /// the clone.
+            case applyingGuestPatches
+            /// The setup boot failed.
+            case setupFailed
+        }
+
+        func applyPreview(_ state: PreviewState) {
             statuses = [:]
             durations = [:]
             downloadFraction = nil
-            if let downloading {
-                statuses[.create] = .passed
-                durations[.create] = 1
-                statuses[.prepare] = .running
-                downloadFraction = downloading
-                current = .prepare
-                isRunning = true
-                return
+            setupStage = nil
+            failure = nil
+            current = nil
+            isRunning = false
+            templateID = nil
+            expectedTemplateID = nil
+            template = nil
+            builtTemplate = false
+            plan.appliesGuestPatches = false
+            func passed(_ steps: [(Step, TimeInterval)]) {
+                for (step, duration) in steps {
+                    statuses[step] = .passed
+                    durations[step] = duration
+                }
             }
-            if failed {
-                statuses[.create] = .passed
-                durations[.create] = 0
+            let restored: [(Step, TimeInterval)] = [
+                (.create, 1), (.prepare, 862), (.patch, 48), (.bootDFU, 6), (.waitDFU, 3), (.restore, 87), (.stopDFU, 10), (.installCFW, 61),
+            ]
+            switch state {
+            case .restoring:
+                plan.foundTemplate = plan.usesTemplate ? false : nil
+                passed((plan.usesTemplate ? [(.findTemplate, 0)] : []) + Array(restored.prefix(5)))
+                statuses[.restore] = .running
+                current = .restore
+                isRunning = true
+            case .failed:
+                passed([(.findTemplate, 0), (.create, 0)])
+                plan.foundTemplate = false
                 statuses[.prepare] = .failed
                 durations[.prepare] = 6
-                current = nil
-                isRunning = false
-                return
+                failure = VPhoneLaunchpadError(String(localized: "\(Step.prepare.title) failed."), detail: "Unable to download the IPSW from https://updates.cdn-apple.com/. Try again later.")
+            case let .downloading(fraction):
+                plan.foundTemplate = false
+                passed([(.findTemplate, 0), (.create, 1)])
+                statuses[.prepare] = .running
+                downloadFraction = fraction
+                current = .prepare
+                isRunning = true
+            case .settingUpTemplate:
+                plan.foundTemplate = false
+                passed([(.findTemplate, 0)] + restored + [(.trimTemplate, 3)])
+                statuses[.setUpTemplate] = .running
+                setupStage = "b. wait for first-boot work"
+                current = .setUpTemplate
+                isRunning = true
+            case .builtTemplate:
+                plan.foundTemplate = false
+                passed([(.findTemplate, 0)] + restored + [(.trimTemplate, 3), (.setUpTemplate, 121), (.adoptTemplate, 0), (.cloneTemplate, 1), (.firstBoot, 9)])
+                templateID = VPhoneLaunchpadPreview.templates.first?.id
+                template = VPhoneLaunchpadPreview.templates.first
+                builtTemplate = true
+            case .clonedFromTemplate:
+                plan.foundTemplate = true
+                passed([(.findTemplate, 0), (.cloneTemplate, 1)])
+                statuses[.firstBoot] = .running
+                templateID = VPhoneLaunchpadPreview.templates.first?.id
+                template = VPhoneLaunchpadPreview.templates.first
+                current = .firstBoot
+                isRunning = true
+            case .applyingGuestPatches:
+                plan.foundTemplate = true
+                plan.appliesGuestPatches = true
+                passed([(.findTemplate, 0), (.cloneTemplate, 1)])
+                statuses[.applyGuestPatches] = .running
+                templateID = VPhoneLaunchpadPreview.templates.first?.id
+                template = VPhoneLaunchpadPreview.templates.first
+                current = .applyGuestPatches
+                isRunning = true
+            case .setupFailed:
+                plan.foundTemplate = false
+                passed([(.findTemplate, 0)] + restored + [(.trimTemplate, 3)])
+                statuses[.setUpTemplate] = .failed
+                durations[.setUpTemplate] = 214
+                failure = VPhoneLaunchpadError(
+                    String(localized: "\(Step.setUpTemplate.title) failed."),
+                    detail: "Setup boot failed at step settle (b. wait for first-boot work): not settled within 300 s: staged_system_apps not empty",
+                )
             }
-            let finished: [Step: TimeInterval] = [.create: 1, .prepare: 862, .patch: 48, .bootDFU: 6, .waitDFU: 3]
-            for (step, duration) in finished {
-                statuses[step] = .passed
-                durations[step] = duration
-            }
-            statuses[.restore] = .running
-            current = .restore
-            isRunning = true
         }
     }
 #endif

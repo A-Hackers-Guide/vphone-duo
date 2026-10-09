@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 /// Name, location, Core Bundle, guest device and firmware pairing from
-/// `fw catalog`, hardware and options, on three pages. Every page has
-/// defaults, so Create works from any of them.
+/// `fw catalog`, hardware, the template and its slimming, and options, on four
+/// pages. Every page has defaults, so Create works from any of them.
 /// Create hands off to the pipeline sheet.
 struct VPhoneLaunchpadNewMachineView: View {
     let onCreate: (VPhoneLaunchpadMachinePath) -> Void
@@ -33,10 +33,13 @@ struct VPhoneLaunchpadNewMachineView: View {
     @State private var patchCatalog: VPhoneLaunchpadPatchCatalog?
     @State private var patchCatalogError: String?
     @State private var keepArtifacts = false
+    /// Clone the machine from a template, built first when there is none.
+    @State private var usesTemplate = true
+    @State private var slimming = VPhoneLaunchpadSlimming()
     @State private var page = Page.general
 
     enum Page: Hashable {
-        case general, hardware, advanced
+        case general, hardware, template, advanced
     }
 
     private var selectedGuest: VPhoneLaunchpadFirmwareCatalog.Device? {
@@ -107,8 +110,23 @@ struct VPhoneLaunchpadNewMachineView: View {
         VPhoneLaunchpadMachineLocations.problem(with: location)
     }
 
+    /// Why the template switches stop Create, or nil.
+    private var templateProblem: String? {
+        guard usesTemplate else {
+            return nil
+        }
+        if let problem = slimming.problem {
+            return problem
+        }
+        // The template is built in a machine named like `template-1a2b3c4d`.
+        if !VPhoneLaunchpadMachineLocations.socketPathFits(root: location, name: "template-00000000") {
+            return String(localized: "The path is too long. Use a location with a shorter path.")
+        }
+        return nil
+    }
+
     private var canCreate: Bool {
-        nameProblem == nil && locationProblem == nil && sources != nil && bundleVersion != nil
+        nameProblem == nil && locationProblem == nil && templateProblem == nil && sources != nil && bundleVersion != nil
     }
 
     var body: some View {
@@ -117,6 +135,7 @@ struct VPhoneLaunchpadNewMachineView: View {
                 VPhoneLaunchpadSheetPages(selection: $page) {
                     Text("General").tag(Page.general)
                     Text("Hardware").tag(Page.hardware)
+                    Text("Template").tag(Page.template)
                     Text("Advanced").tag(Page.advanced)
                 }
                 Form {
@@ -126,7 +145,7 @@ struct VPhoneLaunchpadNewMachineView: View {
                             TextField("Name", text: $name)
                             locationPicker
                         } footer: {
-                            if let problem = nameProblem ?? locationProblem {
+                            if let problem = nameProblem ?? locationProblem ?? templateProblem {
                                 Text(problem).foregroundStyle(.red)
                             }
                         }
@@ -134,6 +153,8 @@ struct VPhoneLaunchpadNewMachineView: View {
                         bundleSection
 
                         firmware
+
+                        slimSection
                     case .hardware:
                         Section {
                             Stepper("CPU: \(cpu) cores", value: $cpu, in: 1 ... ProcessInfo.processInfo.activeProcessorCount)
@@ -142,8 +163,11 @@ struct VPhoneLaunchpadNewMachineView: View {
                         } footer: {
                             Text(spaceNote).foregroundStyle(.secondary)
                         }
+                    case .template:
+                        VPhoneLaunchpadSlimmingSections(usesTemplate: $usesTemplate, slimming: $slimming)
                     case .advanced:
                         VPhoneLaunchpadNewMachineAdvancedView(
+                            usesTemplate: usesTemplate,
                             network: $network,
                             patches: $patches,
                             keepArtifacts: $keepArtifacts,
@@ -175,8 +199,30 @@ struct VPhoneLaunchpadNewMachineView: View {
             #if DEBUG
                 if VPhoneLaunchpadPreview.isActive {
                     page = VPhoneLaunchpadPreview.newMachinePage
+                    patches = VPhoneLaunchpadPreview.newMachinePatches
                 }
             #endif
+        }
+    }
+
+    // MARK: - Slimming
+
+    /// The master switch. The parts are on the Template page.
+    private var slimSection: some View {
+        Section {
+            Toggle("Slim System", isOn: $slimming.slim)
+                .disabled(!usesTemplate)
+        } footer: {
+            Group {
+                if !usesTemplate {
+                    Text("Without a template the machine is not slimmed. Turn templates on in Template.")
+                } else if slimming.slim {
+                    Text("Trims system files, unneeded services and system apps once, in the template the machine is cloned from. Choose what goes in Template.")
+                } else {
+                    Text("The template keeps every file, service and app. Setup Assistant is still skipped.")
+                }
+            }
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -482,7 +528,10 @@ struct VPhoneLaunchpadNewMachineView: View {
             diskSizeGB: diskSizeGB,
             network: network,
             patches: patches,
+            guestPatches: patchCatalog?.guestOverrides(patches) ?? [],
             keepArtifacts: keepArtifacts,
+            usesTemplate: usesTemplate,
+            slimming: slimming,
         )
         let pipeline = model.machines.create(options)
         model.machines.selection = [pipeline.machine]
@@ -493,26 +542,76 @@ struct VPhoneLaunchpadNewMachineView: View {
 // MARK: - Pipeline
 
 /// The pipeline, which keeps running when this sheet closes. A failure shows
-/// on its step; the log, which records why, opens in its own sheet.
+/// on its step; the log, which records why, opens in its own sheet. A
+/// template-backed creation shows the template's steps apart from the
+/// machine's own.
 struct VPhoneLaunchpadCreationView: View {
+    typealias Step = VPhoneLaunchpadCreationStep
+
     let creation: VPhoneLaunchpadCreationPipeline
+    @Environment(VPhoneLaunchpadModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var showsLog = false
+    /// The IPSWs a template this creation built came from, once it is done.
+    @State private var ipswFiles: [VPhoneLaunchpadIPSWFile] = []
+    @State private var ipswDirectories: [URL] = []
+    @State private var offersIPSWs = false
+
+    private var templateSteps: [Step] {
+        creation.steps.filter { $0 == .findTemplate || creation.plan.buildsTemplate($0) }
+    }
+
+    private var machineSteps: [Step] {
+        creation.steps.filter { !templateSteps.contains($0) }
+    }
 
     var body: some View {
         VPhoneLaunchpadSheet(Text("Creating \(creation.options.name)")) {
             Form {
+                if creation.plan.usesTemplate {
+                    Section {
+                        ForEach(templateSteps) { step in
+                            stepRow(step)
+                        }
+                    } header: {
+                        Text("Template")
+                    } footer: {
+                        Text(templateNote).foregroundStyle(.secondary)
+                    }
+                }
                 Section {
-                    ForEach(VPhoneLaunchpadCreationPipeline.Step.allCases) { step in
+                    ForEach(machineSteps) { step in
                         stepRow(step)
+                    }
+                } header: {
+                    if creation.plan.usesTemplate {
+                        Text("Machine")
                     }
                 } footer: {
                     if creation.isRunning {
                         Text("Creation continues if you close this window.").foregroundStyle(.secondary)
+                    } else if let failure = creation.failure, let detail = failure.detail {
+                        Text(verbatim: detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .lineLimit(6)
                     }
+                }
+                if offersIPSWs {
+                    VPhoneLaunchpadTemplateIPSWOffer(files: $ipswFiles, cacheDirectories: ipswDirectories)
                 }
             }
             .formStyle(.grouped)
+            .task(id: creation.isFinished && creation.builtTemplate) {
+                guard creation.isFinished, creation.builtTemplate, !offersIPSWs else {
+                    return
+                }
+                let found = await VPhoneLaunchpadTemplateIPSWOffer.scan(creation, library: model.machines)
+                ipswFiles = found.files
+                ipswDirectories = found.directories
+                offersIPSWs = !found.files.isEmpty
+            }
         } accessory: {
             Button("Open Log") { showsLog = true }
         } actions: {
@@ -526,13 +625,27 @@ struct VPhoneLaunchpadCreationView: View {
                 .keyboardShortcut(.cancelAction)
         }
         .frame(width: 720)
-        .fixedSize(horizontal: false, vertical: true)
+        // A template build lists fourteen steps: the form scrolls in a
+        // sheet that fits a laptop screen instead of growing past it.
+        .frame(height: creation.plan.usesTemplate ? 720 : nil)
+        .fixedSize(horizontal: false, vertical: !creation.plan.usesTemplate)
         .sheet(isPresented: $showsLog) {
             VPhoneLaunchpadConsoleView(title: "\(creation.options.name) Creation Log", url: creation.logFile)
         }
     }
 
-    private func stepRow(_ step: VPhoneLaunchpadCreationPipeline.Step) -> some View {
+    private var templateNote: String {
+        if let id = creation.templateID, creation.plan.foundTemplate == true {
+            return String(localized: "Cloned from template \(id), which machines with these options share.")
+        }
+        if let id = creation.templateID, creation.builtTemplate {
+            return String(localized: "Saved as template \(id). The next machine with these options is cloned from it in seconds.")
+        }
+        let build = creation.plan.buildName ?? ""
+        return String(localized: "A missing template is built in \(build), set up once without a window, and saved under Templates.")
+    }
+
+    private func stepRow(_ step: Step) -> some View {
         LabeledContent {
             HStack(spacing: 8) {
                 if step == .prepare, let fraction = creation.downloadFraction {
@@ -552,13 +665,21 @@ struct VPhoneLaunchpadCreationView: View {
             }
         } label: {
             Label {
-                HStack(spacing: 4) {
-                    Text(step.title)
-                    if step.needsRoot {
-                        Image(systemName: "lock.fill")
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(step.title)
+                        if step.needsRoot {
+                            Image(systemName: "lock.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .help("Runs as root through the privileged helper")
+                        }
+                    }
+                    if step == .setUpTemplate, let stage = creation.setupStage {
+                        // The CLI's own words for the stage: `b. wait for first-boot work`.
+                        Text(verbatim: stage)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .help("Runs as root through the privileged helper")
                     }
                 }
             } icon: {
@@ -569,5 +690,106 @@ struct VPhoneLaunchpadCreationView: View {
 
     static func duration(_ interval: TimeInterval) -> String {
         Duration.seconds(interval).formatted(.time(pattern: interval >= 3600 ? .hourMinuteSecond : .minuteSecond))
+    }
+}
+
+// MARK: - IPSWs a template came from
+
+/// Offered once a creation has built a template: its clones need neither
+/// IPSW, so the two downloads can go. Nothing is deleted without the
+/// confirmation, and only files the IPSW cache holds.
+struct VPhoneLaunchpadTemplateIPSWOffer: View {
+    @Binding var files: [VPhoneLaunchpadIPSWFile]
+    let cacheDirectories: [URL]
+    @State private var confirming = false
+    @State private var deleted = false
+    @State private var error: VPhoneLaunchpadError?
+
+    private var total: Int64 {
+        files.reduce(0) { $0 + $1.size }
+    }
+
+    var body: some View {
+        Section {
+            if deleted {
+                Label("The IPSWs were deleted.", systemImage: "checkmark.circle")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(files) { file in
+                    LabeledContent {
+                        Text(verbatim: VPhoneLaunchpadIPSWCacheView.size(file.size)).monospacedDigit()
+                    } label: {
+                        Text(verbatim: file.name)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button("Delete IPSWs…") { confirming = true }
+                        .disabled(files.isEmpty)
+                }
+            }
+        } header: {
+            Text("Downloaded IPSWs")
+        } footer: {
+            if !deleted {
+                Text("Machines from this template need neither IPSW. A machine with other options downloads them again.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .confirmationDialog(
+            String(localized: "Delete the IPSWs this template came from?"),
+            isPresented: $confirming,
+        ) {
+            Button(String(localized: "Delete \(VPhoneLaunchpadIPSWCacheView.size(total))"), role: .destructive) {
+                Task { await delete() }
+            }
+        } message: {
+            Text("\(files.map(\.name).joined(separator: ", ")) are deleted from the IPSW cache.")
+        }
+        .errorAlert($error)
+    }
+
+    /// The cached IPSWs `creation` was given as sources and no unfinished
+    /// creation still reads.
+    static func scan(
+        _ creation: VPhoneLaunchpadCreationPipeline,
+        library: VPhoneLaunchpadMachineLibrary,
+    ) async -> (files: [VPhoneLaunchpadIPSWFile], directories: [URL]) {
+        let sources = [creation.options.iphoneSource, creation.options.cloudOSSource]
+        #if DEBUG
+            if VPhoneLaunchpadPreview.isActive {
+                let scan = VPhoneLaunchpadPreview.ipswScan
+                return (scan.ipsws.filter { file in sources.contains { VPhoneLaunchpadIPSWUse.source($0, is: file) } }, scan.cacheDirectories)
+            }
+        #endif
+        guard let scan = try? await VPhoneLaunchpadIPSWCache.scan(libraryRoots: library.roots, machineFolders: []) else {
+            return ([], [])
+        }
+        let busy = library.creations.values.filter { !$0.isFinished && $0 !== creation }
+            .flatMap { [$0.options.iphoneSource, $0.options.cloudOSSource] }
+        let files = scan.ipsws.filter { file in
+            !file.isDownloading
+                && sources.contains { VPhoneLaunchpadIPSWUse.source($0, is: file) }
+                && !busy.contains { VPhoneLaunchpadIPSWUse.source($0, is: file) }
+        }
+        return (files, scan.cacheDirectories)
+    }
+
+    private func delete() async {
+        var remaining = files
+        for file in files {
+            do {
+                try await VPhoneLaunchpadIPSWCache.removeIPSW(file.url, cacheDirectories: cacheDirectories)
+                remaining.removeAll { $0.id == file.id }
+            } catch {
+                self.error = VPhoneLaunchpadError(String(localized: "Unable to Delete \(file.name)"), detail: error.localizedDescription)
+                files = remaining
+                return
+            }
+        }
+        files = []
+        deleted = true
     }
 }

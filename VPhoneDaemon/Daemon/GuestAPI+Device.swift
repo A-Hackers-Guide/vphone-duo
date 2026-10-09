@@ -19,6 +19,7 @@ extension GuestAPI {
             info["low_power_mode"] = (try? lowPowerMode()) ?? [:]
             info["developer_mode"] = (try? developerModeStatus()) ?? [:]
             info["agent"] = ["binary_hash": binaryHash, "pid": getpid()]
+            info["device_name"] = deviceNameInfo()
             return info
         case "device.network":
             return networkInfo()
@@ -205,7 +206,12 @@ extension GuestAPI {
     }
 
     /// Pin `name`, or with nil give the guest its own back. Returns the state
-    /// plus `changed`.
+    /// plus `changed` and `reboot_required`: lockdown readers (Finder,
+    /// `ideviceinfo`, `idevicename`) follow a change at once, but CoreDevice (Xcode,
+    /// `devicectl`) reads the name once per handshake and the DHCP lease keeps
+    /// the host name it was requested with, so both show the new name only
+    /// after the guest restarts. A clone of a template boots with the
+    /// template's pin until `vphone-vm` connects and sets its own.
     static func setDeviceName(_ name: String?) throws -> [String: Any] {
         if let name {
             try validateDeviceName(name)
@@ -226,21 +232,30 @@ extension GuestAPI {
         }
         var state = deviceNameState()
         state["changed"] = changed
+        state["reboot_required"] = changed
         return state
     }
 
-    /// The host's rule (`VPhoneGuestDeviceName.validate`), which the guest's
-    /// (`VPDeviceNameCreateFromBytes`) accepts: not blank, at most 255 UTF-8
-    /// bytes, no control character.
+    /// For `device.info`: the pinned name, and the guest's own ComputerName in
+    /// configd's preferences, which a clone inherits from its template. Two
+    /// small file reads.
+    static func deviceNameInfo() -> [String: Any] {
+        let path = "/private/var/preferences/SystemConfiguration/preferences.plist"
+        let preferences = FileManager.default.contents(atPath: path).flatMap {
+            try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any]
+        }
+        let system = (preferences?["System"] as? [String: Any])?["System"] as? [String: Any]
+        return [
+            "name": storedDeviceName() ?? NSNull(),
+            "own_name": system?["ComputerName"] as? String ?? NSNull(),
+        ]
+    }
+
+    /// `GuestDeviceNameRule`: not blank, at most 255 UTF-8 bytes, no control
+    /// character.
     private static func validateDeviceName(_ name: String) throws {
-        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            throw GuestAPIError.invalidRequest("name must not be blank")
-        }
-        if name.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) {
-            throw GuestAPIError.invalidRequest("name must not contain a control character")
-        }
-        if name.utf8.count > 255 {
-            throw GuestAPIError.invalidRequest("name must be at most 255 bytes in UTF-8")
+        if let problem = GuestDeviceNameRule.problem(name) {
+            throw GuestAPIError.invalidRequest(problem)
         }
     }
 

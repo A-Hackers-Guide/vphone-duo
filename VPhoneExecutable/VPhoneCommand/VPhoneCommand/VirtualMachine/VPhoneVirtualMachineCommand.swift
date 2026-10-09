@@ -25,6 +25,7 @@ struct VPhoneVirtualMachineCommand: ParsableCommand {
             VPhoneVirtualMachineLaunchCommand.self,
             VPhoneVirtualMachineStopCommand.self,
             VPhoneVirtualMachineCreateCommand.self,
+            VPhoneVirtualMachineTemplateCommand.self,
             VPhoneVirtualMachineWriteManifestCommand.self,
         ],
     )
@@ -167,6 +168,9 @@ struct VPhoneVirtualMachineInfoCommand: ParsableCommand {
             }
             if let udid = report.udid {
                 print("udid:  \(udid)")
+            }
+            if let template = report.template {
+                print("template: \(template)")
             }
             if let info = report.restoreInfo {
                 print("iOS:     \(info.ios.version) (\(info.ios.build))")
@@ -345,7 +349,7 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
         return edit
     }
 
-    private static func parseSwitch(_ value: String, option: String) throws -> Bool {
+    static func parseSwitch(_ value: String, option: String) throws -> Bool {
         switch value.lowercased() {
         case "on": return true
         case "off": return false
@@ -353,7 +357,7 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
         }
     }
 
-    private static func parseMode(_ s: String)
+    static func parseMode(_ s: String)
         throws -> VPhoneVirtualMachineManifest.NetworkConfig.NetworkMode
     {
         switch s.lowercased() {
@@ -432,7 +436,15 @@ struct VPhoneVirtualMachineDeleteCommand: ParsableCommand {
                 return
             }
         }
+        let source = try VPhoneMachineTemplates.readSource(inBundle: lib.library.bundle(named: name).url)
         try VPhoneBundleOperations.delete(bundleNamed: name, in: lib.library)
         print("deleted \(name)")
+        // Never deleted here: another create may want it, and rebuilding it
+        // takes a restore.
+        if let template = VPhoneMachineTemplates.unusedTemplate(after: source, in: lib.library) {
+            let size = VPhoneSystemTrim.formatBytes(VPhoneMachineTemplates.allocatedBytes(of: template.url))
+            print("note: template \(template.identifier) (~\(size)) is no longer used by any machine; "
+                + "remove it with `vphone-cli vm template delete \(template.identifier)`")
+        }
     }
 }

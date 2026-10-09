@@ -1,11 +1,4459 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ Guest System" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Guest System"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ のゲストシステム"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 게스트 시스템"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hệ thống máy khách của %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 的客户机系统"
+          }
+        }
+      }
+    },
+    "%@ allocated; the rest is shared with its template or clones." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ allocated; the rest is shared with its template or clones."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "割り当て済み %@。残りはテンプレートまたは複製と共有しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 할당됨. 나머지는 템플릿 또는 복제본과 공유합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã cấp phát %@; phần còn lại dùng chung với mẫu hoặc các bản nhân bản."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已分配 %@；其余部分与模板或克隆共享。"
+          }
+        }
+      }
+    },
+    "%@ are deleted from the IPSW cache." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ are deleted from the IPSW cache."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ を IPSW キャッシュから削除します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@이(가) IPSW 캐시에서 삭제됩니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ sẽ bị xóa khỏi bộ nhớ đệm IPSW."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将从 IPSW 缓存中删除 %@。"
+          }
+        }
+      }
+    },
+    "%@ is not a language code such as ja or zh-Hant." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ is not a language code such as ja or zh-Hant."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ は ja や zh-Hant のような言語コードではありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@은(는) ja 또는 zh-Hant 같은 언어 코드가 아닙니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ không phải là mã ngôn ngữ như ja hoặc zh-Hant."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 不是 ja 或 zh-Hant 这样的语言代码。"
+          }
+        }
+      }
+    },
+    "%@ keep working: they share its blocks but do not need it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ keep working: they share its blocks but do not need it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ は引き続き動作します。ブロックを共有していますが、テンプレートは不要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@은(는) 계속 동작합니다. 블록을 공유하지만 템플릿이 필요하지는 않습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ vẫn hoạt động: chúng dùng chung khối dữ liệu nhưng không cần đến mẫu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 仍可正常使用：它们共享其数据块，但并不依赖它。"
+          }
+        }
+      }
+    },
+    "%@ now runs with Core Bundle %@, but its guest environment was not updated. Update its guest environment to finish the change." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ now runs with Core Bundle %@, but its guest environment was not updated. Update its guest environment to finish the change."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ はコアバンドル %2$@ で動作するようになりましたが、ゲスト環境は更新されていません。変更を完了するには、ゲスト環境を更新してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@은(는) 이제 코어 번들 %2$@(으)로 실행되지만 게스트 환경은 업데이트되지 않았습니다. 변경을 마치려면 게스트 환경을 업데이트하세요."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ giờ chạy bằng Bundle lõi %2$@, nhưng môi trường máy khách chưa được cập nhật. Hãy cập nhật môi trường máy khách để hoàn tất thay đổi."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 现在使用核心 Bundle %2$@ 运行，但其客户机环境未更新。请更新客户机环境以完成更改。"
+          }
+        }
+      }
+    },
+    "%lld could not be changed." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld could not be changed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 件は変更できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld개는 변경할 수 없었습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể thay đổi %lld mục."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 项无法更改。"
+          }
+        }
+      }
+    },
+    "%lld turned off, %lld turned back on." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld turned off, %lld turned back on."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld 件をオフ、%2$lld 件をオンに戻しました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld개 끔, %2$lld개 다시 켬."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã tắt %1$lld, bật lại %2$lld."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已关闭 %1$lld 项，重新开启 %2$lld 项。"
+          }
+        }
+      }
+    },
+    "A missing template is built in %@, set up once without a window, and saved under Templates." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A missing template is built in %@, set up once without a window, and saved under Templates."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートがなければ %@ で作成し、ウインドウなしで一度セットアップしてから「テンプレート」に保存します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿이 없으면 %@에서 만들고 창 없이 한 번 설정한 뒤 템플릿에 저장합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nếu chưa có mẫu, mẫu sẽ được dựng trong %@, thiết lập một lần không có cửa sổ và lưu vào Mẫu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果没有模板，会在 %@ 中构建模板，无界面完成一次设置，然后保存到“模板”中。"
+          }
+        }
+      }
+    },
+    "A template build stopped before it finished: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A template build stopped before it finished: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートの作成が途中で止まりました: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 빌드가 완료되기 전에 중단됨: %@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Một bản dựng mẫu đã dừng trước khi xong: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有一个模板构建未完成就停止了：%@"
+          }
+        }
+      }
+    },
+    "A template never keeps them." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A template never keeps them."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートには残りません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿에는 보관되지 않습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mẫu không bao giờ giữ lại chúng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模板从不保留它们。"
+          }
+        }
+      }
+    },
+    "About 140 launch daemons a research machine rarely needs. Each machine can switch them back on in Guest System. Without Apple Account the guest cannot sign in." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About 140 launch daemons a research machine rarely needs. Each machine can switch them back on in Guest System. Without Apple Account the guest cannot sign in."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "研究用マシンではほとんど使わない約 140 の launch デーモンです。各マシンは「ゲストシステム」で元に戻せます。Apple アカウントをオフにすると、ゲストはサインインできません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연구용 머신에 거의 필요 없는 약 140개의 launch 데몬입니다. 각 머신은 게스트 시스템에서 다시 켤 수 있습니다. Apple 계정을 끄면 게스트가 로그인할 수 없습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khoảng 140 launch daemon mà máy nghiên cứu hiếm khi cần. Mỗi máy ảo có thể bật lại chúng trong Hệ thống máy khách. Khi tắt Tài khoản Apple, máy khách không thể đăng nhập."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "研究用虚拟机很少用到的约 140 个 launch 守护进程。每台虚拟机都可以在“客户机系统”中重新开启。关闭 Apple 账户后，客户机无法登录。"
+          }
+        }
+      }
+    },
+    "Allocated" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allocated"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "割り当て済み"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "할당됨"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã cấp phát"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已分配"
+          }
+        }
+      }
+    },
+    "Allocated on disk." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allocated on disk."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ディスク上の割り当て量です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "디스크에 할당된 크기입니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dung lượng đã cấp phát trên ổ đĩa."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "磁盘上已分配的空间。"
+          }
+        }
+      }
+    },
+    "Allocated on disk; deleting it frees about %@, the blocks no machine shares, once no local Time Machine snapshot keeps them." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allocated on disk; deleting it frees about %@, the blocks no machine shares, once no local Time Machine snapshot keeps them."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ディスク上の割り当て量です。削除すると、どのマシンとも共有していない約 %@ が解放されます。Time Machine のローカルスナップショットが保持している場合は、その期限が切れたときに解放されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "디스크에 할당된 크기입니다. 삭제하면 어떤 머신과도 공유하지 않는 약 %@이(가) 확보됩니다. Time Machine 로컬 스냅샷이 보관 중이면 스냅샷이 만료될 때 확보됩니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dung lượng đã cấp phát trên ổ đĩa; xóa sẽ giải phóng khoảng %@, phần không máy ảo nào dùng chung, sau khi không còn bản chụp nhanh cục bộ Time Machine nào giữ chúng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "磁盘上已分配的空间；删除约可释放 %@，即没有虚拟机共享的数据块；若 Time Machine 本地快照仍保留这些块，要等快照过期后才释放。"
+          }
+        }
+      }
+    },
+    "Also deletes the AirPods pairing assets, watch faces and the language data of languages not kept, about 1.2 GB. It cannot be undone: the trim is part of the template." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Also deletes the AirPods pairing assets, watch faces and the language data of languages not kept, about 1.2 GB. It cannot be undone: the trim is part of the template."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "さらに AirPods のペアリング用アセット、文字盤、保持しない言語の言語データも削除します（約 1.2 GB）。元に戻せません。削減はテンプレートの一部です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AirPods 페어링 에셋, 시계 페이스, 유지하지 않는 언어의 언어 데이터도 삭제합니다(약 1.2GB). 되돌릴 수 없습니다. 정리는 템플릿의 일부입니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xóa thêm tài nguyên ghép đôi AirPods, mặt đồng hồ và dữ liệu ngôn ngữ của các ngôn ngữ không giữ lại, khoảng 1,2 GB. Không thể hoàn tác: phần cắt giảm là một phần của mẫu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还会删除 AirPods 配对资源、表盘以及未保留语言的语言数据，约 1.2 GB。此操作无法撤销：裁剪是模板的一部分。"
+          }
+        }
+      }
+    },
+    "An outdated template has the key this machine needs." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An outdated template has the key this machine needs."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このマシンに必要なキーを持つテンプレートが古くなっています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 머신에 필요한 키를 가진 템플릿이 오래되었습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Một mẫu đã lỗi thời đang giữ khóa mà máy ảo này cần."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个过时的模板占用了这台虚拟机所需的键。"
+          }
+        }
+      }
+    },
+    "Another creation is building this template." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Another creation is building this template."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別の作成処理がこのテンプレートを作成中です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다른 생성 작업이 이 템플릿을 빌드하고 있습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Một lần tạo khác đang dựng mẫu này."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "另一个创建任务正在构建此模板。"
+          }
+        }
+      }
+    },
+    "App Store" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Store"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Store"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Store"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Store"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Store"
+          }
+        }
+      }
+    },
+    "Apply guest patches" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apply guest patches"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストのパッチを適用"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트 패치 적용"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Áp dụng bản vá máy khách"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用客户机补丁"
+          }
+        }
+      }
+    },
+    "Building template: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Building template: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートを作成中: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 빌드 중: %@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang dựng mẫu: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在构建模板：%@"
+          }
+        }
+      }
+    },
+    "Built from %@ and cloudOS %@ (%@)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Built from %@ and cloudOS %@ (%@)."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ と cloudOS %2$@ (%3$@) から作成。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 및 cloudOS %2$@ (%3$@)에서 빌드됨."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dựng từ %1$@ và cloudOS %2$@ (%3$@)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "构建自 %1$@ 和 cloudOS %2$@ (%3$@)。"
+          }
+        }
+      }
+    },
+    "Built with Core Bundle %@; every machine from it shares its SEP root secret and Data volume keys." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Built with Core Bundle %@; every machine from it shares its SEP root secret and Data volume keys."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Core Bundle %@ で作成。このテンプレートから作成したすべてのマシンは、SEP のルートシークレットと Data ボリュームの鍵を共有します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Core Bundle %@(으)로 빌드됨. 이 템플릿에서 만든 모든 머신은 SEP 루트 시크릿과 Data 볼륨 키를 공유합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dựng bằng Core Bundle %@; mọi máy ảo tạo từ mẫu này dùng chung bí mật gốc SEP và khóa ổ Data."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Core Bundle %@ 构建；从它创建的每台虚拟机都共享其 SEP 根密钥和 Data 卷密钥。"
+          }
+        }
+      }
+    },
+    "Checked apps are removed. Camera and Phone are never removed. Each machine can restore removed apps in Guest System." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checked apps are removed. Camera and Phone are never removed. Each machine can restore removed apps in Guest System."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "チェックした App を削除します。カメラと電話は削除しません。削除した App は各マシンの「ゲストシステム」で復元できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택한 앱이 제거됩니다. 카메라와 전화는 제거되지 않습니다. 각 머신은 게스트 시스템에서 제거된 앱을 복원할 수 있습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Các ứng dụng được đánh dấu sẽ bị gỡ. Camera và Điện thoại không bao giờ bị gỡ. Mỗi máy ảo có thể khôi phục ứng dụng đã gỡ trong Hệ thống máy khách."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勾选的 App 会被移除。相机和电话不会被移除。每台虚拟机都可以在“客户机系统”中恢复已移除的 App。"
+          }
+        }
+      }
+    },
+    "Cloned from template %@, which machines with these options share." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloned from template %@, which machines with these options share."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレート %@ から複製しました。同じオプションのマシンはこのテンプレートを共有します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 %@에서 복제했습니다. 같은 옵션의 머신은 이 템플릿을 공유합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nhân bản từ mẫu %@, mẫu mà các máy ảo cùng tùy chọn dùng chung."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从模板 %@ 克隆，使用相同选项的虚拟机共享此模板。"
+          }
+        }
+      }
+    },
+    "Conservative" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conservative"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控えめ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보수적"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thận trọng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保守"
+          }
+        }
+      }
+    },
+    "Conservative trim" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conservative trim"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控えめな削減"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보수적 정리"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cắt giảm thận trọng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保守裁剪"
+          }
+        }
+      }
+    },
+    "Create from a template" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create from a template"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートから作成"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿에서 생성"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tạo từ mẫu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从模板创建"
+          }
+        }
+      }
+    },
+    "Create machine from template" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create machine from template"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートからマシンを作成"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿에서 머신 생성"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tạo máy ảo từ mẫu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从模板创建虚拟机"
+          }
+        }
+      }
+    },
+    "Created from this template. It shares the template's SEP root secret and Data volume keys with every machine created from it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Created from this template. It shares the template's SEP root secret and Data volume keys with every machine created from it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このテンプレートから作成されました。テンプレートの SEP ルートシークレットと Data ボリュームの鍵を、このテンプレートから作成したすべてのマシンと共有しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 템플릿에서 생성되었습니다. 템플릿의 SEP 루트 시크릿과 Data 볼륨 키를 이 템플릿에서 만든 모든 머신과 공유합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Được tạo từ mẫu này. Máy ảo dùng chung bí mật gốc SEP và khóa ổ Data của mẫu với mọi máy ảo tạo từ mẫu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从此模板创建。它与从该模板创建的每台虚拟机共享模板的 SEP 根密钥和 Data 卷密钥。"
+          }
+        }
+      }
+    },
+    "Created from an earlier build of this template, since deleted. It shares its SEP root secret and Data volume keys only with the machines created from that build, not with the template that has this identifier now or the machines created from it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Created from an earlier build of this template, since deleted. It shares its SEP root secret and Data volume keys only with the machines created from that build, not with the template that has this identifier now or the machines created from it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このテンプレートの以前のビルドから作成されました。そのビルドは削除されています。SEP ルートシークレットと Data ボリュームの鍵はそのビルドから作成したマシンとだけ共有し、現在この識別子を持つテンプレートやそこから作成したマシンとは共有しません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 템플릿의 이전 빌드에서 생성되었으며, 그 빌드는 삭제되었습니다. SEP 루트 시크릿과 Data 볼륨 키는 그 빌드에서 만든 머신과만 공유하며, 현재 이 식별자를 가진 템플릿이나 그 템플릿에서 만든 머신과는 공유하지 않습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Được tạo từ một bản dựng trước của mẫu này, bản dựng đó đã bị xóa. Máy ảo chỉ dùng chung bí mật gốc SEP và khóa ổ Data với các máy ảo tạo từ bản dựng đó, không dùng chung với mẫu hiện mang mã định danh này hay các máy ảo tạo từ mẫu đó."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从此模板较早的一次构建创建，该构建已被删除。它只与从那次构建创建的虚拟机共享 SEP 根密钥和 Data 卷密钥，不与现在使用此标识符的模板及从其创建的虚拟机共享。"
+          }
+        }
+      }
+    },
+    "Created from this template, which was deleted. It shares the template's SEP root secret and Data volume keys with every machine created from it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Created from this template, which was deleted. It shares the template's SEP root secret and Data volume keys with every machine created from it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このテンプレートから作成されました。テンプレートは削除されています。テンプレートの SEP ルートシークレットと Data ボリュームの鍵を、このテンプレートから作成したすべてのマシンと共有しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 템플릿에서 생성되었으며, 템플릿은 삭제되었습니다. 템플릿의 SEP 루트 시크릿과 Data 볼륨 키를 이 템플릿에서 만든 모든 머신과 공유합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Được tạo từ mẫu này, mẫu đó đã bị xóa. Máy ảo dùng chung bí mật gốc SEP và khóa ổ Data của mẫu với mọi máy ảo tạo từ mẫu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从此模板创建，该模板已被删除。它与从该模板创建的每台虚拟机共享模板的 SEP 根密钥和 Data 卷密钥。"
+          }
+        }
+      }
+    },
+    "%@ (earlier build, deleted)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (earlier build, deleted)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（以前のビルド、削除済み）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@(이전 빌드, 삭제됨)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (bản dựng trước, đã xóa)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（较早的构建，已删除）"
+          }
+        }
+      }
+    },
+    "%@ (deleted)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (deleted)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（削除済み）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@(삭제됨)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (đã xóa)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（已删除）"
+          }
+        }
+      }
+    },
+    "Delete IPSWs…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete IPSWs…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IPSW を削除…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IPSW 삭제…"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xóa IPSW…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除 IPSW…"
+          }
+        }
+      }
+    },
+    "Delete template %@ in Templates, then retry. Machines created from it keep working." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete template %@ in Templates, then retry. Machines created from it keep working."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「テンプレート」でテンプレート %@ を削除してから再試行してください。そこから作成したマシンは引き続き動作します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿에서 템플릿 %@을(를) 삭제한 후 다시 시도하십시오. 이 템플릿에서 만든 머신은 계속 동작합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hãy xóa mẫu %@ trong Mẫu rồi thử lại. Các máy ảo tạo từ mẫu đó vẫn hoạt động."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在“模板”中删除模板 %@，然后重试。从它创建的虚拟机仍可正常使用。"
+          }
+        }
+      }
+    },
+    "Delete template %@?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete template %@?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレート %@ を削除しますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 %@을(를) 삭제하겠습니까?"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xóa mẫu %@?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除模板 %@？"
+          }
+        }
+      }
+    },
+    "Delete the IPSWs this template came from?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete the IPSWs this template came from?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このテンプレートの元になった IPSW を削除しますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 템플릿의 원본 IPSW를 삭제하겠습니까?"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xóa các IPSW đã dùng để dựng mẫu này?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除构建此模板所用的 IPSW？"
+          }
+        }
+      }
+    },
+    "Delete the selected template. Machines created from it keep working." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete the selected template. Machines created from it keep working."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択したテンプレートを削除します。そこから作成したマシンは引き続き動作します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택한 템플릿을 삭제합니다. 이 템플릿에서 만든 머신은 계속 동작합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xóa mẫu đã chọn. Các máy ảo tạo từ mẫu vẫn hoạt động."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除所选模板。从它创建的虚拟机仍可正常使用。"
+          }
+        }
+      }
+    },
+    "Delete the unfinished template build?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete the unfinished template build?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未完成のテンプレート作成を削除しますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "완료되지 않은 템플릿 빌드를 삭제하겠습니까?"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xóa bản dựng mẫu chưa hoàn tất?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除未完成的模板构建？"
+          }
+        }
+      }
+    },
+    "Deletes the software update ramdisk and baseband firmware, about 0.4 GB. It cannot be undone: the trim is part of the template." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deletes the software update ramdisk and baseband firmware, about 0.4 GB. It cannot be undone: the trim is part of the template."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ソフトウェア・アップデート用の RAM ディスクとベースバンドファームウェアを削除します（約 0.4 GB）。元に戻せません。削減はテンプレートの一部です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "소프트웨어 업데이트 램디스크와 베이스밴드 펌웨어를 삭제합니다(약 0.4GB). 되돌릴 수 없습니다. 정리는 템플릿의 일부입니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xóa ramdisk cập nhật phần mềm và firmware baseband, khoảng 0,4 GB. Không thể hoàn tác: phần cắt giảm là một phần của mẫu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除软件更新内存盘和基带固件，约 0.4 GB。此操作无法撤销：裁剪是模板的一部分。"
+          }
+        }
+      }
+    },
+    "Deleting it frees about %@, once no local Time Machine snapshot keeps those blocks; the blocks its machines share are freed once they change or are deleted." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleting it frees about %@, once no local Time Machine snapshot keeps those blocks; the blocks its machines share are freed once they change or are deleted."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除すると約 %@ が解放されます。Time Machine のローカルスナップショットが保持している場合は、その期限が切れたときに解放されます。マシンと共有しているブロックは、それらが変更または削除されたときに解放されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "삭제하면 약 %@이(가) 확보됩니다. Time Machine 로컬 스냅샷이 보관 중이면 스냅샷이 만료될 때 확보됩니다. 머신과 공유하는 블록은 해당 머신이 변경되거나 삭제될 때 확보됩니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xóa sẽ giải phóng khoảng %@, sau khi không còn bản chụp nhanh cục bộ Time Machine nào giữ các khối đó; các khối dùng chung với máy ảo được giải phóng khi chúng thay đổi hoặc bị xóa."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除约可释放 %@，若 Time Machine 本地快照仍保留这些块，要等快照过期后才释放；与虚拟机共享的数据块会在这些虚拟机改写或被删除后释放。"
+          }
+        }
+      }
+    },
+    "Deleting template…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleting template…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートを削除中…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 삭제 중…"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang xóa mẫu…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在删除模板…"
+          }
+        }
+      }
+    },
     "Edit…" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "編集…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "편집…"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sửa…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑…"
+          }
+        }
+      }
+    },
+    "Every block the machine's files hold, shared or not." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every block the machine's files hold, shared or not."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有の有無にかかわらず、マシンのファイルが保持しているすべてのブロックです。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "공유 여부와 상관없이 머신의 파일이 차지하는 모든 블록입니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mọi khối mà các tệp của máy ảo chiếm giữ, dùng chung hay không."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虚拟机文件占用的全部数据块，无论是否共享。"
+          }
+        }
+      }
+    },
+    "Exclusive" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exclusive"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "専有"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단독 사용"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Riêng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "独占"
+          }
+        }
+      }
+    },
+    "FaceTime" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FaceTime"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FaceTime"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FaceTime"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FaceTime"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FaceTime 通话"
+          }
+        }
+      }
+    },
+    "Find My" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find My"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "探す"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "나의 찾기"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tìm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查找"
+          }
+        }
+      }
+    },
+    "Find template" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find template"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートを検索"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 찾기"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tìm mẫu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查找模板"
+          }
+        }
+      }
+    },
+    "Games" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Games"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲーム"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게임"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trò chơi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏"
+          }
+        }
+      }
+    },
+    "Guest patch changes are applied to this machine after it is cloned. The template keeps the preset’s, so machines that do not change them share it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guest patch changes are applied to this machine after it is cloned. The template keeps the preset’s, so machines that do not change them share it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストのパッチの変更は、複製後にこのマシンへ適用します。テンプレートはプリセットのままなので、変更しないマシンと共有されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트 패치 변경은 복제한 뒤 이 머신에 적용합니다. 템플릿은 프리셋 그대로 유지되므로 변경하지 않는 머신과 공유됩니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Các thay đổi bản vá máy khách được áp dụng cho máy này sau khi nhân bản. Mẫu giữ nguyên theo cấu hình sẵn, nên các máy không thay đổi chúng dùng chung mẫu này."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机补丁的更改会在克隆后应用到此虚拟机。模板保持预设的补丁，因此不更改它们的虚拟机可以共用该模板。"
+          }
+        }
+      }
+    },
+    "Guest System" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guest System"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストシステム"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트 시스템"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hệ thống máy khách"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机系统"
+          }
+        }
+      }
+    },
+    "Guest System…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guest System…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストシステム…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트 시스템…"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hệ thống máy khách…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机系统…"
+          }
+        }
+      }
+    },
+    "Home" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Home"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ホーム"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "홈"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nhà"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "家庭"
+          }
+        }
+      }
+    },
+    "Its restored disk is deleted. A machine that needs this template builds it again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Its restored disk is deleted. A machine that needs this template builds it again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復元済みのディスクを削除します。このテンプレートが必要なマシンは、もう一度作成します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "복원된 디스크가 삭제됩니다. 이 템플릿이 필요한 머신은 다시 빌드합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ổ đĩa đã khôi phục sẽ bị xóa. Máy ảo nào cần mẫu này sẽ dựng lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将删除已恢复的磁盘。需要此模板的虚拟机会重新构建它。"
+          }
+        }
+      }
+    },
+    "Kept Languages" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kept Languages"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保持する言語"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "유지할 언어"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ngôn ngữ giữ lại"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留的语言"
+          }
+        }
+      }
+    },
+    "Machine" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Machine"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マシン"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "머신"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Máy ảo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虚拟机"
+          }
+        }
+      }
+    },
+    "Machines from one template share its SEP root secret and Data volume keys. Turn this off for a machine that needs keys of its own." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Machines from one template share its SEP root secret and Data volume keys. Turn this off for a machine that needs keys of its own."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じテンプレートから作成したマシンは、SEP のルートシークレットと Data ボリュームの鍵を共有します。独自の鍵が必要なマシンではオフにしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "같은 템플릿에서 만든 머신은 SEP 루트 시크릿과 Data 볼륨 키를 공유합니다. 고유한 키가 필요한 머신에서는 끄십시오."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Các máy ảo từ cùng một mẫu dùng chung bí mật gốc SEP và khóa ổ Data. Hãy tắt mục này cho máy ảo cần khóa riêng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从同一模板创建的虚拟机共享 SEP 根密钥和 Data 卷密钥。需要独立密钥的虚拟机请关闭此项。"
+          }
+        }
+      }
+    },
+    "Machines from this template need neither IPSW. A machine with other options downloads them again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Machines from this template need neither IPSW. A machine with other options downloads them again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このテンプレートから作成するマシンには、どちらの IPSW も不要です。別のオプションのマシンでは再度ダウンロードします。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 템플릿에서 만드는 머신에는 두 IPSW 모두 필요하지 않습니다. 다른 옵션의 머신은 다시 다운로드합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Máy ảo tạo từ mẫu này không cần IPSW nào. Máy ảo có tùy chọn khác sẽ tải lại chúng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从此模板创建的虚拟机不需要这两个 IPSW。使用其他选项的虚拟机会重新下载。"
+          }
+        }
+      }
+    },
+    "Messages" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Messages"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッセージ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메시지"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tin nhắn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "信息"
+          }
+        }
+      }
+    },
+    "New Machine builds a template the first time it creates a machine from a firmware, and clones every later machine with the same options from it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Machine builds a template the first time it creates a machine from a firmware, and clones every later machine with the same options from it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「新規マシン」は、あるファームウェアから初めてマシンを作成するときにテンプレートを作成し、同じオプションの以降のマシンはそこから複製します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 머신은 펌웨어로 처음 머신을 만들 때 템플릿을 빌드하고, 이후 같은 옵션의 머신은 이 템플릿에서 복제합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Máy ảo mới dựng một mẫu ở lần đầu tạo máy ảo từ một firmware, và nhân bản mọi máy ảo sau có cùng tùy chọn từ mẫu đó."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“新建虚拟机”首次用某个固件创建虚拟机时会构建模板，之后使用相同选项的虚拟机都从该模板克隆。"
+          }
+        }
+      }
+    },
+    "News" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "News"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "News"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "News"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "News"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "News"
+          }
+        }
+      }
+    },
+    "No Templates" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Templates"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートなし"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không có mẫu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有模板"
+          }
+        }
+      }
+    },
+    "No machine uses template %@ any more. It stays, taking about %@, so the next machine with its options is created in seconds. Delete it in Templates once it is no longer needed." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No machine uses template %@ any more. It stays, taking about %@, so the next machine with its options is created in seconds. Delete it in Templates once it is no longer needed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレート %1$@ を使っているマシンはなくなりました。テンプレートは約 %2$@ を使ったまま残るので、同じオプションの次のマシンは数秒で作成できます。不要になったら「テンプレート」で削除してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "더 이상 템플릿 %1$@을(를) 사용하는 머신이 없습니다. 템플릿은 약 %2$@을(를) 차지한 채 남아 있으므로 같은 옵션의 다음 머신은 몇 초 만에 생성됩니다. 더 이상 필요 없으면 템플릿에서 삭제하십시오."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không còn máy ảo nào dùng mẫu %1$@. Mẫu vẫn được giữ, chiếm khoảng %2$@, để máy ảo tiếp theo có cùng tùy chọn được tạo trong vài giây. Hãy xóa trong Mẫu khi không cần nữa."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已没有虚拟机使用模板 %1$@。模板会保留，约占用 %2$@，下一台使用相同选项的虚拟机可在几秒内创建。不再需要时，请在“模板”中删除它。"
+          }
+        }
+      }
+    },
+    "No machine was created from it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No machine was created from it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このテンプレートから作成したマシンはありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 템플릿에서 만든 머신이 없습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chưa có máy ảo nào được tạo từ mẫu này."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未有虚拟机从它创建。"
+          }
+        }
+      }
+    },
+    "No system app was removed." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No system app was removed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除されたシステム App はありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제거된 시스템 앱이 없습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không có ứng dụng hệ thống nào bị gỡ."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有移除任何系统 App。"
+          }
+        }
+      }
+    },
+    "No template to create the machine from. Retry from Find Template." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No template to create the machine from. Retry from Find Template."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マシンを作成するためのテンプレートがありません。「テンプレートを検索」から再試行してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "머신을 생성할 템플릿이 없습니다. 템플릿 찾기부터 다시 시도하십시오."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không có mẫu để tạo máy ảo. Hãy thử lại từ Tìm mẫu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可用于创建虚拟机的模板。请从“查找模板”重试。"
+          }
+        }
+      }
+    },
+    "No trim" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No trim"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削減なし"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "정리 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không cắt giảm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不裁剪"
+          }
+        }
+      }
+    },
+    "Not slimmed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not slimmed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "軽量化なし"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "간소화 안 함"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chưa tinh gọn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未精简"
+          }
+        }
+      }
+    },
+    "Nothing is deleted from the System volume." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing is deleted from the System volume."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System ボリュームからは何も削除しません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System 볼륨에서 아무것도 삭제하지 않습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không xóa gì khỏi ổ System."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不从 System 卷删除任何内容。"
+          }
+        }
+      }
+    },
+    "Outdated" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Outdated"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "古い"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오래됨"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lỗi thời"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已过时"
+          }
+        }
+      }
+    },
+    "Outdated: %@. New machines get a new template; this one only takes space." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Outdated: %@. New machines get a new template; this one only takes space."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "古いテンプレート: %@。新しいマシンには新しいテンプレートを使います。このテンプレートは容量を使うだけです。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오래됨: %@. 새 머신은 새 템플릿을 사용하며, 이 템플릿은 공간만 차지합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lỗi thời: %@. Máy ảo mới sẽ dùng mẫu mới; mẫu này chỉ chiếm dung lượng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已过时：%@。新虚拟机会使用新模板；此模板只占用空间。"
+          }
+        }
+      }
+    },
+    "Remove system apps" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove system apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システム App を削除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시스템 앱 제거"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gỡ ứng dụng hệ thống"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除系统 App"
+          }
+        }
+      }
+    },
+    "Removed System Apps" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Removed System Apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除したシステム App"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제거된 시스템 앱"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ứng dụng hệ thống đã gỡ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已移除的系统 App"
+          }
+        }
+      }
+    },
+    "Removed: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Removed: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除済み: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제거됨: %@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã gỡ: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已移除：%@"
+          }
+        }
+      }
+    },
+    "Restart Guest" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restart Guest"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストを再起動"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트 재시동"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khởi động lại máy khách"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重启客户机"
+          }
+        }
+      }
+    },
+    "Restart required" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restart required"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再起動が必要"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "재시동 필요"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cần khởi động lại"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要重启"
+          }
+        }
+      }
+    },
+    "Restore Selected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restore Selected"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択項目を復元"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택 항목 복원"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khôi phục mục đã chọn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复所选项"
+          }
+        }
+      }
+    },
+    "Retry once it has finished; the machine is then created from that template." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry once it has finished; the machine is then created from that template."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "それが終わってから再試行してください。マシンはそのテンプレートから作成されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "완료된 후 다시 시도하십시오. 그러면 머신이 해당 템플릿에서 생성됩니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hãy thử lại khi việc đó xong; máy ảo khi đó sẽ được tạo từ mẫu ấy."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在其完成后重试，届时将从该模板创建虚拟机。"
+          }
+        }
+      }
+    },
+    "Save template" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save template"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートを保存"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 저장"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lưu mẫu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存模板"
+          }
+        }
+      }
+    },
+    "Saved as template %@. The next machine with these options is cloned from it in seconds." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved as template %@. The next machine with these options is cloned from it in seconds."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレート %@ として保存しました。同じオプションの次のマシンは、ここから数秒で複製されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 %@(으)로 저장했습니다. 같은 옵션의 다음 머신은 몇 초 만에 여기에서 복제됩니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã lưu thành mẫu %@. Máy ảo tiếp theo có cùng tùy chọn sẽ được nhân bản từ mẫu này trong vài giây."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存为模板 %@。下一台使用相同选项的虚拟机会在几秒内从它克隆。"
+          }
+        }
+      }
+    },
+    "Service Profile" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Service Profile"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サービスプロファイル"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서비스 프로필"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cấu hình dịch vụ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务配置"
+          }
+        }
+      }
+    },
+    "Service profile and removed system apps" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Service profile and removed system apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サービスプロファイルと削除したシステム App"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서비스 프로필 및 제거된 시스템 앱"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cấu hình dịch vụ và ứng dụng hệ thống đã gỡ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务配置和已移除的系统 App"
+          }
+        }
+      }
+    },
+    "Service profile: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Service profile: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サービスプロファイル: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서비스 프로필: %@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cấu hình dịch vụ: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务配置：%@"
+          }
+        }
+      }
+    },
+    "Services" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Services"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サービス"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서비스"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dịch vụ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务"
+          }
+        }
+      }
+    },
+    "Services and accounts off" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Services and accounts off"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サービスとアカウントをオフ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서비스 및 계정 끔"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tắt dịch vụ và tài khoản"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已精简服务、已关闭账户"
+          }
+        }
+      }
+    },
+    "Services trimmed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Services trimmed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サービスを削減"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서비스 정리됨"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã cắt giảm dịch vụ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已精简服务"
+          }
+        }
+      }
+    },
+    "Set up template" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set up template"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートをセットアップ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 설정"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thiết lập mẫu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置模板"
+          }
+        }
+      }
+    },
+    "Show Templates" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Templates"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートを表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 보기"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hiện mẫu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示模板"
+          }
+        }
+      }
+    },
+    "Slim System" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Slim System"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システムを軽量化"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시스템 간소화"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tinh gọn hệ thống"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "精简系统"
+          }
+        }
+      }
+    },
+    "Slimming" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Slimming"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "軽量化"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "간소화"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tinh gọn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "精简"
+          }
+        }
+      }
+    },
+    "Standard trim" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard trim"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "標準の削減"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표준 정리"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cắt giảm tiêu chuẩn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标准裁剪"
+          }
+        }
+      }
+    },
+    "Start %@ to change these. They change the guest itself, through vphoned." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start %@ to change these. They change the guest itself, through vphoned."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "変更するには %@ を起動してください。これらは vphoned を通じてゲスト自体を変更します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "변경하려면 %@을(를) 시작하십시오. vphoned를 통해 게스트 자체를 변경합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hãy khởi động %@ để thay đổi các mục này. Chúng thay đổi chính máy khách, qua vphoned."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动 %@ 后才能更改这些项。它们通过 vphoned 更改客户机本身。"
+          }
+        }
+      }
+    },
+    "System Apps" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System Apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システム App"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시스템 앱"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ứng dụng hệ thống"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统 App"
+          }
+        }
+      }
+    },
+    "System Files" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System Files"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システムファイル"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시스템 파일"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tệp hệ thống"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统文件"
+          }
+        }
+      }
+    },
+    "The guest has restarted." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The guest has restarted."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストを再起動しました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트가 재시동되었습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Máy khách đã khởi động lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机已重启。"
+          }
+        }
+      }
+    },
+    "TV" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TV"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TV"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TV"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TV"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "视频"
+          }
+        }
+      }
+    },
+    "Template" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Template"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレート"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mẫu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模板"
+          }
+        }
+      }
+    },
+    "Template No Longer Used" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Template No Longer Used"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使われなくなったテンプレート"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "더 이상 사용되지 않는 템플릿"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mẫu không còn được dùng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模板已不再使用"
+          }
+        }
+      }
+    },
+    "Templates" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Templates"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレート"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mẫu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模板"
+          }
+        }
+      }
+    },
+    "Templates…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Templates…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレート…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿…"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mẫu…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模板…"
+          }
+        }
+      }
+    },
+    "The IPSWs were deleted." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The IPSWs were deleted."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IPSW を削除しました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IPSW를 삭제했습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã xóa các IPSW."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已删除 IPSW。"
+          }
+        }
+      }
+    },
+    "The blocks no other machine or template holds: what deleting it frees, once no local Time Machine snapshot keeps them. The rest is shared with its template or clones." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The blocks no other machine or template holds: what deleting it frees, once no local Time Machine snapshot keeps them. The rest is shared with its template or clones."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "他のマシンやテンプレートが保持していないブロックで、削除すると解放される量です。Time Machine のローカルスナップショットが保持している場合は、その期限が切れたときに解放されます。残りはテンプレートまたは複製と共有しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다른 머신이나 템플릿이 차지하지 않는 블록으로, 삭제하면 확보되는 크기입니다. Time Machine 로컬 스냅샷이 보관 중이면 스냅샷이 만료될 때 확보됩니다. 나머지는 템플릿 또는 복제본과 공유합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Các khối không máy ảo hay mẫu nào khác giữ: phần được giải phóng khi xóa, sau khi không còn bản chụp nhanh cục bộ Time Machine nào giữ chúng. Phần còn lại dùng chung với mẫu hoặc các bản nhân bản."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有其他虚拟机或模板占用的数据块，即删除后可释放的空间；若 Time Machine 本地快照仍保留这些块，要等快照过期后才释放。其余部分与模板或克隆共享。"
+          }
+        }
+      }
+    },
+    "The guest is restarting." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The guest is restarting."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストを再起動しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트가 재시동 중입니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Máy khách đang khởi động lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机正在重启。"
+          }
+        }
+      }
+    },
+    "The machine is restored on its own, with keys of its own. It is not slimmed, and starts at Setup Assistant." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The machine is restored on its own, with keys of its own. It is not slimmed, and starts at Setup Assistant."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マシンは単独で復元され、独自の鍵を持ちます。軽量化されず、設定アシスタントから始まります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "머신이 단독으로 복원되며 고유한 키를 가집니다. 간소화되지 않으며 설정 지원에서 시작합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Máy ảo được khôi phục riêng, với khóa riêng. Máy ảo không được tinh gọn và bắt đầu ở Trợ lý thiết lập."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "虚拟机将单独恢复，拥有独立的密钥。不会精简，并从设置助理开始。"
+          }
+        }
+      }
+    },
+    "The next machine with its options builds a new template, which takes a restore." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The next machine with its options builds a new template, which takes a restore."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じオプションの次のマシンでは新しいテンプレートを作成するため、復元が必要になります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "같은 옵션의 다음 머신은 새 템플릿을 빌드하므로 복원이 필요합니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Máy ảo tiếp theo có cùng tùy chọn sẽ dựng mẫu mới, việc này cần một lần khôi phục."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一台使用相同选项的虚拟机需要构建新模板，这需要一次恢复。"
+          }
+        }
+      }
+    },
+    "The path is too long. Use a location with a shorter path." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The path is too long. Use a location with a shorter path."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パスが長すぎます。より短いパスの場所を使用してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "경로가 너무 깁니다. 더 짧은 경로의 위치를 사용하십시오."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đường dẫn quá dài. Hãy dùng vị trí có đường dẫn ngắn hơn."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "路径过长。请使用路径更短的位置。"
+          }
+        }
+      }
+    },
+    "The template keeps every file, service and app. Setup Assistant is still skipped." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The template keeps every file, service and app. Setup Assistant is still skipped."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートはすべてのファイル、サービス、App を保持します。設定アシスタントはスキップされます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿은 모든 파일, 서비스, 앱을 유지합니다. 설정 지원은 계속 건너뜁니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mẫu giữ lại mọi tệp, dịch vụ và ứng dụng. Trợ lý thiết lập vẫn được bỏ qua."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模板保留所有文件、服务和 App。仍会跳过设置助理。"
+          }
+        }
+      }
+    },
+    "The template's setup boot removed these and kept a backup in the guest. A restored app returns to the Home Screen after SpringBoard restarts." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The template's setup boot removed these and kept a backup in the guest. A restored app returns to the Home Screen after SpringBoard restarts."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートのセットアップ起動でこれらを削除し、ゲスト内にバックアップを残しました。復元した App は SpringBoard の再起動後にホーム画面に戻ります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 설정 부팅에서 이 앱들을 제거하고 게스트에 백업을 남겼습니다. 복원된 앱은 SpringBoard가 재시동된 후 홈 화면에 다시 나타납니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lần khởi động thiết lập của mẫu đã gỡ các ứng dụng này và giữ bản sao lưu trong máy khách. Ứng dụng được khôi phục sẽ trở lại Màn hình chính sau khi SpringBoard khởi động lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模板的设置启动移除了这些 App，并在客户机中保留了备份。恢复的 App 会在 SpringBoard 重启后回到主屏幕。"
+          }
+        }
+      }
+    },
+    "This iOS version has no trimmed list." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This iOS version has no trimmed list."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この iOS バージョンには削減リストがありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 iOS 버전에는 정리 목록이 없습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phiên bản iOS này không có danh sách cắt giảm."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 iOS 版本没有精简列表。"
+          }
+        }
+      }
+    },
+    "Trim" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trim"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削減"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "정리"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cắt giảm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "裁剪"
+          }
+        }
+      }
+    },
+    "Trim system files" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trim system files"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システムファイルを削減"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시스템 파일 정리"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cắt giảm tệp hệ thống"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "裁剪系统文件"
+          }
+        }
+      }
+    },
+    "Trim: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trim: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削減: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "정리: %@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cắt giảm: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "裁剪：%@"
+          }
+        }
+      }
+    },
+    "Trimmed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trimmed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削減済み"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "정리됨"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã cắt giảm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "精简"
+          }
+        }
+      }
+    },
+    "Trimmed turns off about 140 launch daemons a research machine rarely needs; None turns back on only those it turned off. Either takes effect when the guest restarts." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trimmed turns off about 140 launch daemons a research machine rarely needs; None turns back on only those it turned off. Either takes effect when the guest restarts."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「削減済み」は研究用マシンではほとんど使わない約 140 の launch デーモンをオフにします。「なし」はそれでオフにしたものだけをオンに戻します。どちらもゲストの再起動後に反映されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "정리됨은 연구용 머신에 거의 필요 없는 약 140개의 launch 데몬을 끕니다. 없음은 정리됨이 끈 데몬만 다시 켭니다. 둘 다 게스트를 재시동하면 적용됩니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã cắt giảm sẽ tắt khoảng 140 launch daemon mà máy nghiên cứu hiếm khi cần; Không có chỉ bật lại những gì nó đã tắt. Cả hai có hiệu lực khi máy khách khởi động lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“精简”会关闭研究用虚拟机很少用到的约 140 个 launch 守护进程；“无”只重新开启由它关闭的那些。两者都在客户机重启后生效。"
+          }
+        }
+      }
+    },
+    "Trims system files, unneeded services and system apps once, in the template the machine is cloned from. Choose what goes in Template." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trims system files, unneeded services and system apps once, in the template the machine is cloned from. Choose what goes in Template."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システムファイル、不要なサービス、システム App を、マシンの複製元のテンプレートで一度だけ削減します。対象は「テンプレート」で選択します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "머신을 복제하는 원본 템플릿에서 시스템 파일, 불필요한 서비스, 시스템 앱을 한 번 정리합니다. 정리할 항목은 템플릿에서 선택하십시오."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cắt giảm tệp hệ thống, dịch vụ không cần và ứng dụng hệ thống một lần, trong mẫu mà máy ảo được nhân bản từ đó. Chọn mục cắt giảm trong Mẫu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在虚拟机克隆所用的模板中一次性裁剪系统文件、不需要的服务和系统 App。在“模板”中选择要裁剪的内容。"
+          }
+        }
+      }
+    },
+    "Turn off Apple Account" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn off Apple Account"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple アカウントをオフ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple 계정 끄기"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tắt Tài khoản Apple"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭 Apple 账户"
+          }
+        }
+      }
+    },
+    "Turn off unneeded services" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn off unneeded services"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不要なサービスをオフ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "불필요한 서비스 끄기"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tắt dịch vụ không cần"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭不需要的服务"
+          }
+        }
+      }
+    },
+    "Unable to apply the guest patches. Check the log for details." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to apply the guest patches. Check the log for details."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストのパッチを適用できません。詳細はログを確認してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트 패치를 적용할 수 없습니다. 자세한 내용은 로그를 확인하십시오."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể áp dụng các bản vá máy khách. Hãy xem nhật ký để biết chi tiết."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法应用客户机补丁。请查看日志了解详情。"
+          }
+        }
+      }
+    },
+    "Unable to Change the Service Profile" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to Change the Service Profile"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サービスプロファイルを変更できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서비스 프로필을 변경할 수 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể thay đổi cấu hình dịch vụ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法更改服务配置"
+          }
+        }
+      }
+    },
+    "Unable to List Templates" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to List Templates"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートを一覧表示できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 목록을 가져올 수 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể liệt kê mẫu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法列出模板"
+          }
+        }
+      }
+    },
+    "Unable to Restart the Guest" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to Restart the Guest"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストを再起動できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트를 재시동할 수 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể khởi động lại máy khách"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法重启客户机"
+          }
+        }
+      }
+    },
+    "Unable to Restore the Apps" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to Restore the Apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App を復元できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "앱을 복원할 수 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể khôi phục ứng dụng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法恢复 App"
+          }
+        }
+      }
+    },
+    "Unable to read the saved template." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to read the saved template."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存したテンプレートを読み取れません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 템플릿을 읽을 수 없습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể đọc mẫu đã lưu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取已保存的模板。"
+          }
+        }
+      }
+    },
+    "Unable to read the template search." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to read the template search."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートの検索結果を読み取れません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 검색 결과를 읽을 수 없습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể đọc kết quả tìm mẫu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取模板查找结果。"
+          }
+        }
+      }
+    },
+    "Wallet" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wallet"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ウォレット"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지갑"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ví"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "钱包"
+          }
+        }
+      }
+    },
+    "Without a template the machine is not slimmed. Turn templates on in Template." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Without a template the machine is not slimmed. Turn templates on in Template."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートを使わない場合、マシンは軽量化されません。「テンプレート」でテンプレートをオンにしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 없이 만든 머신은 간소화되지 않습니다. 템플릿에서 템플릿을 켜십시오."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không có mẫu thì máy ảo không được tinh gọn. Hãy bật mẫu trong Mẫu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不使用模板时，虚拟机不会精简。请在“模板”中开启模板。"
+          }
+        }
+      }
+    },
+    "^[%lld app](inflect: true) removed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "^[%lld app](inflect: true) removed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 個の App を削除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "앱 %lld개 제거됨"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã gỡ %lld ứng dụng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已移除 %lld 个 App"
+          }
+        }
+      }
+    },
+    "^[%lld app](inflect: true) restored." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "^[%lld app](inflect: true) restored."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 個の App を復元しました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "앱 %lld개를 복원했습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã khôi phục %lld ứng dụng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已恢复 %lld 个 App。"
+          }
+        }
+      }
     },
     "iPadOS" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPadOS"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPadOS"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPadOS"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPadOS"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPadOS"
+          }
+        }
+      }
+    },
+    "iTunes Store" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iTunes Store"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iTunes Store"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iTunes Store"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iTunes Store"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iTunes Store"
+          }
+        }
+      }
     },
     "Device" : {
       "localizations" : {
@@ -5701,6 +10149,15 @@
         "ko" : { "stringUnit" : { "state" : "translated", "value" : "게스트 환경을 업데이트할 수 없습니다." } },
         "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không thể cập nhật môi trường máy khách." } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法更新客户机环境。" } }
+      }
+    },
+    "Unable to Update the Guest Environment of %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to Update the Guest Environment of %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ のゲスト環境を更新できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@의 게스트 환경을 업데이트할 수 없음" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không thể cập nhật môi trường máy khách của %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法更新 %@ 的客户机环境" } }
       }
     },
     "Install Custom Firmware" : {
@@ -13130,6 +17587,15 @@
         "ko" : { "stringUnit" : { "state" : "translated", "value" : "커널을 업데이트할 수 없습니다." } },
         "vi" : { "stringUnit" : { "state" : "translated", "value" : "Không thể cập nhật kernel." } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法更新内核。" } }
+      }
+    },
+    "The disk of %@ is open in process %@, which does not run it. Try again once that process closes it." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The disk of %@ is open in process %@, which does not run it. Try again once that process closes it." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ のディスクはプロセス %2$@ が開いていますが、このプロセスはマシンを実行していません。そのプロセスがディスクを閉じてから、もう一度お試しください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%1$@의 디스크를 프로세스 %2$@이(가) 열고 있지만, 이 프로세스는 머신을 실행하지 않습니다. 해당 프로세스가 디스크를 닫은 후 다시 시도하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đĩa của %1$@ đang được mở bởi tiến trình %2$@, tiến trình này không chạy máy. Hãy thử lại sau khi tiến trình đó đóng đĩa." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ 的磁盘正被进程 %2$@ 打开，该进程并未运行这台机器。请等该进程关闭磁盘后再试。" } }
       }
     },
     "Swaps the Preboot kernelcache for the one this machine's patches resolve to, keeping the data (no restore)." : {

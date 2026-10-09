@@ -16,18 +16,92 @@ public struct VPhoneDiskRebaseReport: Equatable, Sendable {
     /// stored once for both machines. Counted in whole units of
     /// `VPhoneDiskRebase.blockSize`.
     public var sharedBytes: Int64 = 0
+    /// The part of `sharedBytes` the target stores in blocks of its own
+    /// before the rebase: what the rebase saves, once nothing else holds
+    /// those blocks. The rest costs the target nothing already: there it
+    /// holds no data, or its blocks are the base's, at the same device
+    /// offset by `F_LOG2PHYS_EXT`, as in two clones of one template.
+    public var newlySharedBytes: Int64 = 0
     /// Bytes that differ from the base and were written from the target.
     public var writtenBytes: Int64 = 0
     /// Bytes where the base holds data and the target reads as zeros, a hole
     /// or zero-filled blocks. They become holes in the rebased image.
     public var punchedBytes: Int64 = 0
 
+    /// Identical bytes that already cost the target nothing: sharing them
+    /// again frees nothing.
+    public var alreadySharedBytes: Int64 {
+        sharedBytes - newlySharedBytes
+    }
+
     public init() {}
+}
+
+// MARK: - Base
+
+/// What a machine is rebased onto: another machine of the library, or a
+/// frozen template in its `.templates`. A template is never booted, so its
+/// image does not drift; the rebase only clones it and leaves it as it is.
+public struct VPhoneDiskRebaseBase: Sendable {
+    public let bundle: VPhoneBundle
+    /// Set when the base is a template.
+    public let template: VPhoneMachineTemplate?
+
+    public init(bundle: VPhoneBundle, template: VPhoneMachineTemplate? = nil) {
+        self.bundle = bundle
+        self.template = template
+    }
+
+    /// How output names it.
+    public var label: String {
+        template.map { "template \($0.identifier)" } ?? bundle.name
+    }
+
+    /// The machine named `name`, or else the template with that identifier
+    /// or unique prefix. A machine wins when both match.
+    public static func resolve(_ name: String, in library: VPhoneLibrary) throws -> Self {
+        do {
+            return try Self(bundle: library.bundle(named: name))
+        } catch VPhoneLibraryError.notFound {
+            let template: VPhoneMachineTemplate
+            do {
+                template = try VPhoneMachineTemplates.template(name, in: library)
+            } catch VPhoneMachineTemplateError.notFound, VPhoneMachineTemplateError.invalidIdentifier {
+                throw VPhoneDiskRebaseError.baseNotFound(name: name)
+            }
+            return try Self(bundle: template.bundle(), template: template)
+        }
+    }
+
+    /// The template that `target` and this base both come from, by their
+    /// records: `target` was cloned from this template, or both machines
+    /// were cloned from the same build of one. Their images then already
+    /// share its blocks wherever neither has written since, and a rebase
+    /// frees little. Nil when the records do not show it.
+    public func commonTemplate(with target: VPhoneBundle, in library: VPhoneLibrary) -> String? {
+        guard let source = VPhoneMachineTemplates.readSource(inBundle: target.url) else { return nil }
+        if let template {
+            return source.isClone(of: template.record) ? template.identifier : nil
+        }
+        guard let other = VPhoneMachineTemplates.readSource(inBundle: bundle.url),
+              other.identifier == source.identifier
+        else { return nil }
+        if let build = source.build, let otherBuild = other.build {
+            return build == otherBuild ? source.identifier : nil
+        }
+        // A record without a build: only the template that exists now, by
+        // the dates `isClone` compares, can tell.
+        guard let template = try? VPhoneMachineTemplates.template(source.identifier, in: library),
+              source.isClone(of: template.record), other.isClone(of: template.record)
+        else { return nil }
+        return source.identifier
+    }
 }
 
 // MARK: - Rebase
 
-/// Re-shares a stopped machine's disk image with another machine's, offline.
+/// Re-shares a stopped machine's disk image with another machine's, or a
+/// template's, offline.
 ///
 /// Two machines restored separately from one IPSW share nothing on disk, yet
 /// most of their system volume is byte-identical at the same offset in both
@@ -112,6 +186,7 @@ public enum VPhoneDiskRebase {
             target: targetFile,
             reference: baseFile,
             referenceData: baseFile.dataRanges(upTo: min(size, baseFile.size)),
+            alreadyShared: physicallyShared(targetFile, baseFile),
             size: size,
             chunkSize: options.chunkSize,
         )
@@ -143,6 +218,16 @@ public enum VPhoneDiskRebase {
         try VPhoneBundleActivity.requireStopped(target)
         try VPhoneBundleActivity.requireStopped(base)
         let original = try FileState(path: targetImage.path)
+        // Mapped before the clone exists, from the two images as they are: a
+        // block of the target that is the base's already costs nothing now
+        // and frees nothing later.
+        let alreadyShared = try {
+            let targetFile = try ImageFile(path: targetImage.path, writable: false)
+            defer { targetFile.close() }
+            let baseFile = try ImageFile(path: baseImage.path, writable: false)
+            defer { baseFile.close() }
+            return try physicallyShared(targetFile, baseFile)
+        }()
 
         let fm = FileManager.default
         let staging = target.url.appendingPathComponent(stagingPrefix + UUID().uuidString, isDirectory: true)
@@ -173,6 +258,7 @@ public enum VPhoneDiskRebase {
                 target: targetFile,
                 reference: stagedFile,
                 referenceData: stagedFile.dataRanges(upTo: size),
+                alreadyShared: alreadyShared,
                 size: size,
                 chunkSize: options.chunkSize,
             )
@@ -295,6 +381,8 @@ public enum VPhoneDiskRebase {
         let reference: ImageFile
         /// The reference's data ranges, sorted, within the target's size.
         let referenceData: [Range<Int64>]
+        /// Where the target already is the base's blocks, sorted.
+        let alreadyShared: [Range<Int64>]
         let size: Int64
         let chunkSize: Int
 
@@ -305,12 +393,15 @@ public enum VPhoneDiskRebase {
             var report = VPhoneDiskRebaseReport()
             report.logicalSize = size
             let block = VPhoneDiskRebase.blockSize
-            let spans = try alignedUnion(target.dataRanges(upTo: size), referenceData, block: Int64(block), size: size)
+            let targetData = try target.dataRanges(upTo: size)
+            let spans = alignedUnion(targetData, referenceData, block: Int64(block), size: size)
             let total = spans.reduce(Int64(0)) { $0 + Int64($1.count) }
             let ours = AlignedBuffer(size: chunkSize)
             let theirs = AlignedBuffer(size: chunkSize)
             let zeros = AlignedBuffer(size: block)
             var cursor = 0 // into referenceData; blocks are visited in order
+            var ownData = Overlap(ranges: targetData)
+            var baseBlocks = Overlap(ranges: alreadyShared)
             var done: Int64 = 0
             progress(.comparing, 0, total)
 
@@ -351,6 +442,11 @@ public enum VPhoneDiskRebase {
                             try flush()
                             if referenceHasData {
                                 report.sharedBytes += Int64(count)
+                                // Only the target's own blocks are a saving:
+                                // not its holes, nor blocks that already are
+                                // the base's (a subset of its data).
+                                let unit = at ..< at + Int64(count)
+                                report.newlySharedBytes += ownData.bytes(in: unit) - baseBlocks.bytes(in: unit)
                             }
                         } else {
                             // Zeros where the reference has other bytes become
@@ -383,6 +479,30 @@ public enum VPhoneDiskRebase {
         }
     }
 
+    /// How many bytes of sorted, disjoint ranges lie in each of a series of
+    /// windows that only move forward.
+    private struct Overlap {
+        let ranges: [Range<Int64>]
+        private var index = 0
+
+        init(ranges: [Range<Int64>]) {
+            self.ranges = ranges
+        }
+
+        mutating func bytes(in window: Range<Int64>) -> Int64 {
+            while index < ranges.count, ranges[index].upperBound <= window.lowerBound {
+                index += 1
+            }
+            var total: Int64 = 0
+            var next = index
+            while next < ranges.count, ranges[next].lowerBound < window.upperBound {
+                total += min(window.upperBound, ranges[next].upperBound) - max(window.lowerBound, ranges[next].lowerBound)
+                next += 1
+            }
+            return total
+        }
+    }
+
     /// Calls `body` for each piece of `span`, split at multiples of
     /// `chunkSize` so pieces of different spans never overlap a boundary.
     private static func forEachChunk(
@@ -398,6 +518,57 @@ public enum VPhoneDiskRebase {
             try body(offset, Int(end - offset))
             offset = end
         }
+    }
+
+    // MARK: - Physical sharing
+
+    /// A run of a file's data that lies contiguously on the device: the
+    /// byte at `logical.lowerBound + n` is at device offset `physical + n`.
+    struct PhysicalRun: Equatable {
+        let logical: Range<Int64>
+        let physical: Int64
+    }
+
+    /// Where the target's data, below its size and the base's, is already
+    /// the base's blocks: the same device offset for the same file offset.
+    /// Two clones of one image, or a clone and its source, share these until
+    /// either writes them. A volume that does not map files (not APFS, a
+    /// compressed file) gives no ranges, and every identical byte the target
+    /// holds data for then counts as newly shared.
+    private static func physicallyShared(_ target: ImageFile, _ base: ImageFile) throws -> [Range<Int64>] {
+        guard target.device == base.device else { return [] }
+        let limit = min(target.size, base.size)
+        guard let ours = try target.physicalRuns(in: target.dataRanges(upTo: limit)),
+              let theirs = try base.physicalRuns(in: base.dataRanges(upTo: limit))
+        else { return [] }
+        return sharedRanges(ours, theirs)
+    }
+
+    /// The file offsets where two files' runs, each sorted and disjoint,
+    /// point at the same device offsets, merged.
+    static func sharedRanges(_ a: [PhysicalRun], _ b: [PhysicalRun]) -> [Range<Int64>] {
+        var shared: [Range<Int64>] = []
+        var i = 0
+        var j = 0
+        while i < a.count, j < b.count {
+            let lower = max(a[i].logical.lowerBound, b[j].logical.lowerBound)
+            let upper = min(a[i].logical.upperBound, b[j].logical.upperBound)
+            // Same device offset at one file offset of the overlap means the
+            // same at all of them: both runs are contiguous.
+            if lower < upper, a[i].physical - a[i].logical.lowerBound == b[j].physical - b[j].logical.lowerBound {
+                if let last = shared.last, last.upperBound == lower {
+                    shared[shared.count - 1] = last.lowerBound ..< upper
+                } else {
+                    shared.append(lower ..< upper)
+                }
+            }
+            if a[i].logical.upperBound <= b[j].logical.upperBound {
+                i += 1
+            } else {
+                j += 1
+            }
+        }
+        return shared
     }
 
     /// The union of two sorted range lists, widened to whole blocks (the last
@@ -488,6 +659,7 @@ private final class AlignedBuffer {
 private final class ImageFile {
     let path: String
     let descriptor: Int32
+    let device: dev_t
     let size: Int64
     private var isOpen = true
 
@@ -504,6 +676,7 @@ private final class ImageFile {
             Darwin.close(descriptor)
             throw VPhoneDiskRebaseError.failed(path: path, reason: reason)
         }
+        device = info.st_dev
         size = Int64(info.st_size)
     }
 
@@ -542,6 +715,39 @@ private final class ImageFile {
             offset = end
         }
         return ranges
+    }
+
+    /// Where `ranges` of the file lie on the device, by `F_LOG2PHYS_EXT`, one
+    /// call per contiguous extent: a 20 GB image of about 120,000 extents
+    /// maps in a tenth of a second. Nil when the file system does not map
+    /// files; a stretch without a device offset (not yet allocated) is left
+    /// out.
+    func physicalRuns(in ranges: [Range<Int64>]) -> [VPhoneDiskRebase.PhysicalRun]? {
+        var runs: [VPhoneDiskRebase.PhysicalRun] = []
+        for range in ranges {
+            var position = range.lowerBound
+            while position < range.upperBound {
+                var request = log2phys()
+                request.l2p_devoffset = off_t(position)
+                request.l2p_contigbytes = off_t(range.upperBound - position)
+                guard fcntl(descriptor, F_LOG2PHYS_EXT, &request) == 0, request.l2p_contigbytes > 0 else {
+                    return nil
+                }
+                let length = min(Int64(request.l2p_contigbytes), range.upperBound - position)
+                let physical = Int64(request.l2p_devoffset)
+                if physical >= 0 {
+                    if let last = runs.last, last.logical.upperBound == position,
+                       last.physical + Int64(last.logical.count) == physical
+                    {
+                        runs[runs.count - 1] = .init(logical: last.logical.lowerBound ..< position + length, physical: last.physical)
+                    } else {
+                        runs.append(.init(logical: position ..< position + length, physical: physical))
+                    }
+                }
+                position += length
+            }
+        }
+        return runs
     }
 
     /// Fills `length` bytes from `offset`; past the end of the file they
@@ -621,6 +827,7 @@ private final class ImageFile {
 
 public enum VPhoneDiskRebaseError: Error, Equatable {
     case sameMachine(name: String)
+    case baseNotFound(name: String)
     case missingImage(machine: String, path: String)
     case notCloneable(path: String)
     case insufficientSpace(path: String, available: Int64, reserve: Int64)
@@ -635,6 +842,8 @@ extension VPhoneDiskRebaseError: CustomStringConvertible, LocalizedError {
         switch self {
         case let .sameMachine(name):
             "Cannot rebase VM '\(name)' onto itself. Name a different VM as the base."
+        case let .baseNotFound(name):
+            "No VM or template named '\(name)'. Name a VM from `vphone-cli vm list`, or a template from `vphone-cli vm template list` by its identifier or a unique prefix of at least four hex digits."
         case let .missingImage(machine, path):
             "VM '\(machine)' has no disk image at \(path)."
         case let .notCloneable(path):

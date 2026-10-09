@@ -333,6 +333,8 @@
 	<array>
 		<string>critical-alerts</string>
 	</array>
+	<key>com.apple.private.vfs.snapshot</key>
+	<true/>
 	<key>com.apple.rootless.critical</key>
 	<true/>
 	<key>com.apple.rootless.datavault.metadata</key>

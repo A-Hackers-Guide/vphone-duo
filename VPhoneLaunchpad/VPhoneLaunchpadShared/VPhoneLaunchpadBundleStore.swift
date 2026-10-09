@@ -82,7 +82,9 @@ nonisolated enum VPhoneLaunchpadNames {
     /// `vm snapshot`, which the Snapshots sheet runs. 2.8.0 added `vm config
     /// --sync-host-location`, which a machine's Settings pass. 2.9.0 added
     /// `--work-parent` on `cfw install`, `update-environment` and
-    /// `update-kernel`, which the helper passes.
+    /// `update-kernel`, which the helper passes, and `vm template
+    /// find|trim|setup|adopt --json|list --json|delete` and `vm create
+    /// --template --skip-first-boot`, which New Machine and Templates run.
     private static let minimumBundleComponents = (2, 9, 0)
     static let minimumBundleVersion =
         "\(minimumBundleComponents.0).\(minimumBundleComponents.1).\(minimumBundleComponents.2)"

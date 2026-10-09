@@ -3,6 +3,8 @@ import SwiftUI
 /// New Machine's Advanced page: network, patches and restore options, as
 /// sections of New Machine's form. It edits New Machine's own state.
 struct VPhoneLaunchpadNewMachineAdvancedView: View {
+    /// A template never keeps the restore files.
+    var usesTemplate: Bool
     @Binding var network: String
     @Binding var patches: VPhoneLaunchpadPatchSelection
     @Binding var keepArtifacts: Bool
@@ -33,8 +35,15 @@ struct VPhoneLaunchpadNewMachineAdvancedView: View {
 
         patchSection
 
-        Section("Options") {
+        Section {
             Toggle("Keep prepared restore files", isOn: $keepArtifacts)
+                .disabled(usesTemplate)
+        } header: {
+            Text("Options")
+        } footer: {
+            if usesTemplate {
+                Text("A template never keeps them.").foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -84,6 +93,10 @@ struct VPhoneLaunchpadNewMachineAdvancedView: View {
             }
             if patches.hasOverrides {
                 Text("Differs from the preset: \(patches.blocked.count) off, \(patches.allowed.count) on.")
+                    .foregroundStyle(.secondary)
+            }
+            if usesTemplate, let patchCatalog, !patchCatalog.guestOverrides(patches).isEmpty {
+                Text("Guest patch changes are applied to this machine after it is cloned. The template keeps the preset’s, so machines that do not change them share it.")
                     .foregroundStyle(.secondary)
             }
             if !essentialOff.isEmpty {

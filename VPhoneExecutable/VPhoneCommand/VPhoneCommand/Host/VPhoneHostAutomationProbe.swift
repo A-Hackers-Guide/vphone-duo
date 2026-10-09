@@ -11,8 +11,14 @@ enum VPhoneHostAutomationProbe {
     }
 
     /// One request, one reply line. Nil when the socket is not there or the
-    /// reply is not JSON.
-    static func send(_ request: [String: Any], socketPath: String, timeout seconds: Int = 2) -> [String: Any]? {
+    /// reply is not JSON. `timeout` bounds each read; `maximumReply` the
+    /// reply (an `apps.list` or `processes.list` runs to a few hundred KB).
+    static func send(
+        _ request: [String: Any],
+        socketPath: String,
+        timeout seconds: Int = 2,
+        maximumReply: Int = 1 << 20,
+    ) -> [String: Any]? {
         guard case let .success(fd) = VPhoneUnixSocket.connect(to: socketPath) else { return nil }
         defer { close(fd) }
 
@@ -32,8 +38,8 @@ enum VPhoneHostAutomationProbe {
         guard written == request.count else { return nil }
 
         var reply = Data()
-        var buffer = [UInt8](repeating: 0, count: 512)
-        while reply.count < 1 << 20 {
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        while reply.count < maximumReply {
             let count = buffer.withUnsafeMutableBytes { bytes in
                 Darwin.read(fd, bytes.baseAddress, bytes.count)
             }

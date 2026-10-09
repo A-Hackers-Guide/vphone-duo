@@ -77,6 +77,7 @@ struct VPhoneLaunchpadMachineInspector: View {
     let onShowProgress: (VPhoneLaunchpadMachinePath) -> Void
     let onOpenConsole: (VPhoneLaunchpadMachinePath) -> Void
     var onChangeBundle: (VPhoneLaunchpadMachine) -> Void = { _ in }
+    var onOpenGuestSystem: (VPhoneLaunchpadMachinePath) -> Void = { _ in }
     @Environment(VPhoneLaunchpadModel.self) private var model
     @State private var showsCommands = false
     @State private var patchCatalog: VPhoneLaunchpadPatchCatalog?
@@ -96,7 +97,7 @@ struct VPhoneLaunchpadMachineInspector: View {
     var body: some View {
         Form {
             Section {
-                if let creation = library.creations[machine.path] {
+                if let creation = library.creation(for: machine.path) {
                     creationSummary(creation)
                 }
                 LabeledContent("State") {
@@ -133,6 +134,18 @@ struct VPhoneLaunchpadMachineInspector: View {
                 LabeledContent("CPU", value: String(localized: "\(machine.cpuCount) cores"))
                 LabeledContent("Memory", value: VPhoneLaunchpadMachinesView.memory(machine.memoryMB))
                 LabeledContent("Disk", value: VPhoneLaunchpadMachinesView.disk(machine.diskSizeBytes))
+                if let usage = library.diskUsage[machine.path] {
+                    if let exclusive = usage.exclusive {
+                        LabeledContent("Exclusive") {
+                            Text(VPhoneLaunchpadDiskUsage.format(exclusive))
+                                .help(String(localized: "The blocks no other machine or template holds: what deleting it frees, once no local Time Machine snapshot keeps them. The rest is shared with its template or clones."))
+                        }
+                    }
+                    LabeledContent("Allocated") {
+                        Text(VPhoneLaunchpadDiskUsage.format(usage.allocated))
+                            .help(String(localized: "Every block the machine's files hold, shared or not."))
+                    }
+                }
                 LabeledContent("Network", value: machine.networkDescription)
                 if let address = machine.addressDescription {
                     LabeledContent("IPv4 Address", value: address)
@@ -158,10 +171,28 @@ struct VPhoneLaunchpadMachineInspector: View {
                 if let udid = machine.udid {
                     value("UDID", udid)
                 }
+                if let origin = library.templateSources[machine.path] {
+                    LabeledContent("Template") {
+                        templateLabel(origin)
+                            .textSelection(.enabled)
+                    }
+                }
                 value(
                     "Location",
                     VPhoneLaunchpadHostSetup.abbreviated(machine.path.url),
                 )
+            }
+
+            Section {
+                HStack {
+                    Text("Service profile and removed system apps")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Guest System…") { onOpenGuestSystem(machine.path) }
+                        .disabled(library.creation(for: machine.path)?.isRunning == true)
+                }
+            } header: {
+                Text("Guest System")
             }
 
             Section("Console") {
@@ -234,7 +265,7 @@ struct VPhoneLaunchpadMachineInspector: View {
             HStack {
                 Spacer()
                 Button("Change…") { onChangeBundle(machine) }
-                    .disabled(model.bundles.selectableVersions.isEmpty || library.creations[machine.path]?.isRunning == true)
+                    .disabled(model.bundles.selectableVersions.isEmpty || library.creation(for: machine.path)?.isRunning == true)
             }
         }
     }
@@ -267,7 +298,7 @@ struct VPhoneLaunchpadMachineInspector: View {
     /// guest patches in line. Boot-chain patches only a restore changes.
     @ViewBuilder
     private var patchesSection: some View {
-        if library.creations[machine.path]?.isRunning != true {
+        if library.creation(for: machine.path)?.isRunning != true {
             Section("Patches") {
                 if let catalog = patchCatalog, patchCatalogMachine == machine.path {
                     LabeledContent(
@@ -382,7 +413,7 @@ struct VPhoneLaunchpadMachineInspector: View {
             patchCatalogError = nil
             patchCatalogMachine = path
         }
-        guard library.creations[path]?.isRunning != true else { return }
+        guard library.creation(for: path)?.isRunning != true else { return }
         do {
             let catalog = try await VPhoneLaunchpadPatchCatalog.read(
                 using: library.commandLine(for: path),
@@ -425,6 +456,24 @@ struct VPhoneLaunchpadMachineInspector: View {
                 .truncationMode(.middle)
                 .textSelection(.enabled)
                 .help(value)
+        }
+    }
+
+    /// The template's identifier. A clone of an earlier build of the same
+    /// key, or of a deleted template, says so, and shares no key with the
+    /// template that has the identifier now.
+    @ViewBuilder
+    private func templateLabel(_ origin: VPhoneLaunchpadTemplateOrigin) -> some View {
+        switch origin.match {
+        case .current:
+            Text(verbatim: origin.identifier)
+                .help(String(localized: "Created from this template. It shares the template's SEP root secret and Data volume keys with every machine created from it."))
+        case .earlierBuild:
+            Text("\(origin.identifier) (earlier build, deleted)")
+                .help(String(localized: "Created from an earlier build of this template, since deleted. It shares its SEP root secret and Data volume keys only with the machines created from that build, not with the template that has this identifier now or the machines created from it."))
+        case .deleted:
+            Text("\(origin.identifier) (deleted)")
+                .help(String(localized: "Created from this template, which was deleted. It shares the template's SEP root secret and Data volume keys with every machine created from it."))
         }
     }
 

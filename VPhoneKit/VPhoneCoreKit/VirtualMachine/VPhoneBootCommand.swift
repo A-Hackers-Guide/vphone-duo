@@ -106,6 +106,8 @@ public struct VPhoneBootCommand: ParsableCommand {
     public mutating func validate() throws {
         let manifest = try VPhoneVirtualMachineManifest.load(from: config)
         let bundle = VPhoneBundle(url: config.deletingLastPathComponent(), manifest: manifest)
+        // In DFU too: a restore would rewrite the disk every clone shares.
+        try VPhoneMachineTemplates.requireBootable(bundleURL: bundle.url)
         if !dfu,
            let existingVariant = VPhoneRestoreInfo.load(fromBundle: bundle)?.variant,
            existingVariant != "jb"

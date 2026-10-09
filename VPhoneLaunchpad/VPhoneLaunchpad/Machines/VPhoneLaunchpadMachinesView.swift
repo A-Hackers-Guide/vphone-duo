@@ -14,6 +14,7 @@ struct VPhoneLaunchpadMachinesView: View {
         case export([MachinePath])
         case snapshots(MachinePath)
         case console(MachinePath)
+        case guestSystem(MachinePath)
 
         var id: String {
             switch self {
@@ -26,6 +27,7 @@ struct VPhoneLaunchpadMachinesView: View {
             case let .export(machines): "export-\(machines.map(\.url.path).joined(separator: "|"))"
             case let .snapshots(machine): "snapshots-\(machine.url.path)"
             case let .console(machine): "console-\(machine.url.path)"
+            case let .guestSystem(machine): "guest-system-\(machine.url.path)"
             }
         }
     }
@@ -81,6 +83,7 @@ struct VPhoneLaunchpadMachinesView: View {
                         onShowProgress: { path in sheet = .creation(path) },
                         onOpenConsole: { path in sheet = .console(path) },
                         onChangeBundle: { machine in sheet = .changeBundle([machine]) },
+                        onOpenGuestSystem: { path in sheet = .guestSystem(path) },
                     )
                 } else if library.selection.count > 1 {
                     ContentUnavailableView("\(library.selection.count) Machines Selected", systemImage: "iphone")
@@ -140,6 +143,22 @@ struct VPhoneLaunchpadMachinesView: View {
             } message: { error in
                 Text(error.detail ?? "")
             }
+            // `vm delete` of the last machine cloned from a template keeps
+            // the template and says so; so does this.
+            .alert(
+                String(localized: "Template No Longer Used"),
+                isPresented: Binding(get: { library.templateNotice != nil && library.actionError == nil }, set: {
+                    if !$0 {
+                        library.templateNotice = nil
+                    }
+                }),
+                presenting: library.templateNotice,
+            ) { _ in
+                Button("Show Templates") { model.present(.templates) }
+                Button("OK", role: .cancel) {}
+            } message: { notice in
+                Text("No machine uses template \(notice.id) any more. It stays, taking about \(notice.size), so the next machine with its options is created in seconds. Delete it in Templates once it is no longer needed.")
+            }
     }
 
     // MARK: - Toolbar
@@ -155,6 +174,8 @@ struct VPhoneLaunchpadMachinesView: View {
                 Button("New Machine…") { sheet = .newMachine }
                 Button("Import…") { chooseImport() }
                     .disabled(library.globalActivity != nil)
+                Divider()
+                Button("Templates…") { model.present(.templates) }
             } label: {
                 Label("New Machine", systemImage: "plus")
             }
@@ -302,6 +323,9 @@ struct VPhoneLaunchpadMachinesView: View {
             Divider()
             Button("Settings…") { sheet = .settings([machine]) }
                 .disabled(!isStopped)
+            // It works on the running guest, and says so when it is not.
+            Button("Guest System…") { sheet = .guestSystem(machine.path) }
+                .disabled(library.creation(for: machine.path)?.isRunning == true)
             changeBundleButton([machine])
             Button("Rename…") { sheet = .rename(machine.path) }
                 .disabled(!isStopped)
@@ -312,7 +336,7 @@ struct VPhoneLaunchpadMachinesView: View {
             // Open while the machine runs too, to read the list; taking,
             // reverting and deleting wait for it to stop.
             Button("Snapshots…") { sheet = .snapshots(machine.path) }
-                .disabled(library.creations[machine.path]?.isRunning == true)
+                .disabled(library.creation(for: machine.path)?.isRunning == true)
             Button("Install Custom Firmware") {
                 Task { await library.installCustomFirmware(machine.path) }
             }
@@ -348,7 +372,7 @@ struct VPhoneLaunchpadMachinesView: View {
     private func changeBundleButton(_ machines: [VPhoneLaunchpadMachine]) -> some View {
         Button("Change Core Bundle…") { sheet = .changeBundle(machines) }
             .disabled(model.bundles.selectableVersions.isEmpty
-                || machines.contains { library.creations[$0.path]?.isRunning == true })
+                || machines.contains { library.creation(for: $0.path)?.isRunning == true })
     }
 
     // MARK: - Table
@@ -398,6 +422,16 @@ struct VPhoneLaunchpadMachinesView: View {
                 Text(Self.disk(machine.diskSizeBytes)).monospacedDigit()
             }
             .width(64)
+            // What deleting the machine frees: a clone of a template
+            // shares the rest.
+            TableColumn("Exclusive") { machine in
+                let usage = library.diskUsage[machine.path]
+                Text(verbatim: usage?.exclusive.map { VPhoneLaunchpadDiskUsage.format($0) } ?? "—")
+                    .monospacedDigit()
+                    .foregroundStyle(usage?.exclusive == nil ? .secondary : .primary)
+                    .help(usage.map { String(localized: "\(VPhoneLaunchpadDiskUsage.format($0.allocated)) allocated; the rest is shared with its template or clones.") } ?? "")
+            }
+            .width(min: 64, ideal: 76)
         }
         .contextMenu(forSelectionType: MachinePath.self) { paths in
             machineActions(library.machines.filter { paths.contains($0.path) })
@@ -450,7 +484,7 @@ struct VPhoneLaunchpadMachinesView: View {
                 self.sheet = .creation(path)
             }
         case let .creation(path):
-            if let creation = library.creations[path] {
+            if let creation = library.creation(for: path) {
                 VPhoneLaunchpadCreationView(creation: creation)
             }
         case let .settings(machines):
@@ -471,6 +505,8 @@ struct VPhoneLaunchpadMachinesView: View {
             VPhoneLaunchpadSnapshotsView(machine: path)
         case let .console(path):
             VPhoneLaunchpadConsoleView(title: "\(path.name) Console", url: VPhoneLaunchpadMachineLibrary.consoleLog(path))
+        case let .guestSystem(path):
+            VPhoneLaunchpadGuestSystemView(machine: path)
         }
     }
 

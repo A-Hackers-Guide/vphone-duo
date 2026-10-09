@@ -31,6 +31,15 @@ final class VPhoneGuestControl {
         }
     }
 
+    /// vphoned refused an `/v1/rpc` call. `body` is its error object as sent;
+    /// it came from JSON, so it serializes back unchanged.
+    struct GuestRPCFailure: Error, CustomStringConvertible, @unchecked Sendable {
+        let body: [String: Any]
+
+        var message: String { body["message"] as? String ?? "Guest operation failed" }
+        var description: String { message }
+    }
+
     struct ClipboardContent {
         let text: String?
         let types: [String]
@@ -338,6 +347,14 @@ final class VPhoneGuestControl {
         return try await call(method, params: params)
     }
 
+    /// `callAfterQueuedInput`, but a refusal from vphoned is thrown as
+    /// `GuestRPCFailure` with its whole error object, for a caller that passes
+    /// it on (`vphone.sock`'s `rpc`).
+    func rpcAfterQueuedInput(_ method: String, params: [String: Any] = [:]) async throws -> [String: Any] {
+        await orderedInput?.value
+        return try await rpc(method, params: params)
+    }
+
     func isDeveloperModeEnabled() async throws -> Bool {
         try await call("developer_mode.status")["enabled"] as? Bool ?? false
     }
@@ -416,20 +433,30 @@ final class VPhoneGuestControl {
 
     /// Calls one named vphoned operation over `/v1/rpc` and returns its result object.
     func call(_ method: String, params: [String: Any] = [:]) async throws -> [String: Any] {
+        do {
+            return try await rpc(method, params: params)
+        } catch let failure as GuestRPCFailure {
+            if failure.body["code"] as? String == "bootstrap_already_installed" {
+                throw ControlError.bootstrapAlreadyInstalled(failure.message)
+            }
+            if failure.body["code"] as? String == "location_services_off" {
+                throw ControlError.locationServicesOff(failure.message)
+            }
+            throw ControlError.guestError(failure.message)
+        }
+    }
+
+    /// `call`, with vphoned's refusal kept whole as `GuestRPCFailure`: `code`,
+    /// `message` and whatever the command adds (`results`, `reason`, `errno`,
+    /// `retryable` …).
+    private func rpc(_ method: String, params: [String: Any]) async throws -> [String: Any] {
         let object: [String: Any] = ["id": UUID().uuidString, "method": method, "params": params]
         let body = try JSONSerialization.data(withJSONObject: object)
         let response = try await http(method: "POST", path: "/v1/rpc", body: body)
         guard let envelope = try JSONSerialization.jsonObject(with: response.body) as? [String: Any]
         else { throw ControlError.protocolError("invalid JSON response") }
         if let error = envelope["error"] as? [String: Any] {
-            let message = error["message"] as? String ?? "Guest operation failed"
-            if error["code"] as? String == "bootstrap_already_installed" {
-                throw ControlError.bootstrapAlreadyInstalled(message)
-            }
-            if error["code"] as? String == "location_services_off" {
-                throw ControlError.locationServicesOff(message)
-            }
-            throw ControlError.guestError(message)
+            throw GuestRPCFailure(body: error)
         }
         guard response.status == 200, let result = envelope["result"] as? [String: Any]
         else { throw ControlError.protocolError("missing result (HTTP \(response.status))") }

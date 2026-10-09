@@ -247,6 +247,14 @@ correlate them by `id`. The socket also sends
 receive pong frames. JSON WebSocket frames are limited to 1 MiB after
 fragment reassembly.
 
+A command that fails can add fields to the error object (`command_failed`
+from `apps.remove_system` carries `results`; `apfs.snapshot.delete` carries
+`reason`, `errno` and `retryable`). The machine's `vphone.sock` passes them on:
+its `rpc` verb answers `{"ok":true,"result":{…}}`, or `{"ok":false,
+"error":"<message>","guest_error":{…}}` with vphoned's error object
+unchanged in `guest_error`; `error` stays the message string. `vphone-launchpad-cli
+guest rpc` prints that object as JSON on the last stderr line.
+
 SwiftNIO handles parsing, upgrade, masking, and backpressure. IcliKit 0.7.0
 owns general device operations. Each HTTP or WebSocket request runs independently
 on a concurrent worker queue, so a stalled system service does not block HID,
@@ -285,18 +293,19 @@ request carries `"force": true`.
 
 | Area | Methods |
 | --- | --- |
-| Device | `device.snapshot`, `device.info` (snapshot plus network, screen, rotation, brightness, volume, low power, Developer Mode, agent), `device.screen`, `device.network`, `device.ioreg {plane}`, `device.environment`, `device.basebin {archive?}` |
+| Device | `device.snapshot`, `device.info` (snapshot plus network, screen, rotation, brightness, volume, low power, Developer Mode, agent, `device_name` `{name, own_name}`: the pinned name and the guest's own ComputerName), `device.screen`, `device.network`, `device.ioreg {plane}`, `device.environment`, `device.basebin {archive?}` |
 | Display, audio | `display.brightness {value?}`, `display.rotation {orientation?}`, `display.orientation` (`{degrees, source}`: SpringBoard's interface orientation without a screen capture, for polling; capability `display_orientation`), `display.rotation_lock {locked}`, `display.auto_lock` (`{auto_lock_seconds, never, lock_screen_minimum_seconds}`: Auto-Lock and the Lock Screen timeout vphoned keeps in step with it, see below; capability `display_auto_lock`), `screen.unlock {passcode?, timeout?}` (`{locked, screen_off, was_locked, was_screen_off}`: the display on and the Lock Screen passed, see below; capability `screen_unlock`), `audio.volume {value?, category?}`, `audio.state` |
 | Input | `input.touch`, `input.hid`, `input.button {name}`, `input.key {name}`, `input.type {text, delay_ms?}`, `input.paste {text}`, `input.tap`, `input.double_tap`, `input.long_press`, `input.swipe`, `input.drag {points}`, `input.touch_sequence {events}` — gesture coordinates are screen points |
 | UI | `ui.tree` (alias `accessibility.tree`), `ui.element_at`, `ui.tap_element`, `ui.wait`, `ui.wait_gone`, `ui.ocr {languages?, min_confidence?}`, `ui.describe`, `screen.screenshot` |
 | Processes | `processes.list {filter?}`, `processes.kill {pid, signal?}` **force**, `memory.jetsam`, `memory.pressure` (only the three kernel memory sysctls, for polling) |
-| launchd | `services.list`, `status`, `print`, `dump`, `disabled`, `start`, `enable`, `load`; `services.stop`, `disable`, `remove`, `signal`, `unload` **force**; `launchd.getenv`, `setenv`, `unsetenv` |
+| launchd | `services.list`, `status`, `print`, `dump`, `disabled`, `start`, `enable`, `load`, `profile` (see below); `services.stop`, `disable`, `remove`, `signal`, `unload`, `profile.apply {profile, groups?, allow?}` **force**; `launchd.getenv`, `setenv`, `unsetenv` |
 | Logs | `logs.syslog {seconds, process?, level?, max_lines?}` (a bounded capture of at most 60 s), `logs.crashes {bundle_id?}`, `logs.crash {path}` |
 | Darwin notifications | `notify.post {name, state?}` (`postDarwinNotification`; `state` is a UInt64, as a number or a decimal string, stored before the post), `notify.state {name}` (`darwinNotificationState`) |
 | Network, security | `network.capture {seconds, interface?, filter?}` (writes a pcap in the guest scratch directory and returns its path), `network.ipv4.get {interface?}`, `network.ipv4.set {interface?, method, address?, subnet_mask?, router?, dns?}`, `network.hostname.get`, `network.hostname.set {local_host_name?}`, `device.name.get`, `device.name.set {name}` (see below), `network.static_names.get`, `network.static_names.set {entries}`, `network.resolve {host, family?, port?, first_only?, timeout_ms?}` (see below), `security.ssl_killswitch` |
-| Apps | `apps.list`, `search`, `refresh`, `launch`, `terminate`, `foreground`, `open_url`, `install`, `info`, `binary`, `data_dir`, `url_schemes`, `handlers`, `registration`, `register`, `network_policy {repair?}`; `apps.uninstall`, `unregister`, `unregister_dir` **force** |
+| Apps | `apps.list`, `search`, `refresh`, `launch`, `terminate`, `foreground`, `open_url`, `install`, `info`, `binary`, `data_dir`, `url_schemes`, `handlers`, `registration`, `register`, `network_policy {repair?}`; `apps.uninstall`, `unregister`, `unregister_dir` **force**; `apps.removed_system`, `apps.remove_system {bundle_ids, backup?, respring?}` **force**, `apps.restore_system {bundle_ids?, respring?}` **force** (removable system apps, see below) |
 | System | `system.uicache`, `system.system_apps {visible?}`, `system.respring` **force**, `system.reboot {userspace?}` **force**, `system.shutdown` **force**, `developer_mode.status`, `developer_mode.enable`, `power.low_power_mode`, `time.timezone {identifier?, automatic?}` (see below), `diagnostics.self_test` |
 | Files | `files.list`, `mkdir`, `remove`, `rename`, `read {binary?, limit?}`, `write`, `find`, `copy`, `symlink`, `chmod`, `chown`, `plist`, `plist_set {value \| remove}` |
+| APFS snapshots | `apfs.snapshots {mount?}`, `apfs.snapshot.delete {mount?, name? \| prefix?}` **force** (only `orig-fs.disabled.rn-*`, see below) |
 | Preferences, clipboard, location | `settings.get/set/delete`, `clipboard.get/set/clear`, `location.set/clear/current` |
 | Motion | `motion.gyroscope.get`, `motion.gyroscope.set {x,y,z,enabled?}`, `motion.gyroscope.clear` (capability `motion_gyroscope`; finite JSON numbers in [-1000,1000] rad/s, all axes required; `enabled` defaults to true and must be a JSON Boolean; capability `motion_gyroscope_toggle` supports disabling while retaining configured axes; returns configuration, `units`, `provider`, and `provider_running`; HID provider status is not proof of CoreMotion app delivery) |
 | Keychain | `keychain.list {class?}`, `add`, `delete`, `get`, `update`, `database` |
@@ -305,7 +314,7 @@ request carries `"force": true`.
 | Bootstrap | `bootstrap.install {layout}`, `bootstrap.status`, `bootstrap.inspect`, `bootstrap.uninstall {jbroot, force}`, `bootstrap.firmware` (see above) |
 | Environment | `environment.status` (SHA-256 of each vphone library in `/usr/lib`, or null when absent, plus the staging directory), `environment.install {libraries: [{name, sha256}]}` (see below) |
 | Profile UDID | `udid.get`, `udid.set {udid}`, `udid.clear` — each returns `{udid, path}`, the UDID the guest gives its profile checks and the host (null: the guest's own) and the settings file it came from; `set` and `clear` also return `restarted_pids`, `usb_serial` and `usb_reenumerated` (see below) |
-| Setup Assistant | `setup.status` (`{pending, running, pid, setup_done, setup_version, current_version}`), `setup.skip` **force** (sets `SetupDone`, `SetupFinishedAllSteps` and `SetupVersion` in `com.apple.purplebuddy`, restarts SpringBoard, returns the status plus `respring`); `/v1/health` carries `setup_pending` — see `Research/Guest/setup_assistant_skip.md` |
+| Setup Assistant | `setup.status` (`{pending, running, pid, setup_done, setup_version, current_version}`), `setup.skip` **force** (sets `SetupDone`, `SetupFinishedAllSteps` and `SetupVersion` in `com.apple.purplebuddy`, restarts SpringBoard, returns the status plus `respring`); `setup.settle {timeout_s?, poll_s?, stable_polls?}` (read-only wait for first-boot work, see below); `/v1/health` carries `setup_pending` — see `Research/Guest/setup_assistant_skip.md` |
 
 `display.auto_lock` reads Settings' Auto-Lock (`maxInactivity` in profiled's
 `EffectiveUserSettings.plist`) and SpringBoard's `SBMinimumLockscreenIdleTime`.
@@ -425,7 +434,76 @@ change vphoned applies configd's preferences unchanged, so configd publishes
 again and `libdevicename.dylib` pins the new name at once, and posts
 `com.apple.mobile.lockdown.device_name_changed`. The file outlives a reboot.
 `vphone-vm` calls `set` after every connect with the VM's name. See
-`Research/Guest/device_name_pinning.md`.
+`Research/Guest/device_name_pinning.md`. `set` also returns `reboot_required`,
+true after a change: lockdown readers (Finder, `ideviceinfo`, `idevicename`) follow
+at once, but CoreDevice (Xcode, `devicectl`) reads the name once per handshake
+and the DHCP lease keeps the host name it was requested with, so both show the
+new name after the guest restarts. A clone of a template boots with the
+template's pin until `vphone-vm` connects. `device.info` carries
+`device_name: {name, own_name}`: the pinned name (null when none) and the
+guest's own `System/System/ComputerName` in configd's preferences, which a
+clone inherits.
+
+`services.profile` (capability `service_profile`) reports the service profile
+and `services.profile.apply` **force** applies one
+(`VPhoneDaemon/Daemon/GuestAPI+ServiceProfile.swift`, lists in
+`GuestServiceProfile.swift`). A profile is a set of launchd jobs turned off
+with the same override as `services.disable`; launchd honors it from the next
+boot, so the guest has to restart. `apply {profile, groups?, allow?}`:
+
+- `profile: "trimmed"` disables the default groups of the list for the
+  guest's iOS major version (`base`, the 137 labels measured on iOS 27.0;
+  `app_store`, appstored and itunesstored; `signin_followup`, followupd and
+  appleidsetupd), plus the optional groups named in `groups` (`accounts`:
+  akd, amsaccountsd, appleaccountd, after which the guest cannot sign in to an
+  Apple Account), minus the labels in `allow`. Only iOS 27 has a list; on
+  another version it fails with "No trimmed service list for iOS N".
+- `profile: "none"` turns back on only the labels the profile disabled, on any
+  version.
+- A label already disabled by somebody else (the OTA block, a user in the
+  Services panel) is skipped and never recorded, so `none` leaves it disabled.
+  A recorded label the profile no longer selects is turned back on. The jobs
+  in `GuestServiceProfile.neverDisable` (sleepd, CommCenter and its helpers,
+  cloudd, NanoRegistry, mobileassetd, storekitd, vphoned, and what vphone's
+  features use) are refused whatever names them.
+- The labels the profile owns go to `/var/db/vphoned/service-profile.plist`
+  (`Profile`, `ListVersion`, `iOSMajor`, `Groups`, `Allow`, `Labels`,
+  `Updated`). A second apply with the same arguments changes nothing.
+- It returns `{profile, ios_major, list_version, groups, disabled, enabled,
+  kept, skipped: [{label, reason}], allowed, failed: [{label, action, error}],
+  owned, reboot_required}`: `disabled` and `enabled` are what this call
+  changed, `kept` what was already the profile's, `owned` how many labels the
+  record holds. `reboot_required` is true when this call changed something or
+  a label the profile owns is still running. A failure on one label is listed
+  in `failed` and the others still apply.
+
+`services.profile` returns `{profile, ios_major, supported, supported_ios,
+list_version, groups: [{name, default, summary, labels}], never_disable,
+record, disabled, enabled_since, running, reboot_required}`: `disabled` are
+the recorded labels still disabled, `enabled_since` recorded labels somebody
+turned back on, `running` recorded labels still running until the next boot.
+See `Research/Guest/service_trimming.md`.
+
+`setup.settle` (capability `setup_settle`) waits until the guest's first-boot
+work has settled and returns, without changing anything
+(`VPhoneDaemon/Daemon/GuestAPI+FirstBoot.swift`, conditions in
+`GuestFirstBootSettle.swift`). It polls every `poll_s` seconds (default 5,
+1–30) and is settled when, over the last `stable_polls` polls (default 3,
+2–20), `/private/var/staged_system_apps` is empty or absent (installd expands
+the removable system apps from it on the first boot), the number of
+registered apps did not change, and installd used less than 0.2 s of CPU
+between polls or was not running. `timeout_s` defaults to 90 and is capped at
+110, because the host waits at most 120 s for one answer; a caller that needs
+longer calls again. A timeout is not an error: it returns `{settled, elapsed_s,
+polls, timeout_s, poll_s, stable_polls, reasons, signals}` with `settled:
+false` and `reasons` naming the conditions still unmet; `signals` holds
+`staged_system_apps` (entries, null when unreadable), `app_count`,
+`app_counts` (the window), `installd_pid`, `installd_cpu_seconds`,
+`installd_cpu_delta` and `setup_pending`.
+
+`VPhoneDaemon/Tests/run-logic-tests.sh` builds the guest-independent parts of
+these three (the lists and their bookkeeping, the settle verdict, the device
+name rule) for the Mac and checks them; it needs no guest.
 
 `network.static_names.set` replaces the names the guest resolves locally, given
 as `entries: [{address, names}]` (IPv4 only; an empty list withdraws them).
@@ -450,10 +528,125 @@ Account passwords, boot logo rendering and package installation, removal and
 repository changes are deliberately not exposed. `/v1/health` lists the new
 areas in `capabilities` (`device_info`, `display`, `audio`, `input_gestures`,
 `ui_inspection`, `processes`, `services`, `logs`, `network_capture`,
-`app_details`, `system_control`, `system_shutdown`, `file_tools`, `packages`, `environment_update`, `udid_override`, `setup_skip`, `network_ipv4`, `network_hostname`, `device_name`, `network_static_names`, `network_resolve`, `display_auto_lock`, `screen_unlock`) so a host can hide
+`app_details`, `system_control`, `system_shutdown`, `file_tools`, `packages`, `environment_update`, `udid_override`, `setup_skip`, `setup_settle`, `service_profile`, `network_ipv4`, `network_hostname`, `device_name`, `network_static_names`, `network_resolve`, `display_auto_lock`, `screen_unlock`) so a host can hide
 panels an older agent cannot serve. icli failures reach the caller with
 icli's own error `code` (`failed`, `unavailable`, `device_locked`, …) and
 message.
+
+## Removable system apps and APFS snapshots
+
+These methods trim a guest that will serve as a template; `/v1/health` lists
+them as `system_app_removal` and `apfs_snapshots`.
+
+**`apps.remove_system {bundle_ids: [...], backup?: true, respring?: true, force}`**
+(`VPhoneDaemon/Daemon/GuestAPI+SystemApps.swift`) removes Apple's removable
+apps durably. For each identifier it reads the app's current `bundle_path`
+from the live app list (the container UUID changes with every install, so
+nothing is cached) and requires a `com.apple.` app whose bundle is
+`/private/var/containers/Bundle/Application/<UUID>/<Name>.app`. An app under
+`/Applications` or `/System` (Phone, Settings) is refused, as is any other
+path shape (`GuestSystemAppPolicy.swift`). Then, in this order:
+
+1. the whole container is cloned to
+   `/private/var/db/vphoned/removed-system-apps/<bundle_id>.container` (root
+   only, mode 0700, on the Data volume with the bundle containers, so the clone
+   shares every block), with `<bundle_id>.manifest.json` beside it
+   (`bundle_id`, `container_uuid`, `app`, `container_path`, `removed_at`). If
+   the clone fails, a copy that keeps owners, modes, extended attributes and
+   flags is made instead; `backup_method` in the result says `clone` or
+   `copy`. A backup of the same app in the legacy directory (below) is removed
+   once the new removal is done. `backup: false` skips this;
+2. the app is unregistered from LaunchServices (icli's `unregisterApp`, as
+   `apps.unregister`). LaunchServices can list it for a moment longer, and
+   icli checks at once, so vphoned looks at the record again every 0.1 s for
+   up to 2.5 s before it believes "still lists the app", unregisters once
+   more if it is still listed, waits as long again, and only then fails the
+   app (`GuestAppUnregistration`); `unregister_attempts` in the app's result
+   says when a second unregistration was needed;
+3. the container is removed recursively, with `SerializedPlaceholder.ipa`,
+   `BundleMetadata.plist` and the container metadata.
+
+Unregistering first matters: a registered app whose bundle is missing is
+repaired by installd from the placeholder on the next boot
+(`Research/Guest/post_setup_signin_and_appstore.md`). SpringBoard restarts once
+at the end when anything was removed and `respring` is not false. The result
+is `{results: [{bundle_id, status, removed, container, app, backup,
+backup_method, unregistered, unregister_attempts?, error?}], removed, failed, backup_directory, respring}`.
+`status` is `removed`, `absent` (not installed: a no-op that succeeds; a
+removal an earlier call left half done, with its backup in place, is finished
+instead), `unregistered_stale` (LaunchServices listed a container that is
+gone) or `failed`. One app's failure does not stop the others; if any failed,
+the call returns error `command_failed` (`error: "remove_incomplete"`) whose
+body carries the same fields.
+
+```json
+{"method":"apps.remove_system","params":{"bundle_ids":["com.apple.news","com.apple.mobilephone"],"force":true}}
+→ error: {"code":"command_failed","message":"1 of 2 apps were not removed; see results","removed":1,"failed":1,
+   "results":[{"bundle_id":"com.apple.news","status":"removed","removed":true,"unregistered":true,
+               "container":"/private/var/containers/Bundle/Application/6EB8…55A1","app":"News.app",
+               "backup":"/private/var/db/vphoned/removed-system-apps/com.apple.news.container","backup_method":"clone"},
+              {"bundle_id":"com.apple.mobilephone","status":"failed","removed":false,
+               "error":"/Applications/MobilePhone.app is not in a bundle container under /private/var/containers/Bundle/Application; …"}],
+   "respring":{"method":"frontboard_relaunch",…}}
+```
+
+**`apps.restore_system {bundle_ids?, respring?: true, force}`** moves each
+backup container back to the UUID path its manifest names (validated as a
+removal is) and registers the app in it with LaunchServices as a deletable
+system app (`VPhoneDaemon/Native/vphoned_apps.m`: `registerApplication:`, then
+`registerApplicationDictionary:`, then the containerized interface, each read
+back). icli's `registerApp`, behind `apps.register`, refuses Apple's apps since
+0.7.17. Without `bundle_ids` every backup is restored. An app that is
+installed is reported `present` and its backup left alone; a restore that
+moved the container but could not register it keeps the manifest, so calling
+it again retries the registration. A backup in the backup directory goes back
+with `rename(2)` (`restore_method: "rename"`). The first version of this verb
+kept backups in `/private/var/mobile/Library/removed-system-apps`, on the User
+volume, where `rename(2)` answers EXDEV; a backup found there (`legacy: true`;
+the new directory is searched first) is copied back with owners, modes,
+extended attributes and flags to a staging name beside the destination, renamed
+into place and then removed (`restore_method: "copy"`; `warning` if the legacy
+copy could not be removed). Results mirror the removal (`status` `restored`,
+`present` or `failed`, plus `backup`, `legacy`, `restore_method` and
+`registration`, the call that worked; `error: "restore_incomplete"` when any
+failed). **`apps.removed_system`** lists the backups in both directories:
+`{directory, legacy_directory, backups: [{bundle_id, backup, legacy,
+container, container_uuid, app, removed_at, restorable}], other,
+legacy_other}`, where `other` and `legacy_other` name entries without a bundle
+identifier, such as `News.container` backups made by hand before this verb
+existed.
+
+**`apfs.snapshots {mount?: "/"}`** returns `{mount, snapshots: [name]}` from
+`fs_snapshot_list` (`VPhoneDaemon/Native/vphoned_apfs.m`).
+**`apfs.snapshot.delete {mount?: "/", name? | prefix?, force}`** deletes with
+`fs_snapshot_delete` only snapshots named `orig-fs.disabled.rn-*`, the sealed
+update snapshot CFW install renamed (`GuestSnapshotPolicy.swift`). A `name` or
+`prefix` that does not start with that is refused, `com.apple.os.update-*`
+included; with neither, every `orig-fs.disabled.rn-*` snapshot is selected.
+A selection that matches nothing succeeds with nothing deleted, and a snapshot
+already gone (ENOENT) is listed under `already_deleted`. The result is `{mount,
+before, deleted, already_deleted, after, remaining}`. A refusal from the
+kernel stops the call: EINVAL and ENOTSUP are invalid requests; EPERM or
+EACCES (`reason: "not_permitted"`: vphoned is not root or lacks
+`com.apple.private.vfs.snapshot`; `com.apple.developer.vfs.snapshot` alone is
+refused), EBUSY (`reason: "busy"`, `retryable:
+true`: mounted, or APFS is still merging an earlier deletion) and anything
+else return `command_failed` with `reason`, `retryable`, `errno`, `snapshot`
+and the `before`/`deleted`/`after` listings. Why and when to call it:
+`Research/Guest/template_snapshot_deletion.md`.
+
+```json
+{"method":"apfs.snapshot.delete","params":{"force":true}}
+→ {"mount":"/","before":["orig-fs.disabled.rn-4EC2…ECB9"],"deleted":["orig-fs.disabled.rn-4EC2…ECB9"],
+   "already_deleted":[],"after":[],"remaining":[]}
+```
+
+The path, identifier, manifest, snapshot-name and errno rules, and the
+`fs_snapshot_list` batch parser, are checked on the Mac without a guest:
+
+```sh
+VPhoneDaemon/Tests/run-system-maintenance-tests.sh
+```
 
 ## Nested accessibility snapshots
 
