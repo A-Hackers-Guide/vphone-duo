@@ -843,7 +843,7 @@ extension VPhoneDiskRebaseError: CustomStringConvertible, LocalizedError {
         case let .sameMachine(name):
             "Cannot rebase VM '\(name)' onto itself. Name a different VM as the base."
         case let .baseNotFound(name):
-            "No VM or template named '\(name)'. Name a VM from `vphone-cli vm list` or a template from `vphone-cli vm template list`."
+            "No VM or template named '\(name)'. Name a VM from `vphone-cli vm list`, or a template from `vphone-cli vm template list` by its identifier or a unique prefix of at least four hex digits."
         case let .missingImage(machine, path):
             "VM '\(machine)' has no disk image at \(path)."
         case let .notCloneable(path):

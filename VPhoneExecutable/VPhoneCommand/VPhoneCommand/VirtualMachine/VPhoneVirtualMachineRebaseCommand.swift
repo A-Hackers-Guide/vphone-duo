@@ -47,8 +47,10 @@ struct VPhoneVirtualMachineRebaseCommand: ParsableCommand {
         let target = try lib.library.bundle(named: name)
         let base = try VPhoneDiskRebaseBase.resolve(onto, in: lib.library)
         if let template = base.commonTemplate(with: target, in: lib.library) {
-            let both = base.template == nil ? "\(target.name) and \(base.label) were both cloned from" : "\(target.name) was cloned from"
-            print("note: \(both) template \(template) and already share its blocks; expect little to be newly shared")
+            let both = base.template == nil
+                ? "\(target.name) and \(base.label) were both cloned from template \(template) and already share"
+                : "\(target.name) was cloned from template \(template) and already shares"
+            print("note: \(both) its blocks; expect little to be newly shared")
         }
 
         let clock = ContinuousClock()
