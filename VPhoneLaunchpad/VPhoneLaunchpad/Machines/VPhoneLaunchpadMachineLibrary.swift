@@ -348,6 +348,8 @@ final class VPhoneLaunchpadMachineLibrary {
     /// on the next start. With `updateEnvironment`, each stopped machine also
     /// gets that version's guest environment; a running one keeps its own
     /// until it is updated later. Boot chain and patches stay as created.
+    /// A machine whose disk another process holds is left as it was rather
+    /// than rebound without its update (`VPhoneLaunchpadBundleChange`).
     func setBundle(_ version: String, for machines: [Path], updateEnvironment: Bool) async {
         guard bundles.commandLine(version: version) != nil else {
             actionError = VPhoneLaunchpadError(String(localized: "VPhone.bundle \(version) is not installed."))
@@ -357,8 +359,31 @@ final class VPhoneLaunchpadMachineLibrary {
             var binding = currentBinding(of: machine)
                 ?? VPhoneLaunchpadMachineBinding(bundle: version)
             binding.bundle = version
+            // A machine not restored yet, or whose custom firmware install
+            // did not finish, has no guest environment to update.
+            let listed = self.machines.first { $0.path == machine }
+            let updates = updateEnvironment && state(of: machine) == .stopped
+                && listed?.restoreInfo != nil && listed?.customFirmwareInstalled != false
+            let change: VPhoneLaunchpadBundleChange
             do {
-                try bind(machine, binding)
+                change = try await VPhoneLaunchpadBundleChange.perform(
+                    updatesEnvironment: updates,
+                    otherDiskHolders: { await currentOtherDiskHolders(of: machine) },
+                    bind: { try bind(machine, binding) },
+                    // A failed update says first which layer moved.
+                    updateEnvironment: {
+                        await updateGuestEnvironment(machine) { failure in
+                            VPhoneLaunchpadError(
+                                String(localized: "Unable to Update the Guest Environment of \(machine.name)"),
+                                detail: [
+                                    String(localized: "\(machine.name) now runs with Core Bundle \(version), but its guest environment was not updated. Update its guest environment to finish the change."),
+                                    failure.message,
+                                    failure.detail,
+                                ].compactMap(\.self).joined(separator: "\n\n"),
+                            )
+                        }
+                    },
+                )
             } catch {
                 actionError = VPhoneLaunchpadError(
                     String(localized: "Unable to Change the Core Bundle of \(machine.name)"),
@@ -366,13 +391,11 @@ final class VPhoneLaunchpadMachineLibrary {
                 )
                 continue
             }
-            // A machine not restored yet, or whose custom firmware install
-            // did not finish, has no guest environment to update.
-            let listed = self.machines.first { $0.path == machine }
-            if updateEnvironment, state(of: machine) == .stopped,
-               listed?.restoreInfo != nil, listed?.customFirmwareInstalled != false
-            {
-                await updateGuestEnvironment(machine)
+            if case let .refused(others) = change {
+                actionError = VPhoneLaunchpadError(
+                    String(localized: "Unable to Change the Core Bundle of \(machine.name)"),
+                    detail: Self.diskHeldDetail(machine, others),
+                )
             }
         }
     }
@@ -493,16 +516,21 @@ final class VPhoneLaunchpadMachineLibrary {
     /// False, with `actionError` set, while a process that does not run the
     /// machine has its disk open. `cfw install` and the updates refuse such a
     /// disk, but say so only in the console log; this names the holder here.
-    private func requireDiskUnheld(_ machine: Path) async -> Bool {
+    private func requireDiskUnheld(
+        _ machine: Path,
+        explain: (VPhoneLaunchpadError) -> VPhoneLaunchpadError = { $0 },
+    ) async -> Bool {
         let others = await currentOtherDiskHolders(of: machine)
         guard !others.isEmpty else {
             return true
         }
-        actionError = VPhoneLaunchpadError(
-            String(localized: "Unable to Complete Action"),
-            detail: String(localized: "The disk of \(machine.name) is open in process \(VPhoneLaunchpadDiskHolder.describe(others)), which does not run it. Try again once that process closes it."),
-        )
+        actionError = explain(VPhoneLaunchpadError(String(localized: "Unable to Complete Action"), detail: Self.diskHeldDetail(machine, others)))
         return false
+    }
+
+    /// Names the processes that hold a machine's disk without running it.
+    private static func diskHeldDetail(_ machine: Path, _ others: [VPhoneLaunchpadDiskHolder]) -> String {
+        String(localized: "The disk of \(machine.name) is open in process \(VPhoneLaunchpadDiskHolder.describe(others)), which does not run it. Try again once that process closes it.")
     }
 
     /// Runs `cfw install` again through the helper, for a machine whose last
@@ -548,14 +576,21 @@ final class VPhoneLaunchpadMachineLibrary {
     /// machine's own bundle into it while it is stopped, through the helper,
     /// and nothing else. This is how a machine created by an older bundle
     /// gets newer hooks, since its restore tree is gone after the first boot.
-    func updateGuestEnvironment(_ machine: Path) async {
+    /// True once the environment is recorded as updated. `explain` rewords a
+    /// failure before it is shown.
+    @discardableResult
+    func updateGuestEnvironment(
+        _ machine: Path,
+        explain: (VPhoneLaunchpadError) -> VPhoneLaunchpadError = { $0 },
+    ) async -> Bool {
         guard let version = bundleVersion(for: machine) else {
-            actionError = VPhoneLaunchpadError(String(localized: "No Core Bundle version is installed. Install one in Core Bundle."))
-            return
+            actionError = explain(VPhoneLaunchpadError(String(localized: "No Core Bundle version is installed. Install one in Core Bundle.")))
+            return false
         }
-        guard await requireDiskUnheld(machine) else {
-            return
+        guard await requireDiskUnheld(machine, explain: explain) else {
+            return false
         }
+        var updated = false
         activities[machine] = String(localized: "Updating guest environment…")
         defer { activities[machine] = nil }
         appendConsoleLog(machine, "$ vphone-cli cfw update-environment \(machine.name)")
@@ -568,20 +603,22 @@ final class VPhoneLaunchpadMachineLibrary {
                 onLine: { line in Self.append(line, to: log) },
             )
             if status != 0 {
-                actionError = VPhoneLaunchpadError(
+                actionError = explain(VPhoneLaunchpadError(
                     String(localized: "Unable to update the guest environment."),
                     detail: String(localized: "Choose Show Console Log for the full output."),
-                )
+                ))
             } else {
                 recordGuestEnvironment(machine, version)
+                updated = true
             }
         } catch {
             if !(error is CancellationError) {
-                actionError = error as? VPhoneLaunchpadError
-                    ?? VPhoneLaunchpadError(String(localized: "Unable to update the guest environment."), detail: error.localizedDescription)
+                actionError = explain(error as? VPhoneLaunchpadError
+                    ?? VPhoneLaunchpadError(String(localized: "Unable to update the guest environment."), detail: error.localizedDescription))
             }
         }
         await refresh()
+        return updated
     }
 
     /// Replaces the machine's Preboot kernelcache with the one its current

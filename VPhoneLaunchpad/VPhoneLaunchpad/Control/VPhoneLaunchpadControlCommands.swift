@@ -772,6 +772,8 @@ struct VPhoneLaunchpadControlCommands {
 
     /// Rebinds one machine. `setBundle` skips the environment update of a
     /// running machine without saying so, so that is refused here instead.
+    /// A disk held by another process it refuses itself, before rebinding;
+    /// an update that fails after rebinding is reported as such.
     private func setBundle(_ request: VPhoneLaunchpadControlRequest, emit: @escaping Emit) async throws -> Any {
         let machine = try await machine(request)
         let version = request.arguments[1]

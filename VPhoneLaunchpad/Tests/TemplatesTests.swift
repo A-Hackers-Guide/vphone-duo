@@ -14,6 +14,7 @@ struct TemplatesTests {
         notices()
         try templateOrigins()
         try await diskUsage()
+        try await bundleChange()
     }
 
     // MARK: - Switches
@@ -672,6 +673,58 @@ struct TemplatesTests {
         let me = Holder(pid: getpid(), executablePath: Holder.executablePath(of: getpid()))
         precondition(me.executablePath != nil && me.name == "templates-tests" && !me.runsMachine, "This process: \(me)")
         precondition(Holder.holders(lsofOutput: "", diskOwners: owners, excluding: 900).isEmpty, "Nothing held")
+    }
+
+    /// The order of a Core Bundle change (retest: `vm set-bundle
+    /// --update-environment` on a disk `tail -f` held rebound the machine,
+    /// then refused the update).
+    @MainActor
+    static func bundleChange() async throws {
+        struct Unwritable: Error {}
+        typealias Change = VPhoneLaunchpadBundleChange
+        let tail = VPhoneLaunchpadDiskHolder(pid: 12925, executablePath: "/usr/bin/tail")
+        var steps: [String] = []
+        func perform(
+            updates: Bool,
+            held: [VPhoneLaunchpadDiskHolder] = [],
+            bindFails: Bool = false,
+            updateSucceeds: Bool = true,
+        ) async throws -> Change {
+            steps = []
+            return try await Change.perform(
+                updatesEnvironment: updates,
+                otherDiskHolders: {
+                    steps.append("holders")
+                    return held
+                },
+                bind: {
+                    steps.append("bind")
+                    if bindFails { throw Unwritable() }
+                },
+                updateEnvironment: {
+                    steps.append("update")
+                    return updateSucceeds
+                },
+            )
+        }
+
+        var change = try await perform(updates: true, held: [tail])
+        precondition(change == .refused([tail]) && steps == ["holders"], "A held disk refuses before the binding: \(change) \(steps)")
+        change = try await perform(updates: true)
+        precondition(change == .updated && steps == ["holders", "bind", "update"], "Checked, bound, updated: \(change) \(steps)")
+        change = try await perform(updates: true, updateSucceeds: false)
+        precondition(change == .boundButNotUpdated && steps == ["holders", "bind", "update"], "A failed update keeps the binding: \(change)")
+        // Without an update the disk is not asked about, so a reader of it
+        // does not stop a rebinding that leaves the guest alone.
+        change = try await perform(updates: false, held: [tail])
+        precondition(change == .bound && steps == ["bind"], "Bound only: \(change) \(steps)")
+        do {
+            _ = try await perform(updates: true, bindFails: true)
+            preconditionFailure("An unwritable binding throws")
+        } catch is Unwritable {
+            precondition(steps == ["holders", "bind"], "No update without the binding: \(steps)")
+        }
+        print("Bundle change tests passed")
     }
 
     /// The folders `mayOpenNow` was asked about.
