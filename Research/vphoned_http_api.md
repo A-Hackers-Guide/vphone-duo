@@ -454,12 +454,13 @@ with the same override as `services.disable`; launchd honors it from the next
 boot, so the guest has to restart. `apply {profile, groups?, allow?}`:
 
 - `profile: "trimmed"` disables the default groups of the list for the
-  guest's iOS major version (`base`, the 137 labels measured on iOS 27.0;
+  guest's iOS major version (`base`, the 137 labels measured on iOS 27.0, or
+  on iOS 26 the 131 of them 26.6.2 loads;
   `app_store`, appstored and itunesstored; `signin_followup`, followupd and
   appleidsetupd), plus the optional groups named in `groups` (`accounts`:
   akd, amsaccountsd, appleaccountd, after which the guest cannot sign in to an
-  Apple Account), minus the labels in `allow`. Only iOS 27 has a list; on
-  another version it fails with "No trimmed service list for iOS N".
+  Apple Account), minus the labels in `allow`. Only iOS 26 and 27 have a
+  list; on another version it fails with "No trimmed service list for iOS N".
 - `profile: "none"` turns back on only the labels the profile disabled, on any
   version.
 - A label already disabled by somebody else (the OTA block, a user in the

@@ -5,9 +5,10 @@ research VM has no use for: Siri and the intelligence daemons, Find My,
 Wallet/NFC/Secure Element, Watch, Home, health coaching, Maps background
 work, iCloud and iMessage sync, ads and recommendations, telemetry, accessory
 firmware updates and OTA. On an iOS 27.0 guest that cuts process memory by
-29%, idle host CPU by 26% and idle host writes by 60%, and no vphone feature
-was lost. The profile is applied once, in the setup boot of a machine
-template, and every clone of the template inherits it.
+29%, idle host CPU by 26% and idle host writes by 60%; on iOS 26.6.2, with
+the same list less what 26 does not load, by 30%, 39% and 94%. No vphone
+feature was lost on either. The profile is applied once, in the setup boot
+of a machine template, and every clone of the template inherits it.
 
 `services.profile` and `services.profile.apply` are described in
 [`vphoned_http_api.md`](../vphoned_http_api.md); the lists are in
@@ -68,8 +69,11 @@ uses one of those frameworks needs its daemon back. Pass that label in `allow`
 and apply again; the profile turns back on a recorded label it no longer
 selects.
 
-Only iOS 27 has a list. It was measured on an iPhone guest. An iOS 26 or
-iPadOS guest gets "No trimmed service list" until one is measured there.
+iOS 26 and 27 have a list, both measured on iPhone guests (see
+[iOS 26](#ios-26) for how the 26 list differs). vphoned picks the list by
+the major version alone, so an iPadOS guest of those versions gets the iPhone
+list, which nobody has measured there. Any other version gets "No trimmed
+service list".
 
 ## Never disabled
 
@@ -147,12 +151,81 @@ Not checked:
 - A real microphone path.
 - **Location.** 27.0's locationd hangs or crashes with `EXC_ARM_PAC_FAIL` on
   untrimmed guests too, and Location Services were off after `setup.skip`.
-  Test it again on a trimmed guest once locationd is fixed. Until then, the
-  Maps background group and `nearbyd` are only optional, not unused.
+  On iOS 26.6.2, where locationd works, location simulation and Maps' blue
+  dot work with the Maps background group and `nearbyd` off ([iOS 26](#ios-26)).
+  On 27 it waits for locationd to be fixed.
 
 Known side effect: with `weatherd` off, the default Home Screen's Weather
 widget reads "Weather Unavailable". Pass `allow: ["com.apple.weatherd"]` to
 keep it.
+
+## iOS 26
+
+The iOS 26 list is the iOS 27 one mapped onto iPhone17,3 26.6.2 (23G90),
+measured on `t26-a` (cloudOS 26.4, 8 GB, 8 cores, `--headless`, 2026-10-09),
+a clone of a template built `--service-profile none`.
+
+How it was derived:
+
+1. The LaunchDaemons and LaunchAngels of both IPSWs' `launchd.plist`, by
+   `Label`: 685 on 26.6.2, 724 on 27.0.
+2. Of the 137 labels of the 27 base list, 132 exist on 26 under the same
+   name. `cloudtelemetryd`, `hybridsearchd`, `libsqlite3.dbtelemetryd`,
+   `speechmaintenanced` and `visualintelligenced` do not exist on 26, under
+   that name or another.
+3. Of those 132, 131 load on the guest. `safetyalertsd` has a
+   `LimitLoadToHardware` list of real devices on 26, so it never loads there
+   and is left out, as the 27 list holds only jobs loaded at boot.
+4. The store, sign-in follow-up and account groups have the same seven labels
+   on 26.
+5. Four jobs exist only on 26. `com.apple.factory.NFQRCoded` lives in
+   `/Developer` and does not load; `deviceinterfaced` and `systemactions`
+   load but did not run. `com.apple.timesync.audioclocksyncd` runs and was the
+   guest's largest idle CPU user once trimmed (1.5 s and 14,000 context
+   switches per 15 minutes, printing PTP clock statistics). With it disabled
+   as well the host's idle CPU did not move (2.69% of a core either way), so
+   it stays on.
+
+So `trimmed` on 26 disables 131 + 2 + 2 = 135 labels (`GuestServiceProfile.base26`,
+`notLoadedOn26`). The never-disabled set needed nothing new: no job of the
+list made the guest worse when off, and the four traps of 27 are kept on 26 as
+on 27 without being measured again.
+
+| After 17 minutes idle | Untrimmed | Trimmed (131 + store + follow-up) | Change |
+| --- | --- | --- | --- |
+| Guest process footprint, summed | 1516 MB | 1061 MB | −30% |
+| Processes | 373 | 230 | −38% |
+| Running launchd jobs | 300 | 179 | |
+| `memorystatus_level` (free memory) | 65% | 74% | |
+| Host VM process CPU, 15 idle minutes | 4.43% of a core | 2.69% | −39% |
+| Host writes, 15 idle minutes | 301 MiB | 18 MiB | −94% |
+| Guest CPU, 15 idle minutes (taskinfo) | 19.1 s | 8.9 s | −53% |
+| Host writes, first 100 s of boot | 480 MiB | 305–315 MiB | about −35% |
+| Host VM process footprint | 8.20 GB | 6.92 GB | |
+
+One untrimmed and one trimmed run of the same machine and disk, the windows
+from 120 to 1020 s after start. Boot CPU was 72 s untrimmed and 48–75 s
+trimmed in the first 100 s, within the spread 27 showed. Most of the
+untrimmed idle writes came in one burst five minutes after boot. With the
+profile on, the screen still turned off, the logs stayed at 50–80 lines per
+10 s after two minutes, and locationd started once on every boot.
+
+Function checks, trimmed and untrimmed alike: unlock, screenshot,
+`apps.list` (236), installing a small app with `apps.install`, launching it,
+Settings, clipboard, `audio.state`, playing a WAV in Safari (21 s, 247
+writes, none starved, host 47999.7/s), starting the Camera app (26.6.2
+publishes the synthetic camera: `libvcamcaptured` appends its source to
+`_sSourceList`), `location.set` and `location.current` with Location
+Services turned on, and Maps showing the blue dot at the simulated
+coordinate, uninstalling. SpringBoard kept its pid throughout.
+
+One difference showed in crash reports. On 2 of 16 trimmed boots, and none
+of 7 untrimmed ones, three control and widget extensions (CalculatorWidget,
+BarcodeScannerWidgetExtension, LauncherControlExtension) stopped in their
+first seconds in WidgetKit's `ControlAction.init(_:)` with "Can't create
+CHSIntentReference from" an App Intent. They are launched again on demand,
+and nothing visible was affected; which disabled job the intent reference
+needs was not found. `SiriSearchFeedback` crashed in both configurations.
 
 ## Applying it in a template
 
