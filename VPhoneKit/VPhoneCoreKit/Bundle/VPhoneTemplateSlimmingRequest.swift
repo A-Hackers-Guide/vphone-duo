@@ -66,7 +66,7 @@ public struct VPhoneTemplateSlimmingRequest: Equatable, Sendable {
     /// `GuestServiceProfile.supportedMajors` in the guest says. On any other
     /// version `services.profile.apply trimmed` refuses, so a template there
     /// takes `none` (``VPhoneMachineTemplateSlimming/fitted(toIOSVersion:)``).
-    public static let trimmedServiceProfileMajors = [27]
+    public static let trimmedServiceProfileMajors = [26, 27]
 
     /// The removable system apps a slimmed template drops (list C of the
     /// template trim plan), each verified to stay removed across a respring

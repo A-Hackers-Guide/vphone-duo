@@ -489,7 +489,7 @@ struct VPhoneVirtualMachineTemplateSetupCommand: ParsableCommand {
     }
 
     /// The slimming asked for, as the guest's iOS can take it: no trimmed
-    /// service profile where vphoned has no list for that version (iOS 26).
+    /// service profile where vphoned has no list for that version (before iOS 26).
     static func fitted(_ slimming: VPhoneMachineTemplateSlimming, toIOSVersion iOSVersion: String) throws -> VPhoneMachineTemplateSlimming {
         do {
             return try slimming.fitted(toIOSVersion: iOSVersion)

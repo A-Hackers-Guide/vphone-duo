@@ -67,8 +67,8 @@ public struct VPhoneMachineTemplateSlimming: Codable, Equatable, Hashable, Senda
     /// list measured for the guest's iOS; vphoned has one only for
     /// ``VPhoneTemplateSlimmingRequest/trimmedServiceProfileMajors`` and
     /// refuses the profile elsewhere, after the restore and most of the setup
-    /// boot. So on another version (iOS 26) the profile is `none`, in the key
-    /// as in the setup boot. Extra groups (`--accounts-off`) need the list and
+    /// boot. So on another version (iOS 25 and earlier) the profile is `none`, in
+    /// the key as in the setup boot. Extra groups (`--accounts-off`) need the list and
     /// are refused before anything is built.
     public func fitted(toIOSVersion iOSVersion: String) throws -> Self {
         guard serviceProfile == "trimmed",

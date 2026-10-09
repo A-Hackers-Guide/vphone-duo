@@ -25,6 +25,7 @@ func expectEqual<T: Equatable>(_ actual: T, _ expected: T, _ message: String = "
 enum LogicTests {
     static func main() {
         profileCatalog()
+        profileCatalog26()
         profileSelection()
         neverDisableEnforcement()
         reconciliation()
@@ -53,8 +54,33 @@ enum LogicTests {
         expectEqual(groups.map(\.name), ["base", "app_store", "signin_followup", "accounts"])
         expectEqual(groups.filter(\.byDefault).map(\.name), ["base", "app_store", "signin_followup"])
         expect(GuestServiceProfile.base27.contains("com.apple.appstorecomponentsd"), "appstorecomponentsd is in base")
-        expect(GuestServiceProfile.groups(iosMajor: 26) == nil, "no list for iOS 26")
+        expect(GuestServiceProfile.groups(iosMajor: 25) == nil, "no list for iOS 25")
+        expect(GuestServiceProfile.groups(iosMajor: 28) == nil, "no list for iOS 28")
+        expect(GuestServiceProfile.groups(iosMajor: 26) != nil, "a list for iOS 26")
         expect(GuestServiceProfile.groups(iosMajor: 27) != nil, "a list for iOS 27")
+        expectEqual(GuestServiceProfile.supportedMajors, [26, 27])
+    }
+
+    static func profileCatalog26() {
+        let base26 = GuestServiceProfile.base26
+        expectEqual(base26.count, 131, "137 minus six 26.6.2 does not load")
+        expectEqual(Set(base26).count, base26.count, "no duplicates")
+        expect(Set(base26).isSubset(of: GuestServiceProfile.base27), "26 adds no label of its own")
+        expect(GuestServiceProfile.notLoadedOn26.isSubset(of: GuestServiceProfile.base27), "only 27 labels are left out")
+        expect(Set(base26).isDisjoint(with: GuestServiceProfile.notLoadedOn26), "what 26 does not load is left out")
+        for label in ["com.apple.cloudtelemetryd", "com.apple.hybridsearchd", "com.apple.safetyalertsd"] {
+            expect(!base26.contains(label), "\(label) is not in the 26 list")
+        }
+        let groups = GuestServiceProfile.groups26
+        expectEqual(groups.map(\.name), GuestServiceProfile.groups27.map(\.name), "same groups as 27")
+        expectEqual(groups.filter(\.byDefault).map(\.name), ["base", "app_store", "signin_followup"])
+        expectEqual(groups.first?.labels, base26, "base is the 26 list")
+        expectEqual(
+            groups.dropFirst().map(\.labels), GuestServiceProfile.groups27.dropFirst().map(\.labels),
+            "store, follow-up and account labels are the same on 26",
+        )
+        let all = groups.flatMap(\.labels)
+        expectEqual(Set(all).count, all.count, "no label is in two 26 groups")
     }
 
     static func profileSelection() {
@@ -76,8 +102,21 @@ enum LogicTests {
         expectEqual(allowed?.allowed, ["com.apple.weatherd"], "only catalog labels are reported as allowed")
         expect(allowed?.labels.contains("com.apple.weatherd") == false, "weatherd kept")
 
-        expectEqual(try? GuestServiceProfile.select(profile: "none", iosMajor: 26), GuestServiceProfile.Selection())
-        expectThrows(.unsupported(iosMajor: 26)) { try GuestServiceProfile.select(profile: "trimmed", iosMajor: 26) }
+        let trimmed26 = try? GuestServiceProfile.select(profile: "trimmed", iosMajor: 26)
+        expectEqual(trimmed26?.labels.count, 135, "26 trimmed = 131 + 2 store + 2 follow-up")
+        expectEqual(trimmed26?.groups, ["base", "app_store", "signin_followup"])
+        expect(trimmed26?.refused.isEmpty == true, "the 26 list names nothing never disabled")
+        expectEqual(
+            (try? GuestServiceProfile.select(profile: "trimmed", iosMajor: 26, extraGroups: ["accounts"]))?.labels.count,
+            138, "accounts adds three on 26",
+        )
+
+        expectEqual(try? GuestServiceProfile.select(profile: "none", iosMajor: 25), GuestServiceProfile.Selection())
+        expectThrows(.unsupported(iosMajor: 25)) { try GuestServiceProfile.select(profile: "trimmed", iosMajor: 25) }
+        expectEqual(
+            GuestServiceProfile.Failure.unsupported(iosMajor: 25).description,
+            "No trimmed service list for iOS 25; lists exist for iOS 26, 27",
+        )
         expectThrows(.unknownGroup("bogus")) {
             try GuestServiceProfile.select(profile: "trimmed", iosMajor: 27, extraGroups: ["bogus"])
         }
@@ -96,7 +135,7 @@ enum LogicTests {
     }
 
     static func neverDisableEnforcement() {
-        for group in GuestServiceProfile.groups27 {
+        for group in GuestServiceProfile.groups27 + GuestServiceProfile.groups26 {
             let overlap = Set(group.labels).intersection(GuestServiceProfile.neverDisable)
             expect(overlap.isEmpty, "\(group.name) names never-disabled \(overlap.sorted())")
         }
