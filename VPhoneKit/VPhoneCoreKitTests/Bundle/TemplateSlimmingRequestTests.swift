@@ -130,4 +130,24 @@ struct TemplateSlimmingRequestTests {
         let identifiers = try Set(requests.map { try MachineTemplateKeyTests.key(slimming: $0.resolve()).identifier })
         #expect(identifiers.count == requests.count)
     }
+
+    @Test func `the trimmed profile becomes none on an iOS vphoned has no service list for`() throws {
+        let slimming = try Request().resolve()
+        let on26 = try slimming.fitted(toIOSVersion: "26.6.2")
+        #expect(on26.serviceProfile == "none")
+        #expect(on26.serviceGroups.isEmpty)
+        #expect(on26.trimTier == slimming.trimTier)
+        #expect(on26.removedApps == slimming.removedApps)
+        #expect(try slimming.fitted(toIOSVersion: "27.0") == slimming)
+        #expect(try slimming.fitted(toIOSVersion: "27.0.1") == slimming)
+        #expect(try on26.fitted(toIOSVersion: "26.6.2") == on26)
+        let none = try Request(serviceProfile: "none").resolve()
+        #expect(try none.fitted(toIOSVersion: "26.6.2") == none)
+    }
+
+    @Test func `accounts-off is refused on an iOS without the trimmed service list`() throws {
+        let slimming = try Request(accountsOff: true).resolve()
+        #expect(throws: VPhoneTemplateSlimmingError.self) { try slimming.fitted(toIOSVersion: "26.6.2") }
+        #expect(try slimming.fitted(toIOSVersion: "27.0") == slimming)
+    }
 }
