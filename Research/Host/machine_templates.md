@@ -425,8 +425,8 @@ setup boot is the guest's first boot). It talks to vphoned through
 | --- | --- | --- | --- |
 | connect | `ping` every second | 300 s | vphoned answers |
 | 0 snapshot | `apfs.snapshot.delete {force}` | 120 s | no `orig-fs.disabled.rn-*` in `remaining`/`after` (none to begin with is fine) |
-| a skip | `setup.skip {force}`, any refusal retried | 120 s | `setup_done` |
-| b settle | `setup.settle {timeout_s ≤ 110}` repeated | 600 s overall | `settled` |
+| a skip | `setup.skip {force}`, any refusal retried | 600 s | `setup_done` |
+| b settle | `setup.settle {timeout_s ≤ 30}` repeated, a progress line after each | 600 s overall | `settled` (system apps expanded and data migration finished) |
 | c apps | `apps.remove_system {bundle_ids, force}` | 300 s | every app `removed`, `absent` or `unregistered_stale` |
 | d/e profile | `services.profile.apply {profile, groups, force}`, `services.profile` | 180 s | no `failed`; the record holds `signin_followup` and the extra groups; followupd and appleidsetupd disabled |
 | f reboot | `processes.list` (launchd's `start_time`), `system.reboot {force}` | 300 s | vphoned answers with another launchd start time |
@@ -436,9 +436,64 @@ setup boot is the guest's first boot). It talks to vphoned through
 
 `setup.skip` is retried on any refusal: right after vphoned first answers on
 a guest that just finished its first boot, it failed with "Cannot allocate
-memory", then for 87 s with "relaunch action ignored and launchd stop failed:
-144 Requestor lacks required entitlement" (SpringBoard's restart), before it
-went through (p4-src, 27.0, 2026-10-08). The keys it writes are idempotent.
+memory". The keys it writes are idempotent.
+
+The setup boot is the guest's first boot, and the first boot's data migration
+runs until 60–180 s after the VM starts (`Research/Guest/setup_assistant_skip.md`,
+"The first boot after a restore"). Until it ends, SpringBoard has not decided
+whether to run Setup, and FrontBoard ignores the request to restart it. Until
+2026-10-09 `setup.skip` always restarted SpringBoard. FrontBoard ignored the
+relaunch, the `launchctl stop` fallback failed with "144 Requestor lacks
+required entitlement", and the step was retried until migration ended. That
+took 45–98 s of every build (p4-src 87 s on 2026-10-08; 49, 56, 63, 79 and
+98 s in later builds). vphoned now writes the keys and leaves SpringBoard alone
+while migration has not finished (`respring: {restarted: false, reason:
+"data_migration_pending"}`, logged as `SpringBoard left alone`). SpringBoard
+reads the keys when migration ends. The settle step waits for the end of
+migration (`data_migration_done`) as well as for the app expansion, so no
+later step, and no template frozen from the boot, can come before it. Before
+this change, that guarantee was only a side effect of the skip's retries:
+`staged_system_apps` empties 26–67 s before migration ends.
+
+This makes the steps report where the time goes, but it does not shorten the
+boot. The wait is the migration (`SpringBoard.migrator`, which waits for
+PosterBoard's poster migration), and every clone would otherwise repeat it.
+Right after it ends, LaunchServices drops 7 records (265 → 258 apps) and
+installd works for about 10 s, which the settle window covers before apps are
+removed. Measured on `ss-raw` (27.0, never booted, reverted from a snapshot
+between runs, 2026-10-09):
+
+| Run | vphoned | setup-skip | settle | VM start → remove-apps | migration end → remove-apps |
+| --- | --- | --- | --- | --- | --- |
+| A | before | 98 s (11 refusals) | 11 s | 114 s | — |
+| A2 | before | 56 s (6) | 10 s | 72 s | — |
+| A3 | before | 54 s (6) | 10 s | 70 s | 14 s |
+| N1 | after | 0 s | 64 s | 70 s | — |
+| N2 | after | 0 s | 80 s | 86 s | 15 s |
+| e2e (`vm create`, template 8e02beba26ce) | after | 0 s | 64 s | 69 s | — |
+
+2.9.0 failed every creation on a slower Mac (a MacBook Air, 2026-10-09):
+`setup.skip` was refused 14 times and its 120 s deadline ran out before data
+migration ended. vphoned now passes the skip at once, and the settle step
+waits for migration for up to 600 s, printing `waiting for the guest's
+first-boot data migration (N s)` after each call of at most 30 s. The skip's
+own deadline is 600 s too: a 2.9.0 vphoned (refused until migration ends)
+gets through, and its refusals print `waiting for the guest's first-boot data
+migration before SpringBoard can restart (N s)` at most every 30 s instead of
+one error line each.
+
+The migration's length varies between runs, and so does the boot. Measured
+from the end of migration, the old and the new flow both reach remove-apps
+about 15 s later. The reboot step took either about 10 s or about 33 s (4 of 6
+runs), with either vphoned. The guest's crash reports show why: a
+`panic-full` "initproc failed to start … Library not loaded:
+/usr/lib/libSystem.B.dylib … (no such file, no dyld cache)" right at a boot,
+after which the VM boots again. It happened on the setup boot's first boot
+(N3: a few seconds lost) and on the boot after its reboot (the e2e build: the
+33 s reboot). The cause is not known yet. Every run also left `duetexpertd`
+crash reports, every 10 s after the reboot ("Failed to initialize datavault
+for DuetExpertCenterAsset"), and one `PridePosterExtension` crash during
+migration.
 
 Retries: a call that did not reach vphoned (no socket, guest not connected,
 timeout) or that vphoned refused with `retryable: true` or `reason: busy`

@@ -32,7 +32,15 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
     var connectDelayPolls = 2
     var snapshotBusyAnswers = 0
     var skipFailures = 0
+    /// vphoned of 2026-10-09 on: the first boot's data migration is still
+    /// running, so `setup.skip` writes the keys and leaves SpringBoard alone.
+    var migrationPending = false
+    var skipFailureDetail: [String: Any] = ["code": "failed", "message": "Cannot allocate memory"]
     var unsettledAnswers = 1
+    /// How long one refused `setup.skip` takes in the guest (2.9.0's
+    /// vphoned waited 5 s for SpringBoard's pid to change).
+    var skipFailureSeconds: TimeInterval = 0
+    var unsettledReasons = ["staged_system_apps not empty"]
     var refusedApps: Set<String> = []
     /// Apps vphoned had to unregister more than once, as it reports them.
     var unregisterAttempts: [String: Int] = [:]
@@ -106,17 +114,21 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
             #expect(params["force"] as? Bool == true)
             if skipFailures > 0 {
                 skipFailures -= 1
-                throw refused("Cannot allocate memory", ["code": "failed", "message": "Cannot allocate memory"])
+                clock.sleep(skipFailureSeconds)
+                throw refused(skipFailureDetail["message"] as? String ?? "", skipFailureDetail)
             }
             setupDone = true
-            return ["setup_done": true, "setup_version": 11]
+            let respring: [String: Any] = migrationPending
+                ? ["restarted": false, "reason": "data_migration_pending"]
+                : ["restarted": true, "method": "frontboard_relaunch", "previous_pid": 36, "pid": 551]
+            return ["setup_done": true, "setup_version": 11, "respring": respring]
         case "setup.settle":
             let wait = params["timeout_s"] as? Int ?? 90
-            #expect(wait <= 110)
+            #expect(wait <= 30)
             if unsettledAnswers > 0 {
                 unsettledAnswers -= 1
                 clock.sleep(TimeInterval(wait))
-                return ["settled": false, "reasons": ["staged_system_apps not empty"], "elapsed_s": wait]
+                return ["settled": false, "reasons": unsettledReasons, "elapsed_s": wait]
             }
             return ["settled": true, "elapsed_s": 10.2, "reasons": [String]()]
         case "apps.remove_system":
@@ -301,6 +313,37 @@ struct TemplateSetupBootTests {
         #expect(outcome.setupSkipped)
     }
 
+    @Test func `setup skip during data migration leaves SpringBoard alone and says so`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.migrationPending = true
+        var lines: [String] = []
+        let boot = VPhoneTemplateSetupBoot(
+            machine: guest,
+            plan: VPhoneTemplateSetupPlan(slimming: VPhoneTemplateSlimmingRequest.defaultSlimming, requiresEveryApp: true),
+            clock: guest.clock,
+            log: { lines.append($0) },
+        )
+        let outcome = try boot.run()
+        #expect(guest.calls.count(where: { $0 == "setup.skip" }) == 1)
+        #expect(outcome.setupSkipped)
+        #expect(outcome.isComplete)
+        #expect(lines.contains { $0.contains("SpringBoard left alone: data_migration_pending") })
+        // The settle step, which waits for migration, still comes before any slimming.
+        #expect(inOrder(guest.calls, ["setup.skip", "setup.settle", "apps.remove_system"]))
+    }
+
+    @Test func `a SpringBoard restart vphoned reports as retryable is retried`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.skipFailures = 2
+        guest.skipFailureDetail = [
+            "code": "command_failed", "reason": "busy", "retryable": true,
+            "message": "Setup Assistant's keys are written, but SpringBoard did not restart: relaunch action ignored",
+        ]
+        let outcome = try run(guest).get()
+        #expect(guest.calls.count(where: { $0 == "setup.skip" }) == 3)
+        #expect(outcome.setupSkipped)
+    }
+
     @Test func `setup skip that keeps failing fails its step`() throws {
         let guest = FakeGuest(clock: FakeClock())
         guest.skipFailures = 1000
@@ -317,7 +360,7 @@ struct TemplateSetupBootTests {
         #expect(outcome.snapshotsGone)
     }
 
-    @Test func `settle is called again until it settles, each call within 110 s`() throws {
+    @Test func `settle is called again until it settles, each call within 30 s`() throws {
         let guest = FakeGuest(clock: FakeClock())
         guest.unsettledAnswers = 4
         let outcome = try run(guest).get()
@@ -335,8 +378,72 @@ struct TemplateSetupBootTests {
         #expect(!guest.stopped)
         #expect(!failure.outcome.isComplete)
         #expect(!guest.calls.contains("apps.remove_system"))
-        // Bounded: 600 s of 110 s calls.
-        #expect(guest.calls.count(where: { $0 == "setup.settle" }) <= 7)
+        // Bounded: 600 s of 30 s calls.
+        #expect(guest.calls.count(where: { $0 == "setup.settle" }) <= 21)
+    }
+
+    /// The slower Mac of the 2.9.0 report: data migration ran past the old
+    /// 120 s skip deadline. The skip now passes at once and the settle step
+    /// waits, printing progress, well past 120 s.
+    @Test func `a slow data migration is waited for in settle with progress, not failed`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.migrationPending = true
+        guest.unsettledAnswers = 10
+        guest.unsettledReasons = ["data migration has not finished"]
+        var lines: [String] = []
+        let boot = VPhoneTemplateSetupBoot(
+            machine: guest,
+            plan: VPhoneTemplateSetupPlan(slimming: VPhoneTemplateSlimmingRequest.defaultSlimming, requiresEveryApp: true),
+            clock: guest.clock,
+            log: { lines.append($0) },
+        )
+        let outcome = try boot.run()
+        #expect(outcome.isComplete)
+        #expect(try #require(outcome.durations[.settle]) > 300)
+        #expect(try #require(outcome.durations[.skipSetup]) < 5)
+        let progress = lines.filter { $0.hasPrefix("  waiting for the guest's first-boot data migration (") }
+        #expect(progress.count == 10)
+        #expect(progress.allSatisfy { !$0.contains(";") })
+        #expect(lines.contains { $0.hasPrefix("  settled after ") })
+    }
+
+    @Test func `settle progress names data migration first`() {
+        #expect(VPhoneTemplateSetupBoot.settleProgress(["data migration has not finished"], elapsed: 42)
+            == "  waiting for the guest's first-boot data migration (42 s)")
+        #expect(VPhoneTemplateSetupBoot.settleProgress(["staged_system_apps has 3 entries", "data migration has not finished"], elapsed: 12)
+            == "  waiting for the guest's first-boot data migration (12 s); also staged_system_apps has 3 entries")
+        #expect(VPhoneTemplateSetupBoot.settleProgress(["app count changed: 250 → 258"], elapsed: 70)
+            == "  waiting for first-boot work (70 s): app count changed: 250 → 258")
+    }
+
+    /// 2.9.0's vphoned restarts SpringBoard in every skip and is refused
+    /// until migration ends: 14 refusals (about 130 s) failed the step on the
+    /// MacBook Air. Now the step outlasts them and reports the wait every 30 s
+    /// instead of every refusal.
+    @Test func `a 2_9_0 vphoned refused until migration ends passes the skip step`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.skipFailures = 30
+        guest.skipFailureSeconds = 5.5
+        guest.skipFailureDetail = [
+            "code": "failed",
+            "message": "relaunch action ignored and launchd stop failed: 144 Requestor lacks required entitlement",
+        ]
+        var lines: [String] = []
+        let boot = VPhoneTemplateSetupBoot(
+            machine: guest,
+            plan: VPhoneTemplateSetupPlan(slimming: VPhoneTemplateSlimmingRequest.defaultSlimming, requiresEveryApp: true),
+            clock: guest.clock,
+            log: { lines.append($0) },
+        )
+        let outcome = try boot.run()
+        #expect(outcome.isComplete)
+        let skip = try #require(outcome.durations[.skipSetup])
+        #expect(skip > 250 && skip < 600)
+        #expect(!lines.contains { $0.contains("144") })
+        let progress = lines.filter { $0.contains("waiting for the guest's first-boot data migration before SpringBoard can restart") }
+        // The first refusal, then one line per 30 s at most.
+        #expect(progress.count >= 2 && progress.count <= Int(skip / 30) + 1, "\(progress)")
+        #expect(progress.first?.hasSuffix(" s)") == true, "\(progress)")
     }
 
     @Test func `a refused app fails a build whose key promises it`() throws {

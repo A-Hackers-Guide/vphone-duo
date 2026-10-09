@@ -96,10 +96,17 @@ public struct VPhoneTemplateSetupTimeouts: Equatable, Sendable {
     /// few seconds; the first-boot check of `vm create` allows 300.
     public var connect: TimeInterval = 300
     public var snapshot: TimeInterval = 120
-    public var skipSetup: TimeInterval = 120
-    /// Overall, across `setup.settle` calls of at most 110 s each. P0 saw
-    /// 92 s after `setup.skip` on a guest whose apps were already expanded.
+    /// vphoned writes the keys at once. A vphoned that also has to restart
+    /// SpringBoard is refused until the first boot's data migration ends,
+    /// which took up to 98 s on a fast Mac and more than 120 s on a MacBook
+    /// Air, so the deadline is sized like the settle step's.
+    public var skipSetup: TimeInterval = 600
+    /// Overall, across `setup.settle` calls of at most `settleCallLimit`
+    /// seconds each. The first boot's data migration ended 60–180 s after
+    /// the VM started on a fast Mac (2026-10-09); a slow host takes longer.
     public var settle: TimeInterval = 600
+    /// How often a waiting step prints its progress.
+    public var progressInterval: TimeInterval = 30
     public var removeApps: TimeInterval = 300
     public var serviceProfile: TimeInterval = 180
     /// From `system.reboot` until vphoned of the new boot answers (P1: 20 s).
@@ -317,8 +324,10 @@ public final class VPhoneTemplateSetupBoot {
     /// (step e), and the labels it must have turned off.
     public static let signInFollowUpGroup = "signin_followup"
     public static let signInFollowUpLabels = ["com.apple.appleidsetupd", "com.apple.followupd"]
-    /// `setup.settle` answers within 110 s; the host waits at most 120 s.
-    static let settleCallLimit = 110
+    /// One `setup.settle` call waits at most this long (vphoned's cap is
+    /// 110 s, the host's read timeout 120 s), so the step prints progress
+    /// between calls.
+    static let settleCallLimit = 30
 
     private let machine: VPhoneTemplateSetupMachine
     private let plan: VPhoneTemplateSetupPlan
@@ -419,23 +428,56 @@ public final class VPhoneTemplateSetupBoot {
             : "  deleted \(outcome.deletedSnapshots.joined(separator: ", "))")
     }
 
-    /// a. `setup.skip` writes purplebuddy's keys and restarts SpringBoard.
-    /// Right after vphoned first answers, SpringBoard and cfprefsd may not be
-    /// up yet: on a fresh 27.0 guest it failed with "Cannot allocate memory"
-    /// seconds into the boot, then for 87 s with SpringBoard's restart
-    /// refused ("Requestor lacks required entitlement"). It is idempotent, so
-    /// any refusal is retried until the deadline.
+    /// a. `setup.skip` writes purplebuddy's keys. On the setup boot (the
+    /// guest's first) data migration is still running: SpringBoard decides
+    /// whether to run Setup only when it ends, so vphoned leaves SpringBoard
+    /// alone and the step takes a moment. Before vphoned did that, it asked
+    /// FrontBoard to restart SpringBoard, which FrontBoard ignores until
+    /// migration ends, and the fallback `launchctl stop` failed with launchd
+    /// status 144 ("Requestor lacks required entitlement"); the step was
+    /// retried for 45–98 s, as long as migration had left. Waiting for
+    /// migration is now part of the settle step. Right after vphoned first
+    /// answers, cfprefsd may not be up yet ("Cannot allocate memory" seconds
+    /// into a fresh 27.0 boot). The skip is idempotent, so any refusal is
+    /// retried until the deadline.
     private func skipSetup() throws {
-        let result = try call("setup.skip", ["force": true], deadline: deadline(timeouts.skipSetup), retryingRefusals: true)
+        let start = clock.now()
+        var lastProgress = start
+        let result = try call(
+            "setup.skip", ["force": true], deadline: deadline(timeouts.skipSetup), retryingRefusals: true,
+        ) { [self] error in
+            // A vphoned that restarts SpringBoard is refused until data
+            // migration ends: report the wait, not every refusal.
+            guard Self.isSpringBoardRestartRefusal(error.message) else { return "  setup.skip: \(error.message); retrying" }
+            let now = clock.now()
+            guard now.timeIntervalSince(lastProgress) >= timeouts.progressInterval || lastProgress == start else { return nil }
+            lastProgress = now
+            return "  waiting for the guest's first-boot data migration before SpringBoard can restart (\(Int(now.timeIntervalSince(start))) s)"
+        }
         guard result["setup_done"] as? Bool == true else {
             throw StepError("setup.skip did not report setup_done")
         }
         outcome.setupSkipped = true
+        let respring = result["respring"] as? [String: Any]
+        if respring?["restarted"] as? Bool == false {
+            log("  SpringBoard left alone: \(respring?["reason"] as? String ?? "not restarted"); it reads the keys when data migration ends")
+        }
     }
 
-    /// b. `setup.settle` waits at most 110 s per call; it is called again
-    /// until the overall deadline.
+    /// The refusal of a SpringBoard restart FrontBoard ignored: 2.9.0's
+    /// "relaunch action ignored and launchd stop failed: 144 …", or the
+    /// later "… SpringBoard did not restart: …".
+    static func isSpringBoardRestartRefusal(_ message: String) -> Bool {
+        message.contains("relaunch action ignored") || message.contains("SpringBoard did not restart")
+    }
+
+    /// b. `setup.settle` waits at most `settleCallLimit` seconds per call;
+    /// it is called again until the overall deadline, printing what it waits
+    /// for in between. It settles once the system apps are expanded and data
+    /// migration has ended, which is also when SpringBoard reads the keys
+    /// `setup.skip` wrote.
     private func settle() throws {
+        let start = clock.now()
         let end = deadline(timeouts.settle)
         var reasons: [String] = []
         while true {
@@ -446,14 +488,27 @@ public final class VPhoneTemplateSetupBoot {
             }
             let wait = Int(min(Double(Self.settleCallLimit), max(10, remaining.rounded(.up))))
             let result = try call("setup.settle", ["timeout_s": wait], deadline: end, timeout: Double(wait) + 20)
+            let elapsed = Int(clock.now().timeIntervalSince(start))
             if result["settled"] as? Bool == true {
                 outcome.settled = true
-                log("  settled after \(result["elapsed_s"].map { "\($0)" } ?? "?") s")
+                log("  settled after \(elapsed) s")
                 return
             }
             reasons = strings(result["reasons"])
-            log("  not settled yet: \(reasons.joined(separator: "; "))")
+            log(Self.settleProgress(reasons, elapsed: elapsed))
         }
+    }
+
+    static let migrationReason = "data migration has not finished"
+
+    /// One progress line of the settle step.
+    static func settleProgress(_ reasons: [String], elapsed: Int) -> String {
+        let others = reasons.filter { $0 != migrationReason }
+        guard others.count < reasons.count else {
+            return "  waiting for first-boot work (\(elapsed) s): \(reasons.joined(separator: "; "))"
+        }
+        return "  waiting for the guest's first-boot data migration (\(elapsed) s)"
+            + (others.isEmpty ? "" : "; also \(others.joined(separator: "; "))")
     }
 
     /// c. `apps.remove_system` backs each container up, unregisters it and
@@ -717,6 +772,7 @@ public final class VPhoneTemplateSetupBoot {
         deadline: Date,
         timeout: TimeInterval = 60,
         retryingRefusals: Bool = false,
+        retryLine: ((VPhoneGuestCallError) -> String?)? = nil,
     ) throws -> [String: Any] {
         var attempts = 0
         while true {
@@ -728,7 +784,9 @@ public final class VPhoneTemplateSetupBoot {
                 guard clock.now().addingTimeInterval(timeouts.retryInterval) < deadline else {
                     throw StepError("\(method): \(error.message) (\(attempts) attempt(s))")
                 }
-                log("  \(method): \(error.message); retrying")
+                if let line = retryLine.map({ $0(error) }) ?? "  \(method): \(error.message); retrying" {
+                    log(line)
+                }
                 clock.sleep(timeouts.retryInterval)
             } catch let error as VPhoneGuestCallError {
                 // Kept whole for a caller that reads its detail.
