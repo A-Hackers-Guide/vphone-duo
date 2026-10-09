@@ -403,6 +403,8 @@ struct VPhoneCustomFirmwareUpdateKernelCommand: ParsableCommand {
 
     @OptionGroup var lib: VPhoneLibraryOption
     @Argument(help: "VM name") var name: String?
+    @Option(name: .customLong("work-parent"), help: "Root-owned private CFW temporary directory")
+    var workParent = VPhoneCustomFirmwareInstaller.defaultWorkParent
 
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
@@ -411,6 +413,7 @@ struct VPhoneCustomFirmwareUpdateKernelCommand: ParsableCommand {
             bundle: bundle.url,
             resources: VPhoneResources.resolve(),
             mode: .kernelUpdate,
+            workParent: workParent,
         )
         throw ExitCode(code)
     }
@@ -449,6 +452,8 @@ struct VPhoneCustomFirmwareUpdateEnvironmentCommand: ParsableCommand {
 
     @OptionGroup var lib: VPhoneLibraryOption
     @Argument(help: "VM name") var name: String?
+    @Option(name: .customLong("work-parent"), help: "Root-owned private CFW temporary directory")
+    var workParent = VPhoneCustomFirmwareInstaller.defaultWorkParent
 
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
@@ -457,6 +462,7 @@ struct VPhoneCustomFirmwareUpdateEnvironmentCommand: ParsableCommand {
             bundle: bundle.url,
             resources: VPhoneResources.resolve(),
             mode: .environmentOnly,
+            workParent: workParent,
         )
         throw ExitCode(code)
     }
