@@ -55,8 +55,14 @@ public struct VPhoneVirtualMachinePatchSelection: Codable, Sendable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         presetIdentifier = try container.decodeIfPresent(String.self, forKey: .presetIdentifier)
             ?? VPhonePatchPreset.standardIdentifier
-        blockedPatches = try container.decodeIfPresent([String].self, forKey: .blockedPatches) ?? []
-        allowedPatches = try container.decodeIfPresent([String].self, forKey: .allowedPatches) ?? []
+        // A record outlives the bundle that wrote it, so a renamed patch is read
+        // under the name this bundle declares.
+        blockedPatches = try FirmwarePatchSetCatalog.currentIdentifiers(
+            container.decodeIfPresent([String].self, forKey: .blockedPatches) ?? [],
+        )
+        allowedPatches = try FirmwarePatchSetCatalog.currentIdentifiers(
+            container.decodeIfPresent([String].self, forKey: .allowedPatches) ?? [],
+        )
     }
 }
 
@@ -98,7 +104,9 @@ public struct VPhoneVirtualMachinePatchPlan: Codable, Sendable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         presetIdentifier = try container.decode(String.self, forKey: .presetIdentifier)
         patchSets = try container.decodeIfPresent([String].self, forKey: .patchSets) ?? []
-        enabledPatches = try container.decodeIfPresent([String].self, forKey: .enabledPatches) ?? []
+        enabledPatches = try FirmwarePatchSetCatalog.currentIdentifiers(
+            container.decodeIfPresent([String].self, forKey: .enabledPatches) ?? [],
+        )
         iOSBaseVersion = try container.decodeIfPresent(String.self, forKey: .iOSBaseVersion)
         cloudOSVersion = try container.decodeIfPresent(String.self, forKey: .cloudOSVersion)
         parameters = try container.decodeIfPresent([String: String].self, forKey: .parameters) ?? [:]
@@ -155,11 +163,15 @@ public struct VPhoneVirtualMachinePatchReceipt: Codable, Sendable, Hashable {
 
         public init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            patches = try container.decode([String].self, forKey: .patches)
+            patches = try FirmwarePatchSetCatalog.currentIdentifiers(
+                container.decode([String].self, forKey: .patches),
+            ).sorted()
             writer = try container.decode(String.self, forKey: .writer)
             bundleVersion = try container.decodeIfPresent(String.self, forKey: .bundleVersion)
             date = try container.decode(Date.self, forKey: .date)
-            notApplicable = try container.decodeIfPresent([String].self, forKey: .notApplicable) ?? []
+            notApplicable = try FirmwarePatchSetCatalog.currentIdentifiers(
+                container.decodeIfPresent([String].self, forKey: .notApplicable) ?? [],
+            ).sorted()
         }
     }
 

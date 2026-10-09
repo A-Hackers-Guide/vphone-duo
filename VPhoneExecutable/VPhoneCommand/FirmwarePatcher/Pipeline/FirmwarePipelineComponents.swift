@@ -90,8 +90,8 @@ extension FirmwarePipeline {
             isEnabled($0.identifier, fallback: false)
         }
 
-        // The 120 Hz display timing, off unless the VM asked for it.
-        let applyDisplayRefresh = isEnabled(FirmwarePatchSetCatalog.displayRefreshPatch, fallback: false)
+        // ProMotion, the 120 Hz display timing: on in `standard`, on every base.
+        let applyProMotion = isEnabled(FirmwarePatchSetCatalog.proMotionPatch, fallback: true)
         // The paravirtual user-client allowlist, on in `standard` and pinned to the
         // 26.x and 18.x bases (27 opens the whole gate instead).
         let applyParavirtUserClients = isEnabled(
@@ -243,7 +243,7 @@ extension FirmwarePipeline {
                         applyExcGuard: applyExcGuard,
                         applyIOS27: applyIOS27,
                         applyFrida: applyFrida,
-                        applyDisplayRefresh: applyDisplayRefresh,
+                        applyProMotion: applyProMotion,
                         applyParavirtUserClients: applyParavirtUserClients,
                         includeBase: includeKernelBase,
                         includeCustomFirmware: includeKernelCustomFirmware,
@@ -391,7 +391,7 @@ extension FirmwarePipeline {
         applyExcGuard: Bool,
         applyIOS27: Bool,
         applyFrida: Bool,
-        applyDisplayRefresh: Bool,
+        applyProMotion: Bool,
         applyParavirtUserClients: Bool,
         includeBase: Bool,
         includeCustomFirmware: Bool,
@@ -411,7 +411,7 @@ extension FirmwarePipeline {
                 let p = KernelCustomFirmwarePatcher(data: data, verbose: verbose)
                 p.applyIOS27 = applyIOS27
                 p.applyFrida = applyFrida
-                p.applyDisplayRefresh = applyDisplayRefresh
+                p.applyProMotion = applyProMotion
                 p.applyParavirtUserClients = applyParavirtUserClients
                 p.gate = gate
                 return p

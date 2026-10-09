@@ -55,23 +55,48 @@ public enum FirmwarePatchSetCatalog {
     /// `dyld-exp-mis_trust_auth` is off because a userspace hook now does its
     /// job: see ``misTrustAuthPatch``.
     ///
-    /// `kernel-exp-display_refresh_120hz` is off because it is a preference with a
-    /// cost: see ``displayRefreshPatch``.
-    ///
-    /// `kernel-cfw-paravirt_user_clients` is not in this list: `standard` turns it
-    /// on. See ``paravirtUserClientsPatch``.
+    /// `kernel-cfw-paravirt_user_clients` and `kernel-cfw-display_promotion`
+    /// are not in this list: `standard` turns them on. See
+    /// ``paravirtUserClientsPatch`` and ``proMotionPatch``.
     public static let manualOnlyPatches: Set<String> =
         Set(FirmwareKernelFridaPatchSet.manifest.patches.map(\.identifier))
             .union(hypervisorConcealmentPatches)
             .union(experimentalIdentityPatches)
-            .union([misTrustAuthPatch, displayRefreshPatch, FirmwareGuestSystemPatchSet.settingsRootRows, FirmwareGuestSystemPatchSet.settingsSoftwareUpdate])
+            .union([misTrustAuthPatch, FirmwareGuestSystemPatchSet.settingsRootRows, FirmwareGuestSystemPatchSet.settingsSoftwareUpdate])
 
-    /// The 120 Hz timing for the paravirtual display.
+    /// ProMotion: the 120 Hz timing for the paravirtual display.
     ///
-    /// Off in `standard`: the host's mode is 60 Hz, a guest rendering twice as
-    /// often costs twice the host CPU and GPU, and only a 120 Hz host display
-    /// shows the difference. See `Research/Guest/display_refresh_rate.md`.
-    public static let displayRefreshPatch = "kernel-exp-display_refresh_120hz"
+    /// On in `standard`. The host's mode is 60 Hz and Virtualization has no
+    /// setting for it; the guest renders at whatever rate the timing element
+    /// advertises, and the host scans out every frame it presents. A guest
+    /// rendering twice as often costs up to twice the host CPU and GPU while it
+    /// animates, and nothing while it is static. Blocking it per VM keeps 60 Hz.
+    ///
+    /// Introduced opt-in as `kernel-exp-display_refresh_120hz`, which shipped from
+    /// 2.4.2; renamed `kernel-cfw-display_promotion` when `standard` turned it on,
+    /// as the naming rule requires. ``renamedPatches`` maps a VM's record of the
+    /// old name. See
+    /// `Research/Guest/display_refresh_rate.md`.
+    public static let proMotionPatch = "kernel-cfw-display_promotion"
+
+    /// Identifiers a released bundle declared that a later one renamed, old to new.
+    ///
+    /// A VM's `PatchSelection.plist` and `PatchReceipt.plist` outlive the bundle
+    /// that wrote them, and `fw patch` throws `unknownPatch` for an identifier
+    /// nothing declares. Only renames that reached a release are listed: one that
+    /// never left a development branch has no record to carry.
+    public static let renamedPatches: [String: String] = [
+        "kernel-exp-display_refresh_120hz": proMotionPatch,
+    ]
+
+    /// The identifiers this bundle declares for ones a VM recorded, in order, each
+    /// once.
+    public static func currentIdentifiers(_ identifiers: [String]) -> [String] {
+        var seen = Set<String>()
+        return identifiers
+            .map { renamedPatches[$0] ?? $0 }
+            .filter { seen.insert($0).inserted }
+    }
 
     /// A narrow IOUserClient sandbox allowlist for the paravirtual devices, on a
     /// base older than 27.

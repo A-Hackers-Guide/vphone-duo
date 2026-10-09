@@ -637,6 +637,39 @@ struct FirmwarePipelineTests {
         }
     }
 
+    @Test func `standard turns ProMotion on unless the VM blocks it`() throws {
+        // From the standard plan and from the no-plan fallback, on every base.
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+        func flag(_ base: String?, standard: Bool, blocked: Set<String> = []) throws -> Bool {
+            let version = VPhoneVersion(base)
+            let pipeline = FirmwarePipeline(
+                vmDirectory: root,
+                variant: .jb,
+                verbose: false,
+                preset: standard ? FirmwarePatchSetCatalog.standardPreset : nil,
+                blockedPatches: blocked,
+            )
+            let plan = try pipeline.resolvePlan(iOSBase: version, cloudOS: VPhoneVersion("26.4"))
+            let components = pipeline.buildComponentList(
+                restoreDir: root,
+                iOSBase: version,
+                plan: plan,
+                gate: plan.map { VPhonePatchGate(plan: $0) } ?? .unrestricted,
+            )
+            let kernel = try #require(components.first { $0.name == "kernelcache" })
+            let patcher = try #require(
+                kernel.patcherFactories.lazy.compactMap { try? $0(Data(), false) as? KernelCustomFirmwarePatcher }.first,
+            )
+            return patcher.applyProMotion
+        }
+        for base in ["18.6.2", "26.6.2", "27.0", nil] {
+            for standard in [true, false] {
+                #expect(try flag(base, standard: standard))
+            }
+            #expect(try !flag(base, standard: true, blocked: [FirmwarePatchSetCatalog.proMotionPatch]))
+        }
+    }
+
     @Test func `find file supports glob patterns`() throws {
         let fm = FileManager.default
         let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())

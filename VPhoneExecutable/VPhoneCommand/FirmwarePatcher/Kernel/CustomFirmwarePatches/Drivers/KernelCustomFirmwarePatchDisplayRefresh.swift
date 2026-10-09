@@ -80,7 +80,7 @@ extension KernelCustomFirmwarePatcher {
         emit(
             loadOff,
             movz,
-            patchID: "kernel-exp-display_refresh_120hz",
+            patchID: FirmwarePatchSetCatalog.proMotionPatch,
             virtualAddress: fileOffsetToVA(loadOff),
             description: "timing element refresh ldur w3,[mode,#-4] -> movz w3,#\(Self.displayRefreshHz),lsl #16 [16.16 Hz]",
         )

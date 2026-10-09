@@ -19,8 +19,11 @@
   userspace in installd, misagent and SpringBoard, so editing the shared cache for
   it buys nothing there, costs an iOS 27 guest its boot (issue #532), and on 24A435 cannot
   even be applied. See FirmwarePatchSetCatalog.misTrustAuthPatch.
-  The fifth is the 120 Hz display timing, a preference that doubles how often the
-  guest renders. See FirmwarePatchSetCatalog.displayRefreshPatch.
+  The fifth is the Settings row hiding (system-preferences-exp-root_rows and
+  dyld-exp-settings_software_update_row), a preference.
+  ProMotion, the 120 Hz display timing (kernel-cfw-display_promotion), is on: the
+  guest renders at the rate its display advertises, and the host shows every frame.
+  See FirmwarePatchSetCatalog.proMotionPatch.
   The narrow paravirtual user-client allowlist (kernel-cfw-paravirt_user_clients) is
   on: without it a daemon on a 26.x or 18.x base cannot open the paravirtual GPU,
   and cameracaptured crash-loops on it. See
@@ -123,7 +126,6 @@
 			<string>dyld-exp-mis_trust_auth</string>
 			<string>system-preferences-exp-root_rows</string>
 			<string>dyld-exp-settings_software_update_row</string>
-			<string>kernel-exp-display_refresh_120hz</string>
 		</array>
 	</dict>
 </dict>
