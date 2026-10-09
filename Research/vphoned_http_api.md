@@ -95,6 +95,9 @@ notch and cutout drawn by the host VM window.
 `apps.install` accepts IPA and TIPA archives. IcliKit 0.6.8 validates and
 extracts the archive, then calls vphone's signer on the temporary app bundle
 before IcliKit copies it into a container, registers it, and owns rollback.
+Since icli 0.7.18 an archive may expand to 8 GiB, in one entry or in all,
+across up to 400,000 entries; a larger one is refused with the size it
+expands to.
 `apps.uninstall` delegates removal to IcliKit and requires `force=true`.
 `POST /v1/bootstrap/install` (or RPC method `bootstrap.install`) accepts
 `{"layout":"rootless"}` or `{"layout":"roothide"}` and installs the latest
