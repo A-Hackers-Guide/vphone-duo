@@ -317,6 +317,8 @@ struct VPhoneCustomFirmwareInstallCommand: ParsableCommand {
         help: "Keep the extracted firmware after install (default: removed to save space)",
     )
     var keepArtifacts = false
+    @Option(name: .customLong("work-parent"), help: "Root-owned private CFW temporary directory")
+    var workParent = VPhoneCustomFirmwareInstaller.defaultWorkParent
 
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
@@ -326,6 +328,7 @@ struct VPhoneCustomFirmwareInstallCommand: ParsableCommand {
         let code = try VPhoneCustomFirmwareInstaller.elevate(
             bundle: bundle.url,
             resources: resources,
+            workParent: workParent,
         )
         if code == 0 {
             try recordInstall(in: bundle)

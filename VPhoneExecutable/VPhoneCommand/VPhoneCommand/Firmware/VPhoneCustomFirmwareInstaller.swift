@@ -68,6 +68,7 @@ struct VPhoneCustomFirmwareInstaller {
     let bundle: URL
     let resources: VPhoneResources
     var mode: Mode = .full
+    let workParent: String
 
     /// Guest system files belong to root:wheel.
     private static let guestOwner: (uid: uid_t, gid: gid_t) = (0, 0)
@@ -86,7 +87,7 @@ struct VPhoneCustomFirmwareInstaller {
 
     /// Root-owned and sticky, outside every user's tree. The work folder is
     /// made here with `mkdtemp`, so its name cannot be predicted or claimed.
-    private static let workParent = "/private/var/tmp"
+    static let defaultWorkParent = "/private/var/tmp"
 
     private var executable: URL {
         VPhoneResources.runningExecutable()
@@ -107,9 +108,15 @@ struct VPhoneCustomFirmwareInstaller {
         bundle: URL,
         resources: VPhoneResources,
         mode: Mode = .full,
+        workParent: String = defaultWorkParent,
     ) throws -> Int32 {
         if geteuid() == 0 {
-            try VPhoneCustomFirmwareInstaller(bundle: bundle, resources: resources, mode: mode).run()
+            try VPhoneCustomFirmwareInstaller(
+                bundle: bundle,
+                resources: resources,
+                mode: mode,
+                workParent: workParent,
+            ).run()
             return 0
         }
         throw ValidationError("\(mode.summary.capitalized) needs root. Run this command with sudo.")
@@ -2552,7 +2559,14 @@ struct VPhoneCustomFirmwareInstaller {
     // MARK: - Cleanup
 
     private func makeWorkDirectory() throws -> WorkDirectory {
-        var template = Array("\(Self.workParent)/vphone-cfw.XXXXXXXX".utf8CString)
+        let parent = try VPhoneConfinedDirectory.pin(absolutePath: workParent, requireOwner: 0)
+        let parentMode = try parent.metadata().st_mode & 0o7777
+        let privateDirectory = parentMode & 0o077 == 0
+        let stickySharedDirectory = parentMode & 0o1777 == 0o1777
+        guard privateDirectory || stickySharedDirectory else {
+            throw ValidationError("The CFW work folder parent \(workParent) must be root-owned and private or sticky.")
+        }
+        var template = Array("\(workParent)/vphone-cfw.XXXXXXXX".utf8CString)
         // mkdtemp returns a pointer into the template. `&template` lends only a
         // temporary buffer that ends with the call, and the array is dead after
         // it, so read the name while the buffer is still pinned.
@@ -2560,7 +2574,7 @@ struct VPhoneCustomFirmwareInstaller {
             mkdtemp(buffer.baseAddress!).map { String(cString: $0) }
         }
         guard let path = created else {
-            throw ValidationError("Unable to create a private work folder in \(Self.workParent): \(String(cString: strerror(errno)))")
+            throw ValidationError("Unable to create a private work folder in \(workParent): \(String(cString: strerror(errno)))")
         }
         // mkdtemp creates the folder 0700 for its caller, root. Re-check it
         // through a no-follow walk before mounting anything under it.
@@ -2594,7 +2608,7 @@ struct VPhoneCustomFirmwareInstaller {
         else {
             throw ValidationError("A CFW volume is still mounted under \(work.url.path). Eject it, then try again.")
         }
-        try VPhoneConfinedDirectory.pin(absolutePath: Self.workParent).removeItem(work.name)
+        try VPhoneConfinedDirectory.pin(absolutePath: workParent).removeItem(work.name)
     }
 
     private func detachImage(at mount: URL) throws {
@@ -2641,11 +2655,14 @@ struct VPhoneCustomFirmwareInstallRootCommand: ParsableCommand {
 
     @Argument(help: "VM bundle path") var bundle: String
     @Option(help: "Resource base") var resources: String
+    @Option(name: .customLong("work-parent"), help: "Root-owned private CFW temporary directory")
+    var workParent = VPhoneCustomFirmwareInstaller.defaultWorkParent
 
     func run() throws {
         try VPhoneCustomFirmwareInstaller(
             bundle: URL(fileURLWithPath: bundle),
             resources: VPhoneResources(base: URL(fileURLWithPath: resources)),
+            workParent: workParent,
         ).run()
     }
 }
