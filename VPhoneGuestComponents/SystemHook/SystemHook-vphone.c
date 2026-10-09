@@ -1,4 +1,5 @@
 #include "../Shared/InjectionEnvironment.h"
+#include "../Shared/AttitudeProcess.h"
 #include "../Shared/JetsamLimits.h"
 #include "../Shared/RootHideLoaderLinks.h"
 #include <crt_externs.h>
@@ -242,9 +243,8 @@ __attribute__((constructor)) static void vpLogProcess(void) {
         vpLoadLibrary("gyroscope-hook", VP_GYROSCOPE_HOOK);
         return;
     }
-    // Loaded before the app gate: SpringBoard is neither an app path nor a
-    // bootstrap executable, and the swizzle has to be in place before UIKit
-    // first asks CoreHaptics for an engine.
+    // SpringBoard needs the haptics swizzle before UIKit first asks for an
+    // engine, even though attitude simulation excludes this system UI app.
     if (vpIsSpringBoard(path))
         vpLoadLibrary("haptics-fix", VP_HAPTICS_FIX);
     // Loaded before the app gate too: the swizzle must be in place before
@@ -258,7 +258,7 @@ __attribute__((constructor)) static void vpLogProcess(void) {
     // above, so background AuthKit auth is untouched).
     if (vpIsAppPath(path))
         vpLoadLibrary("signin-fix", VP_SIGNIN_FIX);
-    if (vpIsAppPath(path))
+    if (vpIsAppPath(path) && vpAttitudeAllowsProcess(path))
         vpLoadLibrary("attitude-hook", VP_ATTITUDE_HOOK);
     if (vpIsAppPath(path) && dlopen(VP_AVFOUNDATION, RTLD_LAZY | RTLD_NOLOAD))
         vpLoadLibrary("camera-hook", VP_CAMERA_APP_HOOK);

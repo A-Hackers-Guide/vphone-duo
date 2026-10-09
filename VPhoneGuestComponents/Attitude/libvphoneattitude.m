@@ -1,8 +1,15 @@
 #import "VPhoneAttitudeSample.h"
 #import "VPhoneAttitudeMotionManager.h"
+#include "../Shared/AttitudeProcess.h"
 #import <objc/runtime.h>
+#include <limits.h>
+#include <mach-o/dyld.h>
 #include <notify.h>
 #include <os/lock.h>
+
+#ifndef VP_ATTITUDE_MANAGER_CLASS
+#define VP_ATTITUDE_MANAGER_CLASS "CMMotionManager"
+#endif
 
 // MARK: - Shared configuration
 
@@ -149,9 +156,14 @@ static CMAttitudeReferenceFrame (*availableFrames)(id, SEL);
         self.latest = nil;
         self.handler = nil;
         self.deliveryQueue = nil;
-        self.invokingNative = YES;
-        stopUpdates(self.manager, @selector(stopDeviceMotionUpdates));
-        self.invokingNative = NO;
+        // Starting a simulated subscription also comes through stop. Calling
+        // native stop before a native start can initialize sensorless guest
+        // Core Motion and crash its motion thread (SpringBoard respring).
+        if (self.nativeActive) {
+            self.invokingNative = YES;
+            stopUpdates(self.manager, @selector(stopDeviceMotionUpdates));
+            self.invokingNative = NO;
+        }
         self.nativeActive = NO;
     }
 }
@@ -270,13 +282,18 @@ static void VPhoneReadAttitude(void) {
 
 __attribute__((constructor)) static void VPhoneAttitudeInstall(void) {
     @autoreleasepool {
+        // Also enforce scope here: a live dylib update can reach a guest
+        // still running the older SystemHook until its next reboot.
+        char path[PATH_MAX];
+        uint32_t length = sizeof(path);
+        if (_NSGetExecutablePath(path, &length) != 0 || !vpAttitudeAllowsProcess(path)) return;
         configurationLock = [NSRecursiveLock new];
         sessions = [NSHashTable weakObjectsHashTable];
         dispatch_queue_t queue = dispatch_queue_create("com.vphone.motion.attitude", DISPATCH_QUEUE_SERIAL);
         if (notify_register_dispatch(VP_ATTITUDE_NOTIFICATION, &notificationToken, queue,
             ^(int token) { VPhoneReadAttitude(); }) != NOTIFY_STATUS_OK) return;
         VPhoneReadAttitude();
-        Class cls = NSClassFromString(@"CMMotionManager");
+        Class cls = NSClassFromString(@VP_ATTITUDE_MANAGER_CLASS);
         // Validate the entire ABI before installing any part of the hook.
         SEL selectors[] = {@selector(startDeviceMotionUpdates), @selector(startDeviceMotionUpdatesUsingReferenceFrame:),
             @selector(startDeviceMotionUpdatesToQueue:withHandler:), @selector(startDeviceMotionUpdatesUsingReferenceFrame:toQueue:withHandler:),

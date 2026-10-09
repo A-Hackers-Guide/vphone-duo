@@ -9,6 +9,7 @@
 #define VP_DEVICE_NAME VP_TEST_LIBRARY_DIR "/libdevicename.dylib"
 
 #include "../Shared/InjectionEnvironment.h"
+#include "../Shared/AttitudeProcess.h"
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -201,6 +202,13 @@ static void skipsRepeatedLibraries(void) {
 }
 
 int main(void) {
+    assert(!vpAttitudeAllowsProcess(NULL));
+    assert(!vpAttitudeAllowsProcess("SpringBoard.app/SpringBoard"));
+    assert(!vpAttitudeAllowsProcess("/System/Library/CoreServices/SpringBoard.app/SpringBoard"));
+    assert(!vpAttitudeAllowsProcess("/private/System/Library/CoreServices/AccessibilityUIServer.app/AccessibilityUIServer"));
+    assert(!vpAttitudeAllowsProcess("/var/jb/Applications/SpringBoard.app/SpringBoard"));
+    assert(vpAttitudeAllowsProcess("/Applications/Preferences.app/Preferences"));
+    assert(vpAttitudeAllowsProcess("/private/var/containers/Bundle/Application/UUID/Motion.app/Motion"));
     insertsBoth();
     addsExtraBesideAnExistingHook();
     leavesACompleteEnvironmentAlone();
