@@ -93,7 +93,9 @@ enum GuestSnapshotPolicy {
             }
         }
 
-        var retryable: Bool { self == .busy }
+        var retryable: Bool {
+            self == .busy
+        }
     }
 
     static func message(_ failure: Failure, errno code: Int32, operation: String) -> String {

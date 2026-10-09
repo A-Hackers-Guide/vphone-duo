@@ -212,12 +212,16 @@ public struct VPhoneSystemTrimSpec: Equatable, Hashable, Sendable {
         for entry in entries {
             switch entry.selection {
             case .item:
-                if relative == entry.path { return true }
+                if relative == entry.path {
+                    return true
+                }
             case .contents, .languageBundles:
                 let prefix = entry.path + "/"
                 guard relative.hasPrefix(prefix) else { continue }
                 let child = String(relative.dropFirst(prefix.count))
-                if entry.selects(child: child) { return true }
+                if entry.selects(child: child) {
+                    return true
+                }
             }
         }
         return false

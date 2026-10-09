@@ -110,8 +110,13 @@ struct GuestSystemAppLocation: Equatable {
     let containerUUID: String
     let appDirectoryName: String
 
-    var containerPath: String { GuestSystemAppPolicy.containersRoot + "/" + containerUUID }
-    var appPath: String { containerPath + "/" + appDirectoryName }
+    var containerPath: String {
+        GuestSystemAppPolicy.containersRoot + "/" + containerUUID
+    }
+
+    var appPath: String {
+        containerPath + "/" + appDirectoryName
+    }
 
     /// Accepts the path LaunchServices reports, with or without the
     /// `/private` prefix and with a trailing slash. Anything else, a `.` or

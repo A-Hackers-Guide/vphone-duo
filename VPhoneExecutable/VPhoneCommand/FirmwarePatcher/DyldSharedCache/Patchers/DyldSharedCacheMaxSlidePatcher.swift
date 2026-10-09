@@ -269,7 +269,11 @@ public enum DyldSharedCacheMaxSlidePatcher {
         let chunks = try DyldSharedCacheChunkSet(
             directory: chunksDirectory, architecture: architecture, captureUndo: captureUndo,
         )
-        defer { if captureUndo, let undo = chunks.takeUndoLog() { onUndo?(undo) } }
+        defer {
+            if captureUndo, let undo = chunks.takeUndoLog() {
+                onUndo?(undo)
+            }
+        }
         let headerVMA = try headerVMA(of: chunks)
         let header = try readHeader(from: chunks, at: headerVMA, chunkName: mainChunkName)
 

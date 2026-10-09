@@ -54,7 +54,9 @@ struct KernelCustomFirmwarePatchSharedRegionSizeTests {
         let blockOff = textStart + text.count
         text += block
         text += [UInt8](repeating: 0xD4, count: 0x20) // UDF padding after
-        while text.count % 0x100 != 0 { text.append(0xD4) }
+        while text.count % 0x100 != 0 {
+            text.append(0xD4)
+        }
 
         var image = Data()
         func append32(_ value: UInt32) {
@@ -126,7 +128,7 @@ struct KernelCustomFirmwarePatchSharedRegionSizeTests {
         #expect(Array(patcher.patchedData[(blockOff + 16) ..< (blockOff + 20)]) == Self.branchForward)
     }
 
-    @Test func `does not match a second time over patched bytes`() throws {
+    @Test func `does not match a second time over patched bytes`() {
         let (data, _) = Self.kernel(withBlock: Self.stockBlock)
         let patcher = KernelCustomFirmwarePatcher(data: data, verbose: false)
         patcher.parseMachO()
@@ -140,7 +142,7 @@ struct KernelCustomFirmwarePatchSharedRegionSizeTests {
         #expect(second.patches.isEmpty)
     }
 
-    @Test func `refuses a block whose constant is not the stock region`() throws {
+    @Test func `refuses a block whose constant is not the stock region`() {
         // movz x22, #0x7000, lsl #16 (0xD2AE0016): a different constant, so the
         // window must not match even though the dup and the store are present.
         let other: [UInt8] = [0x16, 0x00, 0xAE, 0xD2]
@@ -153,7 +155,7 @@ struct KernelCustomFirmwarePatchSharedRegionSizeTests {
         #expect(patcher.patches.isEmpty)
     }
 
-    @Test func `follows the registers and displacement of the block`() throws {
+    @Test func `follows the registers and displacement of the block`() {
         // The same shape with a different register allocation and pair slot —
         // x19 size, x20 base, pair at [sp, #0x80] — so the matcher cannot be
         // pinned to x22/x26/0x70. All words keystone-verified:
@@ -195,10 +197,10 @@ struct KernelCustomFirmwarePatchSharedRegionSizeTests {
     ///     <restore>/kernelcache.research.vphone600 xcodebuild … test
     @Test(.enabled(
         if: ProcessInfo.processInfo.environment["VPHONE_VP600_KERNEL"] != nil,
-        "VPHONE_VP600_KERNEL is not set; point it at a kernelcache.*.vphone600 to run"
+        "VPHONE_VP600_KERNEL is not set; point it at a kernelcache.*.vphone600 to run",
     ))
     func `patches a real vphone600 kernel`() throws {
-        let path = ProcessInfo.processInfo.environment["VPHONE_VP600_KERNEL"]!
+        let path = try #require(ProcessInfo.processInfo.environment["VPHONE_VP600_KERNEL"])
         let (payload, _) = try IM4PHandler.load(contentsOf: URL(fileURLWithPath: path))
 
         let patcher = KernelCustomFirmwarePatcher(data: payload, verbose: true)

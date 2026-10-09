@@ -27,9 +27,18 @@ final class VPhoneMotionModel {
             enqueue(value)
         }
     }
-    var xText = "0" { didSet { axesChanged() } }
-    var yText = "0" { didSet { axesChanged() } }
-    var zText = "0" { didSet { axesChanged() } }
+
+    var xText = "0" {
+        didSet { axesChanged() }
+    }
+
+    var yText = "0" {
+        didSet { axesChanged() }
+    }
+
+    var zText = "0" {
+        didSet { axesChanged() }
+    }
 
     private(set) var isConnected = false
     private(set) var isReading = false
@@ -65,19 +74,29 @@ final class VPhoneMotionModel {
         self.write = write
     }
 
-    var canEdit: Bool { isConnected && hasLoaded && !isReading }
-    var hasInvalidAxes: Bool { parsedConfiguration == nil }
-    var canRetry: Bool { canEdit && !isSending && hasLocalChanges && error != nil }
+    var canEdit: Bool {
+        isConnected && hasLoaded && !isReading
+    }
 
-    // Computed key-path bindings let the steppers repair a partially typed axis.
+    var hasInvalidAxes: Bool {
+        parsedConfiguration == nil
+    }
+
+    var canRetry: Bool {
+        canEdit && !isSending && hasLocalChanges && error != nil
+    }
+
+    /// Computed key-path bindings let the steppers repair a partially typed axis.
     var xValue: Double {
         get { number(xText, range: ranges[0]) ?? configuration.x }
         set { xText = formatted(newValue) }
     }
+
     var yValue: Double {
         get { number(yText, range: ranges[1]) ?? configuration.y }
         set { yText = formatted(newValue) }
     }
+
     var zValue: Double {
         get { number(zText, range: ranges[2]) ?? configuration.z }
         set { zText = formatted(newValue) }
@@ -122,7 +141,9 @@ final class VPhoneMotionModel {
         enqueue(zero)
     }
 
-    func retry() { startWriter() }
+    func retry() {
+        startWriter()
+    }
 
     /// A read belongs to the view's connection task; an accepted edit's write
     /// survives closing the panel. Never apply a read/ack from an old connection.
@@ -131,19 +152,27 @@ final class VPhoneMotionModel {
         let current = generation
         isConnected = connected
         hasLoaded = false
-        if hasLocalChanges { pending = configuration }
+        if hasLocalChanges {
+            pending = configuration
+        }
         guard connected else {
             isReading = false
             providerRunning = false
             return
         }
         isReading = true
-        defer { if generation == current { isReading = false } }
+        defer {
+            if generation == current {
+                isReading = false
+            }
+        }
         do {
             let reply = try await read()
             guard generation == current, isConnected, !Task.isCancelled else { return }
             providerRunning = reply.providerRunning
-            if !hasLocalChanges { applyFields(reply.configuration) }
+            if !hasLocalChanges {
+                applyFields(reply.configuration)
+            }
             hasLoaded = true
             error = nil
             startWriter()
@@ -191,7 +220,9 @@ final class VPhoneMotionModel {
                 error = nil
             } catch {
                 guard generation == current, isConnected else { continue }
-                if pending != nil { continue } // A newer edit supersedes this failed write.
+                if pending != nil {
+                    continue
+                } // A newer edit supersedes this failed write.
                 self.error = String(describing: error)
                 pending = configuration
                 break

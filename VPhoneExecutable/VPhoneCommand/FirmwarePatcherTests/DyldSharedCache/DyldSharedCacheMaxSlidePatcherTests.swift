@@ -865,7 +865,6 @@ struct DyldSharedCacheMaxSlideGateTests {
 /// `requireFitsAtSlideZero`, which `cfw install` runs before any dyld patch.
 /// Synthetic caches only, so this runs without the real-cache fixture: the
 /// sizes are the iOS 27.0.1 (24A446) headers from issue #596.
-@Suite
 struct DyldSharedCacheRegionCheckTests {
     private func withCache(
         regionSize: UInt64,

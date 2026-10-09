@@ -148,4 +148,3 @@ struct MachineSnapshotsTests {
         print("Snapshot binding tests passed: save, load, revert, invalid sidecar, names, links")
     }
 }
-

@@ -137,7 +137,11 @@ public enum DyldSharedCacheLockdownModePatcher {
         log: ((String) -> Void)? = DyldSharedCacheCodeSignature.stderrLog,
     ) throws -> Outcome {
         let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory, captureUndo: captureUndo)
-        defer { if captureUndo, let undo = chunks.takeUndoLog() { onUndo?(undo) } }
+        defer {
+            if captureUndo, let undo = chunks.takeUndoLog() {
+                onUndo?(undo)
+            }
+        }
         return try patch(in: chunks, dryRun: dryRun, log: log)
     }
 

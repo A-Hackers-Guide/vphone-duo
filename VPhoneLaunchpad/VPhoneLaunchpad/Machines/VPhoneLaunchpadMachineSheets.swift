@@ -165,11 +165,11 @@ struct VPhoneLaunchpadMachineSettingsView: View {
         .onChange(of: unlocksAtStartup) { edited.insert(.unlock) }
         .onChange(of: syncsHostLocation) { edited.insert(.location) }
         #if DEBUG
-        .onAppear {
-            if VPhoneLaunchpadPreview.isActive {
-                page = VPhoneLaunchpadPreview.machineSettingsPage
+            .onAppear {
+                if VPhoneLaunchpadPreview.isActive {
+                    page = VPhoneLaunchpadPreview.machineSettingsPage
+                }
             }
-        }
         #endif
     }
 

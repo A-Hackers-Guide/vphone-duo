@@ -64,15 +64,17 @@ struct IPSWCacheTests {
 
     // MARK: - Zip
 
-    static var cloudManifest: [String: Any] { [
-        "ProductVersion": "26.4",
-        "ProductBuildVersion": "23E5207q",
-        "SupportedProductTypes": ["ComputeModule14,1"],
-        "BuildIdentities": [
-            ["Info": ["DeviceClass": "VRESEARCH101AP"]],
-            ["Info": ["DeviceClass": "vphone600ap"]],
-        ],
-    ] }
+    static var cloudManifest: [String: Any] {
+        [
+            "ProductVersion": "26.4",
+            "ProductBuildVersion": "23E5207q",
+            "SupportedProductTypes": ["ComputeModule14,1"],
+            "BuildIdentities": [
+                ["Info": ["DeviceClass": "VRESEARCH101AP"]],
+                ["Info": ["DeviceClass": "vphone600ap"]],
+            ],
+        ]
+    }
 
     static func manifestData(_ plist: [String: Any]) throws -> Data {
         // Padding that deflates well, so the member is really compressed.
@@ -125,9 +127,15 @@ struct IPSWCacheTests {
     /// ZIP64, as an IPSW over 4 GB has them.
     static func zip64Archive(member: String, contents: Data) -> Data {
         var data = Data()
-        func le16(_ value: Int) { withUnsafeBytes(of: UInt16(value).littleEndian) { data.append(contentsOf: $0) } }
-        func le32(_ value: UInt32) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
-        func le64(_ value: Int) { withUnsafeBytes(of: UInt64(value).littleEndian) { data.append(contentsOf: $0) } }
+        func le16(_ value: Int) {
+            withUnsafeBytes(of: UInt16(value).littleEndian) { data.append(contentsOf: $0) }
+        }
+        func le32(_ value: UInt32) {
+            withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) }
+        }
+        func le64(_ value: Int) {
+            withUnsafeBytes(of: UInt64(value).littleEndian) { data.append(contentsOf: $0) }
+        }
         let name = Data(member.utf8)
 
         le32(0x0403_4B50); le16(45); le16(0); le16(0); le16(0); le16(0); le32(0)

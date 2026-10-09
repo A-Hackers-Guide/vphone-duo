@@ -108,7 +108,7 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
 
     private enum CodingKeys: String, CodingKey {
         case name, cpuCount, memoryMB, diskSizeBytes, network, restoreInfo, customFirmwareInstalled, udid, unlocksAtStartup,
-            syncsHostLocation
+             syncsHostLocation
     }
 
     /// The inspector's firmware line. A restore whose CFW install never

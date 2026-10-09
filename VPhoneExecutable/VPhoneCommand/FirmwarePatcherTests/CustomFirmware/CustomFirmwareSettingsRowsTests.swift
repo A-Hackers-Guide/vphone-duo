@@ -6,14 +6,14 @@ import Testing
 @Suite("Settings root rows")
 struct CustomFirmwareSettingsRowsTests {
     @Test(arguments: [0, 31, 64, 4096])
-    func rejectsUnreviewedInput(size: Int) {
+    func `rejects unreviewed input`(size: Int) {
         #expect(throws: (any Error).self) {
             try CustomFirmwareSettingsRows.patchPreferences(Data(repeating: 0, count: size))
         }
     }
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["VPHONE_SETTINGS_FIXTURE"] != nil))
-    func reviewedFixtureAndUndo() throws {
+    func `reviewed fixture and undo`() throws {
         let path = try #require(ProcessInfo.processInfo.environment["VPHONE_SETTINGS_FIXTURE"])
         let original = try Data(contentsOf: URL(fileURLWithPath: path))
         let result = try CustomFirmwareSettingsRows.patchPreferences(original)
@@ -23,7 +23,7 @@ struct CustomFirmwareSettingsRowsTests {
         var restored = result.data
         for edit in result.edits {
             #expect(edit.before != edit.after)
-            restored.replaceSubrange(edit.fileOffset..<edit.fileOffset + 4, with: edit.before)
+            restored.replaceSubrange(edit.fileOffset ..< edit.fileOffset + 4, with: edit.before)
         }
         #expect(restored == original)
         #expect(throws: (any Error).self) {

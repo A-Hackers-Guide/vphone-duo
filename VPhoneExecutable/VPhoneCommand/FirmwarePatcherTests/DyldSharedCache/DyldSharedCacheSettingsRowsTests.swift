@@ -7,14 +7,15 @@ import Testing
 @Suite("Settings Software Update cache")
 struct DyldSharedCacheSettingsRowsTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["VPHONE_SETTINGS_CACHE_FIXTURE"] != nil))
-    func fixturePatchRepeatAndUndo() throws {
+    func `fixture patch repeat and undo`() throws {
         let fm = FileManager.default
-        let source = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["VPHONE_SETTINGS_CACHE_FIXTURE"]))
+        let source = try URL(fileURLWithPath: #require(ProcessInfo.processInfo.environment["VPHONE_SETTINGS_CACHE_FIXTURE"]))
         let work = fm.temporaryDirectory.appendingPathComponent("settings-cache-test-\(UUID().uuidString)")
         try fm.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: work) }
         for url in try fm.contentsOfDirectory(at: source, includingPropertiesForKeys: nil)
-        where url.lastPathComponent.hasPrefix("dyld_shared_cache_arm64e") {
+            where url.lastPathComponent.hasPrefix("dyld_shared_cache_arm64e")
+        {
             let to = work.appendingPathComponent(url.lastPathComponent)
             guard clonefile(url.path, to.path, 0) == 0 else { throw CocoaError(.fileWriteUnknown) }
         }

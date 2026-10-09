@@ -36,8 +36,13 @@ final class VPhoneGuestControl {
     struct GuestRPCFailure: Error, CustomStringConvertible, @unchecked Sendable {
         let body: [String: Any]
 
-        var message: String { body["message"] as? String ?? "Guest operation failed" }
-        var description: String { message }
+        var message: String {
+            body["message"] as? String ?? "Guest operation failed"
+        }
+
+        var description: String {
+            message
+        }
     }
 
     struct ClipboardContent {

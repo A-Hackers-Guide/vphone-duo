@@ -235,14 +235,14 @@ public final class TXMDevPatcher: TXMPatcher {
                   selector.mnemonic == "mov",
                   let selOps = selector.detail?.operands, selOps.count == 2,
                   selOps[0].type == .register, selOps[0].reg == .x(17),
-                  selOps[1].type == .immediate, selOps[1].imm == 0x7e51,
+                  selOps[1].type == .immediate, selOps[1].imm == 0x7E51,
                   let call = disasm.disassembleOne(in: buffer.data, at: off + 4),
                   call.mnemonic == "blraa"
             else {
                 if verbose, let ins = disasm.disassembleOne(in: buffer.data, at: off),
                    ins.mnemonic == "mov",
                    let ops = ins.detail?.operands,
-                   ops.count == 2, ops[1].type == .immediate, ops[1].imm == 0x7e51
+                   ops.count == 2, ops[1].type == .immediate, ops[1].imm == 0x7E51
                 {
                     let next = disasm.disassembleOne(in: buffer.data, at: off + 4)
                     print("  [·] TXM: selector 0x7e51 at \(String(format: "%06X", off)); next: \(next.map { "\($0.mnemonic) \($0.operandString)" } ?? "decode-fail")")

@@ -107,8 +107,8 @@ struct SystemTrimTests {
         }
         #expect(!spec.permits("System/Library/LinguisticData/ja"))
         #expect(!spec.permits("System/Library/LinguisticData/Info.plist"))
-        #expect(!spec.permits("usr/standalone/update"))  // the folder itself stays
-        #expect(!spec.permits("usr/standalone/update/ramdisk/arm64eSURamDisk.dmg"))  // only direct children
+        #expect(!spec.permits("usr/standalone/update")) // the folder itself stays
+        #expect(!spec.permits("usr/standalone/update/ramdisk/arm64eSURamDisk.dmg")) // only direct children
         #expect(!spec.permits("usr/standalone/update/.."))
         #expect(!spec.permits("usr/standalone/update/../../../etc"))
         #expect(!spec.permits("/usr/standalone/update/x"))
@@ -226,6 +226,8 @@ struct SystemTrimTests {
         // Again: nothing left to delete, nothing absent either.
         let again = try VPhoneSystemTrimSpec.standard.apply(to: root)
         #expect(again.bytes == 0)
+        // A key path here makes #expect's expansion fail to compile.
+        // swiftformat:disable:next preferKeyPath
         #expect(again.entries.allSatisfy { $0.removed.isEmpty })
     }
 

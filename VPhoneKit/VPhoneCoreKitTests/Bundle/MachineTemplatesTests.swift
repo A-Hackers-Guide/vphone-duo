@@ -511,7 +511,7 @@ struct MachineTemplatesTests {
         try FileManager.default.createDirectory(at: built.url.appendingPathComponent("iPhone17,3_27.0_24A435_Restore"), withIntermediateDirectories: true)
         try VPhoneMachineTemplates.writeRecord(record(key), inBundle: build.bundleURL)
         let frozen = try VPhoneMachineTemplates.freeze(build)
-        #expect(VPhoneMachineTemplates.restoreTree(of: try frozen.bundle()) == nil)
+        #expect(try VPhoneMachineTemplates.restoreTree(of: frozen.bundle()) == nil)
     }
 
     // MARK: - Source and usage
@@ -710,7 +710,7 @@ struct MachineTemplatesTests {
         #expect(VPhoneMachineTemplates.unusedTemplate(after: newSource, in: fixture.library)?.identifier == second.identifier)
     }
 
-    @Test func `a clone record without a build is matched by its clone date`() throws {
+    @Test func `a clone record without a build is matched by its clone date`() {
         let frozenAt = Date(timeIntervalSince1970: 1_800_000_100)
         var template = record()
         template.frozen = true

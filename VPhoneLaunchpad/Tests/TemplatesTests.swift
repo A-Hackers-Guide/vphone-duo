@@ -50,7 +50,7 @@ struct TemplatesTests {
         // trimmed profile; Camera is not one of the apps.
         precondition(parts.arguments == ["--trim", "conservative", "--service-profile", "none",
                                          "--keep-apps", "com.apple.findmy,com.apple.Passbook"],
-        "Mixed switches: \(parts.arguments)")
+                     "Mixed switches: \(parts.arguments)")
         precondition(parts.setupArguments == ["--service-profile", "none", "--keep-apps", "com.apple.findmy,com.apple.Passbook"],
                      "Setup drops the trim: \(parts.setupArguments)")
         precondition(parts.trimArguments == ["--tier", "conservative"], "Conservative trim keeps no languages")
@@ -699,7 +699,9 @@ struct TemplatesTests {
                 },
                 bind: {
                     steps.append("bind")
-                    if bindFails { throw Unwritable() }
+                    if bindFails {
+                        throw Unwritable()
+                    }
                 },
                 updateEnvironment: {
                     steps.append("update")

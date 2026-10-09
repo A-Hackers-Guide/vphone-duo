@@ -260,13 +260,13 @@ enum SystemMaintenanceTests {
             return (try? JSONSerialization.data(withJSONObject: copy)) ?? Data()
         }
         check(throwsError { _ = try GuestSystemAppManifest.decode(tampered("container_uuid", "../../../System"),
-                                                                 expectedBundleID: "com.apple.findmy") },
+                                                                  expectedBundleID: "com.apple.findmy") },
               "tampered UUID refused")
         check(throwsError { _ = try GuestSystemAppManifest.decode(tampered("app", "../../Applications/X.app"),
-                                                                 expectedBundleID: "com.apple.findmy") },
+                                                                  expectedBundleID: "com.apple.findmy") },
               "tampered app refused")
         check(throwsError { _ = try GuestSystemAppManifest.decode(tampered("version", 2),
-                                                                 expectedBundleID: "com.apple.findmy") },
+                                                                  expectedBundleID: "com.apple.findmy") },
               "unknown version refused")
         check(throwsError {
             _ = try GuestSystemAppManifest.decode(tampered("bundle_id", "com.example.app"), expectedBundleID: "com.example.app")

@@ -658,7 +658,7 @@ public final class VPhoneTemplateSetupBoot {
         }
         let removed = Set(outcome.removedApps)
         if !removed.isEmpty {
-            let listed = (try call("apps.list", [:], deadline: end)["apps"] as? [[String: Any]] ?? [])
+            let listed = try (call("apps.list", [:], deadline: end)["apps"] as? [[String: Any]] ?? [])
                 .compactMap { $0["bundle_id"] as? String }
             let back = listed.filter { removed.contains($0) }
             if !back.isEmpty {

@@ -223,7 +223,7 @@ public struct DyldSharedCacheUndoLog: Codable, Sendable, Hashable {
 
 // MARK: - Earlier implementations
 
-extension DyldSharedCacheUndoLog {
+public extension DyldSharedCacheUndoLog {
     /// Patches whose implementation changed under the same identifier, and how
     /// a record written by an earlier one looks. A guest receipt only names the
     /// identifier, so without this an installed guest would keep the old bytes
@@ -234,14 +234,14 @@ extension DyldSharedCacheUndoLog {
     /// instruction, one 4-byte record per entry point. It now writes a 16-byte
     /// conditional dispatcher per entry point, so a 4-byte record is the
     /// unconditional version, which leaves DeviceHub's capture display black.
-    public static let outdatedImplementations: [String: @Sendable (Record) -> Bool] = [
+    static let outdatedImplementations: [String: @Sendable (Record) -> Bool] = [
         "dyld-boot-iomfb_force_kern": { $0.original.count == 4 },
     ]
 
     /// Whether any record of `patchID` was written by an earlier
     /// implementation. False for a patch with no records, which cannot be
     /// reverted from this log anyway.
-    public func hasOutdatedImplementation(of patchID: String) -> Bool {
+    func hasOutdatedImplementation(of patchID: String) -> Bool {
         guard let outdated = Self.outdatedImplementations[patchID] else { return false }
         return records(forPatchIDs: [patchID]).contains(where: outdated)
     }

@@ -33,7 +33,9 @@ enum VPhoneMachineTemplateKeys {
         )
         return enabled.filter { identifier in
             guard let target = targets[identifier] else { return true }
-            if case .firmware = target { return true }
+            if case .firmware = target {
+                return true
+            }
             return false
         }.sorted()
     }
@@ -233,7 +235,9 @@ enum VPhoneMachineTemplateKeys {
         }
         let notApplicable = Set(receipt?.parts.values.flatMap(\.notApplicable) ?? [])
         let declarations = FirmwarePatchSetCatalog.allDeclarations.filter {
-            if case .firmware = $0.target { return true }
+            if case .firmware = $0.target {
+                return true
+            }
             return false
         }
         return FirmwarePatchDrift.states(

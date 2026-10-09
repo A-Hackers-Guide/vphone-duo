@@ -95,12 +95,13 @@ func launchAndConnect(foreground: Bool) -> Int32 {
 // MARK: - Main
 
 var words = Array(CommandLine.arguments.dropFirst())
-// --foreground goes before the command, or among the options of any command
-// but exec, whose arguments all belong to vphone-cli.
+/// --foreground goes before the command, or among the options of any command
+/// but exec, whose arguments all belong to vphone-cli.
 var foreground = words.first == "--foreground"
 if foreground {
     words.removeFirst()
 }
+
 if words.isEmpty || ["help", "-h", "--help"].contains(words[0]) {
     print(usage(), terminator: "")
     exit(words.isEmpty ? 1 : 0)
@@ -112,6 +113,7 @@ do {
 } catch {
     fail(error.message, detail: error.detail)
 }
+
 let fd = connectControl() ?? launchAndConnect(foreground: foreground)
 
 guard var line = try? JSONEncoder().encode(request) else {

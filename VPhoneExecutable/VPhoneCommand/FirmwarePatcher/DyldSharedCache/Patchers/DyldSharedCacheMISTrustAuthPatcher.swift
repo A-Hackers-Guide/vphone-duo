@@ -271,7 +271,11 @@ public enum DyldSharedCacheMISTrustAuthPatcher {
         log: ((String) -> Void)? = stdoutLog,
     ) throws -> Report {
         let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory, captureUndo: captureUndo)
-        defer { if captureUndo, let undo = chunks.takeUndoLog() { onUndo?(undo) } }
+        defer {
+            if captureUndo, let undo = chunks.takeUndoLog() {
+                onUndo?(undo)
+            }
+        }
         log?("  [.] \(chunksDirectory.path): \(chunks.chunkURLs.count) chunk(s), "
             + "\(chunks.mappings.count) mapping(s)")
 

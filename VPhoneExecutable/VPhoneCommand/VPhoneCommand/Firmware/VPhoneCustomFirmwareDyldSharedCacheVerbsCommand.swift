@@ -37,7 +37,9 @@ struct DyldSharedCacheUndoOptions: ParsableArguments {
     @Option(name: .customLong("undo-id"), help: "Patch identifier to tag the recorded bytes with")
     var undoID: String?
 
-    var captures: Bool { undoLog != nil }
+    var captures: Bool {
+        undoLog != nil
+    }
 
     /// Fold this verb's captured runs into the log file beside the cache.
     ///

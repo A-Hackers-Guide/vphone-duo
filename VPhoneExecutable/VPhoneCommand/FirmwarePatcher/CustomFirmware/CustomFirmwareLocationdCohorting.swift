@@ -16,7 +16,7 @@ public enum CustomFirmwareLocationdCohorting {
         let input = try Data(contentsOf: url)
         var format = PropertyListSerialization.PropertyListFormat.xml
         guard var root = try PropertyListSerialization.propertyList(
-            from: input, options: [], format: &format
+            from: input, options: [], format: &format,
         ) as? [String: Any],
             var feature = root[Self.feature] as? [String: Any]
         else {
@@ -28,12 +28,16 @@ public enum CustomFirmwareLocationdCohorting {
             else {
                 throw PatcherError.invalidFormat("CLAutoCohort.Enabled is not a boolean: \(url.path)")
             }
-            if !number.boolValue { return false }
+            if !number.boolValue {
+                return false
+            }
         }
         feature["Enabled"] = false
         root[Self.feature] = feature
         let output = try PropertyListSerialization.data(fromPropertyList: root, format: format, options: 0)
-        if !dryRun { try output.write(to: url, options: .atomic) }
+        if !dryRun {
+            try output.write(to: url, options: .atomic)
+        }
         return true
     }
 }

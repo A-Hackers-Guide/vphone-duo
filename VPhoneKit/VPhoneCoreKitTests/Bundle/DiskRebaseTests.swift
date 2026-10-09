@@ -168,7 +168,9 @@ struct DiskRebaseTests {
             let ours = try left.read(upToCount: 1 << 20) ?? Data()
             let theirs = try right.read(upToCount: 1 << 20) ?? Data()
             guard ours == theirs else { return false }
-            if ours.isEmpty { return true }
+            if ours.isEmpty {
+                return true
+            }
         }
     }
 

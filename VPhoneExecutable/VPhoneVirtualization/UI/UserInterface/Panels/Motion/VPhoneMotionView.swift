@@ -3,13 +3,25 @@ import SwiftUI
 enum VPhoneMotionSensor {
     case gyroscope, attitude
 
-    var identifier: String { self == .gyroscope ? "gyroscope" : "attitude" }
-    var axes: [String] { self == .gyroscope ? ["X", "Y", "Z"] : ["Roll", "Pitch", "Yaw"] }
+    var identifier: String {
+        self == .gyroscope ? "gyroscope" : "attitude"
+    }
+
+    var axes: [String] {
+        self == .gyroscope ? ["X", "Y", "Z"] : ["Roll", "Pitch", "Yaw"]
+    }
+
     var ranges: [ClosedRange<Double>] {
         self == .gyroscope ? [-1000 ... 1000, -1000 ... 1000, -1000 ... 1000] : [-180 ... 180, -90 ... 90, -180 ... 180]
     }
-    var units: String { self == .gyroscope ? "rad/s" : "°" }
-    var step: Double { self == .gyroscope ? 0.1 : 1 }
+
+    var units: String {
+        self == .gyroscope ? "rad/s" : "°"
+    }
+
+    var step: Double {
+        self == .gyroscope ? 0.1 : 1
+    }
 }
 
 struct VPhoneMotionView: View {
@@ -122,7 +134,7 @@ struct VPhoneMotionSyncStatus: View {
             Spacer(minLength: 0)
             if model.canRetry {
                 Button { model.retry() } label: { Text("Retry", bundle: VPhoneLocalization.bundle) }
-            } else if model.isConnected && !model.hasLoaded && !model.isReading {
+            } else if model.isConnected, !model.hasLoaded, !model.isReading {
                 Button { Task { await model.connectionChanged(true) } } label: {
                     Text("Retry", bundle: VPhoneLocalization.bundle)
                 }

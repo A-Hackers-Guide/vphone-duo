@@ -382,6 +382,7 @@ public struct VPhoneMachineTemplateBuild: Sendable {
         self.identifier = identifier
         self.stagingURL = stagingURL
     }
+
     /// The library the machine folder is created in: the staging folder.
     public var library: VPhoneLibrary {
         VPhoneLibrary(root: stagingURL)

@@ -85,7 +85,7 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
         VPhoneGuestCallError(kind: .refused, message: message, detail: detail)
     }
 
-    func call(_ method: String, params: [String: Any], timeout: TimeInterval) throws -> [String: Any] {
+    func call(_ method: String, params: [String: Any], timeout _: TimeInterval) throws -> [String: Any] {
         calls.append(method)
         clock.sleep(0.5)
         if downCalls > 0 {
@@ -375,7 +375,7 @@ struct TemplateSetupBootTests {
         #expect(!guest.calls.contains("system.reboot"))
     }
 
-    @Test func `deviations name what fell short of the plan`() {
+    @Test func `deviations name what fell short of the plan`() throws {
         let plan = VPhoneTemplateSetupPlan(slimming: VPhoneTemplateSlimmingRequest.defaultSlimming, requiresEveryApp: true)
         var outcome = VPhoneTemplateSetupOutcome()
         outcome.apps = plan.removedApps.map { VPhoneTemplateSetupAppResult(bundleID: $0, status: "removed") }
@@ -384,7 +384,7 @@ struct TemplateSetupBootTests {
         #expect(outcome.deviations(from: plan).isEmpty)
 
         var short = outcome
-        short.apps[short.apps.firstIndex { $0.bundleID == "com.apple.findmy" }!] = VPhoneTemplateSetupAppResult(
+        try short.apps[#require(short.apps.firstIndex { $0.bundleID == "com.apple.findmy" })] = VPhoneTemplateSetupAppResult(
             bundleID: "com.apple.findmy",
             status: "failed",
             error: "LaunchServices still lists the app after unregistration",

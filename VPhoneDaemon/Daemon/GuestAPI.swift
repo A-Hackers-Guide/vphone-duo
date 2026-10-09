@@ -491,7 +491,7 @@ enum GuestAPI {
     /// identifier. `setup.settle` counts this list, not icli's `count`, which
     /// was one higher than `apps.list` on an iOS 27 guest.
     static func listedApps() throws -> [[String: Any]] {
-        (try listApps()["apps"] as? [[String: Any]] ?? []).filter {
+        try (listApps()["apps"] as? [[String: Any]] ?? []).filter {
             !(($0["bundle_id"] as? String) ?? "").isEmpty
         }
     }

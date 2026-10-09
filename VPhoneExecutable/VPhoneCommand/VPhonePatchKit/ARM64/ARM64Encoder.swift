@@ -80,7 +80,9 @@ public enum ARM64Encoder {
         let imm19 = delta >> 2
         guard imm19 >= -(1 << 18), imm19 < (1 << 18) else { return nil }
         var insn: UInt32 = (width64 ? 0xB400_0000 : 0x3400_0000)
-        if nonzero { insn |= 1 << 24 }
+        if nonzero {
+            insn |= 1 << 24
+        }
         insn |= (UInt32(bitPattern: Int32(imm19)) & 0x7FFFF) << 5
         insn |= register
         return ARM64.encodeU32(insn)

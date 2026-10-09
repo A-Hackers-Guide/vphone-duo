@@ -1,9 +1,11 @@
 import Darwin
 
-// Standalone guest probe: no app dependencies, injected scripts or kernel writes.
-// The default mode reports the remap mismatch without executing an NX mapping.
-// --copy exercises the RW-copy-then-RX alternative.
-@_cdecl("remap_probe_marker") public func remapProbeMarker() -> Int32 { 42 }
+/// Standalone guest probe: no app dependencies, injected scripts or kernel writes.
+/// The default mode reports the remap mismatch without executing an NX mapping.
+/// --copy exercises the RW-copy-then-RX alternative.
+@_cdecl("remap_probe_marker") public func remapProbeMarker() -> Int32 {
+    42
+}
 
 func protection(at value: vm_address_t) -> vm_prot_t? {
     var address = value, size: vm_size_t = 0
@@ -15,7 +17,9 @@ func protection(at value: vm_address_t) -> vm_prot_t? {
             vm_region_64(mach_task_self_, &address, &size, VM_REGION_BASIC_INFO_64, $0, &count, &object)
         }
     }
-    if object != 0 { mach_port_deallocate(mach_task_self_, object) }
+    if object != 0 {
+        mach_port_deallocate(mach_task_self_, object)
+    }
     guard result == KERN_SUCCESS, address <= value, value - address < size else { return nil }
     return info.protection
 }
@@ -37,9 +41,10 @@ if CommandLine.arguments.contains("--copy") {
     }
 } else {
     result = vm_remap(mach_task_self_, &target, vm_size_t(vm_page_size), 0, VM_FLAGS_ANYWHERE,
-                     mach_task_self_, page, 1, &current, &maximum, VM_INHERIT_NONE)
+                      mach_task_self_, page, 1, &current, &maximum, VM_INHERIT_NONE)
     print("remap result", result, "reported protections", current, maximum)
 }
+
 guard result == KERN_SUCCESS else { exit(2) }
 let actual = protection(at: target)
 print("actual protection", actual ?? -1)
@@ -47,6 +52,7 @@ guard actual == rx else {
     vm_deallocate(mach_task_self_, target, vm_size_t(vm_page_size))
     exit(3)
 }
+
 let copied = unsafeBitCast(UnsafeRawPointer(bitPattern: UInt(target + offset))!, to: (@convention(c) () -> Int32).self)
 let answer = copied()
 print("copied marker", answer)

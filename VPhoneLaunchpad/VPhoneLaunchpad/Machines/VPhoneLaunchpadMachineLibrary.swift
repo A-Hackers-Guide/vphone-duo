@@ -877,7 +877,11 @@ final class VPhoneLaunchpadMachineLibrary {
     /// run, a stop), the last `lsof` named no other process for its disk,
     /// and Launchpad has no operation on it or on a whole library.
     private func diskAccess(of machine: Path) -> VPhoneLaunchpadDiskAccess {
-        let isBusy = if case .busy = state(of: machine) { true } else { false }
+        let isBusy = if case .busy = state(of: machine) {
+            true
+        } else {
+            false
+        }
         return VPhoneLaunchpadDiskAccess(
             isLaunched: launched[machine] != nil,
             isHeld: diskHolders[machine]?.isEmpty == false,

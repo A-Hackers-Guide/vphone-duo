@@ -112,9 +112,9 @@ struct VPhoneVirtualMachineStopCommand: ParsableCommand {
             return
         }
 
-        /// Every process holding the disk now, by executable. Looked up again
-        /// before each signal, so a PID reused by another program meanwhile is
-        /// not taken for the VM.
+        // Every process holding the disk now, by executable. Looked up again
+        // before each signal, so a PID reused by another program meanwhile is
+        // not taken for the VM.
         func holders() -> (machine: [VPhoneProcessHolder], others: [VPhoneProcessHolder]) {
             guard let r = try? VPhoneProcessRunner.runCapturing(
                 URL(fileURLWithPath: "/usr/sbin/lsof"),

@@ -290,7 +290,9 @@ public enum VPhoneMachineSnapshots {
                     throw VPhoneMachineSnapshotError.failed(path: live, reason: currentErrorText())
                 }
                 steps.append(SwapStep(file: file, movedAside: movedAside))
-                if absent.contains(file) { continue }
+                if absent.contains(file) {
+                    continue
+                }
                 guard rename(staging.appendingPathComponent(file).path, live) == 0 else {
                     throw VPhoneMachineSnapshotError.failed(path: live, reason: currentErrorText())
                 }

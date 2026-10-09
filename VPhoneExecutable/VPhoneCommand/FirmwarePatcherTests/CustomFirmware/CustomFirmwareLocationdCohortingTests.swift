@@ -6,19 +6,19 @@ import VPhonePatchKit
 @Suite("Locationd cohort configuration")
 struct CustomFirmwareLocationdCohortingTests {
     @Test
-    func selectedOnlyForIOS27() throws {
+    func `selected only for IOS 27`() throws {
         for base in [nil, "18.6", "26.6.2", "27.0", "27.0.1", "28.0"] as [String?] {
             let plan = try VPhonePatchPlan.resolve(
                 preset: FirmwarePatchSetCatalog.standardPreset,
                 patchSets: FirmwarePatchSetCatalog.bundled,
-                iOSBase: base.flatMap { VPhoneVersion($0) }, cloudOS: VPhoneVersion("26.4")
+                iOSBase: base.flatMap { VPhoneVersion($0) }, cloudOS: VPhoneVersion("26.4"),
             )
             #expect(plan.isEnabled(FirmwareGuestSystemPatchSet.locationdCohorting) == (base?.hasPrefix("27.") == true))
         }
     }
 
     @Test(arguments: [PropertyListSerialization.PropertyListFormat.xml, .binary])
-    func preservesOtherFeaturesAndEncoding(format: PropertyListSerialization.PropertyListFormat) throws {
+    func `preserves other features and encoding`(format: PropertyListSerialization.PropertyListFormat) throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: url) }
         let original: [String: Any] = [
@@ -44,7 +44,7 @@ struct CustomFirmwareLocationdCohortingTests {
     }
 
     @Test
-    func rejectsUnexpectedSchemaWithoutWriting() throws {
+    func `rejects unexpected schema without writing`() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: url) }
         for root: [String: Any] in [[:], ["CLAutoCohort": "invalid"], ["CLAutoCohort": ["Enabled": 0]]] {

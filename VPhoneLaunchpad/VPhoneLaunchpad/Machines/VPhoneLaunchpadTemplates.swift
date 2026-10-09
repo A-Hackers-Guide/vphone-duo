@@ -464,7 +464,7 @@ nonisolated struct VPhoneLaunchpadTemplate: Decodable, Identifiable, Hashable, S
 
     private enum CodingKeys: String, CodingKey {
         case id, path, key, created, builtWithBundleVersion, bootChainBundleVersion, sourceMachine, allocatedBytes,
-            machines, stale, staleReasons, sources
+             machines, stale, staleReasons, sources
     }
 
     static func decoder() -> JSONDecoder {

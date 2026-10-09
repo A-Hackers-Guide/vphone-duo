@@ -102,7 +102,6 @@ struct VPhoneLaunchpadGuestSystemView: View {
 
     // MARK: - Services
 
-    @ViewBuilder
     private var servicesSection: some View {
         Section {
             if let profile {
@@ -153,7 +152,6 @@ struct VPhoneLaunchpadGuestSystemView: View {
 
     // MARK: - Apps
 
-    @ViewBuilder
     private var appsSection: some View {
         Section {
             if let removedApps {

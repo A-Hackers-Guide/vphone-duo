@@ -173,7 +173,11 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
         log: ((String) -> Void)? = stdoutLog,
     ) throws -> Outcome {
         let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory, captureUndo: captureUndo)
-        defer { if captureUndo, let undo = chunks.takeUndoLog() { onUndo?(undo) } }
+        defer {
+            if captureUndo, let undo = chunks.takeUndoLog() {
+                onUndo?(undo)
+            }
+        }
         let resolver = try DyldSharedCacheSymbolResolver(chunks: chunks)
         return try patch(chunks: chunks, resolver: resolver, dryRun: dryRun, log: log)
     }
@@ -247,7 +251,6 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
         for site in toWrite {
             try records.append(force(site, chunks: chunks))
         }
-
 
         var reattestation: DyldSharedCacheReattestation?
         if records.isEmpty {
@@ -359,7 +362,7 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
     }
 
     private static func isConditionalDispatch(
-        _ instructions: [ARM64Instruction], entry: EntryPoint
+        _ instructions: [ARM64Instruction], entry: EntryPoint,
     ) -> Bool {
         guard instructions.count >= 4,
               instructions[0].mnemonic == "cbz",
@@ -435,7 +438,8 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
               ),
               let virtBranch = ARM64Encoder.encodeB(
                   from: Int(entry.publicAddress + 12), to: Int(entry.virtAddress),
-              ), portLoad.count == 4, kernBranch.count == 4, virtBranch.count == 4 else {
+              ), portLoad.count == 4, kernBranch.count == 4, virtBranch.count == 4
+        else {
             throw PatcherError.patchVerificationFailed(
                 "cannot encode conditional IOMFB dispatch for \(entry.publicName) "
                     + "for \(entry.publicName)",

@@ -140,7 +140,7 @@ extension KernelCustomFirmwarePatcher {
             replacement,
             patchID: "kernel-boot-shared_region_size",
             virtualAddress: va,
-            description: "arm64 shared region size \(hex(stock)) → \(hex(size)) [vm_shared_region_create]"
+            description: "arm64 shared region size \(hex(stock)) → \(hex(size)) [vm_shared_region_create]",
         )
         return true
     }

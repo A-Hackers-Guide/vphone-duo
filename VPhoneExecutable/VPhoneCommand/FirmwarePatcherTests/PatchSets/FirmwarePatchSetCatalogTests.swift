@@ -50,7 +50,7 @@ struct FirmwarePatchSetCatalogTests {
             let plan = try VPhonePatchPlan.resolve(
                 preset: FirmwarePatchSetCatalog.standardPreset,
                 patchSets: FirmwarePatchSetCatalog.bundled,
-                iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4")
+                iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4"),
             )
             #expect(plan.isEnabled(FirmwareGuestSystemPatchSet.installCoordinationPersona) == base.hasPrefix("27."))
         }

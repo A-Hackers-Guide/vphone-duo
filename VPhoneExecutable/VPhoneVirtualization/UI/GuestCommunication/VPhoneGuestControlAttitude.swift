@@ -8,14 +8,14 @@ extension VPhoneGuestControl {
         guard guestCapabilities.contains("motion_attitude") else {
             throw ControlError.unsupportedCapability("motion_attitude")
         }
-        return try attitudeReply(await call("motion.attitude.get"))
+        return try await attitudeReply(call("motion.attitude.get"))
     }
 
     func setAttitude(_ value: VPhoneMotionConfiguration) async throws -> VPhoneMotionReply {
         guard guestCapabilities.contains("motion_attitude") else {
             throw ControlError.unsupportedCapability("motion_attitude")
         }
-        return try attitudeReply(await call("motion.attitude.set", params: [
+        return try await attitudeReply(call("motion.attitude.set", params: [
             "enabled": value.enabled, "roll": value.x, "pitch": value.y, "yaw": value.z,
         ]))
     }

@@ -17,6 +17,8 @@ struct VPhoneCustomFirmwarePatchSettingsSoftwareUpdateCommand: ParsableCommand {
         let before = site.before.map { String(format: "%02x", $0) }.joined()
         let after = site.replacement.map { String(format: "%02x", $0) }.joined()
         print("SoftwareUpdateListItemProvider: 0x\(String(site.address, radix: 16)) \(before) -> \(after), already patched: \(site.alreadyPatched)")
-        if let captured = chunks.takeUndoLog() { try undo.persist(captured, dryRun: dryRun) }
+        if let captured = chunks.takeUndoLog() {
+            try undo.persist(captured, dryRun: dryRun)
+        }
     }
 }

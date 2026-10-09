@@ -90,7 +90,7 @@ final class VPhoneLaunchpadAppDelegate: NSObject, NSApplicationDelegate {
     /// window is still up. Without the menu bar, closing the last window
     /// quits, so the alert says Quit. Cancel refuses the close. In menu bar
     /// mode closing only hides the window, so no confirmation is needed.
-    func windowShouldClose(_ window: NSWindow) -> Bool {
+    func windowShouldClose(_: NSWindow) -> Bool {
         guard !VPhoneLaunchpadMenuBar.isEnabled, let model, model.machines.hasActiveCreation else {
             return true
         }
@@ -121,7 +121,7 @@ private final class VPhoneLaunchpadWindowCloseHook: NSView, NSWindowDelegate {
     private weak var delegate: VPhoneLaunchpadAppDelegate?
     /// Read from `NSObject`'s nonisolated forwarding methods. AppKit calls
     /// those, and moves this view between windows, on the main thread.
-    nonisolated(unsafe) private weak var forwarded: NSWindowDelegate?
+    private nonisolated(unsafe) weak var forwarded: NSWindowDelegate?
 
     init(delegate: VPhoneLaunchpadAppDelegate) {
         self.delegate = delegate
@@ -129,7 +129,7 @@ private final class VPhoneLaunchpadWindowCloseHook: NSView, NSWindowDelegate {
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) {
+    required init?(coder _: NSCoder) {
         nil
     }
 
@@ -147,11 +147,11 @@ private final class VPhoneLaunchpadWindowCloseHook: NSView, NSWindowDelegate {
         return delegate?.windowShouldClose(sender) ?? true
     }
 
-    nonisolated override func responds(to selector: Selector!) -> Bool {
+    override nonisolated func responds(to selector: Selector!) -> Bool {
         super.responds(to: selector) || forwarded?.responds(to: selector) == true
     }
 
-    nonisolated override func forwardingTarget(for selector: Selector!) -> Any? {
+    override nonisolated func forwardingTarget(for selector: Selector!) -> Any? {
         if forwarded?.responds(to: selector) == true {
             return forwarded
         }
@@ -171,11 +171,11 @@ extension View {
 private struct VPhoneLaunchpadWindowCloseInstaller: NSViewRepresentable {
     let delegate: VPhoneLaunchpadAppDelegate
 
-    func makeNSView(context: Context) -> NSView {
+    func makeNSView(context _: Context) -> NSView {
         MainActor.assumeIsolated {
             VPhoneLaunchpadWindowCloseHook(delegate: delegate)
         }
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_: NSView, context _: Context) {}
 }

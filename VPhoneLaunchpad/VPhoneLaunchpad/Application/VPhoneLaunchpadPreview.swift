@@ -424,7 +424,7 @@
             func pending(_ part: String, _ value: Bool = false) -> String {
                 guard machine else { return "" }
                 // delivery is reported only for a pending patch, by part.
-                let deliveryKind: String = switch part {
+                let deliveryKind = switch part {
                 case "kernelcache": "update-kernel"
                 case "Guest": "update-environment"
                 case "AVPBooter": "fw-patch"

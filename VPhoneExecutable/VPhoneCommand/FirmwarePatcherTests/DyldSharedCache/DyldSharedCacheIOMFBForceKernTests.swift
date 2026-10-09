@@ -464,13 +464,12 @@ private enum Digest {
         let mine = try chunkDigests(of: directory)
         let changed = mine.filter { pristineDigests[$0.key] != $0.value }.keys.sorted()
         #expect(changed == FrozenReference.changedChunks.keys.sorted())
-
     }
 }
 
-// The conditional dispatcher requires a real virtual sibling. These ten were
-// independently resolved on the 24A446 cache; the remaining old force sites
-// must not be rewritten by this narrower patch.
+/// The conditional dispatcher requires a real virtual sibling. These ten were
+/// independently resolved on the 24A446 cache; the remaining old force sites
+/// must not be rewritten by this narrower patch.
 private enum ConditionalReference {
     static let suffixes: Set<String> = [
         "Begin", "Cancel", "DebugInfo", "End", "SetEventSignal",
@@ -479,6 +478,7 @@ private enum ConditionalReference {
     static let forcedPairs = FrozenReference.forcedPairs.filter {
         suffixes.contains(String($0.publicName.dropFirst("_IOMobileFramebufferSwap".count)))
     }
+
     static let newlyForced = 10
     static let leftOnVirtPath: Set<String> = ["_IOMobileFramebufferSwapSignal"]
     static let discoveredNames = Set(forcedPairs.map(\.publicName)).union(leftOnVirtPath)
@@ -707,7 +707,6 @@ struct DyldSharedCacheIOMFBForceKernDiscoveryTests {
             #expect(decoded[2].detail?.operands[1].imm == Int64(entry.kernAddress))
             #expect(decoded[3].detail?.operands[0].imm == Int64(entry.virtAddress))
             #expect(try chunks.bytesAtVMA(address, length: 16) == record.patchedBytes)
-
         }
     }
 }

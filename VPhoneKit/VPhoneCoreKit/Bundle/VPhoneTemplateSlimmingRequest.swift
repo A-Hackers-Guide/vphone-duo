@@ -129,10 +129,18 @@ public struct VPhoneTemplateSlimmingRequest: Equatable, Sendable {
             if trimGiven, trim.tier != .none {
                 contradicted.append(trimTier.map { "--trim \($0)" } ?? "--keep-languages")
             }
-            if serviceProfile == "trimmed" { contradicted.append("--service-profile trimmed") }
-            if removeApps == true { contradicted.append("--remove-apps on") }
-            if !keepApps.isEmpty { contradicted.append("--keep-apps") }
-            if accountsOff { contradicted.append("--accounts-off") }
+            if serviceProfile == "trimmed" {
+                contradicted.append("--service-profile trimmed")
+            }
+            if removeApps == true {
+                contradicted.append("--remove-apps on")
+            }
+            if !keepApps.isEmpty {
+                contradicted.append("--keep-apps")
+            }
+            if accountsOff {
+                contradicted.append("--accounts-off")
+            }
             if !contradicted.isEmpty {
                 problems.append("--slim off turns slimming off; it cannot be combined with \(contradicted.joined(separator: ", "))")
             }

@@ -46,7 +46,7 @@ struct DyldSharedCacheUndoLogTests {
             let original = try overwrite(chunk, offset: 16, patched: [0xAA, 0xBB, 0xCC, 0xDD])
 
             var log = DyldSharedCacheUndoLog()
-            log.capture(chunk: chunk.lastPathComponent, fileOffset: 16, vma: 0x1_0000, original: original)
+            log.capture(chunk: chunk.lastPathComponent, fileOffset: 16, vma: 0x10000, original: original)
             log.stamp(patchID: "dyld-boot-example")
 
             // The range reads as the patched bytes before the revert.
@@ -54,7 +54,7 @@ struct DyldSharedCacheUndoLogTests {
 
             let spans = try log.restore(patchIDs: ["dyld-boot-example"], in: dir)
             #expect(spans.count == 1)
-            #expect(spans.first?.vma == 0x1_0000)
+            #expect(spans.first?.vma == 0x10000)
             #expect(spans.first?.length == 4)
 
             // And the original 16,17,18,19 are back.
@@ -105,7 +105,7 @@ struct DyldSharedCacheUndoLogTests {
     @Test
     func `A plist round-trips through encode and decode`() throws {
         var log = DyldSharedCacheUndoLog()
-        log.capture(chunk: "dyld_shared_cache_arm64e.01", fileOffset: 0x2000, vma: 0x1_8000, original: Data([1, 2, 3, 4, 5]))
+        log.capture(chunk: "dyld_shared_cache_arm64e.01", fileOffset: 0x2000, vma: 0x18000, original: Data([1, 2, 3, 4, 5]))
         log.stamp(patchID: "dyld-cfw-camera")
         let decoded = try DyldSharedCacheUndoLog.decode(log.encoded())
         #expect(decoded == log)
@@ -219,9 +219,9 @@ struct DyldSharedCacheOutdatedImplementationTests {
 
     @Test func `The unconditional force-kern records are an earlier implementation`() {
         let id = "dyld-boot-iomfb_force_kern"
-        let old = DyldSharedCacheUndoLog(records: (0..<31).map { record(id, bytes: 4, offset: $0 * 64) })
+        let old = DyldSharedCacheUndoLog(records: (0 ..< 31).map { record(id, bytes: 4, offset: $0 * 64) })
         #expect(old.hasOutdatedImplementation(of: id))
-        let current = DyldSharedCacheUndoLog(records: (0..<10).map { record(id, bytes: 16, offset: $0 * 64) })
+        let current = DyldSharedCacheUndoLog(records: (0 ..< 10).map { record(id, bytes: 16, offset: $0 * 64) })
         #expect(!current.hasOutdatedImplementation(of: id))
     }
 

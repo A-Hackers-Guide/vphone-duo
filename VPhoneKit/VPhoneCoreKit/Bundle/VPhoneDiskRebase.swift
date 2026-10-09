@@ -703,8 +703,12 @@ private final class ImageFile {
         while offset < limit {
             let data = lseek(descriptor, off_t(offset), SEEK_DATA)
             if data < 0 {
-                if errno == ENXIO { break } // no data from here to the end
-                if errno == EINVAL { return limit > 0 ? [0 ..< limit] : [] }
+                if errno == ENXIO {
+                    break
+                } // no data from here to the end
+                if errno == EINVAL {
+                    return limit > 0 ? [0 ..< limit] : []
+                }
                 throw failure()
             }
             guard Int64(data) < limit else { break }
@@ -757,7 +761,9 @@ private final class ImageFile {
         while filled < length {
             let got = pread(descriptor, buffer.pointer + filled, length - filled, off_t(offset + Int64(filled)))
             if got < 0 {
-                if errno == EINTR { continue }
+                if errno == EINTR {
+                    continue
+                }
                 throw failure()
             }
             if got == 0 {
@@ -774,7 +780,9 @@ private final class ImageFile {
             let start = range.lowerBound + written
             let put = pwrite(descriptor, buffer.pointer + start, range.count - written, off_t(chunkOffset + Int64(start)))
             if put < 0 {
-                if errno == EINTR { continue }
+                if errno == EINTR {
+                    continue
+                }
                 throw failure()
             }
             written += put

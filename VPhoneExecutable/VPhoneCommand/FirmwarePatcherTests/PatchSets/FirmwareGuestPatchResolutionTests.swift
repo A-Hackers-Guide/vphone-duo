@@ -44,7 +44,7 @@ struct FirmwareGuestPatchResolutionTests {
         let guest = FirmwareGuestPatchResolution.guestTargetIdentifiers
         let bootChain = Set(
             FirmwarePatchSetCatalog.allDeclarations
-                .filter { $0.target.isBootChain }
+                .filter(\.target.isBootChain)
                 .map(\.identifier),
         )
         guard

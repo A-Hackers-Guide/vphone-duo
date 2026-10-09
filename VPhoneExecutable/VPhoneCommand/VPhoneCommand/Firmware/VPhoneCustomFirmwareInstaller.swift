@@ -338,7 +338,7 @@ struct VPhoneCustomFirmwareInstaller {
             priorGuest = receiptGuest ?? (wasInstalled ? priorFallback : [])
             switch mode {
             case .kernelUpdate:
-                break  // handled by runKernelUpdate, never reached here
+                break // handled by runKernelUpdate, never reached here
             case .full:
                 guard let restore else {
                     throw ValidationError("A full CFW install needs a prepared restore tree.")
@@ -387,7 +387,7 @@ struct VPhoneCustomFirmwareInstaller {
         // An environment update has no restore tree to read the device from;
         // the VM's configuration says which board repair its tree takes.
         let device = configuredGuestDevice(in: bundleDirectory) ?? guestDevice(of: restore)
-        liveGuest.formUnion(try patchPreboot(
+        try liveGuest.formUnion(patchPreboot(
             volumes: volumes,
             work: work,
             plan: plan,
@@ -459,7 +459,7 @@ struct VPhoneCustomFirmwareInstaller {
         case .environmentOnly:
             print("[+] Guest environment updated; start the VM to pick it up")
         case .kernelUpdate:
-            break  // handled by runKernelUpdate
+            break // handled by runKernelUpdate
         }
     }
 
@@ -655,7 +655,13 @@ struct VPhoneCustomFirmwareInstaller {
         let plan = readPatchPlan(in: bundleDirectory)
         if let pristine = try firmwareOriginalsKernelcache(in: bundleDirectory),
            let preset = VPhonePatchPresetStore.preset(named: selection.presetIdentifier),
-           !preset.patchSets.contains(where: { if case .external = $0 { true } else { false } })
+           !preset.patchSets.contains(where: {
+               if case .external = $0 {
+                   true
+               } else {
+                   false
+               }
+           })
         {
             try pristine.directory.copyFile(from: pristine.name, to: "kernelcache.im4p", in: work.directory)
             let copy = work.file("kernelcache.im4p")
@@ -676,7 +682,7 @@ struct VPhoneCustomFirmwareInstaller {
             )
             print("  [*] kernelcache re-patched from \(VPhoneBundleOperations.firmwareOriginalsDirectoryName)"
                 + (changed ? "" : " (preset leaves every kernel patch off)"))
-            return (try Data(contentsOf: copy), Set(pipeline.resolvedPlan?.enabled ?? []))
+            return try (Data(contentsOf: copy), Set(pipeline.resolvedPlan?.enabled ?? []))
         }
         // No originals, or an external-set preset: the restore tree's kernelcache
         // was patched by `fw patch` running as the user.
@@ -1016,10 +1022,10 @@ struct VPhoneCustomFirmwareInstaller {
         var live = Set<String>()
         var failures: [String] = []
 
-        /// Whether the VM's plan (its guest half re-resolved from the current
-        /// selection) turned this guest patch on. A VM with no plan gets every
-        /// legacy patch, which is what it was restored with. New Settings-row
-        /// preferences and motion sensors still require an explicit plan.
+        // Whether the VM's plan (its guest half re-resolved from the current
+        // selection) turned this guest patch on. A VM with no plan gets every
+        // legacy patch, which is what it was restored with. New Settings-row
+        // preferences and motion sensors still require an explicit plan.
         func on(_ identifier: String) -> Bool {
             guard let plan else {
                 return !FirmwareGuestSystemPatchSet.settingsRowPatches.contains(identifier)
@@ -1033,31 +1039,33 @@ struct VPhoneCustomFirmwareInstaller {
             return true
         }
 
-        /// A first backup of a file is safe only when no patch that touches the
-        /// file was live before this run: otherwise the "original" we would
-        /// snapshot already carries a patch, and a later revert to it would be a
-        /// lie. When it is not safe the file's patches are not revertible.
+        // A first backup of a file is safe only when no patch that touches the
+        // file was live before this run: otherwise the "original" we would
+        // snapshot already carries a patch, and a later revert to it would be a
+        // lie. When it is not safe the file's patches are not revertible.
         func backupSafe(_ ids: String...) -> Bool {
             ids.allSatisfy { !priorGuest.contains($0) }
         }
 
-        /// Run a patch step so a throw does not abort the run: report it, keep
-        /// each covered patch's prior-live state in the receipt, and carry on.
+        // Run a patch step so a throw does not abort the run: report it, keep
+        // each covered patch's prior-live state in the receipt, and carry on.
         func isolate(_ ids: [String], _ body: () throws -> Void) {
             do {
                 try body()
             } catch {
                 failures.append(contentsOf: ids)
                 print("  [!] \(ids.joined(separator: ", ")): patch step failed, left in its prior state: \(error)")
-                for id in ids where priorGuest.contains(id) { live.insert(id) }
+                for id in ids where priorGuest.contains(id) {
+                    live.insert(id)
+                }
             }
         }
 
-        /// A Mach-O patch: apply from the pristine backup when on, restore the
-        /// backup when off. A binary off with no `.bak` (patched before backups
-        /// were kept) is left as it is and, if it was live before, stays
-        /// recorded as live — nothing here can put Apple's original back without
-        /// the restore tree.
+        // A Mach-O patch: apply from the pristine backup when on, restore the
+        // backup when off. A binary off with no `.bak` (patched before backups
+        // were kept) is left as it is and, if it was live before, stays
+        // recorded as live — nothing here can put Apple's original back without
+        // the restore tree.
         func machO(
             _ identifier: String,
             path: String,
@@ -1074,7 +1082,9 @@ struct VPhoneCustomFirmwareInstaller {
                         identifier: codeIdentifier, preserveEntitlements: preserveEntitlements,
                         injectedDylibPath: injectedDylibPath,
                     )
-                    if let bundle { try sealGuestBundle(system: system, bundle: bundle) }
+                    if let bundle {
+                        try sealGuestBundle(system: system, bundle: bundle)
+                    }
                     live.insert(identifier)
                 } else if try revertMachO(system: system, work: work, path: path, bundle: bundle) {
                     print("  [+] \(identifier): restored \(path) from backup")
@@ -1184,7 +1194,7 @@ struct VPhoneCustomFirmwareInstaller {
             if version.hasPrefix("27."), on(locationdID) {
                 try patchCopy(
                     of: locationdPath, in: system, work: work,
-                    verb: "patch-locationd-cohorting", backupSafe: backupSafe(locationdID)
+                    verb: "patch-locationd-cohorting", backupSafe: backupSafe(locationdID),
                 )
                 live.insert(locationdID)
             } else if try revertCopy(of: locationdPath, in: system) {
@@ -1210,10 +1220,14 @@ struct VPhoneCustomFirmwareInstaller {
                     try patchCopy(of: path, in: system, work: work, verb: "patch-build-version", arguments: [build], backupSafe: backupSafe(buildID))
                     applied = true
                 }
-                if applied { live.insert(buildID) }
+                if applied {
+                    live.insert(buildID)
+                }
             } else if !on(buildID) {
                 var reverted = false
-                for path in buildPaths where try revertCopy(of: path, in: system) { reverted = true }
+                for path in buildPaths where try revertCopy(of: path, in: system) {
+                    reverted = true
+                }
                 if !reverted, priorGuest.contains(buildID) {
                     print("  [!] \(buildID): off now but no backup to revert (not revertible)")
                     live.insert(buildID)
@@ -1313,7 +1327,9 @@ struct VPhoneCustomFirmwareInstaller {
                     verbs: virtualAudioOn.map(\.verb), preserveEntitlements: true,
                 )
                 try sealGuestBundle(system: system, bundle: virtualAudioBundle)
-                for patch in virtualAudioOn { live.insert(patch.id) }
+                for patch in virtualAudioOn {
+                    live.insert(patch.id)
+                }
             } else if try revertMachO(system: system, work: work, path: virtualAudioBinary, bundle: virtualAudioBundle) {
                 print("  [+] VirtualAudio restored from backup (all speaker/mute patches off)")
             } else {
@@ -1343,7 +1359,9 @@ struct VPhoneCustomFirmwareInstaller {
                     let patched = try patchVirtualAudioGraphConfigurations(
                         system: system, work: work, verb: entry.verb, backupSafe: graphBackupSafe,
                     )
-                    if patched { live.insert(entry.id) }
+                    if patched {
+                        live.insert(entry.id)
+                    }
                 }
             } else if !hadGraphBackup {
                 for entry in graphGroup where priorGuest.contains(entry.id) {
@@ -1425,7 +1443,9 @@ struct VPhoneCustomFirmwareInstaller {
         live: inout Set<String>,
         failures: inout [String],
     ) {
-        func enabled(_ id: String) -> Bool { plan?.isEnabled(id) ?? !FirmwareGuestSystemPatchSet.settingsRowPatches.contains(id) }
+        func enabled(_ id: String) -> Bool {
+            plan?.isEnabled(id) ?? !FirmwareGuestSystemPatchSet.settingsRowPatches.contains(id)
+        }
         let undoAbsolute = (dsc as NSString).appendingPathComponent(Self.dscUndoLogLeaf)
         let undoRelative = "\(Self.dscCacheRelative)/\(Self.dscUndoLogLeaf)"
         let undoLog = (try? system.readData(undoRelative)).flatMap { try? DyldSharedCacheUndoLog.decode($0) }
@@ -1484,7 +1504,9 @@ struct VPhoneCustomFirmwareInstaller {
             } catch {
                 failures.append(contentsOf: revertable)
                 print("  [!] dyld revert failed, left in prior state: \(error)")
-                for id in revertable { live.insert(id) }
+                for id in revertable {
+                    live.insert(id)
+                }
             }
         }
     }
@@ -1506,7 +1528,9 @@ struct VPhoneCustomFirmwareInstaller {
         try system.copyFile(from: backup, to: name, in: work.directory)
         try system.replaceFile(path, fromFileAt: work.file(name), mode: 0o755, owner: Self.guestOwner)
         try system.removeItem(backup)
-        if let bundle { try sealGuestBundle(system: system, bundle: bundle) }
+        if let bundle {
+            try sealGuestBundle(system: system, bundle: bundle)
+        }
         return true
     }
 
@@ -1810,7 +1834,9 @@ struct VPhoneCustomFirmwareInstaller {
     /// infrastructure. A full install writes every library and creates `/vh`.
     private func installEnvironment(system: VPhoneConfinedDirectory, environmentOnly: Bool = false) throws {
         for name in VPhoneGuestEnvironment.libraries {
-            if VPhoneGuestEnvironment.selectedLibraries.contains(name) { continue }
+            if VPhoneGuestEnvironment.selectedLibraries.contains(name) {
+                continue
+            }
             let path = "usr/lib/\(name)"
             if environmentOnly, try !system.exists(path) {
                 print("  [·] \(path): not on this VM, left out")
@@ -1961,9 +1987,11 @@ struct VPhoneCustomFirmwareInstaller {
         boardDeviceTree: URL?,
     ) throws -> Set<String> {
         var live = Set<String>()
-        /// Whether a device-tree patch is enabled. A VM with no plan gets every
-        /// one, which is what it was restored with.
-        func enabled(_ identifier: String) -> Bool { plan?.isEnabled(identifier) ?? true }
+        // Whether a device-tree patch is enabled. A VM with no plan gets every
+        // one, which is what it was restored with.
+        func enabled(_ identifier: String) -> Bool {
+            plan?.isEnabled(identifier) ?? true
+        }
 
         let identity = FirmwareGuestIdentityPatchSet.prebootDeviceTreeIdentity
         var rewriteIdentity = false
@@ -1972,7 +2000,9 @@ struct VPhoneCustomFirmwareInstaller {
                 print("  [·] \(identity): skipped, the device tree already presents \(guestDevice.productType)")
             } else {
                 rewriteIdentity = enabled(identity)
-                if !rewriteIdentity { print("  [·] \(identity): off in the current selection") }
+                if !rewriteIdentity {
+                    print("  [·] \(identity): off in the current selection")
+                }
             }
         } else if priorGuest.contains(identity) {
             // An environment update does not touch the identity rewrite; if the
@@ -2066,7 +2096,7 @@ struct VPhoneCustomFirmwareInstaller {
         work: WorkDirectory,
         rewriteIdentity: Bool,
         identity: String,
-        includeIdentity: Bool,
+        includeIdentity _: Bool,
         repairGroup: [(id: String, verb: String, arguments: [String])],
         repairsOn: [(id: String, verb: String, arguments: [String])],
         priorGuest: Set<String>,
@@ -2207,7 +2237,7 @@ struct VPhoneCustomFirmwareInstaller {
             print("[*] \(originals) has no \(tree); looking for the \(device.productType) \(firmware.version) (\(firmware.build)) IPSW in \(directories.map(\.path).joined(separator: ", "))")
             let recover = { () throws -> (source: VPhoneBoardDeviceTree.Source, path: String)? in
                 guard let source = VPhoneBoardDeviceTree.find(firmware, in: directories) else { return nil }
-                return (source, try VPhoneBoardDeviceTree.store(source, for: firmware, in: bundleDirectory))
+                return try (source, VPhoneBoardDeviceTree.store(source, for: firmware, in: bundleDirectory))
             }
             do {
                 guard let recovered = try invokingUser.map({ try $0.withUserCredentials(recover) }) ?? recover() else {

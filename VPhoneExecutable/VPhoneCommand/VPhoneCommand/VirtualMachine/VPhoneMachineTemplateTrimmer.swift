@@ -124,7 +124,9 @@ enum VPhoneMachineTemplateTrimmer {
         guard attach.succeeded, let whole = disks.wholeDisk, VPhoneGuestDiskLayout.isDeviceName(whole) else {
             let leftover = disks.wholeDisk.flatMap { VPhoneGuestDiskLayout.isDeviceName($0) ? $0 : nil }
                 ?? attached.range(of: #"/dev/disk[0-9]+"#, options: .regularExpression).map { String(attached[$0]) }
-            if let leftover { eject(leftover) }
+            if let leftover {
+                eject(leftover)
+            }
             let detail = attach.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             throw VPhoneSystemTrimError.layout(attach.succeeded
                 ? "diskutil attached no disk image"

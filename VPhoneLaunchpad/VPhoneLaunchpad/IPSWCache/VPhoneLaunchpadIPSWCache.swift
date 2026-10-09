@@ -105,11 +105,10 @@ nonisolated enum VPhoneLaunchpadIPSWCache {
                 continue
             }
             let size = Int64(values.fileSize ?? 0)
-            let facts: VPhoneLaunchpadIPSW?
-            if let partial {
-                facts = VPhoneLaunchpadIPSW(fileName: partial)
+            let facts: VPhoneLaunchpadIPSW? = if let partial {
+                VPhoneLaunchpadIPSW(fileName: partial)
             } else {
-                facts = manifestFacts(url, size: size, modified: values.contentModificationDate)
+                manifestFacts(url, size: size, modified: values.contentModificationDate)
                     ?? VPhoneLaunchpadIPSW(fileName: name)
             }
             files.append(VPhoneLaunchpadIPSWFile(

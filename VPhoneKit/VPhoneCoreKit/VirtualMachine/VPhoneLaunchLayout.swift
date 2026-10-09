@@ -213,12 +213,18 @@ public enum VPhoneGuestProcesses {
         guard argc > 0 else { return nil }
         var index = MemoryLayout<Int32>.size
         // Skip the executable path, then the padding after it.
-        while index < buffer.count, buffer[index] != 0 { index += 1 }
-        while index < buffer.count, buffer[index] == 0 { index += 1 }
+        while index < buffer.count, buffer[index] != 0 {
+            index += 1
+        }
+        while index < buffer.count, buffer[index] == 0 {
+            index += 1
+        }
         var arguments: [String] = []
         while arguments.count < argc, index < buffer.count {
             let start = index
-            while index < buffer.count, buffer[index] != 0 { index += 1 }
+            while index < buffer.count, buffer[index] != 0 {
+                index += 1
+            }
             arguments.append(String(decoding: buffer[start ..< index], as: UTF8.self))
             index += 1
         }

@@ -258,7 +258,7 @@ nonisolated enum VPhoneLaunchpadZipReader {
     /// The central directory's bytes, found through the end record and, for
     /// archives over 4 GB, its ZIP64 counterpart.
     static func centralDirectory(_ handle: FileHandle, size: UInt64) throws -> Data {
-        let tailLength = min(size, 65_535 + 22 + 20)
+        let tailLength = min(size, 65535 + 22 + 20)
         let tail = try read(handle, at: size - tailLength, count: Int(tailLength))
         guard tail.count >= 22 else {
             throw Failure.notZip

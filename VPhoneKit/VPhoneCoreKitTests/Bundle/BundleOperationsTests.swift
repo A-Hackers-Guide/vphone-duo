@@ -149,12 +149,12 @@ struct BundleOperationsTests {
             .init(name: "unlock", cpuCount: 8, memoryMB: 8192, diskSizeGB: 1, romSource: rom, sepromSource: seprom),
             in: lib,
         )
-        #expect(VPhoneBundleReport(bundle: try lib.bundle(named: "unlock")).unlocksAtStartup == false)
+        #expect(try VPhoneBundleReport(bundle: lib.bundle(named: "unlock")).unlocksAtStartup == false)
 
         _ = try VPhoneBundleOperations.updateConfig(
             bundleNamed: "unlock", in: lib, cpuCount: nil, memoryMB: nil, unlocksAtStartup: true,
         )
-        #expect(VPhoneBundleReport(bundle: try lib.bundle(named: "unlock")).unlocksAtStartup)
+        #expect(try VPhoneBundleReport(bundle: lib.bundle(named: "unlock")).unlocksAtStartup)
 
         // Another edit leaves it alone; off turns it off.
         _ = try VPhoneBundleOperations.updateConfig(bundleNamed: "unlock", in: lib, cpuCount: 4, memoryMB: nil)
@@ -175,12 +175,12 @@ struct BundleOperationsTests {
             .init(name: "location", cpuCount: 8, memoryMB: 8192, diskSizeGB: 1, romSource: rom, sepromSource: seprom),
             in: lib,
         )
-        #expect(VPhoneBundleReport(bundle: try lib.bundle(named: "location")).syncsHostLocation == false)
+        #expect(try VPhoneBundleReport(bundle: lib.bundle(named: "location")).syncsHostLocation == false)
 
         _ = try VPhoneBundleOperations.updateConfig(
             bundleNamed: "location", in: lib, cpuCount: nil, memoryMB: nil, syncsHostLocation: true,
         )
-        #expect(VPhoneBundleReport(bundle: try lib.bundle(named: "location")).syncsHostLocation)
+        #expect(try VPhoneBundleReport(bundle: lib.bundle(named: "location")).syncsHostLocation)
 
         // Another edit leaves it alone; off turns it off.
         _ = try VPhoneBundleOperations.updateConfig(
@@ -555,7 +555,11 @@ struct BundleOperationsTests {
 
         for name in ["Disk.img", "SEPStorage", "nvram.bin"] {
             var fd: Int32 = -1
-            defer { if fd >= 0 { close(fd) } }
+            defer {
+                if fd >= 0 {
+                    close(fd)
+                }
+            }
             #expect(throws: VPhoneBundleActivityError.running(name: "src", pids: [getpid()])) {
                 try VPhoneBundleOperations.clone(bundleNamed: "src", to: "dst", in: lib, newIdentity: false) {
                     // The source starts after the first check passed.

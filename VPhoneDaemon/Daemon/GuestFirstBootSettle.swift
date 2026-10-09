@@ -80,8 +80,8 @@ enum GuestFirstBootSettle {
             let counts = window.map(\.appCount)
             if counts.contains(where: { $0 == nil }) {
                 reasons.append("app count unavailable")
-            } else if Set(counts.compactMap { $0 }).count > 1 {
-                let values = counts.compactMap { $0 }.map(String.init).joined(separator: " → ")
+            } else if Set(counts.compactMap(\.self)).count > 1 {
+                let values = counts.compactMap(\.self).map(String.init).joined(separator: " → ")
                 reasons.append("app count changed: \(values)")
             }
         }

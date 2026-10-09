@@ -31,7 +31,9 @@ final class VPhoneGyroscopeTestGuest {
 struct VPhoneMotionModelTests {
     @MainActor static func waitFor(_ predicate: () -> Bool) async {
         for _ in 0 ..< 10000 {
-            if predicate() { return }
+            if predicate() {
+                return
+            }
             await Task.yield()
         }
         fatalError("Timed out waiting for the gyroscope request queue")

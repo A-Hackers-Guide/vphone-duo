@@ -356,8 +356,8 @@ final class VPhoneLaunchpadCreationPipeline {
             try await commandLine.runChecked(arguments, onLine: onLine, onProgress: onProgress)
         }
 
-        /// For the template steps: a failure names the step and carries the
-        /// line `vphone-cli` ended with, which says why.
+        // For the template steps: a failure names the step and carries the
+        // line `vphone-cli` ended with, which says why.
         func runReporting(
             _ arguments: [String],
             onLine: @escaping @Sendable (String) -> Void = output,
@@ -405,12 +405,12 @@ final class VPhoneLaunchpadCreationPipeline {
             defer { downloadFraction = nil }
             try await run(["fw", "prepare", name, "--iphone-source", options.iphoneSource,
                            "--cloudos-source", options.cloudOSSource] + deviceArguments + library,
-                onProgress: { [weak self] fraction in
-                    Task { @MainActor in
-                        guard let self, self.current == .prepare else { return }
-                        self.downloadFraction = fraction < 1 ? fraction : nil
-                    }
-                })
+                          onProgress: { [weak self] fraction in
+                              Task { @MainActor in
+                                  guard let self, self.current == .prepare else { return }
+                                  self.downloadFraction = fraction < 1 ? fraction : nil
+                              }
+                          })
 
         case .patch:
             // The preset rides on `fw patch` itself; per-patch overrides are
@@ -808,7 +808,6 @@ final class VPhoneLaunchpadCreationPipeline {
         return false
     }
 }
-
 
 #if DEBUG
     extension VPhoneLaunchpadCreationPipeline {
