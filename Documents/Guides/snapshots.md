@@ -69,6 +69,11 @@ writes to it, and then only the changed blocks take new space. Because of this,
 `du` and Finder count each snapshot at the full size of the disk and overstate
 what it really uses. Free space on the volume is the honest measure.
 
+A snapshot keeps the disk blocks it was taken with. `vm rebase`, which makes a
+VM share identical blocks with another VM's, frees nothing while a snapshot of
+that VM still holds the old ones; see
+[Sharing disk space between VMs](create-and-run.md#sharing-disk-space-between-vms).
+
 The VM must be on an APFS volume. Elsewhere `create` refuses rather than copying
 a disk image that can be tens of gigabytes.
 

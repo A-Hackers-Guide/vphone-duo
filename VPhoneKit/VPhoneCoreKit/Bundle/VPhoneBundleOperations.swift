@@ -336,7 +336,8 @@ public enum VPhoneBundleOperations {
     /// temporary cloudOS VM. None of these is `--include-ipsw`'s restore tree.
     /// Snapshots stay with the machine they were taken on: in an archive each
     /// one would be another full copy of the disk. A revert's staging folder
-    /// is left behind only by a revert that was killed.
+    /// is left behind only by a revert that was killed, and a rebase's staging
+    /// folder only by a rebase that was killed.
     ///
     /// Export itself is `VPhoneBundleTransfer` in `VPhoneArchiveKit` — it needs
     /// libarchive, and this does not. The list stays here because it describes
@@ -349,6 +350,7 @@ public enum VPhoneBundleOperations {
         ".pcc-system-*",
         VPhoneMachineSnapshots.directoryName,
         ".snapshot-revert-*",
+        VPhoneDiskRebase.stagingPrefix + "*",
     ]
 
     /// The directory holding each boot-chain file exactly as the restore tree laid

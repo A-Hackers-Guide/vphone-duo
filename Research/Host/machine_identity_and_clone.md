@@ -146,3 +146,6 @@ deleting the source frees no shared blocks while a clone remains.
 - Deleting clones leaves their DHCP bindings to unused MACs;
   `vm leases --release-orphans` returns them (see
   [network notes](network_fixed_address.md)).
+- Two machines restored separately share no disk blocks, although about 8.6 GB
+  of their images is identical; `vm rebase` re-shares it without touching
+  `SEPStorage`, `nvram.bin` or the identity (see [disk rebase](disk_rebase.md)).
