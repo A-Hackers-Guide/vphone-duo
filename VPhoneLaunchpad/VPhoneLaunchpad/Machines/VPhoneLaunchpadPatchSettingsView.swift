@@ -68,7 +68,11 @@ struct VPhoneLaunchpadPatchSettingsView: View {
             VStack(spacing: 0) {
                 header
                 Divider()
+                // A ContentUnavailableView is only as tall as its text; left
+                // to that, the stack centers in the sheet and the header
+                // drops to the middle.
                 list
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
                 detailPane
             }
@@ -85,6 +89,15 @@ struct VPhoneLaunchpadPatchSettingsView: View {
                 .disabled(catalog == nil)
         }
         .frame(width: 920, height: 680)
+        // A hidden patch leaves the selection, so the detail pane reads only
+        // a row the table shows.
+        .onChange(of: filter) {
+            if let catalog, let highlighted,
+               !catalog.patches(matching: filter).contains(where: { $0.identifier == highlighted })
+            {
+                self.highlighted = nil
+            }
+        }
         .confirmationDialog(
             "Leave ^[\(essentialOff.count) boot-essential patch](inflect: true) off?",
             isPresented: $confirmsBootEssential,
@@ -166,7 +179,6 @@ struct VPhoneLaunchpadPatchSettingsView: View {
                 ProgressView()
                 Text("Reading the bundle's patches…").foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
