@@ -222,6 +222,8 @@ final class VPhoneLaunchpadMachineLibrary {
         }
         let paths = machines.map(\.path)
         externallyRunning = await Task.detached { Self.machinesHoldingDisks(paths) }.value
+        // A stopped machine's guest boots afresh when it starts again.
+        pendingGuestRestarts = pendingGuestRestarts.filter { state(of: $0.key) != .stopped }
         await loadBindings(paths)
         refreshDiskUsage()
     }
@@ -899,6 +901,44 @@ final class VPhoneLaunchpadMachineLibrary {
             timeout: timeout,
         )
         return (reply as? [String: Any])?["result"] as? [String: Any] ?? [:]
+    }
+
+    // MARK: - Guest restarts
+
+    /// Service profile changes waiting for their guest to restart, by
+    /// machine. Kept for this Launchpad session, so the Guest System sheet
+    /// shows them when it opens again.
+    private(set) var pendingGuestRestarts: [Path: VPhoneLaunchpadPendingRestart] = [:]
+
+    /// The guest's current boot, launchd's start time; nil when the guest
+    /// does not answer.
+    func guestBoot(_ machine: Path) async -> Double? {
+        guard let result = try? await guestCall(machine, "processes.list", ["filter": "launchd"], timeout: 20) else {
+            return nil
+        }
+        return VPhoneLaunchpadPendingRestart.boot(fromProcesses: result)
+    }
+
+    /// Keeps what `services.profile.apply` left waiting for a restart.
+    func recordServiceProfileApply(_ machine: Path, result: [String: Any], boot: Double?) {
+        pendingGuestRestarts[machine] = VPhoneLaunchpadPendingRestart.afterApply(result, pending: pendingGuestRestarts[machine], boot: boot)
+    }
+
+    /// Whether a change still waits for the guest to restart. Forgets it once
+    /// the guest answers from a later boot.
+    func isGuestRestartPending(_ machine: Path) async -> Bool {
+        guard let pending = pendingGuestRestarts[machine] else {
+            return false
+        }
+        if await pending.hasRestarted(currentBoot: guestBoot(machine)) {
+            pendingGuestRestarts[machine] = nil
+            return false
+        }
+        return true
+    }
+
+    func forgetPendingRestart(_ machine: Path) {
+        pendingGuestRestarts[machine] = nil
     }
 
     // MARK: - Export

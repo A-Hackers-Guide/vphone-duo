@@ -3061,6 +3061,40 @@
         }
       }
     },
+    "The guest has restarted." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The guest has restarted."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストを再起動しました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트가 재시동되었습니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Máy khách đã khởi động lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机已重启。"
+          }
+        }
+      }
+    },
     "TV" : {
       "localizations" : {
         "en" : {

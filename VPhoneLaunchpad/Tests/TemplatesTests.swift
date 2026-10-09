@@ -8,6 +8,7 @@ struct TemplatesTests {
         commandArguments()
         patchOverrides()
         creationPlan()
+        guestRestart()
         try templateList()
         try templateFind()
         notices()
@@ -229,6 +230,49 @@ struct TemplatesTests {
     }
 
     typealias Step = VPhoneLaunchpadCreationStep
+
+    // MARK: - Guest restart
+
+    static func guestRestart() {
+        let processes: [String: Any] = ["processes": [
+            ["pid": 412, "name": "launchd_sim", "start_time": 1_791_500_000.5],
+            ["pid": 1, "name": "launchd", "start_time": 1_791_453_600.25],
+        ]]
+        let boot = VPhoneLaunchpadPendingRestart.boot(fromProcesses: processes)
+        precondition(boot == 1_791_453_600.25, "launchd's start time: \(String(describing: boot))")
+        precondition(VPhoneLaunchpadPendingRestart.boot(fromProcesses: ["processes": []]) == nil, "No launchd")
+
+        // Switching to None: the apply says a restart is needed, the profile
+        // read afterwards does not.
+        let applyNone: [String: Any] = ["enabled": Array(repeating: "label", count: 141), "failed": [], "reboot_required": true]
+        let profile = VPhoneLaunchpadServiceProfile(["profile": "none", "supported": true, "running": [], "reboot_required": false])
+        precondition(!profile.rebootRequired && profile.profile == "none" && profile.groups.isEmpty, "The profile forgets")
+        guard let pending = VPhoneLaunchpadPendingRestart.afterApply(applyNone, pending: nil, boot: boot) else {
+            preconditionFailure("The apply's answer is kept")
+        }
+        precondition(pending.boot == boot, "Made in this boot")
+        precondition(!pending.hasRestarted(currentBoot: boot), "Same boot: still pending")
+        precondition(!pending.hasRestarted(currentBoot: boot.map { $0 + 0.4 }), "Rounding is not a boot")
+        precondition(!pending.hasRestarted(currentBoot: nil), "A guest that does not answer has not restarted")
+        precondition(pending.hasRestarted(currentBoot: 1_791_457_200), "A later boot")
+
+        // A second change keeps the first one's boot; one needing no restart clears it.
+        let older = VPhoneLaunchpadPendingRestart(boot: 10)
+        precondition(VPhoneLaunchpadPendingRestart.afterApply(["reboot_required": true], pending: older, boot: 20) == older,
+                     "The earliest boot counts")
+        precondition(VPhoneLaunchpadPendingRestart.afterApply(["reboot_required": false], pending: older, boot: 20) == nil,
+                     "Nothing to restart for")
+        precondition(VPhoneLaunchpadPendingRestart.afterApply([:], pending: nil, boot: 20) == nil, "An older guest says nothing")
+        precondition(!VPhoneLaunchpadPendingRestart(boot: nil).hasRestarted(currentBoot: 20), "Unknown boot: wait for a stop")
+
+        let trimmed = VPhoneLaunchpadServiceProfile([
+            "profile": "trimmed", "supported": true, "running": ["a", "b"], "reboot_required": true,
+            "record": ["groups": ["base", "accounts"], "allow": ["com.apple.x"]],
+        ])
+        precondition(trimmed.rebootRequired && trimmed.running == 2 && trimmed.groups == ["base", "accounts"] && trimmed.allow == ["com.apple.x"],
+                     "Trimmed profile")
+        print("Guest restart tests passed")
+    }
 
     // MARK: - JSON
 

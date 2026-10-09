@@ -496,3 +496,67 @@ nonisolated struct VPhoneLaunchpadTemplateNotice: Identifiable, Hashable, Sendab
         return nil
     }
 }
+
+// MARK: - Guest System
+
+/// `services.profile`, as much of it as the Guest System sheet shows.
+nonisolated struct VPhoneLaunchpadServiceProfile: Equatable, Sendable {
+    var profile: String
+    var supported: Bool
+    /// The groups and allowed labels the guest's record holds, passed back
+    /// when the profile is applied again so `--accounts-off` stays.
+    var groups: [String]
+    var allow: [String]
+    /// Labels the profile turned off that still run until the guest restarts.
+    var running: Int
+    var rebootRequired: Bool
+
+    init(_ result: [String: Any]) {
+        profile = result["profile"] as? String ?? "none"
+        supported = result["supported"] as? Bool ?? false
+        let record = result["record"] as? [String: Any]
+        groups = record?["groups"] as? [String] ?? []
+        allow = record?["allow"] as? [String] ?? []
+        running = (result["running"] as? [Any])?.count ?? 0
+        rebootRequired = result["reboot_required"] as? Bool ?? false
+    }
+}
+
+/// A service profile change waiting for its guest to restart.
+///
+/// `services.profile` cannot say this for every change: switching to None
+/// clears the guest's record, and with it the labels `reboot_required` is
+/// counted from, while the services it turned back on start only with the
+/// next boot. So the apply's own answer is kept until the guest has booted
+/// again, which shows as a new start time of launchd (pid 1).
+nonisolated struct VPhoneLaunchpadPendingRestart: Hashable, Sendable {
+    /// When launchd started in the boot the change was made in; nil when the
+    /// guest did not say. Without it, only the machine stopping clears this.
+    let boot: Double?
+
+    /// The guest's boot from `processes.list`: launchd's start time.
+    static func boot(fromProcesses result: [String: Any]) -> Double? {
+        let rows = result["processes"] as? [[String: Any]] ?? []
+        return rows.first { $0["pid"] as? Int == 1 }?["start_time"] as? Double
+    }
+
+    /// What is pending after `services.profile.apply` answered `result`. A
+    /// change still waiting keeps the boot it was made in; an apply that
+    /// needs no restart, such as one undoing a change that never ran, leaves
+    /// nothing pending.
+    static func afterApply(_ result: [String: Any], pending: Self?, boot: Double?) -> Self? {
+        guard result["reboot_required"] as? Bool == true else {
+            return nil
+        }
+        return pending ?? Self(boot: boot)
+    }
+
+    /// Whether the guest has booted since the change: both boots known, and
+    /// a second or more apart.
+    func hasRestarted(currentBoot: Double?) -> Bool {
+        guard let boot, let currentBoot else {
+            return false
+        }
+        return abs(currentBoot - boot) >= 1
+    }
+}

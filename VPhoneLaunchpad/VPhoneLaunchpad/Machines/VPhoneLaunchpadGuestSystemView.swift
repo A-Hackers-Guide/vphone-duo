@@ -2,29 +2,6 @@ import SwiftUI
 
 // MARK: - State read from the guest
 
-/// `services.profile`, as much of it as the sheet shows.
-nonisolated struct VPhoneLaunchpadServiceProfile: Equatable, Sendable {
-    var profile: String
-    var supported: Bool
-    /// The groups and allowed labels the guest's record holds, passed back
-    /// when the profile is applied again so `--accounts-off` stays.
-    var groups: [String]
-    var allow: [String]
-    /// Labels the profile turned off that still run until the guest restarts.
-    var running: Int
-    var rebootRequired: Bool
-
-    init(_ result: [String: Any]) {
-        profile = result["profile"] as? String ?? "none"
-        supported = result["supported"] as? Bool ?? false
-        let record = result["record"] as? [String: Any]
-        groups = record?["groups"] as? [String] ?? []
-        allow = record?["allow"] as? [String] ?? []
-        running = (result["running"] as? [Any])?.count ?? 0
-        rebootRequired = result["reboot_required"] as? Bool ?? false
-    }
-}
-
 /// One backup `apps.removed_system` lists.
 nonisolated struct VPhoneLaunchpadRemovedApp: Identifiable, Hashable, Sendable {
     let id: String
@@ -56,6 +33,11 @@ struct VPhoneLaunchpadGuestSystemView: View {
     @Environment(VPhoneLaunchpadModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var profile: VPhoneLaunchpadServiceProfile?
+    /// A change the guest takes on only when it restarts, kept by the library
+    /// until it has (`VPhoneLaunchpadPendingRestart`).
+    @State private var restartPending = false
+    /// Waits for the guest to come back after Restart Guest.
+    @State private var restartTask: Task<Void, Never>?
     @State private var chosenProfile = "trimmed"
     @State private var removedApps: [VPhoneLaunchpadRemovedApp]?
     @State private var selectedApps: Set<String> = []
@@ -114,6 +96,7 @@ struct VPhoneLaunchpadGuestSystemView: View {
                 await load()
             }
         }
+        .onDisappear { restartTask?.cancel() }
         .errorAlert($error)
     }
 
@@ -128,15 +111,17 @@ struct VPhoneLaunchpadGuestSystemView: View {
                     Text("None").tag("none")
                 }
                 HStack {
-                    if profile.rebootRequired {
+                    if needsRestart {
                         Label("Restart required", systemImage: "arrow.clockwise")
                             .foregroundStyle(.orange)
                             .font(.callout)
                     }
                     Spacer()
-                    if profile.rebootRequired {
-                        Button("Restart Guest") { Task { await restartGuest() } }
-                            .disabled(isWorking)
+                    if needsRestart {
+                        Button("Restart Guest") {
+                            restartTask = Task { await restartGuest() }
+                        }
+                        .disabled(isWorking)
                     }
                     Button("Apply") { Task { await applyProfile() } }
                         .disabled(isWorking || chosenProfile == profile.profile || (!profile.supported && chosenProfile == "trimmed"))
@@ -158,6 +143,12 @@ struct VPhoneLaunchpadGuestSystemView: View {
             }
             .foregroundStyle(.secondary)
         }
+    }
+
+    /// The guest's own word, or a change Launchpad applied that the guest
+    /// no longer reports: switching to None clears its record.
+    private var needsRestart: Bool {
+        profile?.rebootRequired == true || restartPending
     }
 
     // MARK: - Apps
@@ -218,6 +209,8 @@ struct VPhoneLaunchpadGuestSystemView: View {
             if VPhoneLaunchpadPreview.isActive {
                 profile = VPhoneLaunchpadServiceProfile(VPhoneLaunchpadPreview.serviceProfile)
                 chosenProfile = profile?.profile ?? "trimmed"
+                restartPending = VPhoneLaunchpadPreview.guestSystemRestartPending
+                profileNote = restartPending ? String(localized: "\(0) turned off, \(141) turned back on.") : nil
                 removedApps = VPhoneLaunchpadRemovedApp.list(VPhoneLaunchpadPreview.removedSystemApps)
                 selectedApps = ["com.apple.news"]
                 return
@@ -228,6 +221,7 @@ struct VPhoneLaunchpadGuestSystemView: View {
             let state = try await VPhoneLaunchpadServiceProfile(library.guestCall(machine, "services.profile"))
             profile = state
             chosenProfile = state.profile
+            restartPending = await library.isGuestRestartPending(machine)
             removedApps = try await VPhoneLaunchpadRemovedApp.list(library.guestCall(machine, "apps.removed_system"))
             selectedApps.formIntersection(Set(removedApps?.map(\.id) ?? []))
         } catch {
@@ -246,8 +240,12 @@ struct VPhoneLaunchpadGuestSystemView: View {
             params["groups"] = profile.groups
             params["allow"] = profile.allow
         }
+        // The boot the change is made in, to tell when the guest has restarted.
+        let boot = await library.guestBoot(machine)
         do {
             let result = try await library.guestCall(machine, "services.profile.apply", params)
+            library.recordServiceProfileApply(machine, result: result, boot: boot)
+            restartPending = library.pendingGuestRestarts[machine] != nil
             let disabled = (result["disabled"] as? [Any])?.count ?? 0
             let enabled = (result["enabled"] as? [Any])?.count ?? 0
             let failed = (result["failed"] as? [Any])?.count ?? 0
@@ -262,14 +260,30 @@ struct VPhoneLaunchpadGuestSystemView: View {
         }
     }
 
+    /// Restarts the guest, then waits up to three minutes for it to answer
+    /// from a new boot and reads its state again.
     private func restartGuest() async {
         isWorking = true
         defer { isWorking = false }
+        let waiting = await VPhoneLaunchpadPendingRestart(boot: library.guestBoot(machine))
         do {
             _ = try await library.guestCall(machine, "system.reboot", ["force": true], timeout: 30)
             profileNote = String(localized: "The guest is restarting.")
         } catch {
             self.error = VPhoneLaunchpadError(String(localized: "Unable to Restart the Guest"), detail: VPhoneLaunchpadError.message(for: error))
+            return
+        }
+        for _ in 0 ..< 60 {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, isRunning else {
+                return
+            }
+            if await waiting.hasRestarted(currentBoot: library.guestBoot(machine)) {
+                profileNote = String(localized: "The guest has restarted.")
+                library.forgetPendingRestart(machine)
+                await load()
+                return
+            }
         }
     }
 

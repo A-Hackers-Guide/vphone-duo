@@ -167,6 +167,10 @@
                 await panel(model, .templates, "14-templates", suffix)
                 guestSystemRunning = true
                 await sheet(.guestSystem(path("research-01")), "15-guest-system", suffix)
+                // Switched to None: the guest no longer reports a restart.
+                guestSystemRestartPending = true
+                await sheet(.guestSystem(path("research-01")), "15b-guest-system-restart-pending", suffix)
+                guestSystemRestartPending = false
                 guestSystemRunning = false
                 await sheet(.guestSystem(labMachine), "15a-guest-system-stopped", suffix)
                 model.machines.applyPreviewNotice()
@@ -524,9 +528,16 @@
         /// Whether the Guest System sheet sees its machine running.
         static var guestSystemRunning = false
 
-        /// Stands in for `services.profile`.
+        /// Whether a profile change waits for the guest to restart.
+        static var guestSystemRestartPending = false
+
+        /// Stands in for `services.profile`. After a switch to None the
+        /// guest keeps no record, so it reports no restart either.
         static var serviceProfile: [String: Any] {
-            [
+            if guestSystemRestartPending {
+                return ["profile": "none", "supported": true, "running": [], "reboot_required": false]
+            }
+            return [
                 "profile": "trimmed", "supported": true, "running": [], "reboot_required": false,
                 "record": ["groups": ["base", "app_store", "signin_followup"], "allow": []],
             ]
