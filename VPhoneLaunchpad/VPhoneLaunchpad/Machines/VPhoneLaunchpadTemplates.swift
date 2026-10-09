@@ -210,12 +210,26 @@ nonisolated enum VPhoneLaunchpadTemplateCommands {
         slimming.trimArguments.map { ["vm", "template", "trim", machine] + $0 }
     }
 
+    /// `--strict`: the setup boot fails when an app it should remove stays.
+    /// Without it the app only drops out of the key, the adopted template
+    /// gets another id than Find Template computed, and every later create
+    /// with these options builds a template again.
     static func setup(_ machine: String, _ slimming: VPhoneLaunchpadSlimming) -> [String] {
-        ["vm", "template", "setup", machine] + slimming.setupArguments
+        ["vm", "template", "setup", machine, "--strict"] + slimming.setupArguments
     }
 
-    static func adopt(_ machine: String, iphoneSource: String, cloudOSSource: String) -> [String] {
+    /// `--expect`: the id Find Template computed for this creation. The adopt
+    /// fails, saying which part of the key differs, rather than save the
+    /// build under another id.
+    static func adopt(_ machine: String, iphoneSource: String, cloudOSSource: String, expect: String?) -> [String] {
         ["vm", "template", "adopt", machine, "--json", "--iphone-source", iphoneSource, "--cloudos-source", cloudOSSource]
+            + (expect.map { ["--expect", $0] } ?? [])
+    }
+
+    /// `fw set-patches`: the template build's boot-chain overrides, or every
+    /// override for a machine of its own (`includingGuest`).
+    static func setPatches(_ machine: String, _ overrides: VPhoneLaunchpadPatchOverrides, includingGuest: Bool) -> [String] {
+        ["fw", "set-patches", machine] + overrides.setPatchesArguments(includingGuest: includingGuest)
     }
 
     /// The new machine, cloned with the settings a template does not fix.
@@ -235,6 +249,52 @@ nonisolated enum VPhoneLaunchpadTemplateCommands {
     /// step failed in a sentence; nil when there is none.
     static func failureLine(_ lines: [String]) -> String? {
         lines.last { $0.hasPrefix("Error: ") }.map { String($0.dropFirst("Error: ".count)) }
+    }
+}
+
+// MARK: - Patch overrides
+
+/// New Machine's per-patch overrides, split where the template key splits
+/// them. A boot-chain patch is built into the template by `fw patch`, so its
+/// overrides are part of the key and go to the build. A guest patch is
+/// written by the guest half of an install, which `cfw update-environment`
+/// runs again on a clone, so its overrides stay out of the template and go
+/// to the clone: a template never passes them on to a creation that did not
+/// ask for them, and `vm template find` does not key on them.
+nonisolated struct VPhoneLaunchpadPatchOverrides: Hashable, Sendable {
+    var preset: String
+    var blocked: Set<String> = []
+    var allowed: Set<String> = []
+    /// The overridden patches the bundle's catalog places in the guest
+    /// (`VPhoneLaunchpadPatchCatalog.guestOverrides`). A patch it does not
+    /// list counts as boot chain, as the template key counts it.
+    var guestPatches: Set<String> = []
+
+    var bootChainBlocked: Set<String> {
+        blocked.subtracting(guestPatches)
+    }
+
+    var bootChainAllowed: Set<String> {
+        allowed.subtracting(guestPatches)
+    }
+
+    var hasBootChainOverrides: Bool {
+        !bootChainBlocked.isEmpty || !bootChainAllowed.isEmpty
+    }
+
+    var hasGuestOverrides: Bool {
+        !blocked.isDisjoint(with: guestPatches) || !allowed.isDisjoint(with: guestPatches)
+    }
+
+    /// `fw set-patches` arguments without the machine. Each run writes the
+    /// whole record, so the clone's run repeats the boot-chain overrides it
+    /// already has from its template.
+    func setPatchesArguments(includingGuest: Bool) -> [String] {
+        let blocked = includingGuest ? blocked : bootChainBlocked
+        let allowed = includingGuest ? allowed : bootChainAllowed
+        return ["--preset", preset]
+            + blocked.sorted().flatMap { ["--block", $0] }
+            + allowed.sorted().flatMap { ["--allow", $0] }
     }
 }
 

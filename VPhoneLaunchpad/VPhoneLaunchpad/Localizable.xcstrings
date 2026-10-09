@@ -613,6 +613,40 @@
         }
       }
     },
+    "Apply guest patches" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apply guest patches"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストのパッチを適用"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트 패치 적용"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Áp dụng bản vá máy khách"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用客户机补丁"
+          }
+        }
+      }
+    },
     "Building template: %@" : {
       "localizations" : {
         "en" : {
@@ -1493,6 +1527,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "游戏"
+          }
+        }
+      }
+    },
+    "Guest patch changes are applied to this machine after it is cloned. The template keeps the preset’s, so machines that do not change them share it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guest patch changes are applied to this machine after it is cloned. The template keeps the preset’s, so machines that do not change them share it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストのパッチの変更は、複製後にこのマシンへ適用します。テンプレートはプリセットのままなので、変更しないマシンと共有されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트 패치 변경은 복제한 뒤 이 머신에 적용합니다. 템플릿은 프리셋 그대로 유지되므로 변경하지 않는 머신과 공유됩니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Các thay đổi bản vá máy khách được áp dụng cho máy này sau khi nhân bản. Mẫu giữ nguyên theo cấu hình sẵn, nên các máy không thay đổi chúng dùng chung mẫu này."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户机补丁的更改会在克隆后应用到此虚拟机。模板保持预设的补丁，因此不更改它们的虚拟机可以共用该模板。"
           }
         }
       }
@@ -3737,6 +3805,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关闭不需要的服务"
+          }
+        }
+      }
+    },
+    "Unable to apply the guest patches. Check the log for details." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to apply the guest patches. Check the log for details."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゲストのパッチを適用できません。詳細はログを確認してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게스트 패치를 적용할 수 없습니다. 자세한 내용은 로그를 확인하십시오."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể áp dụng các bản vá máy khách. Hãy xem nhật ký để biết chi tiết."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法应用客户机补丁。请查看日志了解详情。"
           }
         }
       }

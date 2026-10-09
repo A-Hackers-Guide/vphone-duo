@@ -57,8 +57,11 @@ either direction. The preset itself is a field because `standard` and
 Not in the key: CPU, memory, screen, network, unlock at startup. They are
 `config.plist` settings that `vm create` sets on the clone.
 
-A machine Launchpad created with per-patch overrides has a digest of its own,
-so it never serves a create without them. A template's staleness check
+A machine Launchpad created with boot-chain overrides has a digest of its
+own, so it never serves a create without them. Launchpad builds a template
+with the boot-chain overrides only and applies guest overrides to the clone
+(see Lifecycle), so no template carries a guest override in its
+`PatchSelection.plist`. A template's staleness check
 re-resolves with the template's own `PatchSelection.plist`.
 
 ## Storage
@@ -431,19 +434,28 @@ made after the latest one, as these clones were.
   the lock and freezes the build on success.
 - **Launchpad** (2.9, `VPhoneLaunchpadCreationPipeline`, steps in
   `VPhoneLaunchpadCreationPlan`) first runs `vm template find --json` with
-  the request (IPSW sources, device, preset and per-patch overrides, disk
+  the request (IPSW sources, device, preset and boot-chain overrides, disk
   size, slimming switches). A usable template is cloned at once. Otherwise it
   builds one in a temporary library machine `template-<8 hex>`: `vm new`,
-  `fw prepare`, `fw patch`, the DFU restore and `cfw install` through the
-  helper, without its own first boot; then `vm template trim <name> --tier …`
-  (left out for trim none), `vm template setup <name> [switches]` (headless),
-  `vm template adopt <name> --json --iphone-source … --cloudos-source …`, then
+  `fw prepare`, `fw set-patches` with the boot-chain overrides only,
+  `fw patch`, the DFU restore and `cfw install` through the helper, without
+  its own first boot; then `vm template trim <name> --tier …` (left out for
+  trim none), `vm template setup <name> --strict [switches]` (headless; fails
+  when an app it should remove stays), `vm template adopt <name> --json
+  --iphone-source … --cloudos-source … --expect <id>` (the id `find`
+  computed, or a second `find` once the restore downloaded the IPSWs; a
+  build whose key differs fails the step with the differing fields), then
   `vm create <name> --template <id> --skip-first-boot --cpu … --memory …
-  --network …` and its own first boot. An adopt refused because another
+  --network …`. When the request has guest patch overrides (the bundle's
+  `fw patches` catalog places the patch outside the boot chain), the clone
+  then gets `fw set-patches <name>` with every override and `cfw
+  update-environment <name>` through the helper's existing verb, before its
+  own first boot. An adopt refused because another
   create saved the same key meanwhile falls back to that template and deletes
   the build. The helper's root surface is unchanged: `cfw install` runs on
-  the temporary machine, a visible library machine, before it is adopted;
-  trim, setup and adopt run as the user. The setup boot's `vphone-vm` is
+  the temporary machine, a visible library machine, before it is adopted,
+  and the guest overrides go through its existing `cfw update-environment`
+  on the clone; trim, setup and adopt run as the user. The setup boot's `vphone-vm` is
   spawned by `vphone-cli`, itself a pipe child of Launchpad like the
   pipeline's DFU boot, not through `vphone-launchpad-launcher`, so Launchpad
   is its responsible process while it runs: a privacy prompt would be

@@ -71,7 +71,8 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
         /// Whether the patch is in the boot chain, which only a restore
         /// changes on a machine that exists. Read from `part` when the bundle
         /// reports it, else from `target`, which names the component the same
-        /// way for a boot-chain patch.
+        /// way for a boot-chain patch. Every `.firmware` component counts, as
+        /// it does for `fw patch` and the template key.
         var isBootChain: Bool {
             Self.bootChainParts.contains(part ?? target)
         }
@@ -82,7 +83,7 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
         }
 
         private static let bootChainParts: Set<String> = [
-            "AVPBooter", "iBSS", "iBEC", "LLB", "TXM", "kernelcache", "DeviceTree",
+            "AVPBooter", "iBSS", "iBEC", "LLB", "TXM", "kernelcache", "DeviceTree", "Filesystem", "Manifest",
         ]
 
         /// False when the patch applies to every version, which is not worth a
@@ -178,6 +179,14 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
     /// Pending boot-chain patches that only an erasing restore applies.
     var pendingRestorePatches: Int {
         patches.count { $0.pending == true && ($0.delivery ?? (($0.isBootChain && !$0.isKernel) ? "restore" : "")) == "restore" }
+    }
+
+    /// The overrides of `selection` the guest half of an install writes. One
+    /// naming a patch this catalog does not list counts as boot chain, as the
+    /// template key counts it.
+    func guestOverrides(_ selection: VPhoneLaunchpadPatchSelection) -> Set<String> {
+        let guest = Set(patches.filter { !$0.isBootChain }.map(\.identifier))
+        return selection.blocked.union(selection.allowed).intersection(guest)
     }
 
     func preset(_ identifier: String) -> Preset? {

@@ -199,6 +199,7 @@ struct VPhoneLaunchpadNewMachineView: View {
             #if DEBUG
                 if VPhoneLaunchpadPreview.isActive {
                     page = VPhoneLaunchpadPreview.newMachinePage
+                    patches = VPhoneLaunchpadPreview.newMachinePatches
                 }
             #endif
         }
@@ -527,6 +528,7 @@ struct VPhoneLaunchpadNewMachineView: View {
             diskSizeGB: diskSizeGB,
             network: network,
             patches: patches,
+            guestPatches: patchCatalog?.guestOverrides(patches) ?? [],
             keepArtifacts: keepArtifacts,
             usesTemplate: usesTemplate,
             slimming: slimming,

@@ -95,6 +95,10 @@ struct VPhoneLaunchpadNewMachineAdvancedView: View {
                 Text("Differs from the preset: \(patches.blocked.count) off, \(patches.allowed.count) on.")
                     .foregroundStyle(.secondary)
             }
+            if usesTemplate, let patchCatalog, !patchCatalog.guestOverrides(patches).isEmpty {
+                Text("Guest patch changes are applied to this machine after it is cloned. The template keeps the preset’s, so machines that do not change them share it.")
+                    .foregroundStyle(.secondary)
+            }
             if !essentialOff.isEmpty {
                 Label {
                     Text("^[\(essentialOff.count) boot-essential patch](inflect: true) off: \(essentialOff.map(\.identifier).joined(separator: ", "))")

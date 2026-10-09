@@ -22,6 +22,9 @@ nonisolated enum VPhoneLaunchpadCreationStep: Int, CaseIterable, Identifiable, C
     case adoptTemplate
     /// `vm create --template`: the new machine, cloned in a second.
     case cloneTemplate
+    /// `fw set-patches` and `cfw update-environment` on the clone: the guest
+    /// patch overrides, which a template does not carry.
+    case applyGuestPatches
     case firstBoot
 
     var id: Int {
@@ -47,12 +50,13 @@ nonisolated enum VPhoneLaunchpadCreationStep: Int, CaseIterable, Identifiable, C
         case .setUpTemplate: String(localized: "Set up template")
         case .adoptTemplate: String(localized: "Save template")
         case .cloneTemplate: String(localized: "Create machine from template")
+        case .applyGuestPatches: String(localized: "Apply guest patches")
         case .firstBoot: String(localized: "First boot")
         }
     }
 
     var needsRoot: Bool {
-        self == .installCFW
+        self == .installCFW || self == .applyGuestPatches
     }
 }
 
@@ -67,18 +71,32 @@ nonisolated enum VPhoneLaunchpadCreationStep: Int, CaseIterable, Identifiable, C
 /// temporary machine name in the same library: restored, custom firmware
 /// installed through the helper, trimmed, set up headless and adopted, which
 /// moves it into `.templates`. Then the clone and its first boot follow.
+///
+/// A template is built with the boot-chain patch overrides only, the ones its
+/// key holds. Guest patch overrides go to the clone before its first boot, so
+/// a template never hands them to a creation that did not ask for them.
 nonisolated struct VPhoneLaunchpadCreationPlan: Hashable, Sendable {
     /// The machine New Machine was asked for.
     var name: String
     /// The temporary machine a template is built in; nil without a template.
     var buildName: String?
     var slimming: VPhoneLaunchpadSlimming
+    /// Whether the clone gets guest patch overrides of its own. Only a
+    /// template-backed creation has the step: without a template, `cfw
+    /// install` applies them to the machine itself.
+    var appliesGuestPatches = false
     /// Nil until Find Template answers; then whether it found a template
     /// this creation clones from as it is.
     var foundTemplate: Bool?
 
     var usesTemplate: Bool {
         buildName != nil
+    }
+
+    /// The temporary machine once Find Template has decided to build in it;
+    /// nil before that, when a template was found, and without a template.
+    var buildingName: String? {
+        foundTemplate == false ? buildName : nil
     }
 
     /// Every step this creation runs, in order. Until Find Template has
@@ -88,14 +106,15 @@ nonisolated struct VPhoneLaunchpadCreationPlan: Hashable, Sendable {
         guard usesTemplate else {
             return restore + [.firstBoot]
         }
+        let machine: [VPhoneLaunchpadCreationStep] = [.cloneTemplate] + (appliesGuestPatches ? [.applyGuestPatches] : []) + [.firstBoot]
         if foundTemplate == true {
-            return [.findTemplate, .cloneTemplate, .firstBoot]
+            return [.findTemplate] + machine
         }
         var steps: [VPhoneLaunchpadCreationStep] = [.findTemplate] + restore
         if slimming.trimArguments != nil {
             steps.append(.trimTemplate)
         }
-        return steps + [.setUpTemplate, .adoptTemplate, .cloneTemplate, .firstBoot]
+        return steps + [.setUpTemplate, .adoptTemplate] + machine
     }
 
     /// The step after `step`, or nil after the last.
@@ -109,7 +128,7 @@ nonisolated struct VPhoneLaunchpadCreationPlan: Hashable, Sendable {
             return false
         }
         switch step {
-        case .findTemplate, .cloneTemplate, .firstBoot: return false
+        case .findTemplate, .cloneTemplate, .applyGuestPatches, .firstBoot: return false
         default: return true
         }
     }

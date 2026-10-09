@@ -20,6 +20,8 @@
         /// The pages New Machine and machine settings open on.
         static var newMachinePage = VPhoneLaunchpadNewMachineView.Page.general
         static var machineSettingsPage = VPhoneLaunchpadMachineSettingsView.Page.general
+        /// The patch choice New Machine opens with.
+        static var newMachinePatches = VPhoneLaunchpadPatchSelection()
 
         // MARK: - Driver
 
@@ -100,6 +102,11 @@
                 await sheet(.newMachine, "07-new-machine-hardware", suffix)
                 newMachinePage = .advanced
                 await sheet(.newMachine, "07-new-machine-advanced", suffix)
+                // One boot-chain and one guest patch off: the guest one is
+                // applied to the clone, not built into the template.
+                newMachinePatches = VPhoneLaunchpadPatchSelection(blocked: ["ibss-cfw-serial_label", "dyld-cfw-camera"])
+                await sheet(.newMachine, "07c-new-machine-guest-patches", suffix)
+                newMachinePatches = VPhoneLaunchpadPatchSelection()
                 newMachinePage = .template
                 await sheet(.newMachine, "07b-new-machine-template", suffix)
                 newMachinePage = .general
@@ -116,6 +123,8 @@
                 await sheet(.creation(path("ios27-rc")), "08f-creation-template-built", suffix)
                 creation.applyPreview(.clonedFromTemplate)
                 await sheet(.creation(path("ios27-rc")), "08g-creation-from-template", suffix)
+                creation.applyPreview(.applyingGuestPatches)
+                await sheet(.creation(path("ios27-rc")), "08h-creation-guest-patches", suffix)
                 creation.applyPreview(.restoring)
                 await standalone("08c-creation-log", suffix, size: NSSize(width: 960, height: 700)) {
                     VPhoneLaunchpadConsoleView(title: "ios27-rc Creation Log", url: creation.logFile)

@@ -6,6 +6,7 @@ struct TemplatesTests {
     static func main() async throws {
         slimmingArguments()
         commandArguments()
+        patchOverrides()
         creationPlan()
         try templateList()
         try templateFind()
@@ -105,10 +106,17 @@ struct TemplatesTests {
         var untrimmed = slimming
         untrimmed.trim = .none
         precondition(VPhoneLaunchpadTemplateCommands.trim("t", untrimmed) == nil, "No trim command for tier none")
+        // Strict: an app the setup boot cannot remove fails the step.
         precondition(VPhoneLaunchpadTemplateCommands.setup("template-1a2b3c4d", slimming)
-            == ["vm", "template", "setup", "template-1a2b3c4d", "--service-profile", "none"], "setup")
-        precondition(VPhoneLaunchpadTemplateCommands.adopt("template-1a2b3c4d", iphoneSource: "i", cloudOSSource: "c")
-            == ["vm", "template", "adopt", "template-1a2b3c4d", "--json", "--iphone-source", "i", "--cloudos-source", "c"], "adopt")
+            == ["vm", "template", "setup", "template-1a2b3c4d", "--strict", "--service-profile", "none"], "setup")
+        precondition(VPhoneLaunchpadTemplateCommands.setup("t", VPhoneLaunchpadSlimming()) == ["vm", "template", "setup", "t", "--strict"],
+                     "setup with the defaults")
+        // The adopt expects the id Find Template computed.
+        precondition(VPhoneLaunchpadTemplateCommands.adopt("template-1a2b3c4d", iphoneSource: "i", cloudOSSource: "c", expect: "2847ec2a3e3e")
+            == ["vm", "template", "adopt", "template-1a2b3c4d", "--json", "--iphone-source", "i", "--cloudos-source", "c",
+                "--expect", "2847ec2a3e3e"], "adopt")
+        precondition(VPhoneLaunchpadTemplateCommands.adopt("t", iphoneSource: "i", cloudOSSource: "c", expect: nil)
+            == ["vm", "template", "adopt", "t", "--json", "--iphone-source", "i", "--cloudos-source", "c"], "adopt without an id")
         precondition(VPhoneLaunchpadTemplateCommands.clone("lab-01", template: "52b1fcc75e0c", cpuCount: 6, memoryMB: 6144, network: "tunnel")
             == ["vm", "create", "lab-01", "--template", "52b1fcc75e0c", "--skip-first-boot",
                 "--cpu", "6", "--memory", "6144", "--network", "tunnel"], "clone")
@@ -119,6 +127,49 @@ struct TemplatesTests {
                      "The error line is the reason")
         precondition(VPhoneLaunchpadTemplateCommands.failureLine(["fine"]) == nil, "No error line")
         print("Command argument tests passed")
+    }
+
+    // MARK: - Patch overrides
+
+    static func patchOverrides() {
+        let overrides = VPhoneLaunchpadPatchOverrides(
+            preset: "standard",
+            blocked: ["ibss-cfw-serial_label", "system-debugserver-cfw-install"],
+            allowed: ["dyld-cfw-camera", "external-x"],
+            guestPatches: ["system-debugserver-cfw-install", "dyld-cfw-camera"],
+        )
+        precondition(overrides.bootChainBlocked == ["ibss-cfw-serial_label"], "Boot-chain blocks: \(overrides.bootChainBlocked)")
+        // One the catalog does not know counts as boot chain, as the key counts it.
+        precondition(overrides.bootChainAllowed == ["external-x"], "Boot-chain allows: \(overrides.bootChainAllowed)")
+        precondition(overrides.hasBootChainOverrides && overrides.hasGuestOverrides, "Both kinds")
+
+        // The template build records the boot chain's; the clone gets all.
+        precondition(VPhoneLaunchpadTemplateCommands.setPatches("template-1a2b3c4d", overrides, includingGuest: false)
+            == ["fw", "set-patches", "template-1a2b3c4d", "--preset", "standard",
+                "--block", "ibss-cfw-serial_label", "--allow", "external-x"], "Build overrides")
+        precondition(VPhoneLaunchpadTemplateCommands.setPatches("lab-01", overrides, includingGuest: true)
+            == ["fw", "set-patches", "lab-01", "--preset", "standard",
+                "--block", "ibss-cfw-serial_label", "--block", "system-debugserver-cfw-install",
+                "--allow", "dyld-cfw-camera", "--allow", "external-x"], "Clone overrides")
+
+        // Find keys on what the template is built with.
+        var request = VPhoneLaunchpadTemplateCommands.Request(
+            iphoneSource: "i", cloudOSSource: "c", preset: overrides.preset,
+            blocked: overrides.bootChainBlocked, allowed: overrides.bootChainAllowed,
+            diskSizeGB: 64, slimming: VPhoneLaunchpadSlimming(),
+        )
+        let find = VPhoneLaunchpadTemplateCommands.find(request)
+        precondition(!find.contains("system-debugserver-cfw-install") && !find.contains("dyld-cfw-camera"), "Find leaves guest overrides out: \(find)")
+        precondition(find.contains("ibss-cfw-serial_label") && find.contains("external-x"), "Find keeps boot-chain overrides")
+
+        let guestOnly = VPhoneLaunchpadPatchOverrides(preset: "standard", blocked: ["dyld-cfw-camera"], guestPatches: ["dyld-cfw-camera"])
+        precondition(!guestOnly.hasBootChainOverrides && guestOnly.hasGuestOverrides, "Guest only")
+        request.blocked = guestOnly.bootChainBlocked
+        request.allowed = guestOnly.bootChainAllowed
+        precondition(!VPhoneLaunchpadTemplateCommands.find(request).contains("--block"), "Guest-only overrides find the plain template")
+        let none = VPhoneLaunchpadPatchOverrides(preset: "experimental", guestPatches: ["dyld-cfw-camera"])
+        precondition(!none.hasGuestOverrides && !none.hasBootChainOverrides, "A guest patch not overridden is no override")
+        print("Patch override tests passed")
     }
 
     // MARK: - Plan
@@ -146,6 +197,7 @@ struct TemplatesTests {
                      "The clone and its boot are the new machine")
         precondition(plan.machineName(for: .findTemplate) == "lab-01", "Find names the new machine")
         precondition(plan.steps.allSatisfy { $0.needsRoot == ($0 == .installCFW) }, "Only CFW needs root")
+        precondition(plan.buildingName == build, "A build is under way")
 
         plan.slimming.slim = false
         precondition(!plan.steps.contains(.trimTemplate), "Slim off: no trim step")
@@ -155,8 +207,28 @@ struct TemplatesTests {
         precondition(plan.steps == [.findTemplate, .cloneTemplate, .firstBoot], "A template found: \(plan.steps)")
         precondition(plan.step(after: .findTemplate) == .cloneTemplate, "Straight to the clone")
         precondition(plan.step(after: .firstBoot) == nil, "First boot is last")
+        // A found template builds nothing: the create report names no build machine.
+        precondition(plan.buildingName == nil, "No build when a template is found")
+        plan.foundTemplate = nil
+        precondition(plan.buildingName == nil, "No build before Find answers")
+        precondition(alone.buildingName == nil, "No build without a template")
+
+        // Guest patch overrides: a step of the new machine's, after the clone.
+        var guest = VPhoneLaunchpadCreationPlan(name: "lab-01", buildName: build, slimming: VPhoneLaunchpadSlimming(), appliesGuestPatches: true)
+        guest.foundTemplate = true
+        precondition(guest.steps == [.findTemplate, .cloneTemplate, .applyGuestPatches, .firstBoot], "Found, with guest patches: \(guest.steps)")
+        precondition(guest.machineName(for: .applyGuestPatches) == "lab-01" && !guest.buildsTemplate(.applyGuestPatches),
+                     "Guest patches go to the clone")
+        precondition(Step.applyGuestPatches.needsRoot, "cfw update-environment runs through the helper")
+        guest.foundTemplate = false
+        precondition(Array(guest.steps.suffix(4)) == [.adoptTemplate, .cloneTemplate, .applyGuestPatches, .firstBoot],
+                     "Built, with guest patches: \(guest.steps)")
+        let withoutTemplate = VPhoneLaunchpadCreationPlan(name: "lab-01", buildName: nil, slimming: VPhoneLaunchpadSlimming(), appliesGuestPatches: true)
+        precondition(!withoutTemplate.steps.contains(.applyGuestPatches), "cfw install applies them without a template")
         print("Creation plan tests passed")
     }
+
+    typealias Step = VPhoneLaunchpadCreationStep
 
     // MARK: - JSON
 

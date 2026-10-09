@@ -677,7 +677,9 @@ struct VPhoneLaunchpadControlCommands {
             "log": pipeline.logFile.path,
             "template": pipeline.templateID ?? NSNull(),
             "builtTemplate": pipeline.builtTemplate,
-            "buildMachine": pipeline.buildMachine?.name ?? NSNull(),
+            // Only once Find Template has decided to build: a creation that
+            // clones a template it found never makes this machine.
+            "buildMachine": pipeline.plan.buildingName ?? NSNull(),
             "steps": pipeline.steps.map { step -> [String: Any] in
                 var item: [String: Any] = ["step": "\(step)", "status": pipeline.status(step).rawValue]
                 if let duration = pipeline.durations[step] {
