@@ -367,6 +367,17 @@ those languages.
 `--no-template` takes no slimming switch; `--template <id>` takes them only to
 check them against the template.
 
+`trimmed` is the service list measured for the guest's iOS, and vphoned has
+one only for iOS 27 (`GuestServiceProfile.supportedMajors`, mirrored by
+`VPhoneTemplateSlimmingRequest.trimmedServiceProfileMajors`). Elsewhere
+`services.profile.apply trimmed` refuses ("No trimmed service list for iOS
+26"), which used to fail an iOS 26.6.2 build at service-profile, after the
+restore and most of the setup boot. So `VPhoneMachineTemplateSlimming.fitted(toIOSVersion:)`
+turns `trimmed` into `none` on such a version, where the key is made
+(`VPhoneMachineTemplateKeys.key`) and in `vm template setup`: an iOS 26
+template's key reads `services none`. `--accounts-off`, whose group is part of
+the iOS 27 list, is refused there before anything is built.
+
 `--slim off` still has a setup boot: skipping Setup and waiting for
 first-boot work are not slimming. Without them every clone would start at the
 Setup screen and write its own first-boot state (P2 measured 3.2 GB per clone

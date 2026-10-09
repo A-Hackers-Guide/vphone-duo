@@ -91,6 +91,15 @@ Until the milestone:
   first answered and SpringBoard left alone, Setup never started after the
   milestone and the guest went to the Lock Screen.
 
+iOS 26.6.2 (23G90, `i26-raw`, 2026-10-09) behaves the same: DataMigrator runs
+from the start of the boot and records `LastSystemVersion = 23G90` 64–87 s
+after the VM starts, and had not after 129 s while a 2.9.0 `setup.skip`
+retried every 9 s, so a 2.9.0 setup boot ran out of its 120 s. There a second fault followed: the
+2.9.0 attitude hook deadlocked SpringBoard as soon as migration ended
+(`Research/Guest/virtual_attitude.md`, "Lock order"), so a relaunch was never
+taken at all and Setup.app died to its launch watchdog. With the hook fixed
+the setup boot passes without restarting SpringBoard.
+
 So `setup.skip` writes the keys and leaves SpringBoard alone while data
 migration is running for the running build: `kern.osversion` is not recorded
 as `LastSystemVersion` or as `DMLastMigrationResults.buildVersion`, and
