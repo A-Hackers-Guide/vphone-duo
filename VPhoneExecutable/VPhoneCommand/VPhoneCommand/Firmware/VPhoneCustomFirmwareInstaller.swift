@@ -1004,9 +1004,13 @@ struct VPhoneCustomFirmwareInstaller {
         /// Whether the VM's plan (its guest half re-resolved from the current
         /// selection) turned this guest patch on. A VM with no plan gets every
         /// legacy patch, which is what it was restored with. New Settings-row
-        /// preferences still require an explicit plan.
+        /// preferences and motion sensors still require an explicit plan.
         func on(_ identifier: String) -> Bool {
-            guard let plan else { return !FirmwareGuestSystemPatchSet.settingsRowPatches.contains(identifier) }
+            guard let plan else {
+                return !FirmwareGuestSystemPatchSet.settingsRowPatches.contains(identifier)
+                    && identifier != FirmwareGuestSystemPatchSet.gyroscope
+                    && identifier != FirmwareGuestSystemPatchSet.attitude
+            }
             guard plan.isEnabled(identifier) else {
                 print("  [·] \(identifier): off in preset \(plan.presetIdentifier)")
                 return false
@@ -1112,6 +1116,22 @@ struct VPhoneCustomFirmwareInstaller {
             if on("system-launchdaemons-boot-environment") {
                 try installEnvironment(system: system, environmentOnly: environmentOnly)
                 live.insert("system-launchdaemons-boot-environment")
+            }
+        }
+        for (identifier, library) in [
+            (FirmwareGuestSystemPatchSet.gyroscope, "libvphonegyro.dylib"),
+            (FirmwareGuestSystemPatchSet.attitude, "libvphoneattitude.dylib"),
+        ] {
+            isolate([identifier]) {
+                let path = "usr/lib/" + library
+                if on(identifier) {
+                    try system.replaceFile(path, fromFileAt: VPhoneGuestBinaries.resolve(library),
+                                           mode: 0o755, owner: Self.guestOwner)
+                    live.insert(identifier)
+                } else {
+                    // Removing vphone's added library reverts its injection.
+                    try system.removeItem(path)
+                }
             }
         }
 
@@ -1756,6 +1776,7 @@ struct VPhoneCustomFirmwareInstaller {
     /// infrastructure. A full install writes every library and creates `/vh`.
     private func installEnvironment(system: VPhoneConfinedDirectory, environmentOnly: Bool = false) throws {
         for name in VPhoneGuestEnvironment.libraries {
+            if VPhoneGuestEnvironment.selectedLibraries.contains(name) { continue }
             let path = "usr/lib/\(name)"
             if environmentOnly, try !system.exists(path) {
                 print("  [·] \(path): not on this VM, left out")

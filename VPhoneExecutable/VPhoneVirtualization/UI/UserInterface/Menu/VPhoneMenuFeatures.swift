@@ -2,9 +2,7 @@ import AppKit
 
 // MARK: - Features Menu
 
-/// Sensors the host simulates for the guest: location, battery and camera.
-/// Each is a titled section of this menu rather than a submenu, so every
-/// control is one level down from the menu bar.
+/// Host sensor controls, with the motion panels grouped in their own submenu.
 extension VPhoneMenuController {
     func buildFeaturesMenu() -> NSMenuItem {
         let item = NSMenuItem(title: "Features", action: nil, keyEquivalent: "")
@@ -22,6 +20,8 @@ extension VPhoneMenuController {
                 menu.addItem(child)
             }
         }
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(buildMotionSensorsMenu())
         item.submenu = menu
         return item
     }

@@ -21,6 +21,8 @@ public enum FirmwareGuestSystemPatchSet {
 
     public static let installCoordinationPersona = "system-installcoordination_proxy-cfw-persona_lookup"
     public static let installCoordinationPersonaMarker = "/usr/lib/vphone-installcoordination-persona-lookup"
+    public static let gyroscope = "system-backboardd-cfw-gyroscope"
+    public static let attitude = "system-apps-cfw-attitude"
 
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
 
@@ -217,6 +219,24 @@ public enum FirmwareGuestSystemPatchSet {
                 """,
                 target: .guestFile(path: "/Library/LaunchDaemons"),
                 bootEssential: true,
+            ),
+
+            // MARK: Motion
+
+            VPhonePatchDeclaration(
+                identifier: gyroscope,
+                title: "Virtual 3D gyroscope",
+                summary: "Installs libvphonegyro.dylib, loaded by SystemHook into backboardd. Publishes a virtual HID gyro service using the three-axis rotation rate configured through vphoned. Removing the library disables the provider after a reboot.",
+                target: .guestFile(path: "/usr/lib/libvphonegyro.dylib"),
+                applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 18, minor: 0)),
+            ),
+
+            VPhonePatchDeclaration(
+                identifier: attitude,
+                title: "Device attitude simulation",
+                summary: "Installs libvphoneattitude.dylib, loaded by SystemHook into apps. Supplies a stationary Core Motion pose configured through vphoned, with polling and callback updates in the arbitrary vertical reference frame. Disabling simulation restores native motion; removing the library reverts the hook on app relaunch.",
+                target: .guestFile(path: "/usr/lib/libvphoneattitude.dylib"),
+                applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 18, minor: 0)),
             ),
 
             // MARK: Audio

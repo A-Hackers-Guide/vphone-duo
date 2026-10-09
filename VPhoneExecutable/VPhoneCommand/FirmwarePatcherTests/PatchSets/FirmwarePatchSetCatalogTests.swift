@@ -17,6 +17,34 @@ import VPhonePatchKit
 
 @Suite("Bundled patch set catalogue")
 struct FirmwarePatchSetCatalogTests {
+    @Test(arguments: [FirmwareGuestSystemPatchSet.gyroscope, FirmwareGuestSystemPatchSet.attitude])
+    func `Motion sensors follow selection and their deployment target`(identifier: String) throws {
+        for base in ["18.6.2", "26.4", "27.0.1"] {
+            let plan = try VPhonePatchPlan.resolve(
+                preset: FirmwarePatchSetCatalog.standardPreset,
+                patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4"),
+            )
+            #expect(plan.isEnabled(identifier))
+            var blocked = FirmwarePatchSetCatalog.standardPreset
+            blocked.selection = blocked.selection.blocking([identifier])
+            let disabled = try VPhonePatchPlan.resolve(
+                preset: blocked, patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4"),
+            )
+            #expect(!disabled.isEnabled(identifier))
+        }
+        let unsupportedBases: [VPhoneVersion?] = [nil, VPhoneVersion("17.0")]
+        for base in unsupportedBases {
+            let plan = try VPhonePatchPlan.resolve(
+                preset: FirmwarePatchSetCatalog.standardPreset,
+                patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: base, cloudOS: VPhoneVersion("26.4"),
+            )
+            #expect(!plan.isEnabled(identifier))
+        }
+    }
+
     @Test func `CoreDevice persona lookup is selected only for iOS 27`() throws {
         for base in ["26.4", "27.0.1", "28.0"] {
             let plan = try VPhonePatchPlan.resolve(
