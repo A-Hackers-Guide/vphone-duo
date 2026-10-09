@@ -2,6 +2,7 @@
 #import "VPhoneAttitudeMotionManager.h"
 #import <objc/runtime.h>
 #include <notify.h>
+#include <os/lock.h>
 
 // MARK: - Shared configuration
 
@@ -36,9 +37,10 @@ static CMAttitudeReferenceFrame (*availableFrames)(id, SEL);
 @property (nonatomic, strong) NSOperationQueue *deliveryQueue;
 @property (nonatomic, copy) CMDeviceMotionHandler handler;
 @property (nonatomic, strong) dispatch_source_t timer;
-@property (nonatomic, strong) CMDeviceMotion *latest;
-@property (nonatomic) CMAttitudeReferenceFrame frame;
-@property (nonatomic) BOOL active;
+// Read without the session lock by the getters below; see "Lock order".
+@property (atomic, strong) CMDeviceMotion *latest;
+@property (atomic) CMAttitudeReferenceFrame frame;
+@property (atomic) BOOL active;
 @property (nonatomic) BOOL nativeActive;
 @property (nonatomic) BOOL invokingNative;
 @property (nonatomic) NSUInteger generation;
@@ -156,19 +158,42 @@ static CMAttitudeReferenceFrame (*availableFrames)(id, SEL);
 - (void)dealloc { if (_timer) dispatch_source_cancel(_timer); }
 @end
 
+// MARK: - Lock order
+//
+// Core Motion's own methods can wait for its MotionThread, and that thread
+// calls the public getters (`isDeviceMotionActive`, `deviceMotion`, …) on the
+// same manager. So no thread may wait for the session lock, or for the
+// manager's own `@synchronized` lock, inside a hooked getter: a caller holding
+// it while it runs a native method would wait for the MotionThread forever.
+// On iOS 26.6.2 that froze SpringBoard's main thread when it built the Home
+// Screen's parallax (`_UIMotionEffectCoreMotionEventProvider` sets the update
+// interval). The getters read the atomic `active`, `frame` and `latest`
+// without the session lock, the setter calls the native method before taking
+// it, and the session is looked up under a private lock that is never held
+// across a call out.
+
+static os_unfair_lock sessionCreationLock = OS_UNFAIR_LOCK_INIT;
+
 static VPhoneAttitudeSession *VPhoneSession(id<VPhoneAttitudeMotionManager> manager) {
-    @synchronized (manager) {
-        VPhoneAttitudeSession *session = objc_getAssociatedObject(manager, &sessionKey);
-        if (!session) {
-            session = [VPhoneAttitudeSession new];
-            session.manager = manager;
-            objc_setAssociatedObject(manager, &sessionKey, session, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            [configurationLock lock];
-            [sessions addObject:session];
-            [configurationLock unlock];
-        }
-        return session;
+    VPhoneAttitudeSession *session = objc_getAssociatedObject(manager, &sessionKey);
+    if (session) return session;
+    VPhoneAttitudeSession *created = [VPhoneAttitudeSession new];
+    created.manager = manager;
+    BOOL inserted = NO;
+    os_unfair_lock_lock(&sessionCreationLock);
+    session = objc_getAssociatedObject(manager, &sessionKey);
+    if (!session) {
+        objc_setAssociatedObject(manager, &sessionKey, created, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        session = created;
+        inserted = YES;
     }
+    os_unfair_lock_unlock(&sessionCreationLock);
+    if (inserted) {
+        [configurationLock lock];
+        [sessions addObject:session];
+        [configurationLock unlock];
+    }
+    return session;
 }
 
 // MARK: - CMMotionManager public entry points
@@ -210,23 +235,23 @@ static void VPhoneStop(id manager, SEL selector) {
     }
 }
 static void VPhoneInterval(id manager, SEL selector, NSTimeInterval value) {
-    VPhoneAttitudeSession *session = VPhoneSession(manager);
-    @synchronized (session) { setInterval(manager, selector, value); [session reschedule]; }
+    setInterval(manager, selector, value);
+    [VPhoneSession(manager) reschedule];
 }
 static BOOL VPhoneAvailable(id manager, SEL selector) {
     return VPhoneCurrentAttitude().enabled || isAvailable(manager, selector);
 }
+// The getters take no lock that a caller of a native method may hold.
 static BOOL VPhoneActive(id manager, SEL selector) {
-    VPhoneAttitudeSession *session = VPhoneSession(manager);
-    @synchronized (session) { return [session simulating] || isActive(manager, selector); }
+    return [VPhoneSession(manager) simulating] || isActive(manager, selector);
 }
 static CMDeviceMotion *VPhoneMotion(id manager, SEL selector) {
     VPhoneAttitudeSession *session = VPhoneSession(manager);
-    @synchronized (session) { return [session simulating] ? session.latest : getMotion(manager, selector); }
+    return [session simulating] ? session.latest : getMotion(manager, selector);
 }
 static CMAttitudeReferenceFrame VPhoneFrame(id manager, SEL selector) {
     VPhoneAttitudeSession *session = VPhoneSession(manager);
-    @synchronized (session) { return [session simulating] ? session.frame : getFrame(manager, selector); }
+    return [session simulating] ? session.frame : getFrame(manager, selector);
 }
 static CMAttitudeReferenceFrame VPhoneFrames(id manager, SEL selector) {
     CMAttitudeReferenceFrame frames = availableFrames(manager, selector);

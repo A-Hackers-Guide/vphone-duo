@@ -311,6 +311,11 @@ test-attitude:
 		-o $(OUT)/AttitudeHookTests Tests/AttitudeHookTests.m $(ATTITUDE_SOURCES) \
 		-framework Foundation -framework CoreMotion
 	@$(OUT)/AttitudeHookTests
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror -Wno-unused-parameter -IAttitude \
+		-DVP_ATTITUDE_NOTIFICATION='"com.vphone.motion.attitude.lock-order-test"' \
+		-o $(OUT)/AttitudeLockOrderTests Tests/AttitudeLockOrderTests.m $(ATTITUDE_SOURCES) \
+		-framework Foundation -framework CoreMotion
+	@$(OUT)/AttitudeLockOrderTests
 
 test-gyroscope:
 	@mkdir -p $(OUT)
