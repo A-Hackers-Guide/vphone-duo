@@ -74,6 +74,17 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     private static let scrollRebaseLandingInset: CGFloat = 0.12
     private static let minPinchRadius: CGFloat = 8
 
+    /// Where the finger a right click put down is, while it is down.
+    private var secondaryPressPoint: NSPoint?
+    /// Uptime at which that finger was pressed.
+    private var secondaryPressStart: TimeInterval = 0
+    /// Release waiting for the hold to register after the button came up.
+    private var secondaryReleaseWork: DispatchWorkItem?
+    /// How long a right click holds the finger down. Long enough for the
+    /// guest's touch-and-hold (about half a second) to fire, short of the
+    /// longer hold that starts Home Screen editing.
+    private static let secondaryClickHoldDuration: TimeInterval = 0.6
+
     // MARK: - Private API Accessors
 
     /// https://github.com/wh1te4ever/super-tart-vphone-writeup/blob/main/contents/ScreenSharingVNC.swift
@@ -116,6 +127,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         window?.makeFirstResponder(self)
         // A synthetic trackpad finger would fight this touch for the same slot.
         finishScrollTouch()
+        releaseSecondaryPress()
         let localPoint = convert(event.locationInWindow, from: nil)
         currentTouchSwipeAim = hitTestEdge(at: localPoint)
         if sendTouchEvent(phase: 0, localPoint: localPoint, timestamp: event.timestamp) {
@@ -140,9 +152,65 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         currentTouchSwipeAim = 0
     }
 
-    override func rightMouseDown(with _: NSEvent) {
-        guard let keySender else { return }
-        keySender.sendHome()
+    // MARK: - Secondary Click
+
+    /// A right click is iPadOS's secondary click: the context menu under the
+    /// pointer. The guest has a touchscreen and no pointer, so it is replayed
+    /// as a touch-and-hold, which is what opens the same menu by finger. A
+    /// click released before the hold registers is kept down until it has.
+    /// Holding and dragging carries on as a drag, as a finger would.
+    override func rightMouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        finishScrollTouch()
+        releaseSecondaryPress()
+        let localPoint = convert(event.locationInWindow, from: nil)
+        // A hold is never an edge swipe, wherever it lands.
+        currentTouchSwipeAim = 0
+        guard sendTouchEvent(phase: 0, localPoint: localPoint, timestamp: event.timestamp) else {
+            super.rightMouseDown(with: event)
+            return
+        }
+        secondaryPressPoint = localPoint
+        secondaryPressStart = ProcessInfo.processInfo.systemUptime
+    }
+
+    override func rightMouseDragged(with event: NSEvent) {
+        guard secondaryPressPoint != nil, secondaryReleaseWork == nil else {
+            super.rightMouseDragged(with: event)
+            return
+        }
+        let localPoint = convert(event.locationInWindow, from: nil)
+        secondaryPressPoint = localPoint
+        sendTouchEvent(phase: 1, localPoint: localPoint, timestamp: event.timestamp)
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        guard secondaryPressPoint != nil, secondaryReleaseWork == nil else {
+            super.rightMouseUp(with: event)
+            return
+        }
+        secondaryPressPoint = convert(event.locationInWindow, from: nil)
+        let held = ProcessInfo.processInfo.systemUptime - secondaryPressStart
+        let remaining = Self.secondaryClickHoldDuration - held
+        guard remaining > 0 else {
+            releaseSecondaryPress()
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in
+            self?.releaseSecondaryPress()
+        }
+        secondaryReleaseWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + remaining, execute: work)
+    }
+
+    /// Lift the finger a right click put down. A new touch calls this first,
+    /// so it never shares the slot with a hold still waiting to finish.
+    private func releaseSecondaryPress() {
+        secondaryReleaseWork?.cancel()
+        secondaryReleaseWork = nil
+        guard let point = secondaryPressPoint else { return }
+        secondaryPressPoint = nil
+        sendTouchEvent(phase: 3, localPoint: point, timestamp: ProcessInfo.processInfo.systemUptime)
     }
 
     // MARK: - Trackpad Gestures
@@ -306,6 +374,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     /// Press the synthetic finger down at `point`, so the drag starts where the
     /// user is pointing.
     private func beginScrollTouch(at point: NSPoint) {
+        releaseSecondaryPress()
         let start = clampedTouchPoint(point)
         scrollTouchPoint = start
         scrollLastSend = 0
@@ -423,6 +492,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
 
     private func beginPinch(at center: NSPoint) {
         endPinch()
+        releaseSecondaryPress()
         pinchTouchCenter = clampedTouchPoint(center)
         pinchTouchRadius = Self.initialPinchRadius(in: bounds)
         sendPinchTouch(phase: 0)
