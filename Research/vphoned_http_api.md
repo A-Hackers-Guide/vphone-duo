@@ -243,7 +243,9 @@ the same response shape; requests may complete out of order, so clients
 correlate them by `id`. The socket also sends
 `{ "type": "event", "event": "...", "data": { ... } }`. The initial event is
 `connected`; changes to screen, frontmost app, or low power mode emit
-`device.state`, and completed operations emit `operation.completed`. Ping frames
+`device.state` (vphoned checks them every three seconds while an event socket
+is open, and not at all otherwise), and completed operations emit
+`operation.completed`. Ping frames
 receive pong frames. JSON WebSocket frames are limited to 1 MiB after
 fragment reassembly.
 
