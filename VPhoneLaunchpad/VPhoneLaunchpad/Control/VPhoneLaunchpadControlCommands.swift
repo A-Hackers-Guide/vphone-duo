@@ -792,10 +792,10 @@ struct VPhoneLaunchpadControlCommands {
             throw VPhoneLaunchpadError("Stop \(machine.name) before updating its guest environment.")
         }
         library.actionError = nil
-        if updatesEnvironment {
+        // Only once the update starts: a held disk refuses the change first.
+        await library.setBundle(version, for: [machine], updateEnvironment: updatesEnvironment) { machine in
             emit("updating the guest environment; console log: \(VPhoneLaunchpadMachineLibrary.consoleLog(machine).path)")
         }
-        await library.setBundle(version, for: [machine], updateEnvironment: updatesEnvironment)
         if let error = takeLibraryError() {
             throw error
         }

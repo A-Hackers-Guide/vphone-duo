@@ -350,7 +350,13 @@ final class VPhoneLaunchpadMachineLibrary {
     /// until it is updated later. Boot chain and patches stay as created.
     /// A machine whose disk another process holds is left as it was rather
     /// than rebound without its update (`VPhoneLaunchpadBundleChange`).
-    func setBundle(_ version: String, for machines: [Path], updateEnvironment: Bool) async {
+    /// `willUpdate` hears of each update just before it starts.
+    func setBundle(
+        _ version: String,
+        for machines: [Path],
+        updateEnvironment: Bool,
+        willUpdate: (Path) -> Void = { _ in },
+    ) async {
         guard bundles.commandLine(version: version) != nil else {
             actionError = VPhoneLaunchpadError(String(localized: "VPhone.bundle \(version) is not installed."))
             return
@@ -372,7 +378,8 @@ final class VPhoneLaunchpadMachineLibrary {
                     bind: { try bind(machine, binding) },
                     // A failed update says first which layer moved.
                     updateEnvironment: {
-                        await updateGuestEnvironment(machine) { failure in
+                        willUpdate(machine)
+                        return await updateGuestEnvironment(machine) { failure in
                             VPhoneLaunchpadError(
                                 String(localized: "Unable to Update the Guest Environment of \(machine.name)"),
                                 detail: [
