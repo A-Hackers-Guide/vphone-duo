@@ -212,6 +212,19 @@ not standing still. Their refusals name each holder (`process 900
 vphone-launchpad`) and say when none of them runs the VM, so a reader is not
 taken for a running machine.
 
+Launchpad judges the holders `lsof` lists the same way
+(`VPhoneLaunchpadDiskHolder`, a copy of the `VPhoneProcessHolder` rule, since
+Launchpad does not link VPhoneCoreKit). Only a VM holder makes a machine
+running. Until 2026-10-09 any holder did, so a `tail -f` on `Disk.img` showed
+the machine as running and `vphone-launchpad-cli vm start` refused it as
+"already running or busy" (PR #633 retest, L1). Any other holder leaves the
+machine stopped. It still counts as held for the disk meter
+(`VPhoneLaunchpadDiskAccess.isHeld`), and Launchpad refuses `cfw install`,
+`update-environment` and `update-kernel` by name before the helper runs them.
+`vm list` reports such holders as `diskOpenIn`. A start is not refused, because
+`vphone-cli vm launch` does not refuse one either: Virtualization opens the
+disk itself. The Launchpad CLI prints a note naming the holder.
+
 Blocks shared with a file outside the libraries (a `cp -c` copy elsewhere)
 count as the folder's own; the CLI's `vm template list/show` print only the
 allocated size.

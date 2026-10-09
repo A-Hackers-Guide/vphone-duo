@@ -306,6 +306,12 @@ struct VPhoneLaunchpadControlCommands {
         if let udid = machine.udid {
             report["udid"] = udid
         }
+        // Processes that have the disk open without running the machine, as
+        // `vm stop` names them: `12925 tail`. The state stays `stopped`.
+        let others = library.otherDiskHolders(of: path)
+        if !others.isEmpty {
+            report["diskOpenIn"] = others.map(\.description)
+        }
         report["unlocksAtStartup"] = machine.unlocksAtStartup ?? false
         report["syncsHostLocation"] = machine.syncsHostLocation ?? false
         if let info = machine.restoreInfo {
@@ -352,8 +358,21 @@ struct VPhoneLaunchpadControlCommands {
 
     private func startMachine(_ request: VPhoneLaunchpadControlRequest, emit: @escaping Emit) async throws -> Any {
         let machine = try await machine(request)
-        guard library.state(of: machine) == .stopped else {
-            throw VPhoneLaunchpadError("\(machine.name) is already running or busy.")
+        switch library.state(of: machine) {
+        case .stopped:
+            break
+        case .running:
+            throw VPhoneLaunchpadError("\(machine.name) is already running.")
+        case let .busy(activity):
+            throw VPhoneLaunchpadError("\(machine.name) is busy: \(activity)")
+        }
+        // A process that has the disk open without running the machine does
+        // not stop the start, as it does not stop `vphone-cli vm launch`:
+        // Virtualization opens the disk itself and fails the start if it
+        // cannot. It is named, so a start that fails is not a mystery.
+        let others = await library.currentOtherDiskHolders(of: machine)
+        if !others.isEmpty {
+            emit("note: the disk of \(machine.name) is open in \(VPhoneLaunchpadDiskHolder.describe(others)), which does not run it")
         }
         library.actionError = nil
         // Checks the machine's own bundle first, once per Launchpad session.
@@ -796,12 +815,26 @@ struct VPhoneLaunchpadControlCommands {
         return version
     }
 
+    /// `cfw install` and the updates need the disk to themselves and refuse
+    /// any other holder, so a process that only reads it refuses them here
+    /// too, by name, before the helper is asked.
+    private func requireDiskUnheld(_ machine: VPhoneLaunchpadMachinePath) async throws {
+        let others = await library.currentOtherDiskHolders(of: machine)
+        guard others.isEmpty else {
+            throw VPhoneLaunchpadError(
+                "The disk of \(machine.name) is open in \(VPhoneLaunchpadDiskHolder.describe(others)), which does not run it. "
+                    + "Try again once that process closes it.",
+            )
+        }
+    }
+
     private func installCustomFirmware(_ request: VPhoneLaunchpadControlRequest, emit: @escaping Emit) async throws -> Any {
         let machine = try await machine(request)
         let version = try bundleVersion(of: machine)
         guard library.state(of: machine) == .stopped else {
             throw VPhoneLaunchpadError("Stop \(machine.name) before installing CFW.")
         }
+        try await requireDiskUnheld(machine)
         let status = try await model.helper.installCustomFirmware(
             bundleVersion: version,
             machineName: machine.name,
@@ -822,6 +855,7 @@ struct VPhoneLaunchpadControlCommands {
         guard library.state(of: machine) == .stopped else {
             throw VPhoneLaunchpadError("Stop \(machine.name) before updating its guest environment.")
         }
+        try await requireDiskUnheld(machine)
         let status = try await model.helper.updateGuestEnvironment(
             bundleVersion: version,
             machineName: machine.name,
@@ -841,6 +875,7 @@ struct VPhoneLaunchpadControlCommands {
         guard library.state(of: machine) == .stopped else {
             throw VPhoneLaunchpadError("Stop \(machine.name) before updating its kernel.")
         }
+        try await requireDiskUnheld(machine)
         let status = try await model.helper.updateKernel(
             bundleVersion: version,
             machineName: machine.name,

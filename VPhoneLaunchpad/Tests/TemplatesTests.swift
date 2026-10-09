@@ -498,6 +498,7 @@ struct TemplatesTests {
         precondition(VPhoneLaunchpadDiskUsage(allocated: 1_000_000_000, exclusive: nil).summary(locale: english) == "1 GB", "Without an exclusive size")
         extentArithmetic()
         diskAccess()
+        diskHolders()
         try await sharedExtents()
         print("Disk use tests passed")
     }
@@ -529,6 +530,86 @@ struct TemplatesTests {
         precondition(Meter.use(isCurrent: false, hasLast: false, mayOpen: false, hasTime: true) == .unknown, "Running, never mapped")
         precondition(Meter.use(isCurrent: false, hasLast: true, mayOpen: true, hasTime: false) == .unknown, "Out of time")
         precondition(Meter.use(isCurrent: false, hasLast: false, mayOpen: false, hasTime: false) == .unknown, "Nothing")
+    }
+
+    /// Which holders of a disk make a machine running (retest L1: `tail -f`
+    /// on a `Disk.img` made Launchpad refuse to start the machine as running).
+    static func diskHolders() {
+        typealias Holder = VPhoneLaunchpadDiskHolder
+        let service = "/System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/"
+            + "com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine"
+        let executables: [pid_t: String] = [
+            410: "/Library/Application Support/vphone-launchpad/Bundles/2.9.0/VPhone.bundle/Contents/MacOS/vphone-vm",
+            412: service,
+            900: "/Applications/vphone-launchpad.app/Contents/MacOS/vphone-launchpad",
+            12925: "/usr/bin/tail",
+            13000: "/tmp/com.apple.Virtualization.VirtualMachine",
+            13001: "/tmp/vphone-vm-helper",
+        ]
+        let disks = ["vm-a", "vm-b", "nt-a", "own", "lab", "fake"]
+        let owners = Dictionary(uniqueKeysWithValues: disks.map { ("/lib/\($0)/Disk.img", $0) })
+        // The shape `lsof -F pn` prints: a `p` line per process, then an `f`
+        // and an `n` line per file. 77 is gone by the time it is looked up.
+        let output = """
+        p410
+        ftxt
+        n/Library/Application Support/vphone-launchpad/Bundles/2.9.0/VPhone.bundle/Contents/MacOS/vphone-vm
+        p412
+        f9
+        n/lib/vm-b/Disk.img
+        p900
+        f12
+        n/lib/own/Disk.img
+        f13
+        n/lib/nt-a/Disk.img
+        p12925
+        f3
+        n/lib/nt-a/Disk.img
+        p77
+        f4
+        n/lib/lab/Disk.img
+        p410
+        f20
+        n/lib/vm-a/Disk.img
+        p13000
+        f5
+        n/lib/fake/Disk.img
+        p13001
+        f6
+        n/lib/fake/Disk.img
+        p412
+        f10
+        n/lib/lab/Disk.img
+        """
+        var lookups: [pid_t] = []
+        let held = Holder.holders(lsofOutput: output, diskOwners: owners, excluding: 900) { pid in
+            lookups.append(pid)
+            return executables[pid]
+        }
+        func running(_ disk: String) -> Bool {
+            held[disk, default: []].contains(where: \.runsMachine)
+        }
+        func others(_ disk: String) -> String {
+            Holder.describe(held[disk, default: []].filter { !$0.runsMachine })
+        }
+        precondition(running("vm-a") && others("vm-a").isEmpty, "vphone-vm runs the machine: \(held["vm-a"] ?? [])")
+        precondition(running("vm-b") && others("vm-b").isEmpty, "The VM service runs the machine: \(held["vm-b"] ?? [])")
+        precondition(!running("nt-a"), "tail does not run the machine")
+        precondition(others("nt-a") == "12925 tail", "A reader is named, Launchpad is not: \(others("nt-a"))")
+        precondition(held["own"] == nil, "Launchpad's own meter holds nothing")
+        precondition(running("lab") && others("lab") == "77 unknown", "A gone process is named, the VM still runs: \(held["lab"] ?? [])")
+        precondition(!running("fake") && others("fake") == "13000 com.apple.Virtualization.VirtualMachine, 13001 vphone-vm-helper",
+                     "Look-alikes do not run a machine: \(others("fake"))")
+        precondition(held.count == 5, "Only listed disks, and only the ones held: \(held.keys.sorted())")
+        precondition(lookups.sorted() == [77, 410, 412, 12925, 13000, 13001], "Each process is looked up once: \(lookups.sorted())")
+
+        precondition(!Holder(pid: 1, executablePath: nil).runsMachine && !Holder(pid: 1, executablePath: "").runsMachine,
+                     "An unknown process never runs a machine")
+        precondition(Holder(pid: 1, executablePath: nil).description == "1 unknown", "An unknown process by name")
+        // The real lookup, on this process.
+        let me = Holder(pid: getpid(), executablePath: Holder.executablePath(of: getpid()))
+        precondition(me.executablePath != nil && me.name == "templates-tests" && !me.runsMachine, "This process: \(me)")
+        precondition(Holder.holders(lsofOutput: "", diskOwners: owners, excluding: 900).isEmpty, "Nothing held")
     }
 
     /// The folders `mayOpenNow` was asked about.

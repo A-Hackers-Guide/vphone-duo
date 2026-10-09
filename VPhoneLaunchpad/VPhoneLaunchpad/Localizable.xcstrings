@@ -17410,6 +17410,15 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法更新内核。" } }
       }
     },
+    "The disk of %@ is open in process %@, which does not run it. Try again once that process closes it." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The disk of %@ is open in process %@, which does not run it. Try again once that process closes it." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ のディスクはプロセス %2$@ が開いていますが、このプロセスはマシンを実行していません。そのプロセスがディスクを閉じてから、もう一度お試しください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%1$@의 디스크를 프로세스 %2$@이(가) 열고 있지만, 이 프로세스는 머신을 실행하지 않습니다. 해당 프로세스가 디스크를 닫은 후 다시 시도하세요." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Đĩa của %1$@ đang được mở bởi tiến trình %2$@, tiến trình này không chạy máy. Hãy thử lại sau khi tiến trình đó đóng đĩa." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ 的磁盘正被进程 %2$@ 打开，该进程并未运行这台机器。请等该进程关闭磁盘后再试。" } }
+      }
+    },
     "Swaps the Preboot kernelcache for the one this machine's patches resolve to, keeping the data (no restore)." : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Swaps the Preboot kernelcache for the one this machine's patches resolve to, keeping the data (no restore)." } },

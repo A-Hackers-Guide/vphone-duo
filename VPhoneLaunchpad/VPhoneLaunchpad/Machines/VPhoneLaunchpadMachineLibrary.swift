@@ -42,7 +42,9 @@ final class VPhoneLaunchpadMachineLibrary {
     private let bundles: VPhoneLaunchpadCoreBundle
     private let helper: VPhoneLaunchpadHelperClient
     private var launched: [Path: VPhoneLaunchpadChildProcess] = [:]
-    private var externallyRunning: Set<Path> = []
+    /// The processes other than Launchpad that the last `lsof` listed for each
+    /// machine's disk image, the machine's own VM included.
+    private var diskHolders: [Path: [VPhoneLaunchpadDiskHolder]] = [:]
     private var activities: [Path: String] = [:]
     private var isRefreshing = false
     private var timer: Timer?
@@ -112,10 +114,25 @@ final class VPhoneLaunchpadMachineLibrary {
         if exports[machine]?.isWaiting == true {
             return .busy(String(localized: "Waiting to export…"))
         }
-        if launched[machine]?.isRunning == true || externallyRunning.contains(machine) {
+        // Only a VM process holding the disk runs the machine; a reader such
+        // as `tail` or a backup tool leaves it stopped (see `otherDiskHolders`).
+        if launched[machine]?.isRunning == true || diskHolders[machine]?.contains(where: \.runsMachine) == true {
             return .running
         }
         return .stopped
+    }
+
+    /// The processes the last `lsof` listed for the machine's disk that do not
+    /// run it. The machine is not running for them, but its disk is not
+    /// standing still either: the meter leaves it alone, and operations that
+    /// need the disk to themselves refuse.
+    func otherDiskHolders(of machine: Path) -> [VPhoneLaunchpadDiskHolder] {
+        diskHolders[machine, default: []].filter { !$0.runsMachine }
+    }
+
+    /// `otherDiskHolders`, asked of `lsof` now rather than at the last refresh.
+    func currentOtherDiskHolders(of machine: Path) async -> [VPhoneLaunchpadDiskHolder] {
+        await Task.detached { Self.diskHolders([machine])[machine, default: []] }.value.filter { !$0.runsMachine }
     }
 
     func launchedProcess(_ machine: Path) -> VPhoneLaunchpadChildProcess? {
@@ -221,16 +238,18 @@ final class VPhoneLaunchpadMachineLibrary {
             selection = [first.id]
         }
         let paths = machines.map(\.path)
-        externallyRunning = await Task.detached { Self.machinesHoldingDisks(paths) }.value
+        diskHolders = await Task.detached { Self.diskHolders(paths) }.value
         // A stopped machine's guest boots afresh when it starts again.
         pendingGuestRestarts = pendingGuestRestarts.filter { state(of: $0.key) != .stopped }
         await loadBindings(paths)
         refreshDiskUsage()
     }
 
-    /// The same test `vm stop` uses: a machine runs while some process holds
-    /// its disk image open. This also finds guests started outside Launchpad.
-    private nonisolated static func machinesHoldingDisks(_ machines: [Path]) -> Set<Path> {
+    /// Every process other than Launchpad holding each machine's disk image,
+    /// by executable. The same test `vm stop` uses: a machine runs while a VM
+    /// process holds its disk, which also finds guests started outside
+    /// Launchpad.
+    private nonisolated static func diskHolders(_ machines: [Path]) -> [Path: [VPhoneLaunchpadDiskHolder]] {
         var diskOwners: [String: Path] = [:]
         for machine in machines {
             let bundle = machine.url
@@ -241,7 +260,7 @@ final class VPhoneLaunchpadMachineLibrary {
             diskOwners[bundle.appendingPathComponent(disk).path] = machine
         }
         guard !diskOwners.isEmpty else {
-            return []
+            return [:]
         }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
@@ -250,27 +269,11 @@ final class VPhoneLaunchpadMachineLibrary {
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
         guard (try? process.run()) != nil else {
-            return []
+            return [:]
         }
         let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         process.waitUntilExit()
-        return runningMachines(lsofOutput: output, diskOwners: diskOwners, excluding: getpid())
-    }
-
-    /// The machines whose disks `lsof -F pn` lists a process for. Launchpad
-    /// itself (`excluding`) holds a disk only while measuring its extents,
-    /// which does not make the machine run.
-    nonisolated static func runningMachines(lsofOutput output: String, diskOwners: [String: Path], excluding ownProcess: pid_t) -> Set<Path> {
-        var running: Set<Path> = []
-        var process: pid_t?
-        for line in output.split(separator: "\n") {
-            if line.hasPrefix("p") {
-                process = pid_t(line.dropFirst())
-            } else if line.hasPrefix("n"), process != ownProcess, let machine = diskOwners[String(line.dropFirst())] {
-                running.insert(machine)
-            }
-        }
-        return running
+        return VPhoneLaunchpadDiskHolder.holders(lsofOutput: output, diskOwners: diskOwners, excluding: getpid())
     }
 
     /// `name` when it is one path component, otherwise nil.
@@ -487,11 +490,29 @@ final class VPhoneLaunchpadMachineLibrary {
         }
     }
 
+    /// False, with `actionError` set, while a process that does not run the
+    /// machine has its disk open. `cfw install` and the updates refuse such a
+    /// disk, but say so only in the console log; this names the holder here.
+    private func requireDiskUnheld(_ machine: Path) async -> Bool {
+        let others = await currentOtherDiskHolders(of: machine)
+        guard !others.isEmpty else {
+            return true
+        }
+        actionError = VPhoneLaunchpadError(
+            String(localized: "Unable to Complete Action"),
+            detail: String(localized: "The disk of \(machine.name) is open in process \(VPhoneLaunchpadDiskHolder.describe(others)), which does not run it. Try again once that process closes it."),
+        )
+        return false
+    }
+
     /// Runs `cfw install` again through the helper, for a machine whose last
     /// install did not finish. Output goes to the machine's console log.
     func installCustomFirmware(_ machine: Path) async {
         guard let version = bundleVersion(for: machine) else {
             actionError = VPhoneLaunchpadError(String(localized: "No Core Bundle version is installed. Install one in Core Bundle."))
+            return
+        }
+        guard await requireDiskUnheld(machine) else {
             return
         }
         activities[machine] = String(localized: "Installing custom firmware…")
@@ -532,6 +553,9 @@ final class VPhoneLaunchpadMachineLibrary {
             actionError = VPhoneLaunchpadError(String(localized: "No Core Bundle version is installed. Install one in Core Bundle."))
             return
         }
+        guard await requireDiskUnheld(machine) else {
+            return
+        }
         activities[machine] = String(localized: "Updating guest environment…")
         defer { activities[machine] = nil }
         appendConsoleLog(machine, "$ vphone-cli cfw update-environment \(machine.name)")
@@ -566,6 +590,9 @@ final class VPhoneLaunchpadMachineLibrary {
     func updateKernel(_ machine: Path) async {
         guard let version = bundleVersion(for: machine) else {
             actionError = VPhoneLaunchpadError(String(localized: "No Core Bundle version is installed. Install one in Core Bundle."))
+            return
+        }
+        guard await requireDiskUnheld(machine) else {
             return
         }
         activities[machine] = String(localized: "Updating kernel…")
@@ -639,12 +666,13 @@ final class VPhoneLaunchpadMachineLibrary {
     }
 
     /// Whether the machine's virtual machine is still up: the process
-    /// Launchpad started, or for one started elsewhere, whoever holds its disk.
+    /// Launchpad started, or for one started elsewhere, a VM process holding
+    /// its disk.
     func isMachineRunning(_ machine: Path) async -> Bool {
         if let child = launched[machine] {
             return child.isRunning
         }
-        return await Task.detached { !Self.machinesHoldingDisks([machine]).isEmpty }.value
+        return await Task.detached { Self.diskHolders([machine])[machine, default: []].contains(where: \.runsMachine) }.value
     }
 
     // MARK: - Edits
@@ -807,7 +835,7 @@ final class VPhoneLaunchpadMachineLibrary {
         let isBusy = if case .busy = state(of: machine) { true } else { false }
         return VPhoneLaunchpadDiskAccess(
             isLaunched: launched[machine] != nil,
-            isHeld: externallyRunning.contains(machine),
+            isHeld: diskHolders[machine]?.isEmpty == false,
             isBusy: isBusy || creation(for: machine)?.isRunning == true || exports[machine] != nil,
             isLibraryBusy: globalActivity != nil,
         )
@@ -1213,7 +1241,9 @@ final class VPhoneLaunchpadMachineLibrary {
         func applyPreview(creation: VPhoneLaunchpadCreationPipeline) {
             machines = VPhoneLaunchpadPreview.machines
             hasListed = true
-            externallyRunning = [VPhoneLaunchpadPreview.path("research-01")]
+            diskHolders = [VPhoneLaunchpadPreview.path("research-01"): [
+                VPhoneLaunchpadDiskHolder(pid: 4101, executablePath: "/Library/Application Support/vphone-launchpad/Bundles/2.9.0/VPhone.bundle/Contents/MacOS/vphone-vm"),
+            ]]
             startedAt = [VPhoneLaunchpadPreview.path("research-01"): Date().addingTimeInterval(-6130)]
             creations = [creation.machine: creation]
             selection = [VPhoneLaunchpadPreview.path("research-01")]
