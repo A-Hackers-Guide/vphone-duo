@@ -37,6 +37,15 @@ struct BundleActivityTests {
         #expect(!VPhoneBundleActivity.processesHolding([disk]).contains(getpid()))
     }
 
+    @Test func `finds a holder on a device numbered past Int32.max`() throws {
+        // /dev is such a device on macOS 27; the scan must match it, not trap.
+        let null = URL(fileURLWithPath: "/dev/null")
+        let fd = open(null.path, O_RDONLY)
+        try #require(fd >= 0)
+        defer { close(fd) }
+        #expect(VPhoneBundleActivity.processesHolding([null]).contains(getpid()))
+    }
+
     @Test func `a missing file has no holders`() {
         let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         #expect(VPhoneBundleActivity.processesHolding([missing]).isEmpty)

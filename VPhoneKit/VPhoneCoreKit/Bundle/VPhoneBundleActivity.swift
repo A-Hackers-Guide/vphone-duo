@@ -71,7 +71,10 @@ public enum VPhoneBundleActivity {
             let got = proc_pidfdinfo(pid, fd.proc_fd, PROC_PIDFDVNODEINFO, &info, Int32(MemoryLayout<vnode_fdinfo>.size))
             guard got == Int32(MemoryLayout<vnode_fdinfo>.size) else { continue }
             let st = info.pvi.vi_stat
-            if targets.contains(FileID(device: dev_t(st.vst_dev), inode: ino_t(st.vst_ino))) {
+            // vst_dev is unsigned and dev_t signed: devfs can be numbered past
+            // Int32.max (0xC6B21E7F on macOS 27), and every process holds
+            // /dev/null, so a plain conversion traps on any scan.
+            if targets.contains(FileID(device: dev_t(bitPattern: st.vst_dev), inode: ino_t(st.vst_ino))) {
                 return true
             }
         }
