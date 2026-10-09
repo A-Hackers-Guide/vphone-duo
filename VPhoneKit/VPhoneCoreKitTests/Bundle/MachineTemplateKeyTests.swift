@@ -178,4 +178,68 @@ struct MachineTemplateKeyTests {
             #expect(text.contains("<key>\(field)</key>"), "\(field)")
         }
     }
+
+    // MARK: - Expected identifier (adopt --expect)
+
+    @Test func `the expected identifier passes, in either case`() {
+        let key = Self.key(slimming: VPhoneTemplateSlimmingRequest.defaultSlimming)
+        #expect(key.mismatch(expecting: key.identifier) == nil)
+        #expect(key.mismatch(expecting: key.identifier.uppercased()) == nil)
+    }
+
+    @Test func `an app the setup boot left behind is named as the difference`() throws {
+        // B1: find keyed the request by ten removed apps; the setup boot left
+        // Find My, so the machine's records give nine.
+        let requested = Self.key(slimming: VPhoneTemplateSlimmingRequest.defaultSlimming)
+        var adopted = requested
+        adopted.slimming.removedApps.removeAll { $0 == "com.apple.findmy" }
+        let mismatch = try #require(adopted.mismatch(expecting: requested.identifier))
+        #expect(mismatch.identifier == adopted.identifier)
+        #expect(mismatch.expected == requested.identifier)
+        #expect(mismatch.expectedKey == requested)
+        #expect(mismatch.differences == ["removed apps: expected com.apple.findmy removed too, the machine still has it"])
+        #expect(mismatch.description.contains(adopted.identifier))
+        #expect(mismatch.description.contains(requested.identifier))
+        #expect(mismatch.description.contains("com.apple.findmy"))
+    }
+
+    @Test func `other slimming differences are recovered and named`() throws {
+        let requested = Self.key(slimming: VPhoneMachineTemplateSlimming(
+            trimTier: VPhoneTemplateSlimmingRequest.defaultTrimTier,
+            setupBoot: true,
+            serviceProfile: "trimmed",
+            serviceGroups: ["accounts"],
+            removedApps: ["com.apple.news", "com.apple.tv"],
+        ))
+        let adopted = Self.key(slimming: VPhoneMachineTemplateSlimming(
+            trimTier: "none",
+            setupBoot: true,
+            serviceProfile: "none",
+            removedApps: ["com.apple.news", "com.apple.Home"],
+        ))
+        let mismatch = try #require(adopted.mismatch(expecting: requested.identifier))
+        #expect(mismatch.expectedKey == requested)
+        #expect(mismatch.differences.contains("trim tier: \(VPhoneTemplateSlimmingRequest.defaultTrimTier) → none"))
+        #expect(mismatch.differences.contains("service profile: trimmed → none"))
+        #expect(mismatch.differences.contains("service groups: accounts → none"))
+        #expect(mismatch.differences.contains("removed apps: expected com.apple.tv removed too, the machine still has it"))
+        #expect(mismatch.differences.contains("removed apps: the machine also lacks com.apple.Home, which was not expected"))
+    }
+
+    @Test func `a known key outside slimming is named, an unknown one is described`() throws {
+        let adopted = Self.key(series: "2.9")
+        let elsewhere = Self.key(series: "2.8", disk: 128)
+        let known = try #require(adopted.mismatch(expecting: elsewhere.identifier, known: [Self.key(device: "iPad16,1"), elsewhere]))
+        #expect(known.expectedKey == elsewhere)
+        #expect(known.differences == ["bundle series: 2.8 → 2.9", "disk size: 128 GB → 64 GB"])
+
+        // Not in the library and not a slimming variant: the hash cannot be
+        // undone, so the machine's own key is spelled out to compare.
+        let unknown = try #require(adopted.mismatch(expecting: elsewhere.identifier))
+        #expect(unknown.expectedKey == nil)
+        #expect(unknown.differences.isEmpty)
+        #expect(unknown.description.contains("is not known here"))
+        #expect(unknown.description.contains("series=2.9"))
+        #expect(unknown.description.contains("removed-apps="))
+    }
 }

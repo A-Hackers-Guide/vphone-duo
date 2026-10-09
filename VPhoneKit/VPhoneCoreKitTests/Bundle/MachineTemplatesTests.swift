@@ -611,4 +611,62 @@ struct MachineTemplatesTests {
         let elsewhere = VPhoneMachineTemplateSources(iPhone: "https://example.invalid/a.ipsw", cloudOS: "https://example.invalid/other")
         #expect(VPhoneMachineTemplates.templates(builtFrom: elsewhere, in: fixture.library).isEmpty)
     }
+
+    @Test func `builds come from the IPSWs first, then from a template with the same sources, and never from a download`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let sources = VPhoneMachineTemplateSources(iPhone: "https://example.invalid/a.ipsw", cloudOS: "https://example.invalid/c")
+        let fromIPSW = VPhoneMachineTemplateBuilds(
+            device: "iPhone17,3",
+            ios: .init(version: "27.0.1", build: "24A446"),
+            cloudOS: .init(version: "26.4", build: "23E5207q"),
+            origin: .ipsw,
+        )
+
+        // Nothing local, no template: unresolved, so only a build (which
+        // downloads) can tell; the local reader is asked once.
+        var looks = 0
+        let none = try VPhoneMachineTemplates.resolveBuilds(sources: sources, device: nil, in: fixture.library) {
+            looks += 1
+            return nil
+        }
+        #expect(none == nil)
+        #expect(looks == 1)
+
+        try makeMachine("src", in: fixture)
+        var built = record()
+        built.sources = sources
+        let template = try VPhoneMachineTemplates.adopt(machineNamed: "src", in: fixture.library, record: built)
+
+        // The IPSWs are here: they win over the template's record.
+        let local = try VPhoneMachineTemplates.resolveBuilds(sources: sources, device: nil, in: fixture.library) { fromIPSW }
+        #expect(local == fromIPSW)
+
+        // Not here (deleted, or a local path that no longer exists): the
+        // template recorded with the same sources gives the builds.
+        let recorded = try #require(try VPhoneMachineTemplates.resolveBuilds(sources: sources, device: nil, in: fixture.library) { nil })
+        #expect(recorded.origin == .template)
+        #expect(recorded.template == template.identifier)
+        #expect(recorded.device == template.key.device)
+        #expect(recorded.ios == .init(version: template.key.iOSVersion, build: template.key.iOSBuild))
+        #expect(recorded.cloudOS == .init(version: template.key.cloudOSVersion, build: template.key.cloudOSBuild))
+        // ...for its device only, and only for the same two sources.
+        #expect(try VPhoneMachineTemplates.resolveBuilds(sources: sources, device: "iPad16,1", in: fixture.library) { nil } == nil)
+        let other = VPhoneMachineTemplateSources(iPhone: sources.iPhone, cloudOS: "https://example.invalid/other")
+        #expect(try VPhoneMachineTemplates.resolveBuilds(sources: other, device: nil, in: fixture.library) { nil } == nil)
+
+        // A local reader that fails (an IPSW that is there but unreadable)
+        // fails the resolution rather than quietly using a template.
+        struct Unreadable: Error {}
+        #expect(throws: Unreadable.self) {
+            try VPhoneMachineTemplates.resolveBuilds(sources: sources, device: nil, in: fixture.library) { throw Unreadable() }
+        }
+    }
+
+    @Test func `deleting a template says the space is free unless machines still share its blocks`() {
+        #expect(VPhoneMachineTemplates.deletionNote(machines: []) == "no machine was cloned from it, so its space is free now")
+        let shared = VPhoneMachineTemplates.deletionNote(machines: ["phone-a", "phone-b"])
+        #expect(shared.hasPrefix("2 machine(s) cloned from it (phone-a, phone-b) still share its blocks"))
+        #expect(shared.contains("freed only when"))
+    }
 }

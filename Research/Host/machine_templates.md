@@ -79,10 +79,20 @@ re-resolves with the template's own `PatchSelection.plist`.
   `SetupDone`, `ServiceProfile`, `ServiceGroups`, `RemovedApps`, `TrimTier`),
   `Sources` (`IPhone`, `CloudOS`: the IPSW sources a `vm create` build or
   `vm template adopt --iphone-source … --cloudos-source …` named; not part of
-  the key). `vm template find` resolves a request whose IPSWs are neither
-  local nor cached from a template recorded with the same sources
-  (`VPhoneMachineTemplates.templates(builtFrom:device:in:)`), so Launchpad
-  can offer to delete a template's IPSWs.
+  the key). `vm template find` and `vm create` resolve a request's builds
+  the same way, without downloading (`VPhoneMachineTemplates.resolveBuilds`,
+  `VPhoneMachineTemplateKeys.resolveBuilds`): from the IPSWs when both are
+  local files or cached, else from the newest template recorded with the
+  same sources (`templates(builtFrom:device:in:)`). A local path that no
+  longer exists counts as not here (`VPhoneIPSWCache.localArchive` answers
+  nil); a local file that is not an IPSW is still an error. `vm create`
+  downloads only when no template matches and it has to build one, so
+  Launchpad can offer to delete a template's IPSWs and a CLI create clones
+  without them. Until 2026-10-09 `vm create` resolved through
+  `VPhoneFirmwarePreparer.resolveSources` first and downloaded both IPSWs
+  (about 13 GB) before it looked for a template, and `find` failed with "IPSW
+  not found" for a deleted local IPSW (Launchpad 2.9 end-to-end test, B3 and
+  B4).
 - `TemplateSource.plist` in a machine cloned from a template: `Identifier`,
   `Cloned`. A plain `vm clone` keeps it (the copy shares the template's
   blocks too); `vm export` excludes it (an import shares nothing).
@@ -91,6 +101,11 @@ re-resolves with the template's own `PatchSelection.plist`.
   template list/show` print it with the template's allocated size; `vm delete`
   of the last machine using a template that still exists prints a note to
   delete it (`unusedTemplate(after:in:)`), never deleting it itself.
+  `vm template delete` says what the deletion frees
+  (`VPhoneMachineTemplates.deletionNote`, from `usage` read before it): with
+  machines using the template, that they still share its blocks, freed only
+  when they change them or are deleted; with none, that its space is free
+  now. Until 2026-10-09 it printed the first note whatever the usage (B8).
 - A build happens in `.building-<id>-<uuid>/<id>/` and is frozen by writing
   `Frozen = true` and one `renamex_np(RENAME_EXCL)` to `.templates/<id>`. A
   listed template is always complete; a race with another build of the same
@@ -311,9 +326,27 @@ Retries: a call that did not reach vphoned (no socket, guest not connected,
 timeout) or that vphoned refused with `retryable: true` or `reason: busy`
 (`apfs.snapshot.delete` on EBUSY) is repeated every 3 s until the step's
 deadline. Other refusals fail the step, except `apps.remove_system`'s
-`remove_incomplete`, whose `results` are read: a template build (key fixed)
-fails on any app not removed; a machine to be adopted reports it and leaves it
-out of the recorded steps, so the adopted key says what was done.
+`remove_incomplete`, whose `results` are read: a strict setup boot fails on
+any app not removed; a lenient one reports it and leaves it out of the
+recorded steps, so the adopted key says what was done. A template build (key
+fixed) is always strict, and so is `vm template setup --strict` on a machine
+(`VPhoneTemplateSetupPlan.requiresEveryApp`); a strict run also checks, once
+the profile is applied, that nothing fell short of the plan
+(`VPhoneTemplateSetupOutcome.deviations(from:)`) and fails before the reboot
+if anything did.
+
+An app left behind was seen once in two setup boots on 27.0 (2026-10-08,
+Find My): "LaunchServices still lists the app after unregistration". icli's
+`unregisterApp` looks at the record straight after `icli_unregister_app`, and
+LaunchServices had not dropped it yet. The lenient setup boot then recorded
+nine removed apps, `adopt` saved the template under a key `vm template find`
+never computes for the default options, and every later create with them
+missed it and built another 17.5 GB template (B1). vphoned now polls the
+record every 0.1 s for up to 2.5 s, unregisters once more if it is still
+listed, and only then fails the app (`GuestAppUnregistration`). For Launchpad
+the setup boot is meant to run with `--strict` and the adopt with
+`--expect <id>` (below), so a template is never saved under a key the request
+did not ask for.
 
 On any failure the VM is killed, the failure names the step
 (`VPhoneTemplateSetupFailure`), and nothing is recorded:
@@ -379,6 +412,20 @@ made after the latest one, as these clones were.
   recorded, and refuses a `--trim` that names another one.
 - `freeze` and `adopt` refuse a record whose steps did not produce the key's
   slimming, and a trim whose snapshot was not deleted.
+- `vm template adopt <vm> --expect <id>` refuses, before anything moves,
+  unless the key the machine's records give hashes to `<id>`, the identifier
+  `vm template find` gave the request
+  (`VPhoneMachineTemplateKey.mismatch(expecting:known:)`). A hash cannot be
+  undone, so the expected key is looked for among the library's templates and
+  builds, then among the keys that differ from the machine's only in slimming
+  (trim tier, setup boot, profile, groups, any subset of the default apps:
+  some tens of thousands of hashes); when found, the refusal names each field
+  (`removed apps: expected com.apple.findmy removed too, the machine still
+  has it`), otherwise it spells out the machine's canonical description to
+  compare with `find --json`'s key. With `--json` the refusal is also printed
+  to stdout: `adopted: false`, `error: unexpected_template`, `message`, `id`
+  (computed), `expected`, `key`, `expectedKey` (or null), `differences`,
+  `canonicalDescription`, `steps`; the exit status is 1.
 
 ## Staleness
 

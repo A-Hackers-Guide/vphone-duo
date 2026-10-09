@@ -301,44 +301,23 @@ struct VPhoneVirtualMachineTemplateFindCommand: ParsableCommand {
         }
     }
 
-    private struct Builds {
-        var device: String
-        var ios: VPhoneRestoreInfo.OSVersion
-        var cloudOS: VPhoneRestoreInfo.OSVersion
-    }
-
     /// The device and builds, from the IPSWs when they are here, else from a
     /// template built from the same sources; nil with `report.reason` set.
-    private func resolveBuilds(in library: VPhoneLibrary, report: inout VPhoneMachineTemplateFindReport) throws -> Builds? {
+    private func resolveBuilds(in library: VPhoneLibrary, report: inout VPhoneMachineTemplateFindReport) throws -> VPhoneMachineTemplateBuilds? {
         let cache = ipswCache.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true) }
             ?? VPhoneResources.ipswCacheDirectory()
-        if let phone = try VPhoneIPSWCache.localArchive(iphoneSource, in: cache),
-           let cloud = try VPhoneIPSWCache.localArchive(cloudosSource, in: cache)
-        {
-            try VPhoneIPSWCache.checkPair(iPhone: phone, cloudOS: cloud)
-            let guest = VPhoneIPSWCache.guestDevice(for: phone, preferring: device) ?? .default
-            if let device, VPhoneGuestDevice.named(device) != guest {
-                throw ValidationError("The iPhone IPSW is for \(phone.productTypes.joined(separator: ", ")), not \(device).")
-            }
-            report.resolvedBy = "ipsw"
-            return Builds(
-                device: guest.productType,
-                ios: .init(version: phone.version, build: phone.build),
-                cloudOS: .init(version: cloud.version, build: cloud.build),
-            )
+        guard let builds = try VPhoneMachineTemplateKeys.resolveBuilds(
+            iPhoneSource: iphoneSource,
+            cloudOSSource: cloudosSource,
+            cache: cache,
+            device: device,
+            in: library,
+        ) else {
+            report.reason = VPhoneMachineTemplates.unresolvedBuildsReason
+            return nil
         }
-        let sources = VPhoneMachineTemplateSources(iPhone: iphoneSource, cloudOS: cloudosSource)
-        if let template = VPhoneMachineTemplates.templates(builtFrom: sources, device: device, in: library).first {
-            let key = template.key
-            report.resolvedBy = "template"
-            return Builds(
-                device: key.device,
-                ios: .init(version: key.iOSVersion, build: key.iOSBuild),
-                cloudOS: .init(version: key.cloudOSVersion, build: key.cloudOSBuild),
-            )
-        }
-        report.reason = "the IPSWs are not downloaded and no template records these sources"
-        return nil
+        report.resolvedBy = builds.origin.rawValue
+        return builds
     }
 }
 
@@ -363,9 +342,15 @@ struct VPhoneVirtualMachineTemplateSetupCommand: ParsableCommand {
         tier vm template trim recorded. Then vm template adopt <name> freezes it with what this \
         recorded. An app that will not go is reported and left out of the template's key.
 
+        --strict: anything short of the requested slimming, an app vphoned does not remove above \
+        all, fails the setup boot and records nothing, instead of being reported and left out of \
+        the key. Use it when the machine is to be adopted under a key worked out beforehand \
+        (vm template find, then vm template adopt --expect), as Launchpad does.
+
         A .building-… name from vm template list: a vm create whose template build failed. Its \
-        key fixes the slimming, so switches that disagree are refused, every app must go, and on \
-        success the template is frozen and vm create uses it.
+        key fixes the slimming, so switches that disagree are refused, every app must go (strict \
+        whether --strict is given or not), and on success the template is frozen and vm create \
+        uses it.
 
         Slimming: --slim off skips the app removal and the service profile; the setup boot still \
         skips Setup and deletes the snapshot, so a trim recorded before it is kept.
@@ -376,6 +361,8 @@ struct VPhoneVirtualMachineTemplateSetupCommand: ParsableCommand {
     @Argument(help: "VM name, or a .building-… name from vm template list") var target: String
     @OptionGroup var slimming: VPhoneTemplateSlimmingOptions
     @Flag(help: "Show the VM window while it boots") var window = false
+    @Flag(help: "Fail instead of warning when the setup boot falls short of the requested slimming (an app not removed)")
+    var strict = false
     @Flag(name: .customShort("v"), help: "Increase verbosity: -vvv internal trace")
     var verboseCount: Int
 
@@ -432,7 +419,7 @@ struct VPhoneVirtualMachineTemplateSetupCommand: ParsableCommand {
         }
         try VPhoneTemplateSetupRun.run(
             bundleURL: bundle.url,
-            plan: VPhoneTemplateSetupPlan(slimming: wanted, requiresEveryApp: false),
+            plan: VPhoneTemplateSetupPlan(slimming: wanted, requiresEveryApp: strict),
             launcher: VPhoneHostPreflight.check(),
             resources: resources,
             headless: !window,
@@ -505,6 +492,14 @@ struct VPhoneVirtualMachineTemplateAdoptCommand: ParsableCommand {
 
         --iphone-source and --cloudos-source record the IPSWs the machine was created from, \
         so vm template find resolves a request from the same sources after they are deleted.
+
+        --expect <id> refuses, and leaves the machine where it is, unless the key its records \
+        give has that identifier: the one vm template find printed for the request the machine \
+        was built for. A template under another identifier would never be found by that request. \
+        The refusal names the fields that differ when the expected key is known (a template or \
+        build in the library has it, or it differs only in slimming, as when an app was not \
+        removed); with --json it is also printed to stdout as an object with adopted false, \
+        the computed id and the expected one.
         """,
     )
 
@@ -513,11 +508,16 @@ struct VPhoneVirtualMachineTemplateAdoptCommand: ParsableCommand {
     @Flag(help: "adopt even when the template would be stale") var force = false
     @Option(name: .shortAndLong, help: "iPhone IPSW URL or path the machine was created from") var iphoneSource: String?
     @Option(name: .shortAndLong, help: "cloudOS IPSW URL or path the machine was created from") var cloudosSource: String?
+    @Option(help: ArgumentHelp("Refuse unless the template's identifier is this one (from vm template find)", valueName: "id"))
+    var expect: String?
     @Flag(name: .shortAndLong, help: "Emit the new template as JSON (as vm template show --json)") var json = false
 
     func validate() throws {
         if (iphoneSource == nil) != (cloudosSource == nil) {
             throw ValidationError("Give both --iphone-source and --cloudos-source, or neither.")
+        }
+        if let expect, !VPhoneMachineTemplateKey.isIdentifier(expect.lowercased()) {
+            throw ValidationError("--expect takes a template identifier of \(VPhoneMachineTemplateKey.identifierLength) hex digits, not \(expect).")
         }
     }
 
@@ -531,6 +531,14 @@ struct VPhoneVirtualMachineTemplateAdoptCommand: ParsableCommand {
         let previous = try VPhoneMachineTemplates.readRecord(inBundle: bundle.url)
         let steps = previous?.steps ?? VPhoneMachineTemplateSteps()
         let recorded = try VPhoneMachineTemplateKeys.recorded(bundle, slimming: steps.slimming)
+        if let expect, recorded.key.identifier != expect.lowercased(),
+           let mismatch = recorded.key.mismatch(expecting: expect, known: knownKeys())
+        {
+            if json {
+                try print(encodeJSON(VPhoneMachineTemplateAdoptRefusal(mismatch, steps: steps)))
+            }
+            throw mismatch
+        }
         var problems: [String] = []
         let series = VPhoneMachineTemplateKeys.currentSeries
         if recorded.key.bundleSeries != series {
@@ -570,6 +578,45 @@ struct VPhoneVirtualMachineTemplateAdoptCommand: ParsableCommand {
         print("adopted \(name) as template \(template.identifier)")
         print("  \(template.key.summary)")
         print("create machines from it with: vphone-cli vm create <name> --template \(template.identifier)")
+    }
+
+    /// The keys of the library's templates and builds, to name the one an
+    /// `--expect` identifier stands for.
+    private func knownKeys() -> [VPhoneMachineTemplateKey] {
+        guard let listing = try? VPhoneMachineTemplates.list(in: lib.library) else { return [] }
+        let builds = listing.staging.compactMap { staging -> VPhoneMachineTemplateKey? in
+            guard let identifier = staging.identifier else { return nil }
+            let url = staging.url.appendingPathComponent(identifier, isDirectory: true)
+            return (try? VPhoneMachineTemplates.readRecord(inBundle: url))?.key
+        }
+        return listing.templates.map(\.key) + builds
+    }
+}
+
+/// What `adopt --expect <id> --json` prints when it refuses.
+struct VPhoneMachineTemplateAdoptRefusal: Encodable {
+    var adopted = false
+    var error = "unexpected_template"
+    var message: String
+    /// The identifier the machine's records give.
+    var id: String
+    var expected: String
+    var key: VPhoneMachineTemplateKey
+    /// The key `expected` stands for, when known.
+    var expectedKey: VPhoneMachineTemplateKey?
+    var differences: [String]
+    var canonicalDescription: String
+    var steps: VPhoneMachineTemplateSteps
+
+    init(_ mismatch: VPhoneMachineTemplateKeyMismatch, steps: VPhoneMachineTemplateSteps) {
+        message = mismatch.description
+        id = mismatch.identifier
+        expected = mismatch.expected
+        key = mismatch.key
+        expectedKey = mismatch.expectedKey
+        differences = mismatch.differences
+        canonicalDescription = mismatch.key.canonicalDescription
+        self.steps = steps
     }
 }
 
@@ -682,8 +729,11 @@ struct VPhoneVirtualMachineTemplateDeleteCommand: ParsableCommand {
                 return
             }
         }
+        // Who uses it, read before it goes: the note depends on it.
+        let identifier = (try? VPhoneMachineTemplates.template(id, in: library).identifier) ?? id
+        let machines = id.hasPrefix(".building-") ? [] : VPhoneMachineTemplates.usage(in: library)[identifier] ?? []
         let removed = try VPhoneMachineTemplates.delete(id, in: library)
         print("deleted \(removed.lastPathComponent)")
-        print("note: blocks still shared with machines cloned from it are freed only when those machines change or are deleted")
+        print("note: \(VPhoneMachineTemplates.deletionNote(machines: machines))")
     }
 }

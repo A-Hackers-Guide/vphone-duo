@@ -218,3 +218,40 @@ struct GuestSystemAppManifest: Codable, Equatable {
         return manifest
     }
 }
+
+// MARK: - Unregistration
+
+/// LaunchServices can still list an app for a moment after
+/// `icli_unregister_app` returned. IcliKit's `unregisterApp` checks the
+/// record at once and then throws "LaunchServices still lists the app after
+/// unregistration": Find My, once in two template setup boots on 27.0
+/// (2026-10-08), which left a template keyed by nine removed apps instead of
+/// ten. `apps.remove_system` therefore polls the record for up to
+/// `settleTimeout` before it believes that, unregisters once more if the app
+/// is still listed, polls again, and only then fails the app.
+enum GuestAppUnregistration {
+    /// How long a record may take to go after one unregistration.
+    static let settleTimeout: TimeInterval = 2.5
+    static let pollInterval: TimeInterval = 0.1
+    /// Unregistrations before the app is failed: the first and one retry.
+    static let attempts = 2
+
+    enum Next: Equatable {
+        /// LaunchServices no longer lists the app.
+        case done
+        /// Still listed; look again after `pollInterval`.
+        case wait
+        /// Still listed after `settleTimeout`; unregister it again.
+        case retry
+        /// Still listed after the last attempt.
+        case fail
+    }
+
+    /// What to do after one look at the record. `attempt` counts
+    /// unregistrations from 1; `waited` is the time since the latest.
+    static func next(registered: Bool, attempt: Int, waited: TimeInterval) -> Next {
+        guard registered else { return .done }
+        guard waited >= settleTimeout else { return .wait }
+        return attempt < attempts ? .retry : .fail
+    }
+}

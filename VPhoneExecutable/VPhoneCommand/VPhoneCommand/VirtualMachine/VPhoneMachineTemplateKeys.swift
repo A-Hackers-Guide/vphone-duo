@@ -1,6 +1,7 @@
 import ArgumentParser
 import FirmwarePatcher
 import Foundation
+import VPhoneArchiveKit
 import VPhoneCoreKit
 import VPhonePatchKit
 
@@ -96,6 +97,55 @@ enum VPhoneMachineTemplateKeys {
             diskSizeGB: diskSizeGB,
             slimming: slimming,
         )
+    }
+
+    // MARK: Builds of a request
+
+    /// The device and builds of the two IPSWs when both are local files or
+    /// already in the IPSW cache, read without downloading; nil otherwise. A
+    /// local path that no longer exists counts as not here.
+    static func localBuilds(
+        iPhoneSource: String,
+        cloudOSSource: String,
+        cache: URL,
+        device: String?,
+    ) throws -> VPhoneMachineTemplateBuilds? {
+        guard let phone = try VPhoneIPSWCache.localArchive(iPhoneSource, in: cache),
+              let cloud = try VPhoneIPSWCache.localArchive(cloudOSSource, in: cache)
+        else {
+            return nil
+        }
+        try VPhoneIPSWCache.checkPair(iPhone: phone, cloudOS: cloud)
+        let guest = VPhoneIPSWCache.guestDevice(for: phone, preferring: device) ?? .default
+        if let device, VPhoneGuestDevice.named(device) != guest {
+            throw ValidationError("The iPhone IPSW is for \(phone.productTypes.joined(separator: ", ")), not \(device).")
+        }
+        return VPhoneMachineTemplateBuilds(
+            device: guest.productType,
+            ios: .init(version: phone.version, build: phone.build),
+            cloudOS: .init(version: cloud.version, build: cloud.build),
+            origin: .ipsw,
+        )
+    }
+
+    /// The builds a request names without downloading: from the IPSWs when
+    /// they are here, else from a template recorded with the same sources
+    /// (``VPhoneMachineTemplates/resolveBuilds(sources:device:in:local:)``).
+    /// Nil when only a download would tell.
+    static func resolveBuilds(
+        iPhoneSource: String,
+        cloudOSSource: String,
+        cache: URL,
+        device: String?,
+        in library: VPhoneLibrary,
+    ) throws -> VPhoneMachineTemplateBuilds? {
+        try VPhoneMachineTemplates.resolveBuilds(
+            sources: VPhoneMachineTemplateSources(iPhone: iPhoneSource, cloudOS: cloudOSSource),
+            device: device,
+            in: library,
+        ) {
+            try localBuilds(iPhoneSource: iPhoneSource, cloudOSSource: cloudOSSource, cache: cache, device: device)
+        }
     }
 
     // MARK: Recorded machine

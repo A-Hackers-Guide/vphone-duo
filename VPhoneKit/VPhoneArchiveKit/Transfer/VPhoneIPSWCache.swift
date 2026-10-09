@@ -117,13 +117,16 @@ public enum VPhoneIPSWCache {
     /// `source` as ``resolve(_:in:session:connections:progress:)`` would
     /// return it, without downloading: a local file is read in place, a
     /// remote one only when the cache holds a readable copy. Nil when a
-    /// remote source is not in the cache; nothing is written or removed.
+    /// remote source is not in the cache, or a local one no longer exists
+    /// (the caller then looks elsewhere, such as a template recorded with the
+    /// same source); a local file that exists but is not an IPSW still
+    /// throws. Nothing is written or removed.
     public static func localArchive(_ source: String, in cacheDirectory: URL) throws -> Archive? {
         guard let url = URL(string: source), let scheme = url.scheme?.lowercased() else {
-            return try inspect(URL(fileURLWithPath: source))
+            return try inspectIfPresent(URL(fileURLWithPath: source))
         }
         if scheme == "file" {
-            return try inspect(url)
+            return try inspectIfPresent(url)
         }
         guard scheme == "http" || scheme == "https" else {
             throw Error.unsupportedSource(source)
@@ -131,6 +134,13 @@ public enum VPhoneIPSWCache {
         let cache = cacheDirectory.appendingPathComponent(cacheName(for: url))
         guard FileManager.default.fileExists(atPath: cache.path) else { return nil }
         return try? inspect(cache)
+    }
+
+    /// A local IPSW, or nil when nothing is at its path (a dangling link
+    /// included).
+    private static func inspectIfPresent(_ file: URL) throws -> Archive? {
+        guard FileManager.default.fileExists(atPath: file.path) else { return nil }
+        return try inspect(file)
     }
 
     /// The cached archive when it is readable; an unreadable one is removed.

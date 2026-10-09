@@ -92,7 +92,7 @@ extension GuestAPI {
             guard try bundleContainerExists(location) else {
                 // LaunchServices lists a bundle whose container is gone:
                 // dropping the record is all that is left to do.
-                let unregistered = try unregisterApp(bundlePath, force: true)
+                let unregistered = try unregisterSystemApp(bundlePath)
                 result["unregistered"] = unregistered["unregistered"] as? Bool ?? false
                 result["status"] = "unregistered_stale"
                 result["removed"] = true
@@ -108,8 +108,11 @@ extension GuestAPI {
                 result["backup_method"] = made.method
             }
             do {
-                let unregistered = try unregisterApp(bundlePath, force: true)
+                let unregistered = try unregisterSystemApp(bundlePath)
                 result["unregistered"] = unregistered["unregistered"] as? Bool ?? false
+                if let attempts = unregistered["attempts"] as? Int, attempts > 1 {
+                    result["unregister_attempts"] = attempts
+                }
             } catch {
                 if backup {
                     discardBackup(id)
@@ -450,6 +453,49 @@ extension GuestAPI {
     }
 
     // MARK: - Helpers
+
+    /// Unregisters the app at `path` and waits for LaunchServices to drop its
+    /// record, unregistering once more if it does not
+    /// (`GuestAppUnregistration`). IcliKit's `unregisterApp` looks at the
+    /// record straight away, and its "still lists the app" is not the last
+    /// word. Throws when the app is still listed after the last attempt.
+    private static func unregisterSystemApp(_ path: String) throws -> [String: Any] {
+        var attempt = 1
+        while true {
+            var result: [String: Any] = [:]
+            var failure: Error?
+            do {
+                result = try unregisterApp(path, force: true)
+            } catch {
+                failure = error
+            }
+            let start = Date()
+            polling: while true {
+                let registered = try appRegistration(path)["registered"] as? Bool == true
+                switch GuestAppUnregistration.next(registered: registered, attempt: attempt, waited: Date().timeIntervalSince(start)) {
+                case .done:
+                    if failure != nil || attempt > 1 {
+                        // Gone, though not when IcliKit looked, or gone
+                        // between the last look and the retry.
+                        result = ["unregistered": true, "path": path]
+                    }
+                    result["attempts"] = attempt
+                    return result
+                case .wait:
+                    Thread.sleep(forTimeInterval: GuestAppUnregistration.pollInterval)
+                case .retry:
+                    attempt += 1
+                    break polling
+                case .fail:
+                    let reason = failure.map(describe) ?? "LaunchServices still lists \(path) after unregistration"
+                    throw GuestAPIError.operationFailed(
+                        "\(reason) (unregistered \(attempt) times, still listed "
+                            + "\(GuestAppUnregistration.settleTimeout) s after the last)",
+                    )
+                }
+            }
+        }
+    }
 
     /// The live LaunchServices record for `id`, never a cached one.
     private static func installedApp(_ id: String) throws -> [String: Any]? {

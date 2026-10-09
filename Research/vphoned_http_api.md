@@ -557,7 +557,12 @@ path shape (`GuestSystemAppPolicy.swift`). Then, in this order:
    `copy`. A backup of the same app in the legacy directory (below) is removed
    once the new removal is done. `backup: false` skips this;
 2. the app is unregistered from LaunchServices (icli's `unregisterApp`, as
-   `apps.unregister`);
+   `apps.unregister`). LaunchServices can list it for a moment longer, and
+   icli checks at once, so vphoned looks at the record again every 0.1 s for
+   up to 2.5 s before it believes "still lists the app", unregisters once
+   more if it is still listed, waits as long again, and only then fails the
+   app (`GuestAppUnregistration`); `unregister_attempts` in the app's result
+   says when a second unregistration was needed;
 3. the container is removed recursively, with `SerializedPlaceholder.ipa`,
    `BundleMetadata.plist` and the container metadata.
 
@@ -566,7 +571,7 @@ repaired by installd from the placeholder on the next boot
 (`Research/Guest/post_setup_signin_and_appstore.md`). SpringBoard restarts once
 at the end when anything was removed and `respring` is not false. The result
 is `{results: [{bundle_id, status, removed, container, app, backup,
-backup_method, unregistered, error?}], removed, failed, backup_directory, respring}`.
+backup_method, unregistered, unregister_attempts?, error?}], removed, failed, backup_directory, respring}`.
 `status` is `removed`, `absent` (not installed: a no-op that succeeds; a
 removal an earlier call left half done, with its backup in place, is finished
 instead), `unregistered_stale` (LaunchServices listed a container that is

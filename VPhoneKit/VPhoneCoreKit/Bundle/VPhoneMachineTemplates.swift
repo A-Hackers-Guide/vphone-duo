@@ -127,6 +127,39 @@ public struct VPhoneMachineTemplateSources: Codable, Equatable, Sendable {
     }
 }
 
+/// The guest device and the two OS builds a request's key starts from, and
+/// where they came from.
+public struct VPhoneMachineTemplateBuilds: Equatable, Sendable {
+    public enum Origin: String, Sendable {
+        /// Read from the IPSWs: local files, or remote ones already cached.
+        case ipsw
+        /// Taken from the key of a template whose record names the same two
+        /// sources (``VPhoneMachineTemplates/templates(builtFrom:device:in:)``).
+        case template
+    }
+
+    public var device: String
+    public var ios: VPhoneRestoreInfo.OSVersion
+    public var cloudOS: VPhoneRestoreInfo.OSVersion
+    public var origin: Origin
+    /// The template the builds were taken from, for ``Origin/template``.
+    public var template: String?
+
+    public init(
+        device: String,
+        ios: VPhoneRestoreInfo.OSVersion,
+        cloudOS: VPhoneRestoreInfo.OSVersion,
+        origin: Origin,
+        template: String? = nil,
+    ) {
+        self.device = device
+        self.ios = ios
+        self.cloudOS = cloudOS
+        self.origin = origin
+        self.template = template
+    }
+}
+
 // MARK: - Record
 
 /// `Template.plist`, in the template's machine folder.
@@ -491,6 +524,39 @@ public enum VPhoneMachineTemplates {
             .sorted { $0.record.created > $1.record.created }
     }
 
+    /// Why ``resolveBuilds(sources:device:in:local:)`` found nothing.
+    public static let unresolvedBuildsReason = "the IPSWs are not downloaded and no template records these sources"
+
+    /// The builds a request names, without downloading anything: first
+    /// `local`, which reads the two IPSWs when both are local files or in
+    /// the IPSW cache and returns nil otherwise (a local path that no longer
+    /// exists included); then the newest template recorded with the same
+    /// two sources (and `device`, when one is named). Nil when neither has
+    /// them: only a download would tell. `vm template find` and `vm create`
+    /// both resolve this way, so a create clones the template find reports
+    /// and downloads only for a build.
+    public static func resolveBuilds(
+        sources: VPhoneMachineTemplateSources,
+        device: String?,
+        in library: VPhoneLibrary,
+        local: () throws -> VPhoneMachineTemplateBuilds?,
+    ) throws -> VPhoneMachineTemplateBuilds? {
+        if let builds = try local() {
+            return builds
+        }
+        guard let template = templates(builtFrom: sources, device: device, in: library).first else {
+            return nil
+        }
+        let key = template.key
+        return VPhoneMachineTemplateBuilds(
+            device: key.device,
+            ios: .init(version: key.iOSVersion, build: key.iOSBuild),
+            cloudOS: .init(version: key.cloudOSVersion, build: key.cloudOSBuild),
+            origin: .template,
+            template: template.identifier,
+        )
+    }
+
     /// The template whose key this is, if one is frozen.
     public static func template(for key: VPhoneMachineTemplateKey, in library: VPhoneLibrary) throws -> VPhoneMachineTemplate? {
         let url = url(of: key.identifier, in: library)
@@ -819,6 +885,19 @@ public enum VPhoneMachineTemplates {
     }
 
     // MARK: Delete
+
+    /// What `vm template delete` says about the space it freed: blocks a
+    /// machine cloned from the template still shares stay allocated until
+    /// that machine changes or is deleted; with no such machine, the
+    /// template's space is free at once. `machines` is what
+    /// ``usage(in:)`` listed for the template before it was deleted.
+    public static func deletionNote(machines: [String]) -> String {
+        guard !machines.isEmpty else {
+            return "no machine was cloned from it, so its space is free now"
+        }
+        return "\(machines.count) machine(s) cloned from it (\(machines.joined(separator: ", "))) still share its blocks; "
+            + "those blocks are freed only when the machines change them or are deleted"
+    }
 
     /// Removes a frozen template, by identifier or unique prefix, or a staging
     /// folder by its `.building-…` name that no build holds. Returns what was

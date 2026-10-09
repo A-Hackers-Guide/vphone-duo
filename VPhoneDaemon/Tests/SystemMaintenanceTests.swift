@@ -38,6 +38,7 @@ enum SystemMaintenanceTests {
         backupNames()
         backupSelection()
         manifests()
+        unregistration()
         snapshotSelection()
         snapshotErrno()
         print("\(checks - failures)/\(checks) checks passed")
@@ -113,6 +114,57 @@ enum SystemMaintenanceTests {
         } catch {
             check(error == .notSystemApp("com.example.app"), "third-party app is not a system app")
         }
+    }
+
+    // MARK: - Unregistration
+
+    /// A record LaunchServices still lists right after unregistration is
+    /// looked at again for 2.5 s, unregistered once more, looked at for
+    /// another 2.5 s, and only then failed.
+    static func unregistration() {
+        typealias U = GuestAppUnregistration
+        check(U.settleTimeout >= 2 && U.settleTimeout <= 3, "waits 2 to 3 s for the record to go")
+        check(U.pollInterval > 0 && U.pollInterval <= 0.25, "looks again at a short interval")
+        check(U.attempts == 2, "one retry")
+        check(U.next(registered: false, attempt: 1, waited: 0) == .done, "gone at once")
+        check(U.next(registered: false, attempt: 1, waited: 1.2) == .done, "gone while waiting")
+        check(U.next(registered: false, attempt: 2, waited: 9) == .done, "gone after the retry, however late it is seen")
+        check(U.next(registered: true, attempt: 1, waited: 0) == .wait, "still listed right after: wait")
+        check(U.next(registered: true, attempt: 1, waited: U.settleTimeout - 0.1) == .wait, "still listed before the timeout: wait")
+        check(U.next(registered: true, attempt: 1, waited: U.settleTimeout) == .retry, "still listed at the timeout: unregister again")
+        check(U.next(registered: true, attempt: 2, waited: 0.5) == .wait, "the retry waits as well")
+        check(U.next(registered: true, attempt: 2, waited: U.settleTimeout) == .fail, "still listed after the retry: fail")
+        check(U.next(registered: true, attempt: 3, waited: U.settleTimeout) == .fail, "never more than the attempts")
+
+        // The decision loop the daemon runs, against a record that goes on
+        // the given look (counting every look across attempts).
+        func simulate(goneOnLook gone: Int?) -> (outcome: U.Next, attempts: Int, looks: Int) {
+            var attempt = 1
+            var looks = 0
+            var waited: TimeInterval = 0
+            while true {
+                looks += 1
+                let registered = gone.map { looks < $0 } ?? true
+                let next = U.next(registered: registered, attempt: attempt, waited: waited)
+                switch next {
+                case .done, .fail: return (next, attempt, looks)
+                case .wait: waited += U.pollInterval
+                case .retry:
+                    attempt += 1
+                    waited = 0
+                }
+            }
+        }
+        let immediate = simulate(goneOnLook: 1)
+        check(immediate.outcome == .done && immediate.attempts == 1 && immediate.looks == 1, "a clean unregistration looks once")
+        let late = simulate(goneOnLook: 5)
+        check(late.outcome == .done && late.attempts == 1, "a record that goes within the wait needs no retry")
+        let perLook = Int((U.settleTimeout / U.pollInterval).rounded(.up)) + 1
+        let retried = simulate(goneOnLook: perLook + 3)
+        check(retried.outcome == .done && retried.attempts == 2, "a record that outlasts the wait is unregistered again")
+        let stuck = simulate(goneOnLook: nil)
+        check(stuck.outcome == .fail && stuck.attempts == 2, "a record that never goes fails after the retry")
+        check(stuck.looks <= 2 * (perLook + 1), "and the looks are bounded")
     }
 
     // MARK: - Backup names

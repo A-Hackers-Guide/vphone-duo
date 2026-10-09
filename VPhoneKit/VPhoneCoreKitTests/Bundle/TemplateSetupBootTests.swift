@@ -358,6 +358,45 @@ struct TemplateSetupBootTests {
         #expect(steps.slimming != VPhoneTemplateSlimmingRequest.defaultSlimming)
     }
 
+    @Test func `a strict setup boot of a machine fails where the lenient one warns`() throws {
+        // vm template setup --strict: a machine Launchpad adopts under the
+        // key vm template find gave must not lose an app from that key.
+        let guest = FakeGuest(clock: FakeClock())
+        guest.refusedApps = ["com.apple.findmy"]
+        let failure = try #require(run(guest, requiresEveryApp: true).failed)
+        #expect(failure.step == .removeApps)
+        #expect(failure.reason.contains("com.apple.findmy"))
+        // Nothing recorded: the outcome is incomplete.
+        #expect(!failure.outcome.isComplete)
+        #expect(!guest.calls.contains("system.reboot"))
+    }
+
+    @Test func `deviations name what fell short of the plan`() {
+        let plan = VPhoneTemplateSetupPlan(slimming: VPhoneTemplateSlimmingRequest.defaultSlimming, requiresEveryApp: true)
+        var outcome = VPhoneTemplateSetupOutcome()
+        outcome.apps = plan.removedApps.map { VPhoneTemplateSetupAppResult(bundleID: $0, status: "removed") }
+        outcome.serviceProfile = plan.serviceProfile
+        outcome.serviceGroups = plan.serviceGroups
+        #expect(outcome.deviations(from: plan).isEmpty)
+
+        var short = outcome
+        short.apps[short.apps.firstIndex { $0.bundleID == "com.apple.findmy" }!] = VPhoneTemplateSetupAppResult(
+            bundleID: "com.apple.findmy",
+            status: "failed",
+            error: "LaunchServices still lists the app after unregistration",
+        )
+        short.apps.removeAll { $0.bundleID == "com.apple.news" }
+        let lines = short.deviations(from: plan)
+        #expect(lines.count == 1)
+        #expect(lines.first?.contains("com.apple.findmy (LaunchServices still lists") == true)
+        #expect(lines.first?.contains("com.apple.news") == true)
+
+        var profile = outcome
+        profile.serviceProfile = "none"
+        profile.serviceGroups = ["accounts"]
+        #expect(profile.deviations(from: plan) == ["service profile none, not trimmed", "service groups accounts, not "])
+    }
+
     @Test func `an app that is already gone counts as removed`() throws {
         let guest = FakeGuest(clock: FakeClock())
         guest.installed.remove("com.apple.news")

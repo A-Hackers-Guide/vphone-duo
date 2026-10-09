@@ -321,6 +321,130 @@ public struct VPhoneMachineTemplateRequest: Equatable, Sendable {
     }
 }
 
+// MARK: - Expected identifier
+
+/// `vm template adopt --expect <id>` refused: the key a machine's records
+/// give hashes to another identifier than the one the caller worked out for
+/// its request (`vm template find`). Adopting it anyway would file the
+/// template where no later request with the same options looks, and every
+/// such request would build another one.
+public struct VPhoneMachineTemplateKeyMismatch: Error, CustomStringConvertible, LocalizedError, Sendable {
+    public var expected: String
+    /// The key the machine's records give.
+    public var key: VPhoneMachineTemplateKey
+    /// The key that hashes to `expected`, when it could be recovered (see
+    /// ``VPhoneMachineTemplateKey/mismatch(expecting:known:)``).
+    public var expectedKey: VPhoneMachineTemplateKey?
+    /// Per field, the expected value and the machine's (`expected → machine`);
+    /// empty when the expected key is not known.
+    public var differences: [String]
+
+    public var identifier: String {
+        key.identifier
+    }
+
+    public var description: String {
+        let head = "The machine's records give template \(identifier), not the expected \(expected)"
+        guard expectedKey != nil else {
+            return head + ". The key behind \(expected) is not known here; compare this machine's key with the key "
+                + "vm template find --json prints: " + key.canonicalDescription.split(separator: "\n").joined(separator: "; ") + "."
+        }
+        return head + ": " + differences.joined(separator: "; ") + "."
+    }
+
+    public var errorDescription: String? {
+        description
+    }
+}
+
+public extension VPhoneMachineTemplateKey {
+    /// Nil when this key hashes to `expected`. Otherwise why not: the key
+    /// behind `expected` is looked for among `known` (the library's
+    /// templates and builds), then among the keys that differ from this one
+    /// only in slimming (the trim tier, the setup boot, the service profile
+    /// and groups, and which of the default apps were removed), where a
+    /// setup boot that left an app behind lands. A hash cannot be undone, so
+    /// a key that differs elsewhere, and is not known, stays unknown.
+    func mismatch(expecting expected: String, known: [VPhoneMachineTemplateKey] = []) -> VPhoneMachineTemplateKeyMismatch? {
+        let expected = expected.lowercased()
+        guard identifier != expected else { return nil }
+        let found = known.first { $0.identifier == expected } ?? slimmingVariant(identifiedBy: expected)
+        return VPhoneMachineTemplateKeyMismatch(
+            expected: expected,
+            key: self,
+            expectedKey: found,
+            differences: found.map { $0.mismatchLines(against: self) } ?? [],
+        )
+    }
+
+    /// The key with this one's fields but another slimming whose identifier
+    /// is `identifier`, or nil. At most a few tens of thousands of hashes,
+    /// this key's own values tried first.
+    func slimmingVariant(identifiedBy identifier: String) -> VPhoneMachineTemplateKey? {
+        func unique<T: Hashable>(_ values: [T]) -> [T] {
+            var seen = Set<T>()
+            return values.filter { seen.insert($0).inserted }
+        }
+        let tiers = unique([
+            slimming.trimTier,
+            "none",
+            VPhoneTemplateSlimmingRequest.defaultTrimTier,
+            (try? VPhoneSystemTrimSpec(tier: .conservative).keyValue) ?? "none",
+        ])
+        let setups = [slimming.setupBoot, !slimming.setupBoot]
+        let profiles = unique([slimming.serviceProfile] + VPhoneTemplateSlimmingRequest.serviceProfiles)
+        let groups = unique([slimming.serviceGroups, [], [VPhoneTemplateSlimmingRequest.accountsGroup]])
+        let apps = unique(slimming.removedApps + VPhoneTemplateSlimmingRequest.defaultRemovedApps)
+        // Every subset of the apps, this key's own first; a list too long to
+        // enumerate is tried as it is, as the default, and as none.
+        let appSets: [[String]] = apps.count <= 12
+            ? [slimming.removedApps] + (0 ..< (1 << apps.count)).map { mask in
+                apps.indices.filter { mask & (1 << $0) != 0 }.map { apps[$0] }
+            }
+            : [slimming.removedApps, VPhoneTemplateSlimmingRequest.defaultRemovedApps, []]
+        var candidate = self
+        for setup in setups {
+            for tier in tiers {
+                for profile in profiles {
+                    for group in groups {
+                        for removed in appSets {
+                            candidate.slimming = VPhoneMachineTemplateSlimming(
+                                trimTier: tier,
+                                setupBoot: setup,
+                                serviceProfile: profile,
+                                serviceGroups: group,
+                                removedApps: removed,
+                            )
+                            if candidate.identifier == identifier {
+                                return candidate
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return nil
+    }
+
+    /// ``differences(from:)`` from this (expected) key to `other`, with the
+    /// removed apps as the apps one list has and the other lacks.
+    private func mismatchLines(against other: VPhoneMachineTemplateKey) -> [String] {
+        var lines = differences(from: other).filter { !$0.hasPrefix("removed apps:") }
+        let mine = Set(slimming.removedApps)
+        let theirs = Set(other.slimming.removedApps)
+        let notRemoved = mine.subtracting(theirs).sorted()
+        let extra = theirs.subtracting(mine).sorted()
+        if !notRemoved.isEmpty {
+            lines.append("removed apps: expected \(notRemoved.joined(separator: ", ")) removed too, the machine still has "
+                + (notRemoved.count == 1 ? "it" : "them"))
+        }
+        if !extra.isEmpty {
+            lines.append("removed apps: the machine also lacks \(extra.joined(separator: ", ")), which was not expected")
+        }
+        return lines
+    }
+}
+
 // MARK: - Bundle version
 
 public enum VPhoneBundleVersion {

@@ -124,9 +124,12 @@ public struct VPhoneTemplateSetupPlan: Equatable, Sendable {
     public var serviceProfile: String
     public var serviceGroups: [String]
     public var removedApps: [String]
-    /// Whether an app vphoned does not remove fails the setup boot. A template
-    /// being built has its key, and with it the apps it promises, fixed; a
-    /// machine to be adopted afterwards gets a key from what was done.
+    /// Strict: whether falling short of this plan fails the setup boot, an
+    /// app vphoned does not remove above all, instead of being reported and
+    /// left out of the recorded steps. A template being built has its key,
+    /// and with it the apps it promises, fixed; so does a machine Launchpad
+    /// (`vm template setup --strict`) adopts under the key `vm template find`
+    /// gave. Otherwise a machine to be adopted gets a key from what was done.
     public var requiresEveryApp: Bool
     /// Clear the device name `vphone-vm` pinned during this boot, so a clone
     /// does not show the template's name before its own VM pins its name.
@@ -227,6 +230,27 @@ public struct VPhoneTemplateSetupOutcome: Equatable, Sendable {
         apps.filter(\.isGone).map(\.bundleID).sorted()
     }
 
+    /// Where the slimming done so far falls short of `plan`: an app not
+    /// removed, another service profile or groups. What a strict setup boot
+    /// refuses once the profile is applied.
+    public func deviations(from plan: VPhoneTemplateSetupPlan) -> [String] {
+        var lines: [String] = []
+        let kept = Set(plan.removedApps).subtracting(removedApps).sorted()
+        if !kept.isEmpty {
+            let reasons = kept.map { id in
+                apps.first { $0.bundleID == id }.map { "\(id) (\($0.error ?? $0.status))" } ?? id
+            }
+            lines.append("not removed: \(reasons.joined(separator: ", "))")
+        }
+        if serviceProfile != plan.serviceProfile {
+            lines.append("service profile \(serviceProfile), not \(plan.serviceProfile)")
+        }
+        if serviceGroups.sorted() != plan.serviceGroups.sorted() {
+            lines.append("service groups \(serviceGroups.sorted().joined(separator: ",")), not \(plan.serviceGroups.sorted().joined(separator: ","))")
+        }
+        return lines
+    }
+
     /// Every step ran and the VM shut down cleanly.
     public var isComplete: Bool {
         snapshotsGone && setupSkipped && settled && verified && stoppedCleanly
@@ -322,7 +346,10 @@ public final class VPhoneTemplateSetupBoot {
             try step(.skipSetup) { try skipSetup() }
             try step(.settle) { try settle() }
             try step(.removeApps) { try removeApps() }
-            try step(.serviceProfile) { try applyServiceProfile() }
+            try step(.serviceProfile) {
+                try applyServiceProfile()
+                try requirePlan()
+            }
             try step(.reboot) { try reboot() }
             try step(.verify) { try verify() }
             try step(.deviceName) { clearDeviceName() }
@@ -491,6 +518,16 @@ public final class VPhoneTemplateSetupBoot {
         outcome.servicesOwned = applied["owned"] as? Int ?? disabled.count
         log("  profile \(plan.serviceProfile)\(plan.serviceGroups.isEmpty ? "" : " +\(plan.serviceGroups.joined(separator: ","))"): "
             + "\(outcome.servicesOwned) services owned, \(strings(applied["disabled"]).count) disabled now")
+    }
+
+    /// A strict setup boot stops here, before the reboot, when what was done
+    /// falls short of the plan.
+    private func requirePlan() throws {
+        guard plan.requiresEveryApp else { return }
+        let deviations = outcome.deviations(from: plan)
+        guard deviations.isEmpty else {
+            throw StepError("strict: the setup boot fell short of the requested slimming: \(deviations.joined(separator: "; "))")
+        }
     }
 
     private func requireApplied(_ result: [String: Any]) throws {

@@ -249,6 +249,37 @@ public struct VPhoneVirtualMachineCreator {
         guard slimming.problems.isEmpty else {
             throw ValidationError("Cannot build this template: \(slimming.problems.joined(separator: "; ")). Pass --trim none.")
         }
+        // Resolved as vm template find resolves it: from the IPSWs when they
+        // are local or cached, else from a template recorded with the same
+        // sources. Nothing is downloaded unless no template matches and one
+        // has to be built.
+        let builds = try VPhoneMachineTemplateKeys.resolveBuilds(
+            iPhoneSource: phoneSource,
+            cloudOSSource: cloudSource,
+            cache: options.ipswCacheDirectory,
+            device: options.device,
+            in: library,
+        )
+        if let builds {
+            let key = try VPhoneMachineTemplateKeys.key(
+                device: builds.device,
+                ios: builds.ios,
+                cloudOS: builds.cloudOS,
+                preset: options.patchPreset,
+                diskSizeGB: options.diskSizeGB,
+                slimming: slimming,
+            )
+            if let found = try VPhoneMachineTemplates.template(for: key, in: library) {
+                print("[*] Template key \(key.identifier): \(key.summary)")
+                if builds.origin == .template, let source = builds.template {
+                    print("[*] Builds from template \(source), recorded with the same IPSW sources; nothing downloaded")
+                }
+                return try requireCurrent(found)
+            }
+        }
+
+        // A build: it needs the IPSWs, so they are downloaded now when they
+        // are not here, and the key is taken from them.
         let sources = try VPhoneFirmwarePreparer.resolveSources(
             iPhoneSource: phoneSource,
             cloudOSSource: cloudSource,
