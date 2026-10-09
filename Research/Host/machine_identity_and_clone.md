@@ -104,7 +104,9 @@ moment. The gigalocker and the anti-replay records advance together, so a copy
 of a running machine can pair a disk with SEP state from another moment.
 `vm clone` refuses while the source runs (`VPhoneBundleActivity.requireStopped`
 looks for a process holding the disk image, `SEPStorage` or `nvram.bin` open, or
-a control socket that answers). Host-side writes to the disk image by `cfw
+a control socket that answers). A holder that runs no machine, such as
+Launchpad's disk meter, is waited out for up to 2 s first; a VM holder refuses
+at once (`Research/Host/machine_templates.md`, Disk use). Host-side writes to the disk image by `cfw
 install` or `--update-environment` do not break the pairing: a source whose
 disk image was modified hours after its `SEPStorage` cloned and booted fine.
 

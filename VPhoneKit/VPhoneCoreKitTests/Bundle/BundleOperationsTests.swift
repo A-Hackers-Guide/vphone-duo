@@ -541,10 +541,33 @@ struct BundleOperationsTests {
         defer { close(fd) }
         for newIdentity in [false, true] {
             #expect(throws: VPhoneBundleActivityError.running(name: "src", pids: [getpid()])) {
-                try VPhoneBundleOperations.clone(bundleNamed: "src", to: "dst", in: lib, newIdentity: newIdentity)
+                // This process runs no machine: the clone waits it out first.
+                try VPhoneBundleOperations.clone(bundleNamed: "src", to: "dst", in: lib, newIdentity: newIdentity, readerWait: 0.3) {}
             }
             #expect(!FileManager.default.fileExists(atPath: lib.url(forName: "dst").path))
         }
+    }
+
+    @Test func `clone waits out a reader that closes the source soon`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let lib = VPhoneLibrary(root: root)
+        let src = try makeBootedSource(named: "src", in: lib)
+        let disk = src.url.appendingPathComponent("Disk.img")
+
+        // Like Launchpad's disk meter mapping a template it has just seen
+        // appear: New Machine of Launchpad 2.9.0 failed its clone step on it.
+        let fd = open(disk.path, O_RDONLY | O_EVTONLY)
+        try #require(fd >= 0)
+        #expect(VPhoneBundleActivity.processesHolding([disk]).contains(getpid()))
+        let closer = Thread {
+            Thread.sleep(forTimeInterval: 0.3)
+            close(fd)
+        }
+        closer.start()
+        let clone = try VPhoneBundleOperations.clone(bundleNamed: "src", to: "dst", in: lib)
+        #expect(FileManager.default.fileExists(atPath: clone.url.appendingPathComponent("Disk.img").path))
+        #expect(!VPhoneBundleActivity.processesHolding([disk]).contains(getpid()))
     }
 
     @Test func `clone refuses a source that starts while it is copied and leaves no copy`() throws {
@@ -561,7 +584,7 @@ struct BundleOperationsTests {
                 }
             }
             #expect(throws: VPhoneBundleActivityError.running(name: "src", pids: [getpid()])) {
-                try VPhoneBundleOperations.clone(bundleNamed: "src", to: "dst", in: lib, newIdentity: false) {
+                try VPhoneBundleOperations.clone(bundleNamed: "src", to: "dst", in: lib, newIdentity: false, readerWait: 0.2) {
                     // The source starts after the first check passed.
                     fd = open(src.url.appendingPathComponent(name).path, O_RDONLY)
                 }

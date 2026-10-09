@@ -543,6 +543,16 @@ struct TemplatesTests {
         precondition(!Access(isLibraryBusy: true).mayOpen, "An import or template deletion")
         precondition(!Access(isLaunched: true, isHeld: true).mayOpen, "Running")
 
+        // Templates are left alone while a creation saves or clones one: the
+        // clone refuses a template the meter holds open (2.9.0, New Machine
+        // failed at its clone step right after the template was saved).
+        precondition(Step.allCases.filter(\.needsTemplatesToItself) == [.adoptTemplate, .cloneTemplate], "Save and clone")
+        precondition(Access.templatesMayOpen(isLibraryBusy: false, creationSteps: []), "Nothing runs")
+        precondition(Access.templatesMayOpen(isLibraryBusy: false, creationSteps: [.restore, .setUpTemplate, .firstBoot]), "Other steps")
+        precondition(!Access.templatesMayOpen(isLibraryBusy: false, creationSteps: [.adoptTemplate]), "Saving a template")
+        precondition(!Access.templatesMayOpen(isLibraryBusy: false, creationSteps: [.restore, .cloneTemplate]), "Cloning a template")
+        precondition(!Access.templatesMayOpen(isLibraryBusy: true, creationSteps: []), "A template deletion")
+
         typealias Meter = VPhoneLaunchpadDiskMeter
         // An unchanged file is never opened, whatever else holds.
         for mayOpen in [true, false] {

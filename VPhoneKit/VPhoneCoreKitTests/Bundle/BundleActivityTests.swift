@@ -121,6 +121,105 @@ struct BundleActivityTests {
         }
     }
 
+    // MARK: - Waiting for readers
+
+    private static let meter = VPhoneProcessHolder(pid: 900, executablePath: "/Applications/vphone-launchpad.app/Contents/MacOS/vphone-launchpad")
+    private static let vm = VPhoneProcessHolder(pid: 410, executablePath: "/opt/VPhone.bundle/Contents/MacOS/vphone-vm")
+    private static let service = VPhoneProcessHolder(
+        pid: 412,
+        executablePath: "/System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/"
+            + "com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine",
+    )
+
+    /// Runs the decision over `answers`, one per probe (the last repeats),
+    /// and returns how many times it slept and probed the socket.
+    private func decide(
+        wait: TimeInterval,
+        _ answers: [[VPhoneProcessHolder]],
+        socketIsLive: Bool = false,
+    ) -> (error: VPhoneBundleActivityError?, sleeps: [TimeInterval], probes: Int, socketProbes: Int) {
+        var probes = 0
+        var socketProbes = 0
+        var sleeps: [TimeInterval] = []
+        var error: VPhoneBundleActivityError?
+        do {
+            try VPhoneBundleActivity.requireStopped(
+                name: "tpl",
+                waitingForReaders: wait,
+                holders: {
+                    defer { probes += 1 }
+                    return answers[min(probes, answers.count - 1)]
+                },
+                socketIsLive: {
+                    socketProbes += 1
+                    return socketIsLive
+                },
+                sleep: { sleeps.append($0) },
+            )
+        } catch let refusal as VPhoneBundleActivityError {
+            error = refusal
+        } catch {
+            Issue.record(error)
+        }
+        return (error, sleeps, probes, socketProbes)
+    }
+
+    @Test func `a reader that closes within the wait lets a clone through`() {
+        let found = decide(wait: 2, [[Self.meter], [Self.meter], []])
+        #expect(found.error == nil)
+        #expect(found.sleeps == [0.1, 0.1])
+        #expect(found.probes == 3)
+    }
+
+    @Test func `a reader that stays refuses once the wait is over`() {
+        let found = decide(wait: 2, [[Self.meter]])
+        #expect(found.error == VPhoneBundleActivityError.running(name: "tpl", holders: [Self.meter]))
+        // 20 waits of 0.1 s, 21 probes: about 2 s, not more.
+        #expect(found.sleeps.count == 20)
+        #expect(found.probes == 21)
+    }
+
+    @Test func `a VM holding the files refuses at once, with or without readers`() {
+        for holders in [[Self.vm], [Self.service], [Self.meter, Self.service]] {
+            let found = decide(wait: 2, [holders, []])
+            #expect(found.error == VPhoneBundleActivityError.running(name: "tpl", holders: holders))
+            #expect(found.sleeps.isEmpty)
+        }
+        // A VM that starts during the wait refuses on the next probe.
+        let starting = decide(wait: 2, [[Self.meter], [Self.meter, Self.vm], []])
+        #expect(starting.error == VPhoneBundleActivityError.running(name: "tpl", holders: [Self.meter, Self.vm]))
+        #expect(starting.sleeps.count == 1)
+    }
+
+    @Test func `a live control socket refuses at once`() {
+        let held = decide(wait: 2, [[Self.meter], []], socketIsLive: true)
+        #expect(held.error == VPhoneBundleActivityError.running(name: "tpl", holders: [Self.meter]))
+        #expect(held.sleeps.isEmpty)
+        let free = decide(wait: 2, [[]], socketIsLive: true)
+        #expect(free.error == VPhoneBundleActivityError.running(name: "tpl", holders: []))
+    }
+
+    @Test func `without a wait any holder refuses as before`() {
+        let found = decide(wait: 0, [[Self.meter], []])
+        #expect(found.error == VPhoneBundleActivityError.running(name: "tpl", holders: [Self.meter]))
+        #expect(found.sleeps.isEmpty)
+        #expect(found.socketProbes == 0)
+        #expect(decide(wait: 0, [[]]).error == nil)
+    }
+
+    @Test func `a held state file is waited for and then refused`() throws {
+        let (root, bundle) = try makeBundle()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fd = open(bundle.url.appendingPathComponent("Disk.img").path, O_RDONLY)
+        try #require(fd >= 0)
+        defer { close(fd) }
+        let began = Date()
+        #expect(throws: VPhoneBundleActivityError.running(name: "vm", pids: [getpid()])) {
+            try VPhoneBundleActivity.requireStopped(bundle, waitingForReaders: 0.3)
+        }
+        #expect(Date().timeIntervalSince(began) >= 0.25)
+    }
+
     @Test func `a control socket path that is not a socket counts as stopped`() throws {
         let (root, bundle) = try makeBundle()
         defer { try? FileManager.default.removeItem(at: root) }

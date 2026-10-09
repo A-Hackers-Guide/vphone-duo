@@ -30,10 +30,61 @@ public enum VPhoneBundleActivity {
     /// The error names each holder's executable, so a refusal caused by, say,
     /// a backup tool reading `Disk.img` is not mistaken for a running VM.
     public static func requireStopped(_ bundle: VPhoneBundle) throws {
+        try requireStopped(bundle, waitingForReaders: 0)
+    }
+
+    /// How long an operation that only reads a machine waits for holders
+    /// that do not run it to close its files: Launchpad's disk meter holds an
+    /// image for 0.1 s or less, longer on a slow Mac.
+    public static let readerWait: TimeInterval = 2
+
+    /// `requireStopped` for an operation that only reads the machine's files,
+    /// a clone's source: while every holder is a process that does not run a
+    /// machine (Launchpad's disk meter, Spotlight, a backup tool), it checks
+    /// again every 0.1 s for up to `wait` seconds before refusing. A VM
+    /// process holding a file, or a live control socket, refuses at once.
+    /// Operations that write the files keep `requireStopped`.
+    public static func requireStopped(_ bundle: VPhoneBundle, waitingForReaders wait: TimeInterval) throws {
         let urls = stateFileNames(of: bundle).map { bundle.url.appendingPathComponent($0) }
-        let pids = processesHolding(urls)
-        if !pids.isEmpty || controlSocketIsLive(bundle.url.appendingPathComponent("vphone.sock")) {
-            throw VPhoneBundleActivityError.running(name: bundle.name, pids: pids)
+        let socket = bundle.url.appendingPathComponent("vphone.sock")
+        try requireStopped(
+            name: bundle.name,
+            waitingForReaders: wait,
+            holders: { processesHolding(urls).map { VPhoneProcessHolder(pid: $0) } },
+            socketIsLive: { controlSocketIsLive(socket) },
+            sleep: { Thread.sleep(forTimeInterval: $0) },
+        )
+    }
+
+    /// The decision behind `requireStopped`, with the process table, the
+    /// socket probe and the clock injected. With no holders the socket
+    /// decides. Holders refuse at once when one runs a machine or the wait
+    /// is over; otherwise, while the socket is not live, they are asked again
+    /// after `interval`. With `wait` 0 the socket is not probed for a held
+    /// machine, as before the wait existed.
+    static func requireStopped(
+        name: String,
+        waitingForReaders wait: TimeInterval,
+        interval: TimeInterval = 0.1,
+        holders: () -> [VPhoneProcessHolder],
+        socketIsLive: () -> Bool,
+        sleep: (TimeInterval) -> Void,
+    ) throws {
+        var waited: TimeInterval = 0
+        while true {
+            let found = holders()
+            if found.isEmpty {
+                if socketIsLive() {
+                    throw VPhoneBundleActivityError.running(name: name, holders: [])
+                }
+                return
+            }
+            // Compared with a margin, so 20 steps of 0.1 s make 2 s.
+            if waited + interval / 2 >= wait || found.contains(where: \.runsMachine) || socketIsLive() {
+                throw VPhoneBundleActivityError.running(name: name, holders: found)
+            }
+            sleep(interval)
+            waited += interval
         }
     }
 

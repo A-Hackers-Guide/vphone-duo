@@ -196,7 +196,8 @@ Launchpad mapping running machines' images about every 30 s, so a forced
 for the machine (starting, running, stopping), the last `lsof` names no other
 process for its disk, and Launchpad has no operation on it (a creation, a
 template build, an export, an install or update, a shutdown or stop) or on a
-whole library (an import, a template deletion). It asks again right before
+whole library (an import, a template deletion). Templates are opened unless a
+library-wide operation runs or a creation is saving or cloning one (below). It asks again right before
 each file is mapped, so a machine started during a pass is not opened. Any
 other machine keeps the ranges last mapped, and a stopped one is opened only
 when a file's size, mtime or ctime changed since then: once after each run.
@@ -218,12 +219,29 @@ image) is named and never signalled. Until 2026-10-09 `vm stop` SIGINTed every
 `lsof` holder when it found no `vphone-vm` and SIGKILLed every holder left
 after the timeout, so a stop that hit the meter's 0.1 s window could kill
 Launchpad (PR #633 retest, N2). `cfw install`, `update-environment` and
-`update-kernel` still refuse any other holder, as do clone, snapshot, revert,
-adopt, trim and the setup boot (`VPhoneBundleActivity.requireStopped`, over
+`update-kernel` still refuse any other holder, as do snapshot, revert, adopt,
+trim and the setup boot (`VPhoneBundleActivity.requireStopped`, over
 `Disk.img`, `SEPStorage` and `nvram.bin`): a file another process has open is
 not standing still. Their refusals name each holder (`process 900
 vphone-launchpad`) and say when none of them runs the VM, so a reader is not
 taken for a running machine.
+
+A clone (`vm clone`, and `vm create --template` cloning a template) only reads
+its source, so it waits out a holder that runs no machine: while every holder
+is such a process and the control socket is not live, each of its two checks
+(before and after the copy) asks again every 0.1 s for up to 2 s, then refuses
+as before (`requireStopped(_:waitingForReaders:)`). A VM process holding the
+source, or a live socket, refuses at once, so a clone still cannot take a
+machine that is running or starting; a template is never booted. Writes keep
+the strict check. In Launchpad 2.9.0 New Machine failed at its clone step with
+"VM '<id>' is in use: … open in process <pid> vphone-launchpad": the adopt
+step refreshed the machine list, the meter saw the new template folder, never
+mapped, and opened its `Disk.img` just as `vm create --template` checked it;
+retrying the step passed at once. Launchpad now also leaves every template
+unopened while a creation of its own is at its adopt or clone step
+(`VPhoneLaunchpadDiskAccess.templatesMayOpen`, asked before each file as
+above), and the wait covers a mapping that was already under way, or another
+reader, when the clone starts.
 
 Launchpad judges the holders `lsof` lists the same way
 (`VPhoneLaunchpadDiskHolder`, a copy of the `VPhoneProcessHolder` rule, since

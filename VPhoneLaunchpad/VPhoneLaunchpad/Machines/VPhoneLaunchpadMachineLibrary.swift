@@ -844,7 +844,7 @@ final class VPhoneLaunchpadMachineLibrary {
         }
         let libraryRoots = roots.filter { $0 == libraryRoot || VPhoneLaunchpadMachineLocations.isAvailable($0) }
         let meter = diskMeter
-        let templatesMayOpen = globalActivity == nil
+        let templatesMayOpen = self.templatesMayOpen
         let mayOpenNow: @Sendable (String) async -> Bool = { [weak self] folder in
             await self?.mayOpenDisk(inFolder: folder) ?? false
         }
@@ -886,16 +886,27 @@ final class VPhoneLaunchpadMachineLibrary {
         )
     }
 
+    /// Whether the meter may open template files now: not while a
+    /// library-wide operation (a template deletion) runs, nor while a
+    /// creation saves a template or clones one, which `vm create --template`
+    /// refuses while another process holds the template open.
+    private var templatesMayOpen: Bool {
+        VPhoneLaunchpadDiskAccess.templatesMayOpen(
+            isLibraryBusy: globalActivity != nil,
+            creationSteps: creations.values.filter(\.isRunning).compactMap(\.current),
+        )
+    }
+
     /// `diskAccess` for a measured folder, asked right before the meter
-    /// opens one of its files. A template folder may be opened unless a
-    /// library-wide operation (a template deletion) runs; a folder that is
-    /// neither a listed machine nor a template is not opened.
+    /// opens one of its files. A template folder may be opened while
+    /// `templatesMayOpen`; a folder that is neither a listed machine nor a
+    /// template is not opened.
     private func mayOpenDisk(inFolder folder: String) -> Bool {
         if let machine = machines.first(where: { $0.path.url.path == folder }) {
             return diskAccess(of: machine.path).mayOpen
         }
         let isTemplate = URL(fileURLWithPath: folder).deletingLastPathComponent().lastPathComponent == ".templates"
-        return isTemplate && globalActivity == nil
+        return isTemplate && templatesMayOpen
     }
 
     @concurrent
