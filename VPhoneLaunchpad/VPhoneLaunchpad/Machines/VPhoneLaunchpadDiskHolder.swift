@@ -11,6 +11,14 @@ import Foundation
 /// (VPhoneCoreKit, which Launchpad does not link), and the two must judge a
 /// path the same way: `vm stop` signals only the holders the CLI calls VM
 /// processes, and Launchpad offers Stop only for a machine it calls running.
+///
+/// The rule is copied rather than asked of `vphone-cli`: Launchpad runs
+/// `lsof` itself on every refresh, while waiting for a stop and before an
+/// operation that needs the disk, and leaves its own meter out by PID. Both
+/// copies are tested against one table,
+/// `VPhoneKit/VPhoneCoreKitTests/VirtualMachine/ProcessHolderKinds.json`
+/// (`Tests/TemplatesTests.sh` here, `LaunchLayoutTests` there), so neither
+/// can change alone. See Research/Host/machine_templates.md.
 nonisolated struct VPhoneLaunchpadDiskHolder: Hashable, Sendable, CustomStringConvertible {
     var pid: pid_t
     /// From `proc_pidpath`; nil for a process that is gone or cannot be

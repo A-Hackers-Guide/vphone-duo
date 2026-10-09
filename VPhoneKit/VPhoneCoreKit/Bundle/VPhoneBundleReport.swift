@@ -17,6 +17,12 @@ public struct VPhoneBundleReport: Codable, Equatable, Sendable {
     /// The template the machine was cloned from (`TemplateSource.plist`),
     /// or nil.
     public let template: String?
+    /// Whether `template` is the build the machine was cloned from, an
+    /// earlier build since deleted, or deleted; nil when `template` is.
+    /// Launchpad reads it rather than the template records, so the rule
+    /// (``VPhoneMachineTemplateSource/isClone(of:)``) has one home. Added in
+    /// 2.9.0.
+    public let templateMatch: VPhoneMachineTemplateMatch?
     /// Whether vphone-vm forwards the Mac's location to the guest. Always
     /// present, like `unlocksAtStartup`.
     public let syncsHostLocation: Bool
@@ -31,7 +37,11 @@ public struct VPhoneBundleReport: Codable, Equatable, Sendable {
         customFirmwareInstalled = VPhoneRestoreInfo.customFirmwareInstalled(inBundle: bundle)
         udid = VPhoneRestoreOperations.resolveUDID(bundle: bundle)
         unlocksAtStartup = bundle.manifest.unlocksScreenAtStartup
-        template = VPhoneMachineTemplates.readSource(inBundle: bundle.url)?.identifier
+        let source = VPhoneMachineTemplates.readSource(inBundle: bundle.url)
+        template = source?.identifier
+        // A machine lives directly in its library's root.
+        let library = VPhoneLibrary(root: bundle.url.deletingLastPathComponent())
+        templateMatch = source.map { VPhoneMachineTemplates.match(of: $0, in: library) }
         syncsHostLocation = bundle.manifest.sharesHostLocation
     }
 }

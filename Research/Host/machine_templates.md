@@ -113,7 +113,12 @@ re-resolves with the template's own `PatchSelection.plist`.
   rebuilt template counted the old build's clones as its users, in `vm
   template list/show`, Launchpad's "N machine(s) use it" and the delete notes
   (PR #633 retest, N1). `vm template list/show --json` add `build` and
-  `frozenAt`. `vm template list/show` print the users with the template's
+  `frozenAt`. `vm list --json` and `vm info --json` report each clone's
+  `template` and `templateMatch` (`current`, `earlierBuild` or `deleted`,
+  `VPhoneMachineTemplates.match`), and Launchpad's inspector shows that
+  instead of reading `TemplateSource.plist` and `Template.plist` itself (see
+  [Rules Launchpad shares with the CLI](#rules-launchpad-shares-with-the-cli)).
+  `vm template list/show` print the users with the template's
   allocated size; `vm delete` of the last machine cloned from the template
   that exists now prints a note to delete it (`unusedTemplate(after:in:)`;
   deleting a clone of an earlier build prints nothing), never deleting it
@@ -222,7 +227,8 @@ taken for a running machine.
 
 Launchpad judges the holders `lsof` lists the same way
 (`VPhoneLaunchpadDiskHolder`, a copy of the `VPhoneProcessHolder` rule, since
-Launchpad does not link VPhoneCoreKit). Only a VM holder makes a machine
+Launchpad does not link VPhoneCoreKit; both are tested against one table, see
+[Rules Launchpad shares with the CLI](#rules-launchpad-shares-with-the-cli)). Only a VM holder makes a machine
 running. Until 2026-10-09 any holder did, so a `tail -f` on `Disk.img` showed
 the machine as running and `vphone-launchpad-cli vm start` refused it as
 "already running or busy" (PR #633 retest, L1). Any other holder leaves the
@@ -236,6 +242,61 @@ disk itself. The Launchpad CLI prints a note naming the holder.
 Blocks shared with a file outside the libraries (a `cp -c` copy elsewhere)
 count as the folder's own; the CLI's `vm template list/show` print only the
 allocated size.
+
+### Rules Launchpad shares with the CLI
+
+PR #633 left two rules written twice, once in VPhoneCoreKit for `vphone-cli`
+and once in Launchpad: which disk holder runs a machine, and whether a clone
+came from the template that has its identifier now. Launchpad does not link
+VPhoneCoreKit on purpose. It ships apart from `VPhone.bundle`, works with
+every bundle of its series, and drives each machine through the `vphone-cli`
+of the bundle that machine is bound to; VPhoneCoreKit is that bundle's
+implementation and changes with every bundle build. Linking it (or a slice
+of it, through a project reference from `VPhoneLaunchpad.xcodeproj` to
+`VPhoneKit.xcodeproj`) would compile Launchpad's build-time copy of the rule
+in place of the answer of the bundle it is talking to, and would pull the
+kit's package graph (ArgumentParser, libarchive) into Launchpad's build. It
+moves the copy into the linker rather than removing it. So, as of
+2026-10-09:
+
+- **Template match: asked of the CLI.** `vm list --json` already read each
+  machine's `TemplateSource.plist` (`template`), and Launchpad already runs it
+  every 5 s for each library. It now also reports `templateMatch`, decided by
+  `VPhoneMachineTemplateSource.isClone(of:)` against the template that
+  `VPhoneMachineTemplates.template(_:in:)` loads, and Launchpad only decodes
+  it (`VPhoneLaunchpadMachine.templateOrigin`). Launchpad no longer reads
+  either plist. The copy had already drifted: it took any frozen
+  `Template.plist` whose identifier matched its folder, while the CLI also
+  requires the key to match and the folder to load as a machine, so a
+  damaged template counted as present in Launchpad and as deleted in the CLI.
+  A bundle that does not report `templateMatch`, or reports a value this
+  Launchpad does not know, leaves the Template row out. 2.9 was not released
+  when the field was added, so it is part of the 2.9 series contract
+  (`minimumBundleComponents`), not a new series.
+- **Disk holder kind: one table, two copies.** Launchpad runs `lsof` itself
+  over every listed machine on each refresh, every second while it waits for
+  a machine it did not start to stop, and right before an operation that
+  needs the disk, and it leaves its own disk meter out by PID. Asking
+  `vphone-cli` would add a process and a library-wide `lsof` to every
+  `vphone-cli vm list` for a ten-line path test that is a host fact, not bundle data.
+  The two copies stay, and both are tested against
+  `VPhoneKit/VPhoneCoreKitTests/VirtualMachine/ProcessHolderKinds.json`:
+  `LaunchLayoutTests` checks `VPhoneProcessHolder.kind`, and
+  `VPhoneLaunchpad/Tests/TemplatesTests.sh` checks
+  `VPhoneLaunchpadDiskHolder.runsMachine` (running for `virtualMachine` and
+  `virtualizationService`). Changing either copy without the table, or the
+  table without both copies, fails a test.
+
+Other places where Launchpad reads the bundle's own files or repeats its
+values, found while doing this and left as they are: `config.plist`
+(`diskImage` for `lsof`, `guestProductType` with a `FirmwareOriginals`
+fallback, read in both `VPhoneLaunchpadMachine` and `VPhoneLaunchpadIPSWCache`),
+`restore-info.json` (`variant`, for the unfinished-install check that
+mirrors `vm launch`), the `.templates` layout for the disk meter, the
+`vm delete` note text (`VPhoneLaunchpadTemplateNotice`), and New Machine's
+removable apps and default languages, which repeat
+`VPhoneTemplateSlimmingRequest.defaultRemovedApps` and
+`VPhoneSystemTrim.defaultKeptLanguages`.
 
 ## Never booting once frozen
 

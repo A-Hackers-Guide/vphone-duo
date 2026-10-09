@@ -815,9 +815,6 @@ final class VPhoneLaunchpadMachineLibrary {
     /// What each listed machine takes on disk, measured off the main actor
     /// at most every `diskUsageInterval` seconds.
     private(set) var diskUsage: [Path: VPhoneLaunchpadDiskUsage] = [:]
-    /// The template each machine was cloned from (its `TemplateSource.plist`),
-    /// and whether it is the build that has that identifier now.
-    private(set) var templateSources: [Path: VPhoneLaunchpadTemplateOrigin] = [:]
     private var diskUsageMeasured: Date?
     private var isMeasuringDiskUsage = false
     /// A forced measurement asked for while one ran.
@@ -861,7 +858,6 @@ final class VPhoneLaunchpadMachineLibrary {
                 mayOpenNow: mayOpenNow,
             )
             diskUsage = measured.usage
-            templateSources = measured.sources
             templateUsage = measured.templates
             diskUsageMeasured = Date()
             isMeasuringDiskUsage = false
@@ -910,7 +906,7 @@ final class VPhoneLaunchpadMachineLibrary {
         templatesMayOpen: Bool,
         meter: VPhoneLaunchpadDiskMeter,
         mayOpenNow: @escaping @Sendable (String) async -> Bool,
-    ) async -> (usage: [Path: VPhoneLaunchpadDiskUsage], sources: [Path: VPhoneLaunchpadTemplateOrigin], templates: [String: VPhoneLaunchpadDiskUsage]) {
+    ) async -> (usage: [Path: VPhoneLaunchpadDiskUsage], templates: [String: VPhoneLaunchpadDiskUsage]) {
         // Templates are keyed as `usage(of:)` looks them up.
         var templateKeys: [String: String] = [:]
         for root in libraryRoots {
@@ -921,16 +917,14 @@ final class VPhoneLaunchpadMachineLibrary {
         let folders = machineFolders + templateKeys.keys.sorted().map { VPhoneLaunchpadDiskMeter.Folder(path: $0, mayOpen: templatesMayOpen) }
         let measured = await meter.measure(folders, mayOpenNow: mayOpenNow)
         var usage: [Path: VPhoneLaunchpadDiskUsage] = [:]
-        var sources: [Path: VPhoneLaunchpadTemplateOrigin] = [:]
         for path in paths {
             usage[path] = measured[path.url.path]
-            sources[path] = VPhoneLaunchpadTemplateOrigin.read(machine: path.url, libraryRoot: path.libraryRoot)
         }
         var templates: [String: VPhoneLaunchpadDiskUsage] = [:]
         for (folder, key) in templateKeys {
             templates[key] = measured[folder]
         }
-        return (usage, sources, templates)
+        return (usage, templates)
     }
 
     // MARK: - Templates
@@ -1295,16 +1289,12 @@ final class VPhoneLaunchpadMachineLibrary {
             })
         }
 
-        /// Disk use and template origins for the mock machines.
+        /// Disk use for the mock machines.
         func applyPreviewDiskUsage() {
             let research = VPhoneLaunchpadPreview.path("research-01")
             diskUsage = [
                 research: VPhoneLaunchpadDiskUsage(allocated: 17_812_000_000, exclusive: 612_000_000),
                 VPhoneLaunchpadPreview.labMachine: VPhoneLaunchpadDiskUsage(allocated: 21_406_000_000, exclusive: 3_240_000_000),
-            ]
-            templateSources = [
-                research: VPhoneLaunchpadTemplateOrigin(identifier: "52b1fcc75e0c", match: .current),
-                VPhoneLaunchpadPreview.labMachine: VPhoneLaunchpadTemplateOrigin(identifier: "2246f982776c", match: .current),
             ]
             diskUsageMeasured = Date()
         }
