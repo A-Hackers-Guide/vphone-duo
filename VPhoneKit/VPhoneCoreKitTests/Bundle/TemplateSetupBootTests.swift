@@ -61,6 +61,14 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
     var bootTime = 1000.0
     var downCalls = 0
     var pinnedName: String? = "p4-src"
+    /// The restore's pre-CFW panic report, written at the first boot after
+    /// CFW, and one daemon crash of the setup boot.
+    var crashReports = [
+        "/var/mobile/Library/Logs/CrashReporter/panic-full-2026-10-09-155009.000.ips",
+        "/var/mobile/Library/Logs/CrashReporter/duetexpertd-2026-10-09-155011.ips",
+    ]
+    var undeletableReports: Set<String> = []
+    var crashListRefused = false
 
     init(clock: FakeClock) {
         self.clock = clock
@@ -183,6 +191,18 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
             return ["setup_done": setupDone, "pending": !setupDone]
         case "apps.list":
             return ["apps": installed.map { ["bundle_id": $0] }]
+        case "logs.crashes":
+            if crashListRefused {
+                throw refused("unknown method logs.crashes", ["code": "unknown_method"])
+            }
+            return ["crashes": crashReports.map { ["path": $0, "name": ($0 as NSString).lastPathComponent] }, "count": crashReports.count]
+        case "files.remove":
+            let path = params["path"] as? String ?? ""
+            if undeletableReports.contains(path) {
+                throw refused("Operation not permitted", ["code": "failed"])
+            }
+            crashReports.removeAll { $0 == path }
+            return ["path": path, "removed": true]
         case "device.name.set":
             pinnedName = params["name"] as? String
             return ["name": NSNull(), "changed": true]
@@ -247,7 +267,7 @@ struct TemplateSetupBootTests {
             "apps.remove_system", "services.profile.apply", "services.profile",
             "processes.list", "system.reboot", "processes.list",
             "apfs.snapshots", "setup.status", "services.profile", "apps.list",
-            "device.name.set",
+            "logs.crashes", "files.remove", "files.remove", "device.name.set",
         ]))
         // Nothing slims before Setup is skipped and first-boot work settled.
         let firstRemoval = try #require(guest.calls.firstIndex(of: "apps.remove_system"))
@@ -264,6 +284,8 @@ struct TemplateSetupBootTests {
         #expect(outcome.serviceProfile == "trimmed")
         #expect(outcome.deviceNameCleared)
         #expect(guest.pinnedName == nil)
+        #expect(guest.crashReports.isEmpty)
+        #expect(outcome.clearedCrashReports.count == 2)
         #expect(Set(outcome.durations.keys) == Set(VPhoneTemplateSetupStep.allCases))
 
         // The offline trim records its tier before the setup boot, which
@@ -601,6 +623,72 @@ struct TemplateSetupBootTests {
         #expect(VPhoneTemplateSetupBoot.bootMarker(["processes": [["pid": 1, "start_time": 12.5]]]) == 12.5)
         #expect(VPhoneTemplateSetupBoot.bootMarker(["processes": [["pid": 2, "start_time": 12.5]]]) == nil)
         #expect(VPhoneTemplateSetupBoot.bootMarker([:]) == nil)
+    }
+
+    @Test func `the restore's panic report and the setup boot's crashes are cleared after the reboot`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        let outcome = try run(guest).get()
+        #expect(guest.crashReports.isEmpty)
+        #expect(outcome.clearedCrashReports == [
+            "panic-full-2026-10-09-155009.000.ips", "duetexpertd-2026-10-09-155011.ips",
+        ])
+        // After the reboot, so the reports of both boots go; before the shutdown.
+        let reboot = try #require(guest.calls.firstIndex(of: "system.reboot"))
+        let listing = try #require(guest.calls.firstIndex(of: "logs.crashes"))
+        #expect(reboot < listing)
+        #expect(outcome.warnings.isEmpty)
+    }
+
+    @Test func `a crash report that cannot be cleared is a warning, not a failure`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.undeletableReports = ["/var/mobile/Library/Logs/CrashReporter/duetexpertd-2026-10-09-155011.ips"]
+        let outcome = try run(guest).get()
+        #expect(outcome.isComplete)
+        #expect(outcome.clearedCrashReports == ["panic-full-2026-10-09-155009.000.ips"])
+        #expect(outcome.warnings.contains { $0.contains("could not delete 1 crash report(s)") })
+
+        let unlisted = FakeGuest(clock: FakeClock())
+        unlisted.crashListRefused = true
+        let second = try run(unlisted).get()
+        #expect(second.isComplete)
+        #expect(second.warnings.contains { $0.contains("could not list the crash reports") })
+        #expect(!unlisted.calls.contains("files.remove"))
+    }
+
+    @Test func `a setup boot told to keep the crash reports leaves them`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        let boot = VPhoneTemplateSetupBoot(
+            machine: guest,
+            plan: VPhoneTemplateSetupPlan(
+                slimming: VPhoneTemplateSlimmingRequest.defaultSlimming,
+                requiresEveryApp: true,
+                clearsCrashReports: false,
+            ),
+            clock: guest.clock,
+            log: { _ in },
+        )
+        let outcome = try boot.run()
+        #expect(outcome.isComplete)
+        #expect(guest.crashReports.count == 2)
+        #expect(!guest.calls.contains("logs.crashes"))
+    }
+
+    @Test func `only report files in a CrashReporter folder are deleted`() {
+        #expect(VPhoneTemplateSetupBoot.isCrashReport("/var/mobile/Library/Logs/CrashReporter/panic-full-2026-10-09-155009.000.ips"))
+        #expect(VPhoneTemplateSetupBoot.isCrashReport("/private/var/mobile/Library/Logs/CrashReporter/Retired/x.ips"))
+        #expect(!VPhoneTemplateSetupBoot.isCrashReport("/var/mobile/Library/Logs/CrashReporter/"))
+        #expect(!VPhoneTemplateSetupBoot.isCrashReport("/var/mobile/Library/Logs/CrashReporter/../../Preferences/x.plist"))
+        #expect(!VPhoneTemplateSetupBoot.isCrashReport("/var/mobile/Library/Preferences/com.apple.x.plist"))
+        #expect(!VPhoneTemplateSetupBoot.isCrashReport("Logs/CrashReporter/x.ips"))
+    }
+
+    @Test func `cleared reports are summarized by process, most first`() {
+        let names = [
+            "duetexpertd-2026-10-09-155011.ips", "duetexpertd-2026-10-09-155020.ips",
+            "panic-full-2026-10-09-155009.000.ips", "SiriSearchFeedback-2026-10-09-151008.ips",
+        ]
+        #expect(VPhoneTemplateSetupBoot.summarizeCrashReports(names)
+            == "4 crash report(s): duetexpertd ×2, SiriSearchFeedback ×1, panic-full ×1")
     }
 }
 

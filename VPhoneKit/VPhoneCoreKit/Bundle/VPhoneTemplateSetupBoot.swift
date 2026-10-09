@@ -112,6 +112,7 @@ public struct VPhoneTemplateSetupTimeouts: Equatable, Sendable {
     /// From `system.reboot` until vphoned of the new boot answers (P1: 20 s).
     public var reboot: TimeInterval = 300
     public var verify: TimeInterval = 120
+    public var crashReports: TimeInterval = 60
     public var deviceName: TimeInterval = 30
     /// The VM gives the guest 15 s to shut down before turning it off.
     public var stop: TimeInterval = 60
@@ -141,12 +142,17 @@ public struct VPhoneTemplateSetupPlan: Equatable, Sendable {
     /// Clear the device name `vphone-vm` pinned during this boot, so a clone
     /// does not show the template's name before its own VM pins its name.
     public var clearsDeviceName: Bool
+    /// Delete the crash reports the template's own boots left (above all the
+    /// restore's pre-CFW `initproc failed` panic, written at the first boot
+    /// after CFW), so a clone does not start with reports of boots it never had.
+    public var clearsCrashReports: Bool
     public var timeouts: VPhoneTemplateSetupTimeouts
 
     public init(
         slimming: VPhoneMachineTemplateSlimming,
         requiresEveryApp: Bool,
         clearsDeviceName: Bool = true,
+        clearsCrashReports: Bool = true,
         timeouts: VPhoneTemplateSetupTimeouts = .standard,
     ) {
         serviceProfile = slimming.serviceProfile
@@ -154,6 +160,7 @@ public struct VPhoneTemplateSetupPlan: Equatable, Sendable {
         removedApps = slimming.removedApps
         self.requiresEveryApp = requiresEveryApp
         self.clearsDeviceName = clearsDeviceName
+        self.clearsCrashReports = clearsCrashReports
         self.timeouts = timeouts
     }
 }
@@ -176,6 +183,7 @@ public enum VPhoneTemplateSetupStep: String, CaseIterable, Sendable, CustomStrin
     case serviceProfile = "service-profile"
     case reboot
     case verify
+    case crashReports = "crash-reports"
     case deviceName = "device-name"
     case stop
 
@@ -190,6 +198,7 @@ public enum VPhoneTemplateSetupStep: String, CaseIterable, Sendable, CustomStrin
         case .serviceProfile: "d/e. apply the service profile"
         case .reboot: "f. reboot"
         case .verify: "f. verify after the reboot"
+        case .crashReports: "clear the crash reports"
         case .deviceName: "clear the pinned device name"
         case .stop: "g. shut down"
         }
@@ -232,6 +241,8 @@ public struct VPhoneTemplateSetupOutcome: Equatable, Sendable {
     /// Labels the profile owns after it was applied.
     public var servicesOwned = 0
     public var verified = false
+    /// Names of the crash reports deleted before the shutdown.
+    public var clearedCrashReports: [String] = []
     public var deviceNameCleared = false
     public var stoppedCleanly = false
     public var durations: [VPhoneTemplateSetupStep: TimeInterval] = [:]
@@ -378,6 +389,7 @@ public final class VPhoneTemplateSetupBoot {
             }
             try step(.reboot) { try reboot() }
             try step(.verify) { try verify() }
+            try step(.crashReports) { clearCrashReports() }
             try step(.deviceName) { clearDeviceName() }
             try step(.stop) {
                 running = false
@@ -724,6 +736,65 @@ public final class VPhoneTemplateSetupBoot {
             problems.append("vphoned does not answer a ping")
         }
         return problems
+    }
+
+    /// The crash reports this machine's boots left go before it is frozen:
+    /// every clone would otherwise list them as its own. The first is always
+    /// a `panic-full` report of `initproc failed to start … libSystem.B.dylib
+    /// … (no dyld cache)`: the restore reboots into the installed system
+    /// before `cfw install` has put the dyld cache on the System volume, the
+    /// kernel records that panic, and iOS writes the report at the next
+    /// boot, which is the setup boot. Nothing in the template panicked.
+    /// Best effort: a report left behind is a warning.
+    private func clearCrashReports() {
+        guard plan.clearsCrashReports else { return }
+        let end = deadline(timeouts.crashReports)
+        do {
+            let reports = try (call("logs.crashes", [:], deadline: end)["crashes"] as? [[String: Any]] ?? [])
+                .compactMap { $0["path"] as? String }
+                .filter(Self.isCrashReport)
+            var left: [String] = []
+            for path in reports {
+                do {
+                    _ = try call("files.remove", ["path": path], deadline: end)
+                    outcome.clearedCrashReports.append((path as NSString).lastPathComponent)
+                } catch {
+                    left.append("\((path as NSString).lastPathComponent) (\(error))")
+                }
+            }
+            if !outcome.clearedCrashReports.isEmpty {
+                log("  cleared \(Self.summarizeCrashReports(outcome.clearedCrashReports))")
+            }
+            if !left.isEmpty {
+                let warning = "could not delete \(left.count) crash report(s): \(left.prefix(3).joined(separator: ", "))"
+                outcome.warnings.append(warning)
+                log("  warning: \(warning)")
+            }
+        } catch {
+            outcome.warnings.append("could not list the crash reports: \(error)")
+            log("  warning: could not list the crash reports: \(error)")
+        }
+    }
+
+    /// Only a report file in a CrashReporter folder: `logs.crashes` lists
+    /// nothing else; the check keeps `files.remove` off any other path it
+    /// might ever return.
+    public static func isCrashReport(_ path: String) -> Bool {
+        path.hasPrefix("/") && !path.contains("/../") && path.contains("/Logs/CrashReporter/")
+            && !path.hasSuffix("/")
+    }
+
+    /// `14 crash report(s): duetexpertd ×12, panic-full ×1, …`, by process.
+    public static func summarizeCrashReports(_ names: [String]) -> String {
+        var counts: [String: Int] = [:]
+        for name in names {
+            let stem = (name as NSString).deletingPathExtension
+            let process = stem.range(of: #"-\d{4}-\d{2}-\d{2}"#, options: .regularExpression)
+                .map { String(stem[..<$0.lowerBound]) } ?? stem
+            counts[process, default: 0] += 1
+        }
+        let parts = counts.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.map { "\($0.key) ×\($0.value)" }
+        return "\(names.count) crash report(s): \(parts.joined(separator: ", "))"
     }
 
     /// `vphone-vm` pinned the device name to this machine's name on connect.

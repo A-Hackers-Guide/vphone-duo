@@ -510,6 +510,7 @@ setup boot is the guest's first boot). It talks to vphoned through
 | d/e profile | `services.profile.apply {profile, groups, force}`, `services.profile` | 180 s | no `failed`; the record holds `signin_followup` and the extra groups; followupd and appleidsetupd disabled |
 | f reboot | `processes.list` (launchd's `start_time`), `system.reboot {force}` | 300 s | vphoned answers with another launchd start time |
 | f verify | `apfs.snapshots`, `setup.status`, `services.profile`, `apps.list`, `ping`, repeated | 120 s | no snapshot, Setup done, the profile recorded with `running` empty, no removed app listed |
+| crash reports | `logs.crashes`, `files.remove {path}` for each report under `/Logs/CrashReporter/` | 60 s | (a warning on failure) |
 | name | `device.name.set {}` | 30 s | (a warning on failure) |
 | g stop | SIGINT to `vphone-vm` | 60 s | it exits without "turning it off" (the guest shut down within its 15 s) |
 
@@ -621,6 +622,44 @@ The device name: `vphone-vm` pins the guest's name to the machine's name
 clone would show the template's name (its identifier, or the adopted
 machine's name) until its own VM connects, and its first DHCP lease would
 carry it (P1). The setup boot clears it last.
+
+The crash reports: every build's first boot after `cfw install` (the setup
+boot) writes a `panic-full-*.ips` of `initproc failed to start … Library not
+loaded: /usr/lib/libSystem.B.dylib … (no such file, no dyld cache)`. That
+panic is not the setup boot's. The restore reboots into the installed system
+before `cfw install` has copied the OS cryptex onto the System volume (vphone
+boots without the cryptex graft: every boot logs `cryptex1 sniff: ignition
+failed: 8`, then `dyld[1]: ignition disabled`), so launchd finds no dyld
+cache and the kernel panics; `vm create` and Launchpad wait for exactly that
+panic as the sign that the restore's reboot happened. iOS writes the report
+at the next boot, which is the setup boot, and the frozen template then gave
+every clone a kernel panic it never had, plus a dozen `duetexpertd` crashes
+(below). Matched by boot session UUID on 2026-10-09: `panic-full` reports in
+setup-boot and clone crash lists all name the session of the restore's
+post-restore boot in the `-dfu.log` (for example `A40A5DEA…` in
+`template-0fa581ca-dfu.log`, `AF2B2981…` in `template-9530cc5e-dfu.log`,
+written 2 s into that build's setup boot). A no-template machine gets the
+same report at its first boot. Console logs of installed guests showed no
+`panic(` in any boot: 0 in 35 boots of a trimmed, snapshot-deleted build, 19
+of a clone of a fixed template and 24 of a `--no-template` machine, by
+`system.reboot` and by `vm stop` + `vm start` (2026-10-09).
+
+After the verify step the setup boot lists the reports (`logs.crashes`) and
+deletes each one with `files.remove`; the report says `crash reports
+cleared: 13 crash report(s): duetexpertd ×11, SiriSearchFeedback ×1,
+panic-full ×1` (2026-10-09 build). A report it cannot delete is a warning, as
+the device name is.
+
+`duetexpertd` crashes about every 10 s from the first boot on every iOS 27.0
+guest, template or not (13 reports on a `--no-template` machine with no trim,
+no snapshot deletion and no service profile): `EXC_BREAKPOINT` in
+`ATXEnableMobileAssetDataVault` (AppPredictionInternal, from
+`_ATXInitializeInOwnerProcess`), "Failed to initialize datavault for
+DuetExpertCenterAsset". Neither the trim nor the slimming causes it; the
+trimmed profile turns `com.apple.duetexpertd` off, so it stops after the
+setup boot's reboot. The reports clones used to show were the template's
+first-boot ones; a clone of a template built with the cleanup had none after
+12 reboots and 6 cold starts. A machine without the profile keeps crashing.
 
 Measured on iPhone17,3 27.0 (24A435), 2026-10-08: Launchpad created
 `p4-src` (first boot at Setup), `vm template setup p4-src` took 2 min 16 s

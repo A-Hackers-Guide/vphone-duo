@@ -189,6 +189,9 @@ enum VPhoneTemplateSetupRun {
         }
         print("    services: \(services)\(outcome.serviceProfile == "none" ? "" : " (\(outcome.servicesOwned) owned)")")
         print("    apps removed: \(outcome.removedApps.isEmpty ? "none" : outcome.removedApps.joined(separator: ", "))")
+        if !outcome.clearedCrashReports.isEmpty {
+            print("    crash reports cleared: \(VPhoneTemplateSetupBoot.summarizeCrashReports(outcome.clearedCrashReports))")
+        }
         let retried = outcome.retriedUnregistrations.sorted { $0.key < $1.key }
         if !retried.isEmpty {
             print("    unregistered after retries: \(retried.map { "\($0.key) (\($0.value) attempts)" }.joined(separator: ", "))")
