@@ -88,7 +88,7 @@ GYROSCOPE_SOURCES := $(call find_sources,Gyroscope)
 GYROSCOPE_INPUTS := $(call find_headers,Gyroscope) $(call find_folders,Gyroscope)
 ATTITUDE := $(STAGE)/attitude/libvphoneattitude.dylib
 ATTITUDE_SOURCES := $(call find_sources,Attitude)
-ATTITUDE_INPUTS := $(call find_headers,Attitude) $(call find_folders,Attitude)
+ATTITUDE_INPUTS := $(call find_headers,Attitude) $(call find_folders,Attitude) Shared/AttitudeProcess.h
 GPU_PLUGIN := $(STAGE)/gpu/libAppleParavirtCompilerPluginIOGPUFamily.dylib
 GPU_PLUGIN_SOURCES := $(wildcard GraphicLoader/*.mm)
 GPU_PLUGIN_INCLUDES := $(wildcard GraphicLoader/*.h GraphicLoader/*.hpp GraphicLoader/*.inc)
@@ -316,6 +316,15 @@ test-attitude:
 		-o $(OUT)/AttitudeLockOrderTests Tests/AttitudeLockOrderTests.m $(ATTITUDE_SOURCES) \
 		-framework Foundation -framework CoreMotion
 	@$(OUT)/AttitudeLockOrderTests
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror -Wno-unused-parameter -IAttitude \
+		-DVP_ATTITUDE_NOTIFICATION='"com.vphone.motion.attitude.lifecycle-test"' \
+		-DVP_ATTITUDE_MANAGER_CLASS='"VPhoneTestMotionManager"' \
+		-o $(OUT)/AttitudeLifecycleTests Tests/AttitudeLifecycleTests.m $(ATTITUDE_SOURCES) \
+		-framework Foundation -framework CoreMotion
+	@$(OUT)/AttitudeLifecycleTests
+	@mkdir -p $(OUT)/attitude-scope/System/Library/CoreServices/SpringBoard.app
+	@cp $(OUT)/AttitudeLifecycleTests $(OUT)/attitude-scope/System/Library/CoreServices/SpringBoard.app/SpringBoard
+	@$(OUT)/attitude-scope/System/Library/CoreServices/SpringBoard.app/SpringBoard
 
 test-gyroscope:
 	@mkdir -p $(OUT)

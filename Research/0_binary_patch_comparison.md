@@ -281,6 +281,22 @@
 > guest cross-compilation passed; manual guest acceptance remains.
 > Contract and validation: `Research/Guest/virtual_attitude.md`.
 
+> **Device attitude respring fix (2026-10-09; guest acceptance pending):**
+> Two iOS 27.0.1 SpringBoard reports (19:41:21 and 19:42:51) show a
+> Core Motion thread `SIGSEGV` at `0x10`, while the main thread calls native
+> stop through `VPhoneAttitudeSession` during UIKit motion-effect subscription.
+> The app-path loader had admitted SpringBoard; a fresh simulated session also
+> stopped native updates without a preceding native start. SystemHook and the
+> attitude dylib now exclude `/System/Library/` services and SpringBoard copies;
+> native stop runs only for a previously forwarded native subscription.
+> `system-apps-cfw-attitude` keeps its identifier, selection and iOS 18+ gate;
+> no kernel, DSC or system executable patch is added. The new sensorless
+> lifecycle regression fails before the stop guard and passes after it;
+> sample, real host hook and injection-scope tests also pass. All 51 catalogue/
+> model tests in six suites passed, and the full VPhone Debug bundle built,
+> passed admission and strict deep signature verification. Updating the
+> guest environment and rebooting is required for deployment verification.
+
 > **Current launchd hook (2026-09-25; isolated VM verification):**
 > `cfw install` now places `launchdhook-vphone.dylib` and a diagnostic
 > `SystemHook-vphone.dylib` in `/usr/lib`, links `/vh` to the launchd hook,

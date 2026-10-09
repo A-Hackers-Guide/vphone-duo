@@ -27,6 +27,11 @@ does not synthesize angular velocity or UIKit/display orientation changes.
 Guest System declares `system-apps-cfw-attitude`, selected by both presets on
 iOS 18+. It adds `/usr/lib/libvphoneattitude.dylib`. SystemHook loads it into
 apps before the optional tweak loader; no bootstrap or new daemon is required.
+The attitude loader excludes `/System/Library/` processes and SpringBoard
+copies, even though their executable paths can contain `.app/`. The dylib
+enforces the same exclusion before registering notifications or replacing
+methods, so an older SystemHook cannot activate the hook in those services
+after a live library update.
 Safe-mode/injection-disable flags still apply. No system executable, kernel or
 DSC bytes change. This intercepts the app's public Core Motion boundary;
 it does not claim that raw gyro HID events are fused attitude samples.
@@ -45,12 +50,17 @@ copies, secure coding and relative quaternion multiplication. Weak timer
 captures and cancellation prevent a timer retaining a released manager.
 Enabling/disabling an existing subscription switches between simulation and
 retained native implementations, including native availability when disabled.
+Native stop is forwarded only for a subscription previously forwarded to
+native start. A new or purely simulated subscription never initializes native
+Core Motion by stopping it; repeated stops remain local after native shutdown.
 
 ### Lock order
 
-"Apps" are paths containing `.app/`, so SpringBoard
-(`/System/Library/CoreServices/SpringBoard.app/SpringBoard`) loads the hook
-too. Core Motion's `-[CMMotionManager setDeviceMotionUpdateInterval:]` (and
+The original app gate matched every path containing `.app/`, so SpringBoard
+(`/System/Library/CoreServices/SpringBoard.app/SpringBoard`) loaded the hook
+too. The respring fix described below now excludes system UI services; the
+lock-order rule still applies to regular app consumers. Core Motion's
+`-[CMMotionManager setDeviceMotionUpdateInterval:]` (and
 other methods) hop synchronously to its `com.apple.CoreMotion.MotionThread`,
 and blocks on that thread call the public getters, such as
 `isDeviceMotionActive`, on the same manager. The first version held the
@@ -116,6 +126,51 @@ enable simulation, compare polling/callback Euler radians, quaternion and
 gravity at zero and single-axis 90° poses. Check reset/disable while subscribed,
 stopped-manager silence, and relaunch after blocking the patch. Host runtime
 checks do not establish guest injection/sandbox acceptance or every app's API.
+
+## SpringBoard respring investigation (2026-10-09)
+
+The reported black screen followed by the Lock Screen is a SpringBoard crash,
+not a VM reboot. Reports `SpringBoard-2026-10-09-194121.ips` and
+`SpringBoard-2026-10-09-194251.ips` on iOS 27.0.1 (24A446), cloudOS 26.4,
+both show `EXC_BAD_ACCESS` / `SIGSEGV` at address `0x10` on
+`com.apple.CoreMotion.MotionThread`. The main thread waits in native Core
+Motion from `-[VPhoneAttitudeSession stop]`, called by
+`startWithFrame:queue:handler:` → `VPhoneStartCallback` → UIKit's
+`-[_UIMotionEffectCoreMotionEventProvider startGeneratingEvents]`.
+Both reports list `/usr/lib/libvphoneattitude.dylib` in SpringBoard.
+
+The `.app/` injection gate admitted
+`/System/Library/CoreServices/SpringBoard.app/SpringBoard`. Separately, every
+new simulated subscription called native stop despite never having called
+native start. The reports establish that this path reached guest Core Motion
+and crashed its motion thread. The console's CloudKit preferences denial,
+RunningBoard faults and “No accelerometer” message do not supply the crash
+stack; the last message is consistent with the sensorless guest.
+
+Fix: exclude system UI services in both loaders and guard native stop with
+the session's native-start tracking. The sensorless lifecycle harness fails
+the `stops == 0` assertion before that guard and passes after it. It covers
+stop before start, simulated start/restart/stop, repeated stop, native forwarding
+of unsupported reference frames, and native-to-simulated switching. Existing
+real host hook tests still cover callbacks, polling and live enable/disable.
+The upstream MotionThread lock-order regression test passes alongside the
+sensorless lifecycle and process-exclusion tests.
+Injection tests cover SpringBoard, AccessibilityUIServer, relocated SpringBoard,
+Settings and a container-installed consumer.
+The lifecycle executable is also run from a `/System/Library/`-shaped
+SpringBoard path to verify that the dylib constructor leaves native methods
+intact. All host attitude/injection checks and 51 catalogue/model tests in six
+suites passed; the attitude and SystemHook dylibs cross-compiled for iPhoneOS.
+The full VPhone Debug bundle built successfully, passed bundle admission and
+strict deep signature verification.
+
+Deployment acceptance remains pending: build and install the new bundle,
+update the stopped guest's environment and boot it. Confirm the new
+SpringBoard PID has no `attitude-hook=... result=loaded` entry, enable/edit/
+disable attitude while opening/closing apps and locking/unlocking, and check
+that no new SpringBoard crash reports appear. Confirm a regular consumer still
+receives the expected polling and callback poses. Reboot is needed to apply
+SystemHook; replacing a dylib cannot unhook a process that already loaded it.
 
 ABI sources: Xcode iPhoneOS SDK CMMotionManager.h, CMAttitude.h, CMDeviceMotion.h,
 system notify.h, Apple [CMAttitude](https://developer.apple.com/documentation/coremotion/cmattitude)

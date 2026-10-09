@@ -70,6 +70,9 @@ CoreMotion acceptance is still pending; see `Research/Guest/virtual_gyroscope.md
 `system-apps-cfw-attitude` installs `libvphoneattitude.dylib`, loaded by
 SystemHook into apps. It supplies a stationary Core Motion pose through
 `motion.attitude.set/get/clear`, independently of gyro angular velocity.
+System UI services under `/System/Library/` and SpringBoard copies are excluded
+by both SystemHook and the attitude dylib itself. Purely simulated subscriptions
+never call native Core Motion stop before native start.
 Removing the selected library and relaunching apps reverts the hook.
 `make test-attitude` checks samples and the actual host Core Motion subscription
 runtime. Guest validation is manual; see `Research/Guest/virtual_attitude.md`.

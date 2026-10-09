@@ -244,7 +244,7 @@ public enum FirmwareGuestSystemPatchSet {
             VPhonePatchDeclaration(
                 identifier: attitude,
                 title: "Device attitude simulation",
-                summary: "Installs libvphoneattitude.dylib, loaded by SystemHook into apps. Supplies a stationary Core Motion pose configured through vphoned, with polling and callback updates in the arbitrary vertical reference frame. Disabling simulation restores native motion; removing the library reverts the hook on app relaunch.",
+                summary: "Installs libvphoneattitude.dylib, loaded by SystemHook into apps outside system UI services such as SpringBoard. Supplies a stationary Core Motion pose configured through vphoned, with polling and callback updates in the arbitrary vertical reference frame. Disabling simulation restores native motion; removing the library reverts the hook on app relaunch.",
                 target: .guestFile(path: "/usr/lib/libvphoneattitude.dylib"),
                 applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 18, minor: 0)),
             ),
