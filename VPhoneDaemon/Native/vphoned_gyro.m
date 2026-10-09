@@ -1,6 +1,8 @@
 #import "Include/VphonedNative.h"
 #import "../../VPhoneGuestComponents/Gyroscope/VPhoneGyroscopeState.h"
+#include <errno.h>
 #include <notify.h>
+#include <signal.h>
 
 static id VPhoneGyroscopeRead(CFStringRef key) {
     return CFBridgingRelease(CFPreferencesCopyValue(key, CFSTR(VP_GYRO_DOMAIN), CFSTR("mobile"),
@@ -19,7 +21,18 @@ NSDictionary *vp_gyro_get(void) {
         [status[@"enumerated"] isKindOfClass:NSNumber.class]) {
         result[@"provider"] = status;
         double age = [NSDate date].timeIntervalSince1970 - [status[@"updated_at"] doubleValue];
-        result[@"provider_running"] = @([status[@"enumerated"] boolValue] && age >= 0 && age < 10);
+        // The provider republishes every two seconds only while it dispatches
+        // samples; idle, its status is as old as the last transition, and the
+        // backboardd that wrote it must still be running instead.
+        BOOL dispatching = [status[@"report_interval_us"] isKindOfClass:NSNumber.class] &&
+                           [status[@"report_interval_us"] unsignedLongLongValue] > 0;
+        BOOL alive = NO;
+        if ([status[@"pid"] isKindOfClass:NSNumber.class]) {
+            pid_t pid = [status[@"pid"] intValue];
+            alive = pid > 1 && (kill(pid, 0) == 0 || errno == EPERM);
+        }
+        BOOL fresh = age >= 0 && age < 10;
+        result[@"provider_running"] = @([status[@"enumerated"] boolValue] && alive && (fresh || !dispatching));
     } else {
         result[@"provider"] = NSNull.null;
         result[@"provider_running"] = @NO;

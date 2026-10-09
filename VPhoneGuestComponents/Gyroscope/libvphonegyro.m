@@ -10,6 +10,7 @@
 @interface VPhoneGyroscopeProvider : NSObject
 @property (nonatomic, strong) dispatch_queue_t queue;
 @property (nonatomic, strong) dispatch_source_t timer;
+@property (nonatomic, strong) dispatch_source_t heartbeat;
 @property (nonatomic, strong) id<VPhoneGyroscopeHIDService> service;
 @property (nonatomic) Class<VPhoneGyroscopeHIDEvent> eventClass;
 @property (nonatomic, strong) NSMutableDictionary *properties;
@@ -54,6 +55,18 @@
     uint64_t period = self.enumerated && self.interval ? self.interval * NSEC_PER_USEC : DISPATCH_TIME_FOREVER;
     dispatch_source_set_timer(self.timer, period == DISPATCH_TIME_FOREVER ? DISPATCH_TIME_FOREVER : DISPATCH_TIME_NOW,
                               period, NSEC_PER_MSEC);
+    // The status is republished every two seconds only while samples flow,
+    // to keep its dispatch counts current. Otherwise it changes only at the
+    // transitions, which publish it themselves, and vphoned judges the
+    // provider by its pid. An unconditional heartbeat had backboardd rewrite
+    // the preferences domain through cfprefsd every two seconds for the
+    // guest's whole life.
+    if (self.heartbeat) {
+        BOOL flowing = period != DISPATCH_TIME_FOREVER;
+        dispatch_source_set_timer(self.heartbeat,
+                                  flowing ? dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC) : DISPATCH_TIME_FOREVER,
+                                  2 * NSEC_PER_SEC, 100 * NSEC_PER_MSEC);
+    }
 }
 
 - (id)sample {
@@ -141,15 +154,12 @@
             }
         }
     });
+    self.heartbeat = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, self.queue);
+    dispatch_source_set_event_handler(self.heartbeat, ^{ [self publishStatus]; });
     [self updateTimer];
     dispatch_resume(self.timer);
+    dispatch_resume(self.heartbeat);
     [self createService];
-    [self heartbeat];
-}
-
-- (void)heartbeat {
-    [self publishStatus];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), self.queue, ^{ [self heartbeat]; });
 }
 
 // MARK: - HIDVirtualEventServiceDelegate selectors
