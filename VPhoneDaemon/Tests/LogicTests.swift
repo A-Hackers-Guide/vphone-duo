@@ -3,8 +3,9 @@ import Foundation
 // MARK: - Harness
 
 /// Checks the guest-independent parts of vphoned on the Mac: the service
-/// profile lists and bookkeeping, the first-boot settle verdict and the device
-/// name rule. `run-logic-tests.sh` builds this file with those sources.
+/// profile lists and bookkeeping, the first-boot settle verdict (data
+/// migration included) and the device name rule. `run-logic-tests.sh` builds
+/// this file with those sources.
 nonisolated(unsafe) var failures = 0
 nonisolated(unsafe) var checks = 0
 
@@ -30,6 +31,7 @@ enum LogicTests {
         noneRestoresOnlyRecorded()
         recordRoundTrip()
         settleVerdicts()
+        dataMigrationRecord()
         deviceNameRule()
         print("\(checks) checks, \(failures) failures")
         exit(failures == 0 ? 0 : 1)
@@ -243,6 +245,47 @@ enum LogicTests {
         expectEqual(restarted.reasons, ["installd used 0.90 s CPU between polls"])
         let restartedIdle = GuestFirstBootSettle.evaluate([sample(0), sample(5, pid: 120, cpu: 0.05), sample(10, pid: 120, cpu: 0.06)], stablePolls: 3)
         expect(restartedIdle.settled, "a new, idle installd: \(restartedIdle.reasons)")
+
+        // Data migration holds the verdict back until the latest poll has it
+        // done; an unknown state (no build version) does not.
+        func migrating(_ time: Double, _ done: Bool?) -> Sample {
+            var polled = sample(time)
+            polled.dataMigrationDone = done
+            return polled
+        }
+        let pending = GuestFirstBootSettle.evaluate([migrating(0, false), migrating(5, false), migrating(10, false)], stablePolls: 3)
+        expectEqual(pending.reasons, ["data migration has not finished"])
+        let finished = GuestFirstBootSettle.evaluate([migrating(0, false), migrating(5, false), migrating(10, true)], stablePolls: 3)
+        expect(finished.settled, "migration done in the latest poll: \(finished.reasons)")
+        expect(GuestFirstBootSettle.evaluate([migrating(0, nil), migrating(5, nil), migrating(10, nil)], stablePolls: 3).settled, "unknown is not pending")
+        let stillStaging = GuestFirstBootSettle.evaluate([migrating(0, false), migrating(5, false), {
+            var polled = migrating(10, false)
+            polled.stagedSystemApps = 30
+            return polled
+        }()], stablePolls: 3)
+        expectEqual(stillStaging.reasons, ["staged_system_apps has 30 entries", "data migration has not finished"])
+    }
+
+    static func dataMigrationRecord() {
+        func done(_ build: String?, _ last: String?, _ results: String?, running: Bool = true) -> Bool? {
+            GuestFirstBootSettle.dataMigrationDone(
+                build: build, lastSystemVersion: last, lastResultsBuild: results, migratorRunning: running,
+            )
+        }
+        // A fresh restore: com.apple.migration is empty until DataMigrator ends.
+        expectEqual(done("24A435", nil, nil), false)
+        expectEqual(done("24A435", "24A435", "24A435"), true)
+        expectEqual(done("24A435", "24A435", nil), true)
+        expectEqual(done("24A435", nil, "24A435"), true)
+        expectEqual(done("24A435", "24A435", "24A435", running: false), true)
+        // The build changed (an update): the old record is not this build's.
+        expectEqual(done("24A446", "24A435", "24A435"), false)
+        // Nothing recorded and DataMigrator not running: unknown, never waited for.
+        expectEqual(done("24A435", nil, nil, running: false), nil)
+        expectEqual(done(nil, "24A435", "24A435"), nil)
+        expectEqual(done("", nil, nil), nil)
+        let migrator = "/System/Library/PrivateFrameworks/DataMigration.framework/XPCServices/com.apple.datamigrator.xpc/com.apple.datamigrator"
+        expect(migrator.hasSuffix(GuestFirstBootSettle.dataMigratorSuffix), "the path seen on 27.0")
     }
 
     // MARK: - Device Name
