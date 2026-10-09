@@ -87,6 +87,12 @@ struct VPhoneVirtualMachineStopCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "stop",
         abstract: "Stop a running VM bundle",
+        discussion: """
+        Sends SIGINT to the machine's vphone-vm, waits, then sends SIGKILL to whatever of the \
+        machine is left. Only processes that run a machine are ever signalled: vphone-vm and \
+        Virtualization's VM service holding this machine's disk. Any other process that has the \
+        disk open (Launchpad measuring it, Spotlight, a backup tool) is named, never signalled.
+        """,
     )
 
     @OptionGroup var lib: VPhoneLibraryOption
@@ -96,7 +102,7 @@ struct VPhoneVirtualMachineStopCommand: ParsableCommand {
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
         let bundle = try lib.library.bundle(named: name)
-        // Every PID lsof reports for this path gets SIGINT and then SIGKILL, so
+        // The holders lsof reports for this path decide what is signalled, so
         // it must be the bundle's own disk: a plain name inside the bundle and
         // a regular file, never a symbolic link to something shared like
         // /dev/null.
@@ -106,12 +112,15 @@ struct VPhoneVirtualMachineStopCommand: ParsableCommand {
             return
         }
 
-        func runningPIDs() -> [Int32] {
+        /// Every process holding the disk now, by executable. Looked up again
+        /// before each signal, so a PID reused by another program meanwhile is
+        /// not taken for the VM.
+        func holders() -> (machine: [VPhoneProcessHolder], others: [VPhoneProcessHolder]) {
             guard let r = try? VPhoneProcessRunner.runCapturing(
                 URL(fileURLWithPath: "/usr/sbin/lsof"),
                 ["-t", "--", disk.path],
-            ) else { return [] }
-            return VPhoneLsof.parsePIDs(r.stdout)
+            ) else { return ([], []) }
+            return VPhoneProcessHolder.classify(VPhoneLsof.parsePIDs(r.stdout).map { VPhoneProcessHolder(pid: $0) })
         }
 
         // The disk is held by Virtualization's service, not by vphone-vm. A
@@ -119,31 +128,47 @@ struct VPhoneVirtualMachineStopCommand: ParsableCommand {
         // with "the virtual machine stopped unexpectedly". vphone-vm quits on
         // SIGINT and the service follows it, so vphone-vm is the one asked.
         let virtualMachines = VPhoneGuestProcesses.virtualMachinePIDs(config: bundle.configURL)
-        let holders = runningPIDs()
-        guard !virtualMachines.isEmpty || !holders.isEmpty else { print("\(name): not running"); return }
+        let initial = holders()
+        guard !virtualMachines.isEmpty || !initial.machine.isEmpty else {
+            if !initial.others.isEmpty {
+                print("\(name): not running; its disk is open in \(VPhoneProcessHolder.describe(initial.others)), "
+                    + "which does not run it and was not signalled")
+            } else {
+                print("\(name): not running")
+            }
+            return
+        }
 
-        // Without a vphone-vm (one started some other way), only the
-        // processes holding the disk are left to ask.
-        let asked = virtualMachines.isEmpty ? holders : virtualMachines
+        // Without a vphone-vm of this config (one started some other way),
+        // only the VM processes holding the disk are left to ask.
+        let asked = virtualMachines.isEmpty ? initial.machine.map(\.pid) : virtualMachines
         print("\(name): sending SIGINT to \(asked.map(String.init).joined(separator: ", "))")
         for pid in asked {
             kill(pid, SIGINT)
         }
 
-        func remaining() -> [Int32] {
-            Array(Set(virtualMachines.filter { kill($0, 0) == 0 } + runningPIDs())).sorted()
+        func remaining() -> (machine: [Int32], others: [VPhoneProcessHolder]) {
+            let held = holders()
+            // Found again by its --config rather than by the PIDs found first,
+            // which another process may have taken once vphone-vm exited.
+            let alive = VPhoneGuestProcesses.virtualMachinePIDs(config: bundle.configURL)
+            return (Array(Set(alive + held.machine.map(\.pid))).sorted(), held.others)
         }
         var waited = 0
-        while waited < timeout, !remaining().isEmpty {
+        while waited < timeout, !remaining().machine.isEmpty {
             Thread.sleep(forTimeInterval: 1)
             waited += 1
         }
-        let survivors = remaining()
+        let (survivors, others) = remaining()
         if !survivors.isEmpty {
             print("\(name): force-killing \(survivors.map(String.init).joined(separator: ", "))")
             for pid in survivors {
                 kill(pid, SIGKILL)
             }
+        }
+        if !others.isEmpty {
+            print("\(name): its disk is also open in \(VPhoneProcessHolder.describe(others)), "
+                + "which does not run it and was not signalled")
         }
         print("\(name): stopped")
     }

@@ -155,12 +155,32 @@ every 30 s, with a 15 s mapping budget after which the rest is mapped on a
 later pass (those folders show no exclusive size meanwhile).
 
 Mapping opens the file (`O_EVTONLY`), and while it is open `lsof` lists
-Launchpad for the image. `vm stop` signals whoever holds a disk, and `cfw
-install` refuses a disk someone holds, so Launchpad never opens a folder it is
-working on (a creation, a template build, an export, an install), keeps a
-stopped machine's last ranges until its files change, and leaves its own
-process out when it asks `lsof` which machines run. A `vphone-cli` run outside
-Launchpad in the ~0.1 s a changed image is being mapped can still see it held.
+Launchpad for the image. `cfw install` refuses a disk someone holds, so
+Launchpad never opens a folder it is working on (a creation, a template build,
+an export, an install), keeps a stopped machine's last ranges until its files
+change, and leaves its own process out when it asks `lsof` which machines run.
+A `vphone-cli` run outside Launchpad in the ~0.1 s a changed image is being
+mapped can still see it held.
+
+What a holder is decides what the CLI does with it
+(`VPhoneProcessHolder`, by `proc_pidpath`). Only `vphone-vm` (any copy of the
+bundle) and Virtualization's VM service
+(`Virtualization.framework/…/com.apple.Virtualization.VirtualMachine`) run a
+machine. `vm stop` asks the machine's `vphone-vm` (found by `--config`) with
+SIGINT, or, without one, the VM processes holding its disk; after the timeout
+it SIGKILLs only VM processes still holding the disk or the `vphone-vm` of
+that config, found again so a reused PID is not hit. Any other holder
+(Launchpad's meter, Spotlight, a backup tool, a trim or rebase attaching the
+image) is named and never signalled. Until 2026-10-09 `vm stop` SIGINTed every
+`lsof` holder when it found no `vphone-vm` and SIGKILLed every holder left
+after the timeout, so a stop that hit the meter's 0.1 s window could kill
+Launchpad (PR #633 retest, N2). `cfw install`, `update-environment` and
+`update-kernel` still refuse any other holder, as do clone, snapshot, revert,
+adopt, trim and the setup boot (`VPhoneBundleActivity.requireStopped`, over
+`Disk.img`, `SEPStorage` and `nvram.bin`): a file another process has open is
+not standing still. Their refusals name each holder (`process 900
+vphone-launchpad`) and say when none of them runs the VM, so a reader is not
+taken for a running machine.
 
 Blocks shared with a file outside the libraries (a `cp -c` copy elsewhere)
 count as the folder's own; the CLI's `vm template list/show` print only the

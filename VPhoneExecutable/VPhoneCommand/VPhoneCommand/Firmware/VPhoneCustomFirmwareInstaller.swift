@@ -194,9 +194,7 @@ struct VPhoneCustomFirmwareInstaller {
         )
         // openDiskImage holds our verified descriptor throughout the install,
         // so lsof always lists this process even when the VM is stopped.
-        guard !VPhoneLsof.parsePIDs(busy.stdout).contains(where: { $0 != getpid() }) else {
-            throw ValidationError("The VM disk is in use. Stop the VM, then run \(mode.summary) again.")
-        }
+        try Self.requireDiskUnused(lsofOutput: busy.stdout, rerun: "run \(mode.summary) again")
         // An environment update is exactly the case where there is no restore
         // tree left: it is deleted once the VM has booted.
         let restore = mode == .full
@@ -465,6 +463,18 @@ struct VPhoneCustomFirmwareInstaller {
         }
     }
 
+    /// Refuses unless no process but this one holds the disk. Any other
+    /// holder refuses, whatever it is: the install rewrites the disk under
+    /// it. The refusal names each holder's executable, so a process that
+    /// only reads the image (Launchpad measuring it, a backup tool) is not
+    /// taken for a running VM.
+    static func requireDiskUnused(lsofOutput: String, rerun: String) throws {
+        let holders = VPhoneLsof.parsePIDs(lsofOutput).filter { $0 != getpid() }.map { VPhoneProcessHolder(pid: $0) }
+        if let refusal = VPhoneProcessHolder.diskRefusal(holders, rerun: rerun) {
+            throw ValidationError(refusal)
+        }
+    }
+
     /// Replace only the Preboot kernelcache, keeping every volume.
     ///
     /// The booting kernel lives in Preboot as an IMG4. `fw patch` has already
@@ -491,9 +501,7 @@ struct VPhoneCustomFirmwareInstaller {
         let busy = try VPhoneProcessRunner.runCapturing(
             URL(fileURLWithPath: "/usr/sbin/lsof"), ["-t", "--", diskPath],
         )
-        guard !VPhoneLsof.parsePIDs(busy.stdout).contains(where: { $0 != getpid() }) else {
-            throw ValidationError("The VM disk is in use. Stop the VM, then run the kernel update again.")
-        }
+        try Self.requireDiskUnused(lsofOutput: busy.stdout, rerun: "run the kernel update again")
 
         let work = try makeWorkDirectory()
         defer {

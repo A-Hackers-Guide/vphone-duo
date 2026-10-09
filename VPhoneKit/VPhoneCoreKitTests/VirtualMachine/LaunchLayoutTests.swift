@@ -14,6 +14,72 @@ struct LaunchLayoutTests {
         #expect(VPhoneLsof.parsePIDs("") == [])
     }
 
+    // MARK: - Disk holders
+
+    private static let service = "/System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/"
+        + "com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine"
+
+    @Test func `only vphone-vm and Virtualization's VM service count as running a machine`() {
+        let kind = VPhoneProcessHolder.kind(executablePath:)
+        #expect(kind("/Library/Application Support/vphone-launchpad/Bundles/2.9.0/VPhone.bundle/Contents/MacOS/vphone-vm") == .virtualMachine)
+        #expect(kind("/Users/me/vphone-cli/.build/XcodeBundle/Build/Products/Release/VPhone.bundle/Contents/MacOS/vphone-vm") == .virtualMachine)
+        #expect(kind(Self.service) == .virtualizationService)
+        // Processes that only open the disk.
+        #expect(kind("/Applications/vphone-launchpad.app/Contents/MacOS/vphone-launchpad") == .other)
+        #expect(kind("/System/Library/Frameworks/CoreServices.framework/Frameworks/Metadata.framework/Versions/A/Support/mds_stores") == .other)
+        #expect(kind("/usr/sbin/lsof") == .other)
+        #expect(kind("/Library/Application Support/vphone-launchpad/Bundles/2.9.0/VPhone.bundle/Contents/MacOS/vphone-cli") == .other)
+        // Another program that takes the service's name is not it.
+        #expect(kind("/tmp/com.apple.Virtualization.VirtualMachine") == .other)
+        #expect(kind("/tmp/vphone-vm-helper") == .other)
+        // A process that is gone or hidden is never signalled.
+        #expect(kind(nil) == .other)
+        #expect(kind("") == .other)
+    }
+
+    @Test func `holders split into the machine's processes and the rest, in PID order`() {
+        let holders = [
+            VPhoneProcessHolder(pid: 900, executablePath: "/Applications/vphone-launchpad.app/Contents/MacOS/vphone-launchpad"),
+            VPhoneProcessHolder(pid: 412, executablePath: Self.service),
+            VPhoneProcessHolder(pid: 77, executablePath: nil),
+            VPhoneProcessHolder(pid: 410, executablePath: "/opt/VPhone.bundle/Contents/MacOS/vphone-vm"),
+        ]
+        let (machine, others) = VPhoneProcessHolder.classify(holders)
+        #expect(machine.map(\.pid) == [410, 412])
+        #expect(others.map(\.pid) == [77, 900])
+        #expect(VPhoneProcessHolder.describe(others) == "77 unknown, 900 vphone-launchpad")
+        #expect(VPhoneProcessHolder.classify([]).machine.isEmpty)
+    }
+
+    @Test func `a disk refusal says whether the holder runs the machine`() throws {
+        #expect(VPhoneProcessHolder.diskRefusal([], rerun: "run cfw install again") == nil)
+        let meter = VPhoneProcessHolder(pid: 900, executablePath: "/Applications/vphone-launchpad.app/Contents/MacOS/vphone-launchpad")
+        let reader = try #require(VPhoneProcessHolder.diskRefusal([meter], rerun: "run cfw install again"))
+        #expect(reader.contains("900 vphone-launchpad"))
+        #expect(reader.contains("does not run the VM"))
+        #expect(!reader.contains("is running"))
+        #expect(reader.hasSuffix("then run cfw install again."))
+        let vm = VPhoneProcessHolder(pid: 412, executablePath: Self.service)
+        let running = try #require(VPhoneProcessHolder.diskRefusal([meter, vm], rerun: "run cfw install again"))
+        #expect(running.hasPrefix("The VM is running (process 412 com.apple.Virtualization.VirtualMachine, 900 vphone-launchpad)."))
+    }
+
+    @Test func `a running refusal names each holder's executable`() {
+        let meter = VPhoneProcessHolder(pid: 900, executablePath: "/Applications/vphone-launchpad.app/Contents/MacOS/vphone-launchpad")
+        let vm = VPhoneProcessHolder(pid: 410, executablePath: "/opt/VPhone.bundle/Contents/MacOS/vphone-vm")
+        let reader = VPhoneBundleActivityError.running(name: "lab", holders: [meter]).description
+        #expect(reader.hasPrefix("VM 'lab' is in use: its disk or state files are open in process 900 vphone-launchpad, which does not run it."))
+        let running = VPhoneBundleActivityError.running(name: "lab", holders: [meter, vm]).description
+        #expect(running == "VM 'lab' is running (process 410 vphone-vm, 900 vphone-launchpad). Stop it, then try again.")
+        // A live control socket with no visible holder (a VM under sudo).
+        #expect(VPhoneBundleActivityError.running(name: "lab", holders: []).description == "VM 'lab' is running. Stop it, then try again.")
+        // The PID form looks the executable up: this test process is no VM.
+        let me = VPhoneBundleActivityError.running(name: "lab", pids: [getpid()])
+        #expect(me == .running(name: "lab", holders: [VPhoneProcessHolder(pid: getpid())]))
+        #expect(VPhoneProcessHolder(pid: getpid()).executablePath != nil)
+        #expect(VPhoneProcessHolder(pid: getpid()).kind == .other)
+    }
+
     // MARK: - Guest processes
 
     /// A KERN_PROCARGS2 buffer as the kernel lays it out.

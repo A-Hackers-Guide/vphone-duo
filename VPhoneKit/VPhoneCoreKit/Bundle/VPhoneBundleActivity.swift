@@ -24,6 +24,11 @@ public enum VPhoneBundleActivity {
     }
 
     /// Throws `VPhoneBundleActivityError.running` unless the machine is stopped.
+    ///
+    /// Any holder refuses, not only a process that runs the machine: a file
+    /// another program is reading or writing is not standing still either.
+    /// The error names each holder's executable, so a refusal caused by, say,
+    /// a backup tool reading `Disk.img` is not mistaken for a running VM.
     public static func requireStopped(_ bundle: VPhoneBundle) throws {
         let urls = stateFileNames(of: bundle).map { bundle.url.appendingPathComponent($0) }
         let pids = processesHolding(urls)
@@ -114,15 +119,30 @@ public enum VPhoneBundleActivity {
 // MARK: - Error
 
 public enum VPhoneBundleActivityError: Error, Equatable {
-    case running(name: String, pids: [pid_t])
+    /// The machine's state files are held open by `holders`, or its control
+    /// socket is live (then `holders` may be empty).
+    case running(name: String, holders: [VPhoneProcessHolder])
+
+    /// `running` with each process's executable looked up now.
+    public static func running(name: String, pids: [pid_t]) -> VPhoneBundleActivityError {
+        .running(name: name, holders: pids.map { VPhoneProcessHolder(pid: $0) })
+    }
 }
 
 extension VPhoneBundleActivityError: CustomStringConvertible, LocalizedError {
     public var description: String {
         switch self {
-        case let .running(name, pids):
-            let who = pids.isEmpty ? "" : " (process \(pids.map(String.init).joined(separator: ", ")))"
-            return "VM '\(name)' is running\(who). Stop it, then try again."
+        case let .running(name, holders):
+            let (machine, others) = VPhoneProcessHolder.classify(holders)
+            guard machine.isEmpty, !others.isEmpty else {
+                let who = holders.isEmpty ? "" : " (process \(VPhoneProcessHolder.describe(machine + others)))"
+                return "VM '\(name)' is running\(who). Stop it, then try again."
+            }
+            // No VM process holds the files: say who does, so a backup tool
+            // or Launchpad's disk meter is not taken for a running VM.
+            return "VM '\(name)' is in use: its disk or state files are open in process "
+                + "\(VPhoneProcessHolder.describe(others)), which does not run it. "
+                + "Try again once that process closes them."
         }
     }
 

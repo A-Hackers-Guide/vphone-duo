@@ -56,6 +56,114 @@ public enum VPhoneLsof {
     }
 }
 
+// MARK: - VPhoneProcessHolder
+
+/// A process that has one of a machine's files open, and what it is, judged
+/// by its executable.
+///
+/// Many processes open a machine's `Disk.img` without running it: Launchpad's
+/// disk meter maps its extents for a moment every half minute, Spotlight and
+/// backup tools read it, and `vm template trim` or a rebase attach it. Only two
+/// kinds of process run a machine: `vphone-vm` (from any copy of the bundle)
+/// and Virtualization's VM service, which holds the disk for it. Those are the
+/// only ones `vm stop` may signal; every other holder is reported by name.
+public struct VPhoneProcessHolder: Equatable, Sendable, CustomStringConvertible {
+    public enum Kind: Equatable, Sendable {
+        /// `vphone-vm`, which runs the machine.
+        case virtualMachine
+        /// `com.apple.Virtualization.VirtualMachine`, the XPC service that
+        /// holds the machine's disk for its `vphone-vm`.
+        case virtualizationService
+        /// Anything else that has the file open.
+        case other
+    }
+
+    public var pid: pid_t
+    /// From `proc_pidpath`; nil for a process that is gone or cannot be
+    /// inspected.
+    public var executablePath: String?
+
+    public init(pid: pid_t, executablePath: String?) {
+        self.pid = pid
+        self.executablePath = executablePath
+    }
+
+    /// Looks the executable up now.
+    public init(pid: pid_t) {
+        self.init(pid: pid, executablePath: Self.executablePath(of: pid))
+    }
+
+    public var kind: Kind {
+        Self.kind(executablePath: executablePath)
+    }
+
+    /// Whether this process runs a machine, and may be stopped as one.
+    public var runsMachine: Bool {
+        kind != .other
+    }
+
+    /// The executable's file name, or `unknown`.
+    public var name: String {
+        executablePath.map { ($0 as NSString).lastPathComponent } ?? "unknown"
+    }
+
+    public var description: String {
+        "\(pid) \(name)"
+    }
+
+    static let virtualizationServiceName = "com.apple.Virtualization.VirtualMachine"
+
+    /// What an executable path is. `vphone-vm` counts from any folder: every
+    /// installed bundle has its own copy. The VM service counts only from
+    /// inside Virtualization.framework, so another program that takes its name
+    /// is still `other`.
+    public static func kind(executablePath: String?) -> Kind {
+        guard let executablePath, !executablePath.isEmpty else { return .other }
+        let components = (executablePath as NSString).pathComponents
+        switch components.last {
+        case "vphone-vm":
+            return .virtualMachine
+        case virtualizationServiceName where components.contains("Virtualization.framework"):
+            return .virtualizationService
+        default:
+            return .other
+        }
+    }
+
+    /// Splits holders into the ones that run a machine and the rest, each in
+    /// PID order.
+    public static func classify(_ holders: [VPhoneProcessHolder]) -> (machine: [VPhoneProcessHolder], others: [VPhoneProcessHolder]) {
+        let sorted = holders.sorted { $0.pid < $1.pid }
+        return (sorted.filter(\.runsMachine), sorted.filter { !$0.runsMachine })
+    }
+
+    /// `123 vphone-vm, 456 mds_stores`.
+    public static func describe(_ holders: [VPhoneProcessHolder]) -> String {
+        holders.map(\.description).joined(separator: ", ")
+    }
+
+    /// Why an operation that needs a machine's disk to itself (`cfw install`
+    /// and its variants) refuses, or nil when `holders` is empty. Every holder
+    /// refuses; the wording says whether one of them runs the machine.
+    /// `rerun` completes "…, then <rerun>.", for example "run cfw install again".
+    public static func diskRefusal(_ holders: [VPhoneProcessHolder], rerun: String) -> String? {
+        guard !holders.isEmpty else { return nil }
+        let (machine, others) = classify(holders)
+        if !machine.isEmpty {
+            return "The VM is running (process \(describe(machine + others))). Stop the VM, then \(rerun)."
+        }
+        return "The VM disk is open in process \(describe(others)), which does not run the VM. "
+            + "Wait for it to close the disk, then \(rerun)."
+    }
+
+    public static func executablePath(of pid: pid_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: Int(4 * MAXPATHLEN))
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        guard length > 0 else { return nil }
+        return String(decoding: buffer.prefix(Int(length)).map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }
+}
+
 // MARK: - VPhoneGuestProcesses
 
 /// Finds the `vphone-vm` that runs one machine.
