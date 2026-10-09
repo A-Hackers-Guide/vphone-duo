@@ -2,10 +2,11 @@
 
 A vphone guest renders at 60 Hz whatever the host display does. This note
 records where the 60 comes from, why no Virtualization setting changes it, and
-the opt-in kernel patch `kernel-exp-display_refresh_120hz` that makes the guest
-display advertise 120 Hz. Measured on 2026-10-04 on macOS 27.0.1 (26A434),
-Apple M5 Pro, built-in 120 Hz display, cloudOS 26.4 (23E5207q) kernel with an
-iPadOS 26.6.2 (23G90) userland.
+the kernel patch `kernel-cfw-display_promotion` (titled ProMotion) that makes the
+guest display advertise 120 Hz. It is on in `standard` since 2026-10-09; it
+shipped opt-in as `kernel-exp-display_refresh_120hz` from 2.4.2. Measured on
+2026-10-04 on macOS 27.0.1 (26A434), Apple M5 Pro, built-in 120 Hz display,
+cloudOS 26.4 (23E5207q) kernel with an iPadOS 26.6.2 (23G90) userland.
 
 ## Where 60 Hz Comes From
 
@@ -80,7 +81,7 @@ driver publishes; the results below show the userland takes its pace from it.
 `KernelCustomFirmwarePatcher.patchParavirtDisplayRefreshRate`
 (`Kernel/CustomFirmwarePatches/Drivers/KernelCustomFirmwarePatchDisplayRefresh.swift`)
 replaces the load of `w3` with `movz w3, #120, lsl #16`, that is 120.0 Hz in
-16.16. One instruction, one record: `kernel-exp-display_refresh_120hz`.
+16.16. One instruction, one record: `kernel-cfw-display_promotion`.
 
 Reveal procedure, no offsets:
 
@@ -98,9 +99,10 @@ Reveal procedure, no offsets:
 On the 23E5207q research kernelcache the record lands at file offset
 `0xEB1A98`.
 
-It is declared in `com.vphone.patchset.kernel.cfw` with no version gate and
-blocked in `standard`, so it is a per-VM checkmark or a preset of its own. It is
-a preference, not a fix: see the cost in the results.
+It is declared in `com.vphone.patchset.kernel.cfw` with no version gate and is on
+in `standard`; a VM that blocks it keeps the host's 60 Hz mode. It is a
+preference, not a fix: see the cost in the results. See "On in `standard`" below
+for why it moved and what happens to a VM that opted in under the old name.
 
 ## Results
 
@@ -133,9 +135,10 @@ A guest whose product type is a 60 Hz device follows the patch too:
 scrolling Settings, 97% of them on time, and about 102 swiping Home Screen
 pages. The userland does not cap the rate by model.
 
-Not measured: an iPhone guest, an iOS 27 userland, and a host display that is
-not 120 Hz, where the window cannot show the extra frames whatever the guest
-renders.
+Not measured here: an iPhone guest, an iOS 27 userland, and a host display that
+is not 120 Hz, where the window cannot show the extra frames whatever the guest
+renders. An iPhone 26.6.2 guest was measured later; see "iPhone 26.6.2, and the
+attitude hook deadlock" below.
 
 
 ## Animations at 120 Hz
@@ -237,3 +240,77 @@ The guest side, with vphoned only:
 The report gives exact CPU time per thread and unsymbolicated frames as
 `library + offset [address]`. Subtract the `System Primary` shared cache slide
 in the report header from an address and pass it to `ipsw dyld a2s`.
+
+## On in `standard` (2026-10-09)
+
+The patch leaves `standard`'s block list and
+`FirmwarePatchSetCatalog.manualOnlyPatches`, so every new VM gets the 120 Hz
+timing element. The measurements above are why it can: the host scans out every
+frame up to 120, the userland follows the advertised rate with no change of its
+own, an iPad guest whose model is a 60 Hz device follows it too, and a static
+screen costs what it did at 60 Hz. The 2026-10-05 kernel update round
+(`Research/0_binary_patch_comparison.md`, "The kernelcache reaches an installed
+guest without a restore") toggled it on an iPhone17,3 27.0 (24A435) guest, which
+booted. The cost while animating is unchanged: up to twice the host CPU and GPU
+of a 60 Hz guest.
+
+### iPhone 26.6.2, and the attitude hook deadlock
+
+Checked on 2026-10-09 on a dedicated VM: iPhone17,3 26.6.2 (23G90), cloudOS 26.4
+(23E5207q) kernel, `standard` from a bundle built from this change (2.9.0 base),
+`--no-template`. The kernelcache record landed at `0xEB1A98`, as on the iPad.
+
+With the 2.9.0 guest components the guest never left the Apple logo. In three
+boots at 120 Hz (the first boot after the restore and two reboots) SpringBoard and
+backboardd stopped at 3–4 s of CPU and stayed there; every SpringBoard-bound vphoned
+call (`apps.launch`, `apps.foreground`) hung. A guest spindump (launchd job, 5 s)
+reported the deadlock itself:
+
+- SpringBoard's main thread: `_SBFApplyParallaxSettingsToViewWithFactor` →
+  `-[UIView _updateParallaxEffectWithAltitude:bias:]` → `-[UIView addMotionEffect:]`
+  → `-[_UIMotionEffectEngine init]` → `-[_UIMotionEffectCoreMotionEventProvider init]`
+  → `VPhoneInterval` (`libvphoneattitude.dylib`, the `setDeviceMotionUpdateInterval:`
+  hook, holding `@synchronized(session)`) → Core Motion's native setter, waiting for
+  the MotionThread.
+- `com.apple.CoreMotion.MotionThread`: a Core Motion callback → `VPhoneActive` (the
+  `isDeviceMotionActive` hook) → `objc_sync_enter`, waiting for the main thread.
+
+The hook image was matched by UUID (`BFDEACD1-AAAB-324E-8A5C-5ACF6135EE47`, this
+build's `libvphoneattitude.dylib`) and the system frames symbolicated against the
+23G90 shared cache with `ipsw dyld a2s`. This is the lock-order bug that
+Lakr233/vphone-cli#643 fixes, not the display patch: #643 reports it at 60 Hz on
+every 2.9.0 iOS 26.6.2 template build. Here, with the same guest data, a 60 Hz
+kernelcache (`fw set-patches --block`, `cfw update-kernel`) booted once without
+hanging, so 120 Hz seems to make the race easier to lose; one 60 Hz boot does not
+show that 60 Hz is safe.
+
+With #643's hook fix (12c72fa) cherry-picked onto the same bundle and the guest
+environment redeployed (`vm set-bundle --update-environment`), the 120 Hz kernel
+booted. Setup Assistant was skipped, SpringBoard relaunched and reached the Home
+Screen. Continuous Settings scrolling for 12 s scanned out 119.3 frames per second,
+with a median gap of 8.2 ms and 98.5% of the gaps under 12.5 ms.
+
+So `standard` with ProMotion needs #643's attitude fix on an iOS 26 guest. Ship it
+in a bundle that also carries #643.
+
+The pipeline's no-plan fallback in `buildComponentList` is now on as well, so a
+pipeline built without a preset agrees with `standard`. The patcher's own
+`applyProMotion` default stays false, so the kernel CFW reference comparison is
+unchanged.
+
+**Renamed.** The `{component}-{effect}-{name}` rule gives `cfw` to a patch
+`standard` turns on, and the editor now titles it ProMotion, so the identifier is
+`kernel-cfw-display_promotion`. Unlike the earlier renames, the old identifier
+shipped (2.4.2 onwards) and a VM may have checked it, so
+`FirmwarePatchSetCatalog.renamedPatches` maps it. `VPhonePatchPresetStore` reads
+`PatchSelection.plist`, `PatchPlan.plist` and `PatchReceipt.plist` through that
+map: a VM that opted in under the old name resolves instead of failing `fw patch`
+with `unknownPatch`, and a kernelcache already patched under the old name counts
+as carrying the new one rather than as drift.
+
+**Existing VMs.** A `standard` VM whose kernelcache was patched without it now
+reads as wanting it. Its guest keeps 60 Hz until `cfw update-kernel` (or a
+restore) writes the re-patched kernelcache.
+
+**Opting out.** `vphone-cli fw set-patches <vm> --block
+kernel-cfw-display_promotion`, then `cfw update-kernel`.

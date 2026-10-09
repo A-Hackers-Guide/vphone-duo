@@ -289,12 +289,13 @@ public enum FirmwareKernelCustomFirmwarePatchSet {
             // MARK: Display
 
             VPhonePatchDeclaration(
-                identifier: FirmwarePatchSetCatalog.displayRefreshPatch,
-                title: "120 Hz display timing",
+                identifier: FirmwarePatchSetCatalog.proMotionPatch,
+                title: "ProMotion",
                 summary: """
-                Makes the paravirtual display advertise 120 Hz instead of the host's fixed \
-                60 Hz mode. Off by default: the guest renders twice as often, and only a \
-                120 Hz host display shows it.
+                Makes the paravirtual display advertise 120 Hz, as a ProMotion panel does, \
+                instead of the host's fixed 60 Hz mode. While it animates the guest renders \
+                twice as often, so the host spends up to twice the CPU and GPU on it; turn it \
+                off to keep 60 Hz.
                 """,
                 target: .firmware(.kernelcache),
             ),

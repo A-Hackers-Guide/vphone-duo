@@ -249,6 +249,51 @@ struct FirmwarePatchSetCatalogTests {
     }
 
     @Test
+    func `Standard turns ProMotion on, on every base`() throws {
+        let patch = FirmwarePatchSetCatalog.proMotionPatch
+        #expect(!FirmwarePatchSetCatalog.manualOnlyPatches.contains(patch))
+        #expect(FirmwarePatchSetCatalog.standardPreset.selection.includes(patch))
+        for base in ["18.6.2", "26.0", "26.4", "26.6.2", "27.0"] {
+            for cloud in ["26.1", "26.4"] {
+                let plan = try VPhonePatchPlan.resolve(
+                    preset: FirmwarePatchSetCatalog.standardPreset,
+                    patchSets: FirmwarePatchSetCatalog.bundled,
+                    iOSBase: VPhoneVersion(base),
+                    cloudOS: VPhoneVersion(cloud),
+                )
+                #expect(plan.isEnabled(patch), "\(patch) on \(base)/\(cloud)")
+            }
+        }
+        // A VM that blocks it keeps the host's 60 Hz.
+        let blocked = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.standardPreset,
+            patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("27.0"),
+            cloudOS: VPhoneVersion("26.4"),
+            blocked: [patch],
+        )
+        #expect(!blocked.isEnabled(patch))
+    }
+
+    @Test
+    func `A renamed patch maps to one the catalogue declares`() {
+        let declared = Set(FirmwarePatchSetCatalog.allDeclarations.map(\.identifier))
+        for (old, new) in FirmwarePatchSetCatalog.renamedPatches {
+            #expect(!declared.contains(old), "\(old) is still declared")
+            #expect(declared.contains(new), "\(old) maps to \(new), which nothing declares")
+        }
+        // A record that named the old 120 Hz identifier, possibly beside the new
+        // one, reads as the new one, once, in place.
+        #expect(
+            FirmwarePatchSetCatalog.currentIdentifiers([
+                "kernel-exp-hv_vmm",
+                "kernel-exp-display_refresh_120hz",
+                FirmwarePatchSetCatalog.proMotionPatch,
+            ]) == ["kernel-exp-hv_vmm", FirmwarePatchSetCatalog.proMotionPatch],
+        )
+    }
+
+    @Test
     func `The Frida relaxations need cloudOS 26.4`() throws {
         for cloud in ["26.1", "26.4"] {
             let plan = try VPhonePatchPlan.resolve(

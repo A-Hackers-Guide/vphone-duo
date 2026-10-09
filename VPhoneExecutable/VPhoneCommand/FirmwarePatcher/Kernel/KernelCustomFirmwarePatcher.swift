@@ -31,9 +31,10 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
     /// byte-identical when false.
     public var applyFrida = false
 
-    /// Opt-in 120 Hz display timing. Set from the plan: `standard` blocks it, so
-    /// a guest keeps the host's 60 Hz mode unless the VM asked otherwise.
-    public var applyDisplayRefresh = false
+    /// ProMotion, the 120 Hz display timing. Set from the plan, and `standard`
+    /// turns it on; a VM that blocks it keeps the host's 60 Hz mode. False here so
+    /// a patcher built directly writes what the reference records were taken from.
+    public var applyProMotion = false
 
     /// On a base older than 27: a narrow allowlist at the same sandbox gate, so a
     /// process outside an app sandbox can open the paravirtual GPU, video decoder,
@@ -102,9 +103,9 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
             patchVmMapDeleteImmutableCode()
         }
 
-        // Opt-in: the paravirtual display advertises 120 Hz instead of the
-        // host's fixed 60 Hz mode.
-        if applyDisplayRefresh {
+        // The paravirtual display advertises 120 Hz instead of the host's
+        // fixed 60 Hz mode, unless the VM blocked it.
+        if applyProMotion {
             patchParavirtDisplayRefreshRate()
         }
 
