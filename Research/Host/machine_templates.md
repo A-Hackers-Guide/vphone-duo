@@ -174,12 +174,23 @@ every 30 s, with a 15 s mapping budget after which the rest is mapped on a
 later pass (those folders show no exclusive size meanwhile).
 
 Mapping opens the file (`O_EVTONLY`), and while it is open `lsof` lists
-Launchpad for the image. `cfw install` refuses a disk someone holds, so
-Launchpad never opens a folder it is working on (a creation, a template build,
-an export, an install), keeps a stopped machine's last ranges until its files
-change, and leaves its own process out when it asks `lsof` which machines run.
-A `vphone-cli` run outside Launchpad in the ~0.1 s a changed image is being
-mapped can still see it held.
+Launchpad for the image. `cfw install` refuses a disk someone holds, and
+until the change below `vm stop` signalled every holder (SIGINT, and SIGKILL
+to whoever was left at its timeout). The retest of PR #633 (N2) found
+Launchpad mapping running machines' images about every 30 s, so a forced
+`vm stop` could kill Launchpad. Launchpad therefore opens a machine's files only when
+`VPhoneLaunchpadDiskAccess` allows it: no `vm launch` of its own still runs
+for the machine (starting, running, stopping), the last `lsof` names no other
+process for its disk, and Launchpad has no operation on it (a creation, a
+template build, an export, an install or update, a shutdown or stop) or on a
+whole library (an import, a template deletion). It asks again right before
+each file is mapped, so a machine started during a pass is not opened. Any
+other machine keeps the ranges last mapped, and a stopped one is opened only
+when a file's size, mtime or ctime changed since then: once after each run.
+Launchpad leaves its own process out when it asks `lsof` which machines run.
+A `vphone-cli` started outside Launchpad, or a root process `lsof` does not
+show to the user, in the ~0.1 s a changed stopped image is being mapped can
+still see it held.
 
 What a holder is decides what the CLI does with it
 (`VPhoneProcessHolder`, by `proc_pidpath`). Only `vphone-vm` (any copy of the

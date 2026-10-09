@@ -37,6 +37,37 @@ nonisolated struct VPhoneLaunchpadDiskUsage: Hashable, Sendable {
     }
 }
 
+// MARK: - Opening
+
+/// Whether the meter may open a machine's files, from what Launchpad knows
+/// of the machine.
+///
+/// Mapping opens the file, and while it is open `lsof` lists Launchpad for
+/// it. `vm stop` signals every process `lsof` lists for a disk (SIGINT, then
+/// SIGKILL to whoever is left at its timeout), and `cfw install` and
+/// `update-environment` refuse a disk anyone else holds. So the meter opens
+/// only the files of a machine that nothing runs, nothing holds and nothing
+/// works on; any other machine keeps the extents last mapped.
+nonisolated struct VPhoneLaunchpadDiskAccess: Hashable, Sendable {
+    /// Launchpad's `vm launch` for the machine has not exited: starting,
+    /// running, stopping, or panicked and not yet ended.
+    var isLaunched = false
+    /// `lsof` listed a process other than Launchpad for its disk image: a
+    /// machine started elsewhere, or anything else holding it.
+    var isHeld = false
+    /// Launchpad has an operation on the machine: a creation or the template
+    /// build in it, an export (queued or running), a CFW install, an
+    /// environment or kernel update, a shutdown, a stop, a rename.
+    var isBusy = false
+    /// Launchpad has an operation on a whole library (an import, a template
+    /// deletion), which can write any folder in it.
+    var isLibraryBusy = false
+
+    var mayOpen: Bool {
+        !isLaunched && !isHeld && !isBusy && !isLibraryBusy
+    }
+}
+
 // MARK: - Measuring
 
 /// Measures machine and template folders against each other, keeping each
@@ -46,15 +77,43 @@ nonisolated struct VPhoneLaunchpadDiskUsage: Hashable, Sendable {
 /// is different, so a stopped machine's 20 GB image is opened once after it
 /// changes, not on every pass. Mapping opens the file: `lsof` then lists
 /// Launchpad for it, which `vm stop` and `cfw install` read as the machine
-/// running. Folders Launchpad is working on are therefore never opened
-/// (`Folder.mayOpen`), and Launchpad leaves its own process out when it asks
-/// `lsof` which machines run.
+/// running. A folder is opened only while `VPhoneLaunchpadDiskAccess` allows
+/// it (`Folder.mayOpen`, asked again right before each file is mapped), and
+/// Launchpad leaves its own process out when it asks `lsof` which machines
+/// run.
 actor VPhoneLaunchpadDiskMeter {
     nonisolated struct Folder: Hashable, Sendable {
         var path: String
-        /// False while something works on the folder: its files' last
-        /// extents are used, and a file never mapped leaves it unknown.
+        /// False while something runs, holds or works on the folder: its
+        /// files' last extents are used, and a file never mapped leaves it
+        /// unknown.
         var mayOpen = true
+    }
+
+    /// What a pass does with one file.
+    nonisolated enum FileUse: Equatable, Sendable {
+        /// The extents mapped last are current: nothing is opened.
+        case current
+        /// The file changed (or was never mapped) and may be opened.
+        case map
+        /// The file may not be opened: the extents mapped last stand in.
+        case last
+        /// Nothing to go on: the folder's exclusive size is unknown.
+        case unknown
+    }
+
+    /// The decision for one file. Only a changed file is ever opened, and
+    /// only when its folder may be opened and the pass has time left.
+    nonisolated static func use(isCurrent: Bool, hasLast: Bool, mayOpen: Bool, hasTime: Bool) -> FileUse {
+        if isCurrent {
+            return .current
+        }
+        guard mayOpen else {
+            return hasLast ? .last : .unknown
+        }
+        // A changed file the budget leaves out is unknown, not stale, so a
+        // folder that is still being written does not show a wrong size.
+        return hasTime ? .map : .unknown
     }
 
     private nonisolated struct FileKey: Hashable {
@@ -85,13 +144,23 @@ actor VPhoneLaunchpadDiskMeter {
 
     /// Each folder's usage, by `Folder.path`. Files are not followed through
     /// links.
-    func measure(_ folders: [Folder]) -> [String: VPhoneLaunchpadDiskUsage] {
+    ///
+    /// `mayOpenNow` is asked with the folder's path right before one of its
+    /// files is mapped, so a machine started, held or worked on since the
+    /// pass began is not opened. The meter has one caller at a time; a
+    /// second pass running while this one waits on `mayOpenNow` would only
+    /// leave the cache less complete.
+    func measure(
+        _ folders: [Folder],
+        mayOpenNow: (@Sendable (String) async -> Bool)? = nil,
+    ) async -> [String: VPhoneLaunchpadDiskUsage] {
         let deadline = ContinuousClock.now + budget
         var seen: Set<String> = []
         var owners: [[VPhoneLaunchpadDiskExtents]] = []
         var usages: [VPhoneLaunchpadDiskUsage] = []
         var unmappedBytes: [Int64] = []
         for folder in folders {
+            var mayOpen = folder.mayOpen
             var usage = VPhoneLaunchpadDiskUsage(allocated: 0, exclusive: 0)
             var extents: [VPhoneLaunchpadDiskExtents] = []
             var unmapped: Int64 = 0
@@ -111,23 +180,37 @@ actor VPhoneLaunchpadDiskMeter {
                     modified: status.st_mtimespec.tv_sec, modifiedNanoseconds: status.st_mtimespec.tv_nsec,
                     changed: status.st_ctimespec.tv_sec, changedNanoseconds: status.st_ctimespec.tv_nsec,
                 )
-                var mapped = cache[file].flatMap { $0.key == key ? $0 : nil }
-                if mapped == nil, folder.mayOpen, ContinuousClock.now < deadline {
+                let last = cache[file]
+                func decide() -> FileUse {
+                    Self.use(isCurrent: last?.key == key, hasLast: last != nil, mayOpen: mayOpen, hasTime: ContinuousClock.now < deadline)
+                }
+                var decision = decide()
+                if decision == .map, let mayOpenNow, await !mayOpenNow(folder.path) {
+                    mayOpen = false
+                    decision = decide()
+                }
+                var found: Mapped?
+                switch decision {
+                case .current, .last:
+                    // A folder that may not be opened keeps what was last
+                    // mapped, which is close: its blocks rarely move.
+                    found = last
+                case .map:
                     switch VPhoneLaunchpadDiskExtents.map(file, deadline: deadline) {
                     case let .success(result):
-                        mapped = Mapped(key: key, extents: result)
+                        found = Mapped(key: key, extents: result)
                     case .failure(.unsupported):
-                        mapped = Mapped(key: key, extents: nil)
+                        found = Mapped(key: key, extents: nil)
                     case .failure(.tooLarge):
                         break
                     }
-                    if let mapped {
-                        cache[file] = mapped
+                    if let found {
+                        cache[file] = found
                     }
+                case .unknown:
+                    break
                 }
-                // A folder that may not be opened keeps what was last
-                // mapped, which is close: its blocks rarely move.
-                guard let found = mapped ?? (folder.mayOpen ? nil : cache[file]) else {
+                guard let found else {
                     usage.exclusive = nil
                     continue
                 }

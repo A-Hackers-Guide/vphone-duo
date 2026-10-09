@@ -463,8 +463,48 @@ struct TemplatesTests {
                      partial.summary(locale: english))
         precondition(VPhoneLaunchpadDiskUsage(allocated: 1_000_000_000, exclusive: nil).summary(locale: english) == "1 GB", "Without an exclusive size")
         extentArithmetic()
+        diskAccess()
         try await sharedExtents()
         print("Disk use tests passed")
+    }
+
+    /// When the meter may open a machine's files (retest N2: `vm stop`
+    /// signals every process `lsof` lists for a disk, Launchpad included).
+    static func diskAccess() {
+        typealias Access = VPhoneLaunchpadDiskAccess
+        precondition(Access().mayOpen, "A stopped machine nothing holds or works on")
+        precondition(!Access(isLaunched: true).mayOpen, "Started, running or stopping by Launchpad")
+        precondition(!Access(isHeld: true).mayOpen, "Started elsewhere, or held by anyone else")
+        precondition(!Access(isBusy: true).mayOpen, "Created, exported, installed into, stopped")
+        precondition(!Access(isLibraryBusy: true).mayOpen, "An import or template deletion")
+        precondition(!Access(isLaunched: true, isHeld: true).mayOpen, "Running")
+
+        typealias Meter = VPhoneLaunchpadDiskMeter
+        // An unchanged file is never opened, whatever else holds.
+        for mayOpen in [true, false] {
+            for hasTime in [true, false] {
+                precondition(Meter.use(isCurrent: true, hasLast: true, mayOpen: mayOpen, hasTime: hasTime) == .current,
+                             "Current: \(mayOpen) \(hasTime)")
+            }
+        }
+        // A changed file is opened only when its folder may be opened and
+        // the pass has time left.
+        precondition(Meter.use(isCurrent: false, hasLast: true, mayOpen: true, hasTime: true) == .map, "Changed")
+        precondition(Meter.use(isCurrent: false, hasLast: false, mayOpen: true, hasTime: true) == .map, "Never mapped")
+        precondition(Meter.use(isCurrent: false, hasLast: true, mayOpen: false, hasTime: true) == .last, "Running: last extents")
+        precondition(Meter.use(isCurrent: false, hasLast: false, mayOpen: false, hasTime: true) == .unknown, "Running, never mapped")
+        precondition(Meter.use(isCurrent: false, hasLast: true, mayOpen: true, hasTime: false) == .unknown, "Out of time")
+        precondition(Meter.use(isCurrent: false, hasLast: false, mayOpen: false, hasTime: false) == .unknown, "Nothing")
+    }
+
+    /// The folders `mayOpenNow` was asked about.
+    actor AskedFolders {
+        private(set) var folders: [String] = []
+
+        func ask(_ folder: String, answer: Bool) -> Bool {
+            folders.append(folder)
+            return answer
+        }
     }
 
     /// The sweep on made-up extents.
@@ -568,6 +608,23 @@ struct TemplatesTests {
         // The third clone shares everything it holds.
         precondition(open[third.path]?.exclusive == 0, "Third: \(String(describing: open[third.path]))")
         precondition(open[template.path]?.exclusive == 0, "Template with a clone that wrote nothing: \(String(describing: open[template.path]))")
+
+        // Asked right before mapping: only a changed file's folder is asked,
+        // and a no keeps the extents last mapped. Unchanged files ask
+        // nothing.
+        let everything: [VPhoneLaunchpadDiskMeter.Folder] = [.init(path: template.path), .init(path: first.path), .init(path: second.path), .init(path: third.path)]
+        let asked = AskedFolders()
+        let unchanged = await meter.measure(everything) { folder in await asked.ask(folder, answer: true) }
+        let askedUnchanged = await asked.folders
+        precondition(askedUnchanged.isEmpty, "Nothing changed, nothing asked: \(askedUnchanged)")
+        precondition(unchanged[first.path]?.exclusive == 7 << 20, "Unchanged: \(String(describing: unchanged[first.path]))")
+        try write(first.appendingPathComponent("Disk.img"), at: 224 << 20, count: 1 << 20, byte: 0x77)
+        let refused = await meter.measure(everything) { folder in await asked.ask(folder, answer: false) }
+        let askedChanged = await asked.folders
+        precondition(askedChanged == [first.path], "Only the changed folder is asked: \(askedChanged)")
+        precondition(refused[first.path]?.exclusive == 7 << 20, "Refused at the last moment: \(String(describing: refused[first.path]))")
+        let allowed = await meter.measure(everything) { folder in await asked.ask(folder, answer: true) }
+        precondition(allowed[first.path]?.exclusive == 8 << 20, "Mapped once allowed: \(String(describing: allowed[first.path]))")
 
         // Links are not followed.
         try fm.createSymbolicLink(at: second.appendingPathComponent("link.img"), withDestinationURL: disk)

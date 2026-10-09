@@ -769,16 +769,24 @@ final class VPhoneLaunchpadMachineLibrary {
             return
         }
         isMeasuringDiskUsage = true
-        // A machine being created, exported or installed into is not opened:
-        // `lsof` would show Launchpad holding its disk to `cfw install`.
         let machineFolders = machines.map { machine in
-            let isBusy = if case .busy = state(of: machine.path) { true } else { false }
-            return VPhoneLaunchpadDiskMeter.Folder(path: machine.path.url.path, mayOpen: !isBusy)
+            VPhoneLaunchpadDiskMeter.Folder(path: machine.path.url.path, mayOpen: diskAccess(of: machine.path).mayOpen)
         }
         let libraryRoots = roots.filter { $0 == libraryRoot || VPhoneLaunchpadMachineLocations.isAvailable($0) }
         let meter = diskMeter
+        let templatesMayOpen = globalActivity == nil
+        let mayOpenNow: @Sendable (String) async -> Bool = { [weak self] folder in
+            await self?.mayOpenDisk(inFolder: folder) ?? false
+        }
         Task {
-            let measured = await Self.measure(machineFolders, paths: paths, libraryRoots: libraryRoots, meter: meter)
+            let measured = await Self.measure(
+                machineFolders,
+                paths: paths,
+                libraryRoots: libraryRoots,
+                templatesMayOpen: templatesMayOpen,
+                meter: meter,
+                mayOpenNow: mayOpenNow,
+            )
             diskUsage = measured.usage
             templateSources = measured.sources
             templateUsage = measured.templates
@@ -791,12 +799,40 @@ final class VPhoneLaunchpadMachineLibrary {
         }
     }
 
+    /// Whether the disk meter may open this machine's files now: only when
+    /// no `vm launch` of Launchpad's for it is still running (a start, a
+    /// run, a stop), the last `lsof` named no other process for its disk,
+    /// and Launchpad has no operation on it or on a whole library.
+    private func diskAccess(of machine: Path) -> VPhoneLaunchpadDiskAccess {
+        let isBusy = if case .busy = state(of: machine) { true } else { false }
+        return VPhoneLaunchpadDiskAccess(
+            isLaunched: launched[machine] != nil,
+            isHeld: externallyRunning.contains(machine),
+            isBusy: isBusy || creation(for: machine)?.isRunning == true || exports[machine] != nil,
+            isLibraryBusy: globalActivity != nil,
+        )
+    }
+
+    /// `diskAccess` for a measured folder, asked right before the meter
+    /// opens one of its files. A template folder may be opened unless a
+    /// library-wide operation (a template deletion) runs; a folder that is
+    /// neither a listed machine nor a template is not opened.
+    private func mayOpenDisk(inFolder folder: String) -> Bool {
+        if let machine = machines.first(where: { $0.path.url.path == folder }) {
+            return diskAccess(of: machine.path).mayOpen
+        }
+        let isTemplate = URL(fileURLWithPath: folder).deletingLastPathComponent().lastPathComponent == ".templates"
+        return isTemplate && globalActivity == nil
+    }
+
     @concurrent
     private nonisolated static func measure(
         _ machineFolders: [VPhoneLaunchpadDiskMeter.Folder],
         paths: [Path],
         libraryRoots: [String],
+        templatesMayOpen: Bool,
         meter: VPhoneLaunchpadDiskMeter,
+        mayOpenNow: @escaping @Sendable (String) async -> Bool,
     ) async -> (usage: [Path: VPhoneLaunchpadDiskUsage], sources: [Path: String], templates: [String: VPhoneLaunchpadDiskUsage]) {
         // Templates are keyed as `usage(of:)` looks them up.
         var templateKeys: [String: String] = [:]
@@ -805,8 +841,8 @@ final class VPhoneLaunchpadMachineLibrary {
                 templateKeys[folder] = URL(fileURLWithPath: folder).lastPathComponent + "@" + root
             }
         }
-        let folders = machineFolders + templateKeys.keys.sorted().map { VPhoneLaunchpadDiskMeter.Folder(path: $0) }
-        let measured = await meter.measure(folders)
+        let folders = machineFolders + templateKeys.keys.sorted().map { VPhoneLaunchpadDiskMeter.Folder(path: $0, mayOpen: templatesMayOpen) }
+        let measured = await meter.measure(folders, mayOpenNow: mayOpenNow)
         var usage: [Path: VPhoneLaunchpadDiskUsage] = [:]
         var sources: [Path: String] = [:]
         for path in paths {
