@@ -20,6 +20,11 @@ public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
     public var serviceGroups: [String]
     public var removedApps: [String]
     public var trimTier: String
+    /// The removed apps vphoned had to unregister more than once, with the
+    /// number of attempts. Not part of the key: a record of how the setup
+    /// boot went, kept so the race with first-boot registration can be
+    /// counted afterwards.
+    public var unregisterAttempts: [String: Int]
 
     public init(
         snapshotDeleted: Bool = false,
@@ -28,6 +33,7 @@ public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
         serviceGroups: [String] = [],
         removedApps: [String] = [],
         trimTier: String = "none",
+        unregisterAttempts: [String: Int] = [:],
     ) {
         self.snapshotDeleted = snapshotDeleted
         self.setupDone = setupDone
@@ -35,6 +41,7 @@ public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
         self.serviceGroups = Array(Set(serviceGroups)).sorted()
         self.removedApps = Array(Set(removedApps)).sorted()
         self.trimTier = trimTier
+        self.unregisterAttempts = unregisterAttempts
     }
 
     /// Why a template with these steps must not be frozen, or nothing.
@@ -74,6 +81,7 @@ public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
         case serviceGroups = "ServiceGroups"
         case removedApps = "RemovedApps"
         case trimTier = "TrimTier"
+        case unregisterAttempts = "UnregisterAttempts"
     }
 
     public init(from decoder: any Decoder) throws {
@@ -84,6 +92,7 @@ public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
         serviceGroups = try container.decodeIfPresent([String].self, forKey: .serviceGroups) ?? []
         removedApps = try container.decodeIfPresent([String].self, forKey: .removedApps) ?? []
         trimTier = try container.decodeIfPresent(String.self, forKey: .trimTier) ?? "none"
+        unregisterAttempts = try container.decodeIfPresent([String: Int].self, forKey: .unregisterAttempts) ?? [:]
     }
 }
 
@@ -91,17 +100,42 @@ public struct VPhoneMachineTemplateSteps: Codable, Equatable, Sendable {
 
 /// `TemplateSource.plist`, in a machine cloned from a template: which
 /// template it shares blocks with.
+///
+/// The identifier names a key, and a key outlives any one template built for
+/// it: a template deleted and built again gets the same identifier, but the
+/// new one shares no block with machines cloned from the old one. `Build`
+/// names the build, so only machines of the template that exists now count
+/// as its users.
 public struct VPhoneMachineTemplateSource: Codable, Equatable, Sendable {
     public var identifier: String
+    /// The ``VPhoneMachineTemplateRecord/build`` of the template it was cloned
+    /// from; nil in a record written before builds had one, or for a
+    /// template without one.
+    public var build: String?
     public var cloned: Date
 
-    public init(identifier: String, cloned: Date = Date()) {
+    public init(identifier: String, build: String? = nil, cloned: Date = Date()) {
         self.identifier = identifier
+        self.build = build
         self.cloned = VPhoneMachineTemplates.wholeSeconds(cloned)
+    }
+
+    /// Whether a machine with this record was cloned from the template
+    /// `record` describes, and not from an earlier one with the same key.
+    /// Both sides having a build decides it. Otherwise (a record written
+    /// before builds were recorded, on either side) the dates do: a machine
+    /// cloned before the template was frozen cannot have come from it.
+    public func isClone(of record: VPhoneMachineTemplateRecord) -> Bool {
+        guard identifier == record.identifier else { return false }
+        if let build, let other = record.build {
+            return build == other
+        }
+        return cloned >= (record.frozenAt ?? record.created)
     }
 
     private enum CodingKeys: String, CodingKey {
         case identifier = "Identifier"
+        case build = "Build"
         case cloned = "Cloned"
     }
 }
@@ -182,6 +216,12 @@ public struct VPhoneMachineTemplateRecord: Codable, Equatable, Sendable {
     /// template adopted without them. Not part of the key: two URLs of the
     /// same build make the same template.
     public var sources: VPhoneMachineTemplateSources?
+    /// A UUID set each time a template is frozen or adopted, and copied into
+    /// each clone's `TemplateSource.plist`. The identifier stays the same
+    /// when a template is deleted and built again; this does not, so the
+    /// clones of an earlier build are not counted as the new one's users.
+    /// Nil for a template frozen before it was recorded.
+    public var build: String?
 
     public init(
         key: VPhoneMachineTemplateKey,
@@ -193,6 +233,7 @@ public struct VPhoneMachineTemplateRecord: Codable, Equatable, Sendable {
         frozenAt: Date? = nil,
         steps: VPhoneMachineTemplateSteps = VPhoneMachineTemplateSteps(),
         sources: VPhoneMachineTemplateSources? = nil,
+        build: String? = nil,
     ) {
         identifier = key.identifier
         self.key = key
@@ -204,6 +245,7 @@ public struct VPhoneMachineTemplateRecord: Codable, Equatable, Sendable {
         self.frozenAt = frozenAt.map(VPhoneMachineTemplates.wholeSeconds)
         self.steps = steps
         self.sources = sources
+        self.build = build
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -217,6 +259,7 @@ public struct VPhoneMachineTemplateRecord: Codable, Equatable, Sendable {
         case frozenAt = "FrozenAt"
         case steps = "Steps"
         case sources = "Sources"
+        case build = "Build"
     }
 
     public init(from decoder: any Decoder) throws {
@@ -231,6 +274,7 @@ public struct VPhoneMachineTemplateRecord: Codable, Equatable, Sendable {
         frozenAt = try container.decodeIfPresent(Date.self, forKey: .frozenAt)
         steps = try container.decodeIfPresent(VPhoneMachineTemplateSteps.self, forKey: .steps) ?? VPhoneMachineTemplateSteps()
         sources = try container.decodeIfPresent(VPhoneMachineTemplateSources.self, forKey: .sources)
+        build = try container.decodeIfPresent(String.self, forKey: .build)
     }
 }
 
@@ -669,6 +713,7 @@ public enum VPhoneMachineTemplates {
         try removeRestoreTree(of: bundle)
         record.frozen = true
         record.frozenAt = Self.wholeSeconds(now)
+        record.build = UUID().uuidString
         try writeRecord(record, inBundle: build.bundleURL)
         let destination = url(of: build.identifier, in: build.libraryRoot)
         do {
@@ -677,6 +722,7 @@ public enum VPhoneMachineTemplates {
         } catch {
             record.frozen = false
             record.frozenAt = nil
+            record.build = nil
             try? writeRecord(record, inBundle: build.bundleURL)
             throw error
         }
@@ -747,6 +793,7 @@ public enum VPhoneMachineTemplates {
         try removeRestoreTree(of: bundle)
         record.frozen = true
         record.frozenAt = Self.wholeSeconds(now)
+        record.build = UUID().uuidString
         try writeRecord(record, inBundle: bundle.url)
         do {
             // Checked again just before the rename: nothing may have opened
@@ -788,7 +835,10 @@ public enum VPhoneMachineTemplates {
             newIdentity: true,
         )
         do {
-            try writeSource(VPhoneMachineTemplateSource(identifier: template.identifier), inBundle: clone.url)
+            try writeSource(
+                VPhoneMachineTemplateSource(identifier: template.identifier, build: template.record.build),
+                inBundle: clone.url,
+            )
         } catch {
             try? FileManager.default.removeItem(at: clone.url)
             throw error
@@ -827,27 +877,46 @@ public enum VPhoneMachineTemplates {
     /// The machines of the library cloned from each template, by template
     /// identifier, sorted by name. Templates adopted from such a machine
     /// count too, under `.templates/<id>`: they share its blocks as well.
+    ///
+    /// A machine counts only for the template it was cloned from
+    /// (``VPhoneMachineTemplateSource/isClone(of:)``): one cloned from an
+    /// earlier template with the same key, since deleted and built again,
+    /// shares nothing with the template that exists now and is left out. A
+    /// machine whose template no longer exists is listed under its identifier.
     public static func usage(in library: VPhoneLibrary) -> [String: [String]] {
+        let templates = (try? list(in: library).templates) ?? []
+        var records: [String: VPhoneMachineTemplateRecord] = [:]
+        for template in templates {
+            records[template.identifier] = template.record
+        }
         var users: [String: [String]] = [:]
+        func count(_ source: VPhoneMachineTemplateSource, as user: String) {
+            if let record = records[source.identifier], !source.isClone(of: record) {
+                return
+            }
+            users[source.identifier, default: []].append(user)
+        }
         for bundle in (try? library.bundles()) ?? [] {
             if let source = readSource(inBundle: bundle.url) {
-                users[source.identifier, default: []].append(bundle.name)
+                count(source, as: bundle.name)
             }
         }
-        for template in (try? list(in: library).templates) ?? [] {
+        for template in templates {
             if let source = readSource(inBundle: template.url), source.identifier != template.identifier {
-                users[source.identifier, default: []].append("\(directoryName)/\(template.identifier)")
+                count(source, as: "\(directoryName)/\(template.identifier)")
             }
         }
         return users.mapValues { $0.sorted() }
     }
 
-    /// The template `source` names, when it still exists and nothing in the
-    /// library uses it any more: what `vm delete` reports after deleting a
-    /// machine cloned from it. Never deletes it.
+    /// The template `source` names, when it still exists, the deleted machine
+    /// was cloned from it (not from an earlier template with the same key),
+    /// and nothing in the library uses it any more: what `vm delete` reports
+    /// after deleting a machine cloned from it. Never deletes it.
     public static func unusedTemplate(after source: VPhoneMachineTemplateSource?, in library: VPhoneLibrary) -> VPhoneMachineTemplate? {
         guard let source,
               let template = try? Self.template(source.identifier, in: library),
+              source.isClone(of: template.record),
               usage(in: library)[template.identifier, default: []].isEmpty
         else { return nil }
         return template
@@ -886,17 +955,20 @@ public enum VPhoneMachineTemplates {
 
     // MARK: Delete
 
-    /// What `vm template delete` says about the space it freed: blocks a
-    /// machine cloned from the template still shares stay allocated until
-    /// that machine changes or is deleted; with no such machine, the
-    /// template's space is free at once. `machines` is what
-    /// ``usage(in:)`` listed for the template before it was deleted.
+    /// What `vm template delete` says about the space it freed, from what is
+    /// known. `machines` is what ``usage(in:)`` listed for the template before
+    /// it was deleted: the machines that use it now. Machines cloned from it
+    /// and deleted since are not among them, so the note never claims it was
+    /// never cloned. With no user its blocks are freed, unless a local Time
+    /// Machine snapshot taken while it existed keeps them; with users, the
+    /// blocks they share stay allocated until they change them or are deleted.
     public static func deletionNote(machines: [String]) -> String {
         guard !machines.isEmpty else {
-            return "no machine was cloned from it, so its space is free now"
+            return "no machine uses it now; deleting frees its blocks "
+                + "(a local Time Machine snapshot may keep them until it expires)"
         }
-        return "\(machines.count) machine(s) cloned from it (\(machines.joined(separator: ", "))) still share its blocks; "
-            + "those blocks are freed only when the machines change them or are deleted"
+        return "\(machines.count) machine(s) use it (\(machines.joined(separator: ", "))); "
+            + "the blocks they share with it stay allocated until they change them or are deleted"
     }
 
     /// Removes a frozen template, by identifier or unique prefix, or a staging

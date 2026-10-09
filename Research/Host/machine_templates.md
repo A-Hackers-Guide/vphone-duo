@@ -78,8 +78,11 @@ re-resolves with the template's own `PatchSelection.plist`.
   Launchpad never list a template.
 - `Template.plist`: `Identifier`, `Key`, `Created`, `BuiltWithBundleVersion`,
   `BootChainBundleVersion`, `SourceMachine` (the name a derived mDNS name
-  follows from), `Frozen`, `FrozenAt`, `Steps` (`SnapshotDeleted`,
-  `SetupDone`, `ServiceProfile`, `ServiceGroups`, `RemovedApps`, `TrimTier`),
+  follows from), `Frozen`, `FrozenAt`, `Build` (a UUID set each time a template
+  is frozen or adopted), `Steps` (`SnapshotDeleted`, `SetupDone`,
+  `ServiceProfile`, `ServiceGroups`, `RemovedApps`, `TrimTier`, and
+  `UnregisterAttempts`: the removed apps vphoned had to unregister more than
+  once, with the count; not part of the key),
   `Sources` (`IPhone`, `CloudOS`: the IPSW sources a `vm create` build or
   `vm template adopt --iphone-source … --cloudos-source …` named; not part of
   the key). `vm template find` and `vm create` resolve a request's builds
@@ -97,18 +100,34 @@ re-resolves with the template's own `PatchSelection.plist`.
   not found" for a deleted local IPSW (Launchpad 2.9 end-to-end test, B3 and
   B4).
 - `TemplateSource.plist` in a machine cloned from a template: `Identifier`,
-  `Cloned`. A plain `vm clone` keeps it (the copy shares the template's
-  blocks too); `vm export` excludes it (an import shares nothing).
-  `VPhoneMachineTemplates.usage` maps each template to the machines (and
-  templates adopted from such machines) that carry its identifier. `vm
-  template list/show` print it with the template's allocated size; `vm delete`
-  of the last machine using a template that still exists prints a note to
-  delete it (`unusedTemplate(after:in:)`), never deleting it itself.
-  `vm template delete` says what the deletion frees
-  (`VPhoneMachineTemplates.deletionNote`, from `usage` read before it): with
-  machines using the template, that they still share its blocks, freed only
-  when they change them or are deleted; with none, that its space is free
-  now. Until 2026-10-09 it printed the first note whatever the usage (B8).
+  `Build` (the template's `Build`), `Cloned`. A plain `vm clone` keeps it
+  (the copy shares the template's blocks too); `vm export` excludes it (an
+  import shares nothing). `VPhoneMachineTemplates.usage` maps each template to
+  the machines (and templates adopted from such machines) cloned from it.
+  The identifier alone does not say that: a template deleted and built again
+  with the same key gets the same identifier and shares nothing with the
+  clones of the old one. A clone counts for a template only when
+  `VPhoneMachineTemplateSource.isClone(of:)` says so: both `Build`s equal, or,
+  when either side has none (records written before 2026-10-09), `Cloned` no
+  earlier than the template's `FrozenAt` (else `Created`). Until then the
+  rebuilt template counted the old build's clones as its users, in `vm
+  template list/show`, Launchpad's "N machine(s) use it" and the delete notes
+  (PR #633 retest, N1). `vm template list/show --json` add `build` and
+  `frozenAt`. `vm template list/show` print the users with the template's
+  allocated size; `vm delete` of the last machine cloned from the template
+  that exists now prints a note to delete it (`unusedTemplate(after:in:)`;
+  deleting a clone of an earlier build prints nothing), never deleting it
+  itself. `vm template delete` says what the deletion frees
+  (`VPhoneMachineTemplates.deletionNote`, from `usage` read before it), from
+  facts it has: with machines using the template, it names them and says the
+  blocks they share stay allocated until they change them or are deleted;
+  with none, "no machine uses it now; deleting frees its blocks (a local Time
+  Machine snapshot may keep them until it expires)". It cannot know whether
+  the template was cloned before and the clones deleted, so it no longer says
+  "no machine was cloned from it", and a local snapshot can keep the blocks,
+  so it no longer says "its space is free now" (retest B8). `--json` (with
+  `--force`) prints `deleted`, `path`, `machines`, `blocksFreed` and the
+  same `note`.
 - A build happens in `.building-<id>-<uuid>/<id>/` and is frozen by writing
   `Frozen = true` and one `renamex_np(RENAME_EXCL)` to `.templates/<id>`. A
   listed template is always complete; a race with another build of the same
@@ -410,7 +429,15 @@ nine removed apps, `adopt` saved the template under a key `vm template find`
 never computes for the default options, and every later create with them
 missed it and built another 17.5 GB template (B1). vphoned now polls the
 record every 0.1 s for up to 2.5 s, unregisters once more if it is still
-listed, and only then fails the app (`GuestAppUnregistration`). For Launchpad
+listed, and only then fails the app (`GuestAppUnregistration`). It
+reports `unregister_attempts` for an app that needed more than one call. The
+setup boot keeps it (`VPhoneTemplateSetupAppResult.unregisterAttempts`),
+prints `  <bundle id>: unregistered after N attempts` in its remove-apps step
+and a summary line in its report, and records the counts in
+`Steps.UnregisterAttempts`, so the race can be counted from build logs and
+`vm template show`. Until 2026-10-09 the count never left vphoned (retest
+G1). It does not tell a first check that still saw the app from one that did
+not: an app that left LaunchServices while vphoned polled still counts 1. For Launchpad
 the setup boot is meant to run with `--strict` and the adopt with
 `--expect <id>` (below), so a template is never saved under a key the request
 did not ask for.

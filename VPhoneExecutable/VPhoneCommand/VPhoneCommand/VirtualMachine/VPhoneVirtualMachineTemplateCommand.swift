@@ -56,12 +56,18 @@ struct VPhoneMachineTemplateReport: Encodable {
     /// What the template's files take on disk (`st_blocks`): what deleting
     /// it frees once no machine shares its blocks.
     var allocatedBytes: UInt64
-    /// Machines cloned from it (their `TemplateSource.plist`), sorted.
+    /// Machines cloned from this build of it (their `TemplateSource.plist`),
+    /// sorted. Machines cloned from an earlier template with the same key
+    /// are not listed: they share none of its blocks.
     var machines: [String]
     var stale: Bool
     var staleReasons: [String]
     /// The IPSW sources it was built from, when its build named them.
     var sources: VPhoneMachineTemplateSources?
+    /// The build's UUID, copied into each clone's `TemplateSource.plist`;
+    /// nil for a template frozen before builds were recorded.
+    var build: String?
+    var frozenAt: Date?
 
     init(_ template: VPhoneMachineTemplate, usage: [String: [String]]) {
         let record = template.record
@@ -79,6 +85,8 @@ struct VPhoneMachineTemplateReport: Encodable {
         staleReasons = VPhoneMachineTemplateKeys.staleReasons(template)
         stale = !staleReasons.isEmpty
         sources = record.sources
+        build = record.build
+        frozenAt = record.frozenAt
     }
 }
 
@@ -180,7 +188,14 @@ struct VPhoneVirtualMachineTemplateShowCommand: ParsableCommand {
             print("removed:   \(key.slimming.removedApps.joined(separator: ","))")
         }
         print("steps:     snapshot deleted \(report.steps.snapshotDeleted ? "yes" : "no"), setup done \(report.steps.setupDone ? "yes" : "no")")
+        let retried = report.steps.unregisterAttempts.sorted { $0.key < $1.key }
+        if !retried.isEmpty {
+            print("retried:   \(retried.map { "\($0.key) unregistered after \($0.value) attempts" }.joined(separator: ", "))")
+        }
         print("created:   \(report.created.formatted(.iso8601))")
+        if let frozenAt = report.frozenAt {
+            print("frozen:    \(frozenAt.formatted(.iso8601))\(report.build.map { ", build \($0)" } ?? "")")
+        }
         if let source = report.sourceMachine {
             print("source:    \(source)")
         }
@@ -709,13 +724,24 @@ struct VPhoneVirtualMachineTemplateDeleteCommand: ParsableCommand {
         abstract: "Delete a template or an unfinished template build",
         discussion: """
         Machines cloned from the template keep working: they share its blocks but do not refer \
-        to it. The space those shared blocks take is freed only when no clone uses them either.
+        to it. The space those shared blocks take is freed only when no clone uses them either. \
+        A local Time Machine snapshot taken while the template existed keeps its blocks until \
+        the snapshot expires.
+
+        --json prints what was deleted and the machines that used it; it needs --force.
         """,
     )
 
     @OptionGroup var lib: VPhoneLibraryOption
     @Argument(help: "template id (or unique prefix), or a .building-… name from vm template list") var id: String
     @Flag(name: .shortAndLong, help: "Do not prompt") var force = false
+    @Flag(name: .shortAndLong, help: "Emit the result as JSON (needs --force)") var json = false
+
+    func validate() throws {
+        if json, !force {
+            throw ValidationError("--json does not prompt: pass --force with it.")
+        }
+    }
 
     func run() throws {
         let library = lib.library
@@ -733,7 +759,33 @@ struct VPhoneVirtualMachineTemplateDeleteCommand: ParsableCommand {
         let identifier = (try? VPhoneMachineTemplates.template(id, in: library).identifier) ?? id
         let machines = id.hasPrefix(".building-") ? [] : VPhoneMachineTemplates.usage(in: library)[identifier] ?? []
         let removed = try VPhoneMachineTemplates.delete(id, in: library)
+        let note = VPhoneMachineTemplates.deletionNote(machines: machines)
+        if json {
+            try print(encodeJSON(VPhoneMachineTemplateDeleteReport(
+                deleted: removed.lastPathComponent,
+                path: removed.path,
+                machines: machines,
+                blocksFreed: machines.isEmpty,
+                note: note,
+            )))
+            return
+        }
         print("deleted \(removed.lastPathComponent)")
-        print("note: \(VPhoneMachineTemplates.deletionNote(machines: machines))")
+        print("note: \(note)")
     }
+}
+
+/// What `vm template delete --json` prints.
+struct VPhoneMachineTemplateDeleteReport: Encodable {
+    /// The template identifier or `.building-…` name removed.
+    var deleted: String
+    var path: String
+    /// The machines that used the template when it was deleted; their shared
+    /// blocks stay allocated until they change them or are deleted.
+    var machines: [String]
+    /// True when no machine used it, so its blocks are freed, unless a local
+    /// Time Machine snapshot keeps them until it expires.
+    var blocksFreed: Bool
+    /// The same note the text output prints.
+    var note: String
 }

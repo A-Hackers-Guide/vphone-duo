@@ -194,11 +194,17 @@ public struct VPhoneTemplateSetupAppResult: Equatable, Sendable {
     /// vphoned's status: `removed`, `absent`, `unregistered_stale` or `failed`.
     public var status: String
     public var error: String?
+    /// How many times vphoned called LaunchServices to unregister the app:
+    /// more than one when the app was still listed after the first call (the
+    /// race with Find My's first-boot registration). vphoned reports it only
+    /// above one; 1 otherwise.
+    public var unregisterAttempts: Int
 
-    public init(bundleID: String, status: String, error: String? = nil) {
+    public init(bundleID: String, status: String, error: String? = nil, unregisterAttempts: Int = 1) {
         self.bundleID = bundleID
         self.status = status
         self.error = error
+        self.unregisterAttempts = unregisterAttempts
     }
 
     /// The app is not installed afterwards, whichever way.
@@ -228,6 +234,16 @@ public struct VPhoneTemplateSetupOutcome: Equatable, Sendable {
 
     public var removedApps: [String] {
         apps.filter(\.isGone).map(\.bundleID).sorted()
+    }
+
+    /// The apps vphoned had to unregister more than once, with the number of
+    /// attempts.
+    public var retriedUnregistrations: [String: Int] {
+        var retried: [String: Int] = [:]
+        for app in apps where app.unregisterAttempts > 1 {
+            retried[app.bundleID] = app.unregisterAttempts
+        }
+        return retried
     }
 
     /// Where the slimming done so far falls short of `plan`: an app not
@@ -264,6 +280,7 @@ public struct VPhoneTemplateSetupOutcome: Equatable, Sendable {
         steps.serviceProfile = serviceProfile
         steps.serviceGroups = serviceGroups.sorted()
         steps.removedApps = removedApps
+        steps.unregisterAttempts = retriedUnregistrations
         return steps
     }
 }
@@ -457,7 +474,12 @@ public final class VPhoneTemplateSetupBoot {
         }
         var results = rows.compactMap { row -> VPhoneTemplateSetupAppResult? in
             guard let id = row["bundle_id"] as? String else { return nil }
-            return VPhoneTemplateSetupAppResult(bundleID: id, status: row["status"] as? String ?? "failed", error: row["error"] as? String)
+            return VPhoneTemplateSetupAppResult(
+                bundleID: id,
+                status: row["status"] as? String ?? "failed",
+                error: row["error"] as? String,
+                unregisterAttempts: max(1, Self.number(row["unregister_attempts"]).flatMap { Int(exactly: $0.rounded()) } ?? 1),
+            )
         }
         for id in plan.removedApps where !results.contains(where: { $0.bundleID == id }) {
             results.append(VPhoneTemplateSetupAppResult(bundleID: id, status: "failed", error: "vphoned returned no result for it"))
@@ -465,6 +487,12 @@ public final class VPhoneTemplateSetupBoot {
         outcome.apps = results
         let refused = results.filter { !$0.isGone }
         log("  \(results.count - refused.count) of \(results.count) apps removed or absent")
+        // Each app LaunchServices still listed after the first unregister
+        // call: the build log is where the race with first-boot
+        // registration can be counted.
+        for app in results.sorted(by: { $0.bundleID < $1.bundleID }) where app.unregisterAttempts > 1 {
+            log("  \(app.bundleID): unregistered after \(app.unregisterAttempts) attempts")
+        }
         guard !refused.isEmpty else { return }
         let lines = refused.map { "\($0.bundleID): \($0.error ?? $0.status)" }
         if plan.requiresEveryApp {

@@ -34,6 +34,8 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
     var skipFailures = 0
     var unsettledAnswers = 1
     var refusedApps: Set<String> = []
+    /// Apps vphoned had to unregister more than once, as it reports them.
+    var unregisterAttempts: [String: Int] = [:]
     var servicesKeepRunning = false
     var rebootNeverReturns = false
     var stopsCleanly = true
@@ -124,7 +126,9 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
                 if refusedApps.contains(id) {
                     results.append(["bundle_id": id, "status": "failed", "removed": false, "error": "not in a bundle container"])
                 } else if installed.remove(id) != nil {
-                    results.append(["bundle_id": id, "status": "removed", "removed": true])
+                    var row: [String: Any] = ["bundle_id": id, "status": "removed", "removed": true]
+                    row["unregister_attempts"] = unregisterAttempts[id]
+                    results.append(row)
                 } else {
                     results.append(["bundle_id": id, "status": "absent", "removed": false])
                 }
@@ -403,6 +407,34 @@ struct TemplateSetupBootTests {
         let outcome = try run(guest).get()
         #expect(outcome.apps.first(where: { $0.bundleID == "com.apple.news" })?.status == "absent")
         #expect(outcome.removedApps.contains("com.apple.news"))
+    }
+
+    @Test func `apps unregistered after more than one attempt are logged and recorded`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.unregisterAttempts = ["com.apple.findmy": 3, "com.apple.tv": 2]
+        var lines: [String] = []
+        let boot = VPhoneTemplateSetupBoot(
+            machine: guest,
+            plan: VPhoneTemplateSetupPlan(slimming: VPhoneTemplateSlimmingRequest.defaultSlimming, requiresEveryApp: true),
+            clock: guest.clock,
+            log: { lines.append($0) },
+        )
+        let outcome = try boot.run()
+
+        #expect(outcome.apps.first(where: { $0.bundleID == "com.apple.findmy" })?.unregisterAttempts == 3)
+        #expect(outcome.apps.first(where: { $0.bundleID == "com.apple.news" })?.unregisterAttempts == 1)
+        #expect(outcome.retriedUnregistrations == ["com.apple.findmy": 3, "com.apple.tv": 2])
+        #expect(lines.contains("  com.apple.findmy: unregistered after 3 attempts"))
+        #expect(lines.contains("  com.apple.tv: unregistered after 2 attempts"))
+        #expect(!lines.contains { $0.contains("com.apple.news: unregistered") })
+        // Recorded with the steps, outside the key.
+        let steps = outcome.applying(to: VPhoneMachineTemplateSteps())
+        #expect(steps.unregisterAttempts == ["com.apple.findmy": 3, "com.apple.tv": 2])
+        var without = steps
+        without.unregisterAttempts = [:]
+        #expect(without.slimming == steps.slimming)
+        let encoded = try PropertyListEncoder().encode(steps)
+        #expect(try PropertyListDecoder().decode(VPhoneMachineTemplateSteps.self, from: encoded) == steps)
     }
 
     @Test func `a VM that exits fails the step it was in`() throws {

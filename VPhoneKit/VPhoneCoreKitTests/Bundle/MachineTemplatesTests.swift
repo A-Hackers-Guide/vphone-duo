@@ -663,10 +663,124 @@ struct MachineTemplatesTests {
         }
     }
 
-    @Test func `deleting a template says the space is free unless machines still share its blocks`() {
-        #expect(VPhoneMachineTemplates.deletionNote(machines: []) == "no machine was cloned from it, so its space is free now")
+    @Test func `deleting a template says its blocks are freed unless machines use it`() {
+        let free = VPhoneMachineTemplates.deletionNote(machines: [])
+        #expect(free.hasPrefix("no machine uses it now; deleting frees its blocks"))
+        // Never claims it was never cloned, and does not promise free space a
+        // local Time Machine snapshot may keep.
+        #expect(!free.contains("cloned"))
+        #expect(free.contains("Time Machine snapshot"))
         let shared = VPhoneMachineTemplates.deletionNote(machines: ["phone-a", "phone-b"])
-        #expect(shared.hasPrefix("2 machine(s) cloned from it (phone-a, phone-b) still share its blocks"))
-        #expect(shared.contains("freed only when"))
+        #expect(shared.hasPrefix("2 machine(s) use it (phone-a, phone-b); "))
+        #expect(shared.contains("stay allocated until they change them or are deleted"))
+    }
+
+    // MARK: - Builds
+
+    @Test func `a template rebuilt with the same key does not count the old build's clones`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        try makeMachine("src", in: fixture)
+        let first = try VPhoneMachineTemplates.adopt(
+            machineNamed: "src", in: fixture.library, record: record(), now: Date(timeIntervalSince1970: 1_800_000_100),
+        )
+        let firstBuild = try #require(first.record.build)
+        let old = try VPhoneMachineTemplates.cloneMachine(from: first, to: "old", in: fixture.library)
+        #expect(VPhoneMachineTemplates.readSource(inBundle: old.url)?.build == firstBuild)
+        #expect(VPhoneMachineTemplates.usage(in: fixture.library) == [first.identifier: ["old"]])
+
+        // Deleted and built again under the same identifier, with a new build.
+        try VPhoneMachineTemplates.delete(first.identifier, in: fixture.library)
+        #expect(VPhoneMachineTemplates.usage(in: fixture.library) == [first.identifier: ["old"]])
+        try makeMachine("src2", in: fixture)
+        let second = try VPhoneMachineTemplates.adopt(machineNamed: "src2", in: fixture.library, record: record(source: "src2"))
+        #expect(second.identifier == first.identifier)
+        #expect(second.record.build != nil && second.record.build != firstBuild)
+        #expect(VPhoneMachineTemplates.usage(in: fixture.library)[second.identifier] == nil)
+
+        let new = try VPhoneMachineTemplates.cloneMachine(from: second, to: "new", in: fixture.library)
+        #expect(VPhoneMachineTemplates.usage(in: fixture.library) == [second.identifier: ["new"]])
+        // Deleting the old build's clone says nothing about the new template;
+        // deleting the new one's last clone does.
+        let oldSource = VPhoneMachineTemplates.readSource(inBundle: old.url)
+        try VPhoneBundleOperations.delete(bundleNamed: "old", in: fixture.library)
+        #expect(VPhoneMachineTemplates.unusedTemplate(after: oldSource, in: fixture.library) == nil)
+        let newSource = VPhoneMachineTemplates.readSource(inBundle: new.url)
+        try VPhoneBundleOperations.delete(bundleNamed: "new", in: fixture.library)
+        #expect(VPhoneMachineTemplates.unusedTemplate(after: newSource, in: fixture.library)?.identifier == second.identifier)
+    }
+
+    @Test func `a clone record without a build is matched by its clone date`() throws {
+        let frozenAt = Date(timeIntervalSince1970: 1_800_000_100)
+        var template = record()
+        template.frozen = true
+        template.frozenAt = frozenAt
+        template.build = UUID().uuidString
+        let id = template.identifier
+
+        // Written before builds were recorded: the date decides.
+        #expect(VPhoneMachineTemplateSource(identifier: id, cloned: frozenAt).isClone(of: template))
+        #expect(VPhoneMachineTemplateSource(identifier: id, cloned: frozenAt + 60).isClone(of: template))
+        #expect(!VPhoneMachineTemplateSource(identifier: id, cloned: frozenAt - 1).isClone(of: template))
+        // A build on both sides decides, whatever the dates say.
+        #expect(VPhoneMachineTemplateSource(identifier: id, build: template.build, cloned: frozenAt - 600).isClone(of: template))
+        #expect(!VPhoneMachineTemplateSource(identifier: id, build: UUID().uuidString, cloned: frozenAt + 60).isClone(of: template))
+        // A template frozen before builds were recorded: the date again.
+        var legacy = template
+        legacy.build = nil
+        #expect(VPhoneMachineTemplateSource(identifier: id, build: UUID().uuidString, cloned: frozenAt + 60).isClone(of: legacy))
+        #expect(!VPhoneMachineTemplateSource(identifier: id, build: UUID().uuidString, cloned: frozenAt - 60).isClone(of: legacy))
+        // Without a freeze date, the creation date.
+        legacy.frozenAt = nil
+        #expect(VPhoneMachineTemplateSource(identifier: id, cloned: template.created).isClone(of: legacy))
+        #expect(!VPhoneMachineTemplateSource(identifier: id, cloned: template.created - 1).isClone(of: legacy))
+        // Another key never.
+        #expect(!VPhoneMachineTemplateSource(identifier: "000000000000", build: template.build, cloned: frozenAt).isClone(of: template))
+    }
+
+    @Test func `a legacy clone record of a deleted template is left out by date`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        try makeMachine("src", in: fixture)
+        let template = try VPhoneMachineTemplates.adopt(machineNamed: "src", in: fixture.library, record: record())
+        let frozenAt = try #require(template.record.frozenAt)
+        // Two clones whose records predate builds: one of an earlier template
+        // with this key, one of this one.
+        let earlier = try makeMachine("earlier", in: fixture)
+        try VPhoneMachineTemplates.writeSource(
+            VPhoneMachineTemplateSource(identifier: template.identifier, cloned: frozenAt - 3600), inBundle: earlier.url,
+        )
+        let current = try makeMachine("current", in: fixture)
+        try VPhoneMachineTemplates.writeSource(
+            VPhoneMachineTemplateSource(identifier: template.identifier, cloned: frozenAt + 1), inBundle: current.url,
+        )
+        #expect(VPhoneMachineTemplates.usage(in: fixture.library) == [template.identifier: ["current"]])
+    }
+
+    @Test func `a record without a build reads, and a frozen one gets one`() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        let machine = try makeMachine("src", in: fixture)
+        // An older record: no Build key at all.
+        try VPhoneMachineTemplates.writeRecord(record(), inBundle: machine.url)
+        let raw = try Data(contentsOf: machine.url.appendingPathComponent(VPhoneMachineTemplates.recordFileName))
+        #expect(!String(decoding: raw, as: UTF8.self).contains("<key>Build</key>"))
+        #expect(try VPhoneMachineTemplates.readRecord(inBundle: machine.url)?.build == nil)
+        let source = try PropertyListDecoder().decode(
+            VPhoneMachineTemplateSource.self,
+            from: PropertyListSerialization.data(
+                fromPropertyList: ["Identifier": "52b1fcc75e0c", "Cloned": Date(timeIntervalSince1970: 1_800_000_000)],
+                format: .xml, options: 0,
+            ),
+        )
+        #expect(source.build == nil)
+
+        let key = MachineTemplateKeyTests.key(bootChain: "built")
+        let build = try VPhoneMachineTemplates.beginBuild(key, in: fixture.library)
+        try makeMachine(key.identifier, in: fixture, library: build.library)
+        try VPhoneMachineTemplates.writeRecord(record(key), inBundle: build.bundleURL)
+        let frozen = try VPhoneMachineTemplates.freeze(build)
+        #expect(frozen.record.build != nil)
+        #expect(try VPhoneMachineTemplates.template(frozen.identifier, in: fixture.library).record.build == frozen.record.build)
     }
 }
