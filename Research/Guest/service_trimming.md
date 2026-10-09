@@ -183,3 +183,53 @@ That turns back on only what the profile disabled. To keep the profile but
 bring back one job, apply `trimmed` again with that label in `allow`. To
 bring back the Apple Account daemons on a guest that had `accounts`, apply
 `trimmed` without that group.
+
+## Idle cost of vphone's own components
+
+With the profile applied, the largest idle cost left in a guest was vphone's
+own plumbing: timers in the guest hooks that ran whether or not anything used
+the feature behind them. Measured 2026-10-09 on two clones of one trimmed
+iPhone 27.0 (24A435) template, `--headless`, 15 idle minutes (902 s) starting
+three minutes after boot, screen off and locked, no camera, audio or API
+client. Guest figures are `/usr/bin/taskinfo` differences (CPU time and
+interrupt wakeups per process), run through a one-shot launchd job; host
+figures are the CPU time of the VM's Virtualization service and of
+`vphone-vm`.
+
+| Per 15 idle minutes | Before (2 runs) | After (2 runs) | Source |
+| --- | --- | --- | --- |
+| cameracaptured wakeups / CPU | 27,212–27,960 / 2.1–3.1 s | 953–956 / 0.1 s | `libvcamcaptured`'s 30 Hz frame drive ran for the daemon's whole life; it now runs only while a viewfinder stream or video sink exists ([`virtual_camera_transport.md`](virtual_camera_transport.md#idle-cost-2026-10-09)) |
+| audiomxd wakeups / CPU | 21,670–22,548 / 1.8–2.6 s | 944–952 / 0.1 s | The virtio sound speaker's 1/24 s flush timer kept firing after the boot sound stopped; it is now disarmed when the stream stops ([`virtio_sound.md`](virtio_sound.md)) |
+| AccessibilityUIServer, InputUI wakeups | about 905 each | 0–7 | `libcamfix`'s 1 Hz preview-layer scan on the main queue of every app-path process with AVFoundation; it now starts with the first running vcam session |
+| SpringBoard wakeups / CPU | 1,603–1,606 / 0.8–1.0 s | 714–717 / 0.3 s | The same scan, in SpringBoard |
+| backboardd wakeups | 788–817 | 419–433 | `libvphonegyro` republished its status through cfprefsd every two seconds; now only while samples are dispatched ([`virtual_gyroscope.md`](virtual_gyroscope.md)) |
+| vphoned wakeups | 315–328 | 38–40 | The 3 s `device.state` poll ran with no subscriber; it now runs only while an event socket is open |
+| All guest processes, wakeups | 62,873–64,396 | 12,324–12,374 | −81% |
+| All guest processes, CPU | 11.2–20.4 s | 7.7–7.8 s | |
+| Host VM service CPU | 26.4–33.5 s (2.9–3.7% of a core) | 20.2 s (2.2%) | |
+| Host `vphone-vm` CPU | 1.9–2.1 s | 0.3 s | The 3 s health probe read and hashed the 9 MB vphoned on the main thread each time; the hash is now kept until the file changes (`VPhoneFileDigestCache`) |
+
+What is left at the top is Apple's own: mDNSResponder (about 1,900),
+locationd (1,100), cameracaptured and audiomxd (about 950 each with nothing
+of ours running in them), clipserviced, fseventsd and backboardd.
+
+**remotepairingdeviced is quiet on a guest that was never paired**: 30
+wakeups and under 0.01 s of CPU per 15 minutes, 0.12 s in its first 18
+minutes, no log lines in a minute. No vphone code talks to it. The 3.5–8 s
+measured earlier came from a clone of a DeviceHub test machine that had been
+paired with this Mac's CoreDevice, so that cost follows pairing between Apple's
+daemons on both sides. An unpaired guest that is unlocked gets a "Trust This
+Computer?" alert from the Mac shortly after; answering it is what pairs it.
+
+Checked after the change: playback through Safari (91 s, 1,073 writes, none
+starved, host rate 48000.1/s) on a boot whose speaker had already started and
+stopped once, so the timer was re-armed; audiomxd fell back to 1.6 wakeups a
+second when it stopped. The gyroscope configuration still reaches the provider
+and `provider_running` stays true while idle. `device.state` arrives about a
+second after an event socket opens and again after an unlock; vphoned took 45
+wakeups a minute with a socket open and 7 without. A guest with an older
+vphoned was still updated by `vphone-vm` over HTTP. Not checked live: camera
+frames, because the iPhone 27.0 guest publishes no synthetic camera
+(`libvcamcaptured` logs `_sSourceList not located` on every boot, before and
+after), so no client can reach the drive; and the microphone, whose code did
+not change.
