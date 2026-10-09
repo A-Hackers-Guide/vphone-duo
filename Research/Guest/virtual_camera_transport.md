@@ -108,3 +108,33 @@ serialises patchers. Kill-and-relaunch stress (killing `cameracaptured`
 with Camera.app auto-reconnecting, the same collision the crashes came
 from) is the validation.
 
+
+## Idle cost (2026-10-09)
+
+With no camera client, both camera hooks used to keep timers running for
+the life of their process:
+
+- `libvcamcaptured` armed its 30 Hz viewfinder and sink drive when it
+  installed its hooks, three seconds after `cameracaptured` started. Each tick
+  copied an empty stream list and an empty sink table and returned, which woke
+  the daemon 27,000–28,000 times in 15 idle minutes (30.2/s, 2–3 s of CPU) on
+  an iPhone 27.0 guest. The drive now runs only while it has a consumer
+  (`VCamCaptured/Frames/VCamDriveGate.{h,c}`): `-[FigCameraViewfinderStream
+  openWithDestination:]` and every new `BWImageQueueSinkNode` or
+  `BWRemoteQueueSinkNode` start it, and the first tick that finds no open
+  stream and no live sink stops it. A consumer that appears during a tick
+  keeps it running; start and stop run under the gate's lock. The log shows
+  `viewfinder drive started (30 Hz, start #N)` and `viewfinder drive stopped`.
+  `make -C VPhoneGuestComponents test-vcam-drive-gate` covers the gate.
+- `libcamfix` loads into every app-path process that has AVFoundation, which
+  on a fresh guest includes SpringBoard, PosterBoard, AccessibilityUIServer,
+  InputUI and most widget extensions. Each armed the 1 Hz preview-layer scan
+  on its main queue as soon as AVFCapture loaded, walking the whole layer tree
+  every second. The scan now starts with the first vcam-bound session that
+  reaches `-[AVCaptureSession _setRunning:YES]`; the preview-layer
+  initializer hooks still adopt layers directly. If `_setRunning:` cannot be
+  hooked, the scan starts at install as before.
+
+After both changes `cameracaptured` took about one wakeup a second in the same
+window, and AccessibilityUIServer and InputUI dropped from about 900 each to
+under 10. The numbers are in [`service_trimming.md`](service_trimming.md#idle-cost-of-vphones-own-components).

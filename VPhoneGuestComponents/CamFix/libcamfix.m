@@ -82,7 +82,11 @@ static void cfx_install_all_hooks(void) {
     cfx_install_photo_representation_hooks();
     cfx_install_capturerequest_stubs();
     cfx_install_remote_queue_tap();
-    cfx_start_scan_timer();
+    // The 1 Hz preview layer scan starts with the first running vcam session
+    // (Session/CamFixSessionGuards.m), not here: this hook also loads into
+    // SpringBoard, PosterBoard and every widget extension that links
+    // AVFoundation, and an always-on scan woke each of their main threads
+    // once a second to walk its whole layer tree.
   });
 }
 

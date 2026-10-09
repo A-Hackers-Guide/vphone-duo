@@ -63,6 +63,9 @@ static void cfx_session_setRunning_hook(id self, SEL _cmd, BOOL running) {
   if (running && cfx_session_is_for_vcam(self)) {
     cfx_log_session_start(self);
     cfx_track_vcam_session(self);
+    // Only a process with a running vcam session can have a preview layer
+    // to find.
+    cfx_start_scan_timer();
   }
   if (!running && cfx_session_is_for_vcam(self)) {
     cfxlog(@"[session _setRunning:NO] suppressed for vcam session %p", self);
@@ -97,6 +100,9 @@ void cfx_install_session_guards(void) {
     cfxlog(@"installed _setRunning: hook");
   } else {
     cfxlog(@"_setRunning: not in objc table");
+    // Without the hook nothing would start the scan: keep the old
+    // always-on fallback.
+    cfx_start_scan_timer();
   }
   if (m2) {
     cfx_orig_setInterrupted = method_setImplementation(m2, (IMP)cfx_session_setInterrupted_hook);
