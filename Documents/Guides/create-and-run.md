@@ -132,7 +132,7 @@ Launchpad 2.9 creates machines from templates by default. New Machine has a Slim
 
 The creation runs `vm template find` first. When a current template matches, it clones the machine (`vm create --template <id> --skip-first-boot`) and boots it. When none does, it builds the template in a temporary machine of the same library, named `template-` and eight hex digits, with its usual steps (restore, then `cfw install` through the helper), then `vm template trim`, the headless `vm template setup` and `vm template adopt --iphone-source … --cloudos-source …`, and clones the machine from the result. Each is a step of its own with its duration, and a failed one shows the reason `vphone-cli` gave. Once it has built a template, the creation offers to delete the two IPSWs it came from; nothing is deleted without confirming.
 
-File > Templates… lists every library's templates with their machines, slimming, size and state, and deletes them. Guest System… (in a machine's Actions menu and inspector) switches a running machine's service profile and restores system apps the template removed. The inspector and the machine list show each machine's exclusive disk use, the blocks only it holds, beside what its files allocate.
+File > Templates… lists every library's templates with their machines, slimming, size and state, and deletes them. Guest System… (in a machine's Actions menu and inspector) switches a running machine's service profile and restores system apps the template removed. The inspector and the machine list show each machine's exclusive disk use beside what its files allocate: the blocks no other machine or template holds, which deleting it frees (a local Time Machine snapshot taken before keeps them until it expires).
 
 ### Shared secrets
 

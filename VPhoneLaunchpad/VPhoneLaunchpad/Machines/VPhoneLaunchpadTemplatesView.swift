@@ -230,7 +230,7 @@ struct VPhoneLaunchpadTemplatesView: View {
         guard let exclusive = library.usage(of: template)?.exclusive else {
             return String(localized: "Allocated on disk.")
         }
-        return String(localized: "Allocated on disk; deleting it frees \(VPhoneLaunchpadDiskUsage.format(exclusive)) now, the blocks no machine shares.")
+        return String(localized: "Allocated on disk; deleting it frees about \(VPhoneLaunchpadDiskUsage.format(exclusive)), the blocks no machine shares, once no local Time Machine snapshot keeps them.")
     }
 
     private func deletionMessage(_ template: VPhoneLaunchpadTemplate) -> String {
@@ -241,7 +241,7 @@ struct VPhoneLaunchpadTemplatesView: View {
             parts.append(String(localized: "\(template.machines.joined(separator: ", ")) keep working: they share its blocks but do not need it."))
         }
         if let exclusive = library.usage(of: template)?.exclusive {
-            parts.append(String(localized: "Deleting it frees about \(VPhoneLaunchpadDiskUsage.format(exclusive)) now; the blocks its machines share are freed once they change or are deleted."))
+            parts.append(String(localized: "Deleting it frees about \(VPhoneLaunchpadDiskUsage.format(exclusive)), once no local Time Machine snapshot keeps those blocks; the blocks its machines share are freed once they change or are deleted."))
         }
         parts.append(String(localized: "The next machine with its options builds a new template, which takes a restore."))
         return parts.joined(separator: " ")

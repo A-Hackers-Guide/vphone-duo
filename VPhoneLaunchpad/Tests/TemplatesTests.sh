@@ -11,6 +11,7 @@ trap '/bin/rm -rf "$temporary"' EXIT
     "$launchpad/VPhoneLaunchpad/Machines/VPhoneLaunchpadTemplates.swift" \
     "$launchpad/VPhoneLaunchpad/Machines/VPhoneLaunchpadCreationPlan.swift" \
     "$launchpad/VPhoneLaunchpad/Machines/VPhoneLaunchpadDiskUsage.swift" \
+    "$launchpad/VPhoneLaunchpad/Machines/VPhoneLaunchpadDiskExtents.swift" \
     "$launchpad/Tests/TemplatesTests.swift" \
     -o "$temporary/templates-tests"
 "$temporary/templates-tests" "$@"

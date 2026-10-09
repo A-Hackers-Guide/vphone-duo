@@ -138,7 +138,7 @@ struct VPhoneLaunchpadMachineInspector: View {
                     if let exclusive = usage.exclusive {
                         LabeledContent("Exclusive") {
                             Text(VPhoneLaunchpadDiskUsage.format(exclusive))
-                                .help(String(localized: "The blocks only this machine holds: what deleting it frees. The rest is shared with its template or clones."))
+                                .help(String(localized: "The blocks no other machine or template holds: what deleting it frees, once no local Time Machine snapshot keeps them. The rest is shared with its template or clones."))
                         }
                     }
                     LabeledContent("Allocated") {

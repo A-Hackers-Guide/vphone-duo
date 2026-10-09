@@ -3,14 +3,14 @@ import Foundation
 
 @main
 struct TemplatesTests {
-    static func main() throws {
+    static func main() async throws {
         slimmingArguments()
         commandArguments()
         creationPlan()
         try templateList()
         try templateFind()
         notices()
-        try diskUsage()
+        try await diskUsage()
     }
 
     // MARK: - Switches
@@ -336,7 +336,7 @@ struct TemplatesTests {
 
     // MARK: - Disk use
 
-    static func diskUsage() throws {
+    static func diskUsage() async throws {
         let english = Locale(identifier: "en_US")
         precondition(VPhoneLaunchpadDiskUsage.format(17_580_000_000, locale: english) == "17.58 GB",
                      VPhoneLaunchpadDiskUsage.format(17_580_000_000, locale: english))
@@ -345,42 +345,138 @@ struct TemplatesTests {
         let partial = VPhoneLaunchpadDiskUsage(allocated: 17_580_000_000, exclusive: 610_000_000)
         precondition(partial.summary(locale: english).contains("610 MB") && partial.summary(locale: english).contains("17.58 GB"),
                      partial.summary(locale: english))
-        precondition(VPhoneLaunchpadDiskUsage(allocated: 1_000_000_000, exclusive: nil).summary(locale: english) == "1 GB", "Without a private size")
+        precondition(VPhoneLaunchpadDiskUsage(allocated: 1_000_000_000, exclusive: nil).summary(locale: english) == "1 GB", "Without an exclusive size")
+        extentArithmetic()
+        try await sharedExtents()
+        print("Disk use tests passed")
+    }
 
-        // A clone shares its blocks until it writes: on APFS (the temporary
-        // directory is on the boot volume) the original keeps its blocks to
-        // itself only once the clone has rewritten them.
+    /// The sweep on made-up extents.
+    static func extentArithmetic() {
+        typealias Extents = VPhoneLaunchpadDiskExtents
+        func extents(_ ranges: [(Int64, Int64)], device: Int64 = 1) -> Extents {
+            Extents(device: device, ranges: ranges.map { Extents.Range(start: $0.0, end: $0.1) })
+        }
+        let merged = extents([(30, 40), (0, 10), (10, 20), (35, 50), (60, 60)])
+        precondition(merged.ranges == [Extents.Range(start: 0, end: 20), Extents.Range(start: 30, end: 50)], "Normalized: \(merged.ranges)")
+        precondition(merged.bytes == 40, "Bytes \(merged.bytes)")
+
+        // A template and two clones: each clone rewrote a part, one of them
+        // also wrote where the template has a hole.
+        let template = extents([(0, 1000)])
+        let first = extents([(0, 100), (2000, 2100), (200, 1000)])
+        let second = extents([(0, 500), (3000, 3050), (600, 1000)])
+        precondition(Extents.exclusiveBytes(of: [[template], [first], [second]]) == [0, 100, 50],
+                     "Clones: \(Extents.exclusiveBytes(of: [[template], [first], [second]]))")
+        // Once the clones are gone, all of it is the template's own.
+        precondition(Extents.exclusiveBytes(of: [[template]]) == [1000], "Alone")
+        // What only the template and one clone share is neither's own.
+        precondition(Extents.exclusiveBytes(of: [[extents([(0, 100)])], [extents([(50, 150)])]]) == [50, 50], "Overlap")
+        // Two files of one folder sharing blocks count them once, as its own.
+        precondition(Extents.exclusiveBytes(of: [[extents([(0, 100)]), extents([(0, 100)])], [extents([(500, 600)])]]) == [100, 100],
+                     "Own clones")
+        // The same offsets on another device are other blocks.
+        precondition(Extents.exclusiveBytes(of: [[extents([(0, 100)], device: 1)], [extents([(0, 100)], device: 2)]]) == [100, 100],
+                     "Devices")
+        precondition(Extents.exclusiveBytes(of: [[], [extents([(0, 10)])]]) == [0, 10], "An empty folder")
+    }
+
+    /// Real clones on APFS (the temporary directory is on the boot volume).
+    /// The images are 256 MiB and sparse, as a disk image is: APFS fills a
+    /// small file's holes with zeros when it writes into one, which would
+    /// count as written.
+    static func sharedExtents() async throws {
         let fm = FileManager.default
         let folder = fm.temporaryDirectory.appendingPathComponent("disk-usage-\(UUID().uuidString)", isDirectory: true)
         defer { try? fm.removeItem(at: folder) }
-        let machine = folder.appendingPathComponent("machine", isDirectory: true)
-        try fm.createDirectory(at: machine, withIntermediateDirectories: true)
-        let disk = machine.appendingPathComponent("Disk.img")
-        let block = Data((0 ..< (8 << 20)).map { UInt8(truncatingIfNeeded: $0 &* 31) })
-        try block.write(to: disk)
-        let alone = try require(VPhoneLaunchpadDiskUsage.privateSize(of: disk.path), "A private size on APFS")
-        precondition(alone >= 8 << 20, "A file shares nothing yet: \(alone)")
+        let library = folder.appendingPathComponent("library", isDirectory: true)
+        let template = library.appendingPathComponent(".templates/0123456789ab", isDirectory: true)
+        let first = library.appendingPathComponent("first", isDirectory: true)
+        let second = library.appendingPathComponent("second", isDirectory: true)
+        for directory in [template, first, second] {
+            try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        try fm.createDirectory(at: library.appendingPathComponent(".templates/.building-0123456789ab-1"), withIntermediateDirectories: true)
+        precondition(VPhoneLaunchpadDiskMeter.templateFolders(in: library.path) == [template.path],
+                     "Template folders: \(VPhoneLaunchpadDiskMeter.templateFolders(in: library.path))")
 
-        let clone = folder.appendingPathComponent("clone.img")
-        precondition(clonefile(disk.path, clone.path, 0) == 0, "clonefile")
-        let shared = try require(VPhoneLaunchpadDiskUsage.privateSize(of: disk.path), "Private size after a clone")
-        precondition(shared < 1 << 20, "A cloned file shares its blocks: \(shared)")
+        let disk = template.appendingPathComponent("Disk.img")
+        precondition(fm.createFile(atPath: disk.path, contents: nil), "Disk.img")
+        try write(disk, at: 0, count: 8 << 20, byte: 0x11)
+        try write(disk, at: 32 << 20, count: 8 << 20, byte: 0x22)
+        try truncate(disk, to: 256 << 20)
 
-        let handle = try FileHandle(forWritingTo: clone)
-        try handle.write(contentsOf: Data(repeating: 0x5A, count: 2 << 20))
+        let mapped = try VPhoneLaunchpadDiskExtents.map(disk.path).get()
+        let allocated = try allocatedBytes(disk)
+        precondition(mapped.bytes == allocated && allocated >= 16 << 20 && allocated < 24 << 20,
+                     "Holes are not mapped: \(mapped.bytes) of \(allocated)")
+        precondition(VPhoneLaunchpadDiskExtents.map(folder.path) == .failure(.unsupported), "A directory is not mapped")
+
+        let meter = VPhoneLaunchpadDiskMeter()
+        let alone = await meter.measure([.init(path: template.path)])
+        precondition(alone[template.path] == VPhoneLaunchpadDiskUsage(allocated: allocated, exclusive: allocated),
+                     "A template alone: \(String(describing: alone[template.path]))")
+
+        for machine in [first, second] {
+            precondition(clonefile(disk.path, machine.appendingPathComponent("Disk.img").path, 0) == 0, "clonefile")
+        }
+        // The first clone rewrites 2 MiB of the template's data and writes
+        // 4 MiB into a hole; the second rewrites the same 2 MiB.
+        try write(first.appendingPathComponent("Disk.img"), at: 1 << 20, count: 2 << 20, byte: 0x33)
+        try write(first.appendingPathComponent("Disk.img"), at: 128 << 20, count: 4 << 20, byte: 0x44)
+        try write(second.appendingPathComponent("Disk.img"), at: 1 << 20, count: 2 << 20, byte: 0x55)
+        let folders: [VPhoneLaunchpadDiskMeter.Folder] = [.init(path: template.path), .init(path: first.path), .init(path: second.path)]
+        let usage = await meter.measure(folders)
+        let templateUsage = try require(usage[template.path]?.exclusive, "Template measured")
+        let firstUsage = try require(usage[first.path]?.exclusive, "First measured")
+        let secondUsage = try require(usage[second.path]?.exclusive, "Second measured")
+        // The template keeps the 2 MiB both clones rewrote to itself.
+        precondition(templateUsage == 2 << 20, "Template: \(templateUsage)")
+        precondition(firstUsage == 6 << 20, "First: \(firstUsage)")
+        precondition(secondUsage == 2 << 20, "Second: \(secondUsage)")
+        let firstAllocated = try allocatedBytes(first.appendingPathComponent("Disk.img"))
+        precondition(usage[first.path]?.allocated == firstAllocated, "Allocated")
+
+        // A folder that may not be opened keeps the extents last mapped; one
+        // never mapped is unknown, and does not open its files.
+        let third = library.appendingPathComponent("third", isDirectory: true)
+        try fm.createDirectory(at: third, withIntermediateDirectories: true)
+        precondition(clonefile(disk.path, third.appendingPathComponent("Disk.img").path, 0) == 0, "clonefile")
+        try write(first.appendingPathComponent("Disk.img"), at: 192 << 20, count: 1 << 20, byte: 0x66)
+        let busy = await meter.measure([.init(path: template.path), .init(path: first.path, mayOpen: false), .init(path: second.path), .init(path: third.path, mayOpen: false)])
+        precondition(busy[first.path]?.exclusive == 6 << 20, "Last mapped: \(String(describing: busy[first.path]))")
+        precondition(busy[third.path]?.exclusive == nil && (busy[third.path]?.allocated ?? 0) >= 16 << 20,
+                     "Never mapped: \(String(describing: busy[third.path]))")
+        let open = await meter.measure([.init(path: template.path), .init(path: first.path), .init(path: second.path), .init(path: third.path)])
+        precondition(open[first.path]?.exclusive == 7 << 20, "Mapped again once changed: \(String(describing: open[first.path]))")
+        // The third clone shares everything it holds.
+        precondition(open[third.path]?.exclusive == 0, "Third: \(String(describing: open[third.path]))")
+        precondition(open[template.path]?.exclusive == 0, "Template with a clone that wrote nothing: \(String(describing: open[template.path]))")
+
+        // Links are not followed.
+        try fm.createSymbolicLink(at: second.appendingPathComponent("link.img"), withDestinationURL: disk)
+        let linked = await meter.measure([.init(path: second.path)])
+        precondition(linked[second.path]?.allocated == usage[second.path]?.allocated, "A link is not followed")
+    }
+
+    static func write(_ file: URL, at offset: UInt64, count: Int, byte: UInt8) throws {
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.seek(toOffset: offset)
+        try handle.write(contentsOf: Data(repeating: byte, count: count))
         try handle.synchronize()
         try handle.close()
-        let written = try require(VPhoneLaunchpadDiskUsage.privateSize(of: clone.path), "Private size of the written clone")
-        precondition(written >= 2 << 20 && written < 4 << 20, "Only rewritten blocks are its own: \(written)")
+    }
 
-        // The folder's own walk: everything allocated, little of it exclusive.
-        let usage = VPhoneLaunchpadDiskUsage.measure(machine)
-        precondition(usage.allocated >= 8 << 20, "Allocated \(usage.allocated)")
-        precondition((usage.exclusive ?? .max) <= 3 << 20, "Exclusive \(String(describing: usage.exclusive))")
-        let link = machine.appendingPathComponent("link.img")
-        try fm.createSymbolicLink(at: link, withDestinationURL: clone)
-        precondition(VPhoneLaunchpadDiskUsage.measure(machine).allocated == usage.allocated, "A link is not followed")
-        print("Disk use tests passed")
+    static func truncate(_ file: URL, to size: UInt64) throws {
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.truncate(atOffset: size)
+        try handle.close()
+    }
+
+    static func allocatedBytes(_ file: URL) throws -> Int64 {
+        var status = stat()
+        precondition(lstat(file.path, &status) == 0, "lstat \(file.path)")
+        return Int64(status.st_blocks) * 512
     }
 
     static func require<T>(_ value: T?, _ message: String) throws -> T {

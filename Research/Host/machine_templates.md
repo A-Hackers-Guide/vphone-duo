@@ -119,6 +119,50 @@ re-resolves with the template's own `PatchSelection.plist`.
   `--no-template`; `adopt` says it removed it.
 - A clone drops `Template.plist`, `Snapshots/` and `vphone.sock`.
 
+## Disk use
+
+Launchpad shows each machine's and template's **Exclusive** size beside what
+its files allocate (`st_blocks`): the blocks no other machine or template in
+its libraries holds, what deleting it frees. `VPhoneLaunchpadDiskMeter`
+measures every machine and template folder of every library in one pass
+(templates are found as `.templates/<12 hex>`, builds left out): each file's
+data ranges come from `SEEK_DATA`/`SEEK_HOLE` and `fcntl(F_LOG2PHYS_EXT)`
+(`VPhoneLaunchpadDiskExtents`), and a sweep over the range ends of all
+folders, per device, credits a stretch covered by exactly one folder to it.
+Blocks a folder's own files share (its `Snapshots/`) count once, as its own; a
+file the volume does not map (a compressed one) counts its allocated size.
+
+It does not use APFS's private size (`ATTR_CMNEXT_PRIVATESIZE`), which
+Launchpad used at first: a Time Machine local snapshot shares every block
+that existed when it was taken, so after each hourly snapshot every machine's
+and template's private size read 0 until it wrote again (Launchpad 2.9
+end-to-end test, B7), and users read that as "deleting it frees nothing".
+Those blocks are freed once the snapshot expires (Time Machine keeps hourly
+local snapshots for 24 hours), so the extent comparison counts them as the
+folder's own, and the help text says a local snapshot can keep them until
+then. macOS has no public per-file "held by a snapshot" figure to show the
+difference: `tmutil` and the volume's purgeable size are per volume.
+
+Cost, measured 2026-10-09 on clones of a booted 64 GB sparse machine image
+(21.6 GB allocated, 123,030 physical ranges): 0.08–0.11 s to map one image,
+3 ms for the sweep over three of them, 0.27 s for a first pass over three
+folders, 4 ms for a pass that maps nothing. A file is mapped again only when
+its size, mtime or ctime changes; the pass runs off the main actor at most
+every 30 s, with a 15 s mapping budget after which the rest is mapped on a
+later pass (those folders show no exclusive size meanwhile).
+
+Mapping opens the file (`O_EVTONLY`), and while it is open `lsof` lists
+Launchpad for the image. `vm stop` signals whoever holds a disk, and `cfw
+install` refuses a disk someone holds, so Launchpad never opens a folder it is
+working on (a creation, a template build, an export, an install), keeps a
+stopped machine's last ranges until its files change, and leaves its own
+process out when it asks `lsof` which machines run. A `vphone-cli` run outside
+Launchpad in the ~0.1 s a changed image is being mapped can still see it held.
+
+Blocks shared with a file outside the libraries (a `cp -c` copy elsewhere)
+count as the folder's own; the CLI's `vm template list/show` print only the
+allocated size.
+
 ## Never booting once frozen
 
 The P0 measurement: booting a template after clones exist raised one clone's

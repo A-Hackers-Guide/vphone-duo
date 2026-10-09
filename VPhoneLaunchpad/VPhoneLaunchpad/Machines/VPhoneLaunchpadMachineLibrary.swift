@@ -243,7 +243,7 @@ final class VPhoneLaunchpadMachineLibrary {
         }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        process.arguments = ["-F", "n", "--"] + diskOwners.keys.sorted()
+        process.arguments = ["-F", "pn", "--"] + diskOwners.keys.sorted()
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
@@ -252,9 +252,19 @@ final class VPhoneLaunchpadMachineLibrary {
         }
         let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         process.waitUntilExit()
+        return runningMachines(lsofOutput: output, diskOwners: diskOwners, excluding: getpid())
+    }
+
+    /// The machines whose disks `lsof -F pn` lists a process for. Launchpad
+    /// itself (`excluding`) holds a disk only while measuring its extents,
+    /// which does not make the machine run.
+    nonisolated static func runningMachines(lsofOutput output: String, diskOwners: [String: Path], excluding ownProcess: pid_t) -> Set<Path> {
         var running: Set<Path> = []
-        for line in output.split(separator: "\n") where line.hasPrefix("n") {
-            if let machine = diskOwners[String(line.dropFirst())] {
+        var process: pid_t?
+        for line in output.split(separator: "\n") {
+            if line.hasPrefix("p") {
+                process = pid_t(line.dropFirst())
+            } else if line.hasPrefix("n"), process != ownProcess, let machine = diskOwners[String(line.dropFirst())] {
                 running.insert(machine)
             }
         }
@@ -735,37 +745,77 @@ final class VPhoneLaunchpadMachineLibrary {
     private(set) var templateSources: [Path: String] = [:]
     private var diskUsageMeasured: Date?
     private var isMeasuringDiskUsage = false
+    /// A forced measurement asked for while one ran.
+    private var isDiskUsageRequested = false
+    private let diskMeter = VPhoneLaunchpadDiskMeter()
     private static let diskUsageInterval: TimeInterval = 30
 
     /// Measures again when the last measurement is old, or a machine was
-    /// added. Private sizes take APFS a walk of each file's extents, so this
-    /// never runs on every five-second refresh.
+    /// added. Every machine and template of every library is measured in one
+    /// pass, because a folder's exclusive size depends on all the others.
+    /// Only files that changed are mapped again, and never on every
+    /// five-second refresh.
     private func refreshDiskUsage(force: Bool = false) {
         let paths = machines.map(\.path)
         let isNew = paths.contains { diskUsage[$0] == nil }
         let isOld = diskUsageMeasured.map { Date().timeIntervalSince($0) > Self.diskUsageInterval } ?? true
-        guard !isMeasuringDiskUsage, force || isNew || isOld else {
+        guard !isMeasuringDiskUsage else {
+            isDiskUsageRequested = isDiskUsageRequested || force
+            return
+        }
+        guard force || isNew || isOld else {
             return
         }
         isMeasuringDiskUsage = true
+        // A machine being created, exported or installed into is not opened:
+        // `lsof` would show Launchpad holding its disk to `cfw install`.
+        let machineFolders = machines.map { machine in
+            let isBusy = if case .busy = state(of: machine.path) { true } else { false }
+            return VPhoneLaunchpadDiskMeter.Folder(path: machine.path.url.path, mayOpen: !isBusy)
+        }
+        let libraryRoots = roots.filter { $0 == libraryRoot || VPhoneLaunchpadMachineLocations.isAvailable($0) }
+        let meter = diskMeter
         Task {
-            let measured = await Self.measure(paths)
+            let measured = await Self.measure(machineFolders, paths: paths, libraryRoots: libraryRoots, meter: meter)
             diskUsage = measured.usage
             templateSources = measured.sources
+            templateUsage = measured.templates
             diskUsageMeasured = Date()
             isMeasuringDiskUsage = false
+            if isDiskUsageRequested {
+                isDiskUsageRequested = false
+                refreshDiskUsage(force: true)
+            }
         }
     }
 
     @concurrent
-    private nonisolated static func measure(_ paths: [Path]) async -> (usage: [Path: VPhoneLaunchpadDiskUsage], sources: [Path: String]) {
+    private nonisolated static func measure(
+        _ machineFolders: [VPhoneLaunchpadDiskMeter.Folder],
+        paths: [Path],
+        libraryRoots: [String],
+        meter: VPhoneLaunchpadDiskMeter,
+    ) async -> (usage: [Path: VPhoneLaunchpadDiskUsage], sources: [Path: String], templates: [String: VPhoneLaunchpadDiskUsage]) {
+        // Templates are keyed as `usage(of:)` looks them up.
+        var templateKeys: [String: String] = [:]
+        for root in libraryRoots {
+            for folder in VPhoneLaunchpadDiskMeter.templateFolders(in: root) {
+                templateKeys[folder] = URL(fileURLWithPath: folder).lastPathComponent + "@" + root
+            }
+        }
+        let folders = machineFolders + templateKeys.keys.sorted().map { VPhoneLaunchpadDiskMeter.Folder(path: $0) }
+        let measured = await meter.measure(folders)
         var usage: [Path: VPhoneLaunchpadDiskUsage] = [:]
         var sources: [Path: String] = [:]
         for path in paths {
-            usage[path] = VPhoneLaunchpadDiskUsage.measure(path.url)
+            usage[path] = measured[path.url.path]
             sources[path] = templateSource(in: path.url)
         }
-        return (usage, sources)
+        var templates: [String: VPhoneLaunchpadDiskUsage] = [:]
+        for (folder, key) in templateKeys {
+            templates[key] = measured[folder]
+        }
+        return (usage, sources, templates)
     }
 
     /// The `Identifier` of `TemplateSource.plist`, when it names a template.
@@ -790,7 +840,8 @@ final class VPhoneLaunchpadMachineLibrary {
     /// Template builds a create left behind (or is running), by library.
     private(set) var templateBuilds: [(libraryRoot: String, build: VPhoneLaunchpadTemplateList.Building)] = []
     private(set) var templatesError: String?
-    /// Each template's private size, read off the main actor.
+    /// Each template's disk use, by `<identifier>@<library root>`, measured
+    /// with the machines.
     private(set) var templateUsage: [String: VPhoneLaunchpadDiskUsage] = [:]
 
     func refreshTemplates() async {
@@ -818,10 +869,7 @@ final class VPhoneLaunchpadMachineLibrary {
         templates = found.sorted { $0.created > $1.created }
         templateBuilds = builds
         templatesError = errors.first
-        let urls = found.map { ($0.id + "@" + $0.libraryRoot, $0.url) }
-        templateUsage = await Task.detached {
-            Dictionary(uniqueKeysWithValues: urls.map { ($0.0, VPhoneLaunchpadDiskUsage.measure($0.1)) })
-        }.value
+        refreshDiskUsage(force: true)
     }
 
     func usage(of template: VPhoneLaunchpadTemplate) -> VPhoneLaunchpadDiskUsage? {

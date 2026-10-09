@@ -443,36 +443,36 @@
         }
       }
     },
-    "Allocated on disk; deleting it frees %@ now, the blocks no machine shares." : {
+    "Allocated on disk; deleting it frees about %@, the blocks no machine shares, once no local Time Machine snapshot keeps them." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Allocated on disk; deleting it frees %@ now, the blocks no machine shares."
+            "value" : "Allocated on disk; deleting it frees about %@, the blocks no machine shares, once no local Time Machine snapshot keeps them."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ディスク上の割り当て量です。今削除すると、どのマシンとも共有していない %@ が解放されます。"
+            "value" : "ディスク上の割り当て量です。削除すると、どのマシンとも共有していない約 %@ が解放されます。Time Machine のローカルスナップショットが保持している場合は、その期限が切れたときに解放されます。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "디스크에 할당된 크기입니다. 지금 삭제하면 어떤 머신과도 공유하지 않는 %@이(가) 확보됩니다."
+            "value" : "디스크에 할당된 크기입니다. 삭제하면 어떤 머신과도 공유하지 않는 약 %@이(가) 확보됩니다. Time Machine 로컬 스냅샷이 보관 중이면 스냅샷이 만료될 때 확보됩니다."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dung lượng đã cấp phát trên ổ đĩa; xóa ngay sẽ giải phóng %@, phần không máy ảo nào dùng chung."
+            "value" : "Dung lượng đã cấp phát trên ổ đĩa; xóa sẽ giải phóng khoảng %@, phần không máy ảo nào dùng chung, sau khi không còn bản chụp nhanh cục bộ Time Machine nào giữ chúng."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "磁盘上已分配的空间；现在删除可释放 %@，即没有虚拟机共享的数据块。"
+            "value" : "磁盘上已分配的空间；删除约可释放 %@，即没有虚拟机共享的数据块；若 Time Machine 本地快照仍保留这些块，要等快照过期后才释放。"
           }
         }
       }
@@ -1191,36 +1191,36 @@
         }
       }
     },
-    "Deleting it frees about %@ now; the blocks its machines share are freed once they change or are deleted." : {
+    "Deleting it frees about %@, once no local Time Machine snapshot keeps those blocks; the blocks its machines share are freed once they change or are deleted." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Deleting it frees about %@ now; the blocks its machines share are freed once they change or are deleted."
+            "value" : "Deleting it frees about %@, once no local Time Machine snapshot keeps those blocks; the blocks its machines share are freed once they change or are deleted."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "今削除すると約 %@ が解放されます。マシンと共有しているブロックは、それらが変更または削除されたときに解放されます。"
+            "value" : "削除すると約 %@ が解放されます。Time Machine のローカルスナップショットが保持している場合は、その期限が切れたときに解放されます。マシンと共有しているブロックは、それらが変更または削除されたときに解放されます。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "지금 삭제하면 약 %@이(가) 확보됩니다. 머신과 공유하는 블록은 해당 머신이 변경되거나 삭제될 때 확보됩니다."
+            "value" : "삭제하면 약 %@이(가) 확보됩니다. Time Machine 로컬 스냅샷이 보관 중이면 스냅샷이 만료될 때 확보됩니다. 머신과 공유하는 블록은 해당 머신이 변경되거나 삭제될 때 확보됩니다."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Xóa ngay sẽ giải phóng khoảng %@; các khối dùng chung với máy ảo được giải phóng khi chúng thay đổi hoặc bị xóa."
+            "value" : "Xóa sẽ giải phóng khoảng %@, sau khi không còn bản chụp nhanh cục bộ Time Machine nào giữ các khối đó; các khối dùng chung với máy ảo được giải phóng khi chúng thay đổi hoặc bị xóa."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "现在删除约可释放 %@；与虚拟机共享的数据块会在这些虚拟机改写或被删除后释放。"
+            "value" : "删除约可释放 %@，若 Time Machine 本地快照仍保留这些块，要等快照过期后才释放；与虚拟机共享的数据块会在这些虚拟机改写或被删除后释放。"
           }
         }
       }
@@ -3197,36 +3197,36 @@
         }
       }
     },
-    "The blocks only this machine holds: what deleting it frees. The rest is shared with its template or clones." : {
+    "The blocks no other machine or template holds: what deleting it frees, once no local Time Machine snapshot keeps them. The rest is shared with its template or clones." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The blocks only this machine holds: what deleting it frees. The rest is shared with its template or clones."
+            "value" : "The blocks no other machine or template holds: what deleting it frees, once no local Time Machine snapshot keeps them. The rest is shared with its template or clones."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このマシンだけが保持しているブロックで、削除すると解放される量です。残りはテンプレートまたは複製と共有しています。"
+            "value" : "他のマシンやテンプレートが保持していないブロックで、削除すると解放される量です。Time Machine のローカルスナップショットが保持している場合は、その期限が切れたときに解放されます。残りはテンプレートまたは複製と共有しています。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "이 머신만 차지하는 블록으로, 삭제하면 확보되는 크기입니다. 나머지는 템플릿 또는 복제본과 공유합니다."
+            "value" : "다른 머신이나 템플릿이 차지하지 않는 블록으로, 삭제하면 확보되는 크기입니다. Time Machine 로컬 스냅샷이 보관 중이면 스냅샷이 만료될 때 확보됩니다. 나머지는 템플릿 또는 복제본과 공유합니다."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Các khối chỉ riêng máy ảo này giữ: phần được giải phóng khi xóa. Phần còn lại dùng chung với mẫu hoặc các bản nhân bản."
+            "value" : "Các khối không máy ảo hay mẫu nào khác giữ: phần được giải phóng khi xóa, sau khi không còn bản chụp nhanh cục bộ Time Machine nào giữ chúng. Phần còn lại dùng chung với mẫu hoặc các bản nhân bản."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "仅此虚拟机占用的数据块，即删除后可释放的空间。其余部分与模板或克隆共享。"
+            "value" : "没有其他虚拟机或模板占用的数据块，即删除后可释放的空间；若 Time Machine 本地快照仍保留这些块，要等快照过期后才释放。其余部分与模板或克隆共享。"
           }
         }
       }
