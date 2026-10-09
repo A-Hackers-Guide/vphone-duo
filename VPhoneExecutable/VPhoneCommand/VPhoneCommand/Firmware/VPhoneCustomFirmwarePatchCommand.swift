@@ -179,6 +179,27 @@ struct VPhoneCustomFirmwareInjectDylibCommand: ParsableCommand {
     }
 }
 
+// MARK: - patch-locationd-cohorting
+
+struct VPhoneCustomFirmwarePatchLocationdCohortingCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-locationd-cohorting",
+        abstract: "Disable automatic CoreLocation cohort queues in a staged iOS 27 feature plist",
+        shouldDisplay: false,
+    )
+
+    @Argument(transform: URL.init(fileURLWithPath:))
+    var plist: URL
+
+    @Flag(name: .customLong("dry-run"))
+    var dryRun = false
+
+    func run() throws {
+        let changed = try CustomFirmwareLocationdCohorting.patch(at: plist, dryRun: dryRun)
+        print("  [\(changed ? "+" : ".")] CLAutoCohort.Enabled = false\(dryRun ? " (dry-run)" : "")")
+    }
+}
+
 // MARK: - patch-build-version
 
 struct VPhoneCustomFirmwarePatchBuildVersionCommand: ParsableCommand {

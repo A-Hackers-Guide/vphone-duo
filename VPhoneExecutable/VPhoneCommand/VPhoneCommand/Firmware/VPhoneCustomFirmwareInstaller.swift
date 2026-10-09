@@ -1161,6 +1161,25 @@ struct VPhoneCustomFirmwareInstaller {
             live: &live, failures: &failures,
         )
 
+        // A missing legacy plan must not apply this iOS-27-only change to
+        // other bases. Turning it off restores the original feature plist.
+        let locationdID = FirmwareGuestSystemPatchSet.locationdCohorting
+        let locationdPath = CustomFirmwareLocationdCohorting.relativePath
+        isolate([locationdID]) {
+            if version.hasPrefix("27."), on(locationdID) {
+                try patchCopy(
+                    of: locationdPath, in: system, work: work,
+                    verb: "patch-locationd-cohorting", backupSafe: backupSafe(locationdID)
+                )
+                live.insert(locationdID)
+            } else if try revertCopy(of: locationdPath, in: system) {
+                print("  [+] \(locationdID): restored CoreLocation feature flags")
+            } else if priorGuest.contains(locationdID) {
+                print("  [!] \(locationdID): no backup to revert (not revertible)")
+                live.insert(locationdID)
+            }
+        }
+
         // 3. The build-version spoof. Off by default (needs a preset parameter
         //    or SPOOF_BUILD). Backed up only when it was not already applied.
         let buildVersion = plan?.parameters[FirmwareGuestSystemPatchSet.buildVersionParameter] ?? spoofBuild

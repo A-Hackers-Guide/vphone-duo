@@ -24,6 +24,8 @@ public enum FirmwareGuestSystemPatchSet {
     public static let gyroscope = "system-backboardd-cfw-gyroscope"
     public static let attitude = "system-apps-cfw-attitude"
 
+    public static let locationdCohorting = "system-locationd-cfw-disable_auto_cohort"
+
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
 
     /// The bases where short-circuiting `checkTrustAndAuthorization` in the
@@ -47,6 +49,13 @@ public enum FirmwareGuestSystemPatchSet {
         name: "Guest System",
         summary: "Shared-cache policy gates, patched system daemons and the vphone guest payload",
         patches: [
+            VPhonePatchDeclaration(
+                identifier: locationdCohorting,
+                title: "locationd startup stability",
+                summary: "Uses independent location silos to avoid iOS 27 startup crashes and queue hangs on the research guest.",
+                target: .guestFile(path: "/" + CustomFirmwareLocationdCohorting.relativePath),
+                applicability: ios27,
+            ),
             // MARK: Shared Cache Policy
 
             VPhonePatchDeclaration(
