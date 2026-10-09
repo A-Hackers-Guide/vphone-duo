@@ -508,7 +508,7 @@ setup boot is the guest's first boot). It talks to vphoned through
 | b settle | `setup.settle {timeout_s ≤ 30}` repeated, a progress line after each | 600 s overall | `settled` (system apps expanded and data migration finished) |
 | c apps | `apps.remove_system {bundle_ids, force}` | 300 s | every app `removed`, `absent` or `unregistered_stale` |
 | d/e profile | `services.profile.apply {profile, groups, force}`, `services.profile` | 180 s | no `failed`; the record holds `signin_followup` and the extra groups; followupd and appleidsetupd disabled |
-| f reboot | `processes.list` (launchd's `start_time`), `system.reboot {force}` | 300 s | vphoned answers with another launchd start time |
+| f reboot | `processes.list` (launchd's `start_time`), `system.reboot {force}`, then `ping` and `processes.list` (10 s timeout) every 3 s | 300 s | vphoned answers with another launchd start time |
 | f verify | `apfs.snapshots`, `setup.status`, `services.profile`, `apps.list`, `ping`, repeated | 120 s | no snapshot, Setup done, the profile recorded with `running` empty, no removed app listed |
 | crash reports | `logs.crashes`, `files.remove {path}` for each report under `/Logs/CrashReporter/` | 60 s | (a warning on failure) |
 | name | `device.name.set {}` | 30 s | (a warning on failure) |
@@ -649,6 +649,16 @@ deletes each one with `files.remove`; the report says `crash reports
 cleared: 13 crash report(s): duetexpertd ×11, SiriSearchFeedback ×1,
 panic-full ×1` (2026-10-09 build). A report it cannot delete is a warning, as
 the device name is.
+
+The reboot step's 33 s: `system.reboot` is answered at once, and the first
+`ping` a moment later can still reach the old vphoned; the `processes.list`
+sent after it reaches vphoned as launchd stops it and is never answered, so
+`vphone.sock`'s read timeout runs out. With the 30 s it had, the step took
+33 s instead of 9–10 s in 4 of 6 builds (2026-10-09), and replaying the same
+polling against a running guest hit it in 3 of 8 reboots (33.3–33.5 s). The
+poll's `processes.list` now uses `VPhoneTemplateSetupTimeouts.rebootPoll`
+(10 s): the same replay took at most 13.3 s, and a fresh boot answers within
+a few seconds.
 
 `duetexpertd` crashes about every 10 s from the first boot on every iOS 27.0
 guest, template or not (13 reports on a `--no-template` machine with no trim,

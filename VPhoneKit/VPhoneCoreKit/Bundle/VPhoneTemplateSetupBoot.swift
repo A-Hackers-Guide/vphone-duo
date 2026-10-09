@@ -111,6 +111,12 @@ public struct VPhoneTemplateSetupTimeouts: Equatable, Sendable {
     public var serviceProfile: TimeInterval = 180
     /// From `system.reboot` until vphoned of the new boot answers (P1: 20 s).
     public var reboot: TimeInterval = 300
+    /// One `processes.list` while waiting for the new boot. It answers within
+    /// a few seconds even right after a boot; one that reaches vphoned just
+    /// before the reboot stops it is never answered and holds the step for
+    /// this whole timeout (30 s made the step take 33 s instead of 10 s in
+    /// about a third of the setup boots).
+    public var rebootPoll: TimeInterval = 10
     public var verify: TimeInterval = 120
     public var crashReports: TimeInterval = 60
     public var deviceName: TimeInterval = 30
@@ -646,7 +652,7 @@ public final class VPhoneTemplateSetupBoot {
         }
         while true {
             try checkMachine()
-            if machine.ping(), let after = try? machine.call("processes.list", params: [:], timeout: 30),
+            if machine.ping(), let after = try? machine.call("processes.list", params: [:], timeout: timeouts.rebootPoll),
                let marker = Self.bootMarker(after), marker != before
             {
                 return

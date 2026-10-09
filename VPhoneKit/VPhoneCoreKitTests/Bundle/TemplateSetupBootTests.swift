@@ -47,6 +47,10 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
     var servicesKeepRunning = false
     var rebootNeverReturns = false
     var stopsCleanly = true
+    /// vphoned still answers the first ping after `system.reboot`, then takes
+    /// the `processes.list` that follows down with it, unanswered.
+    var dyingVphonedTakesAList = false
+    private var dyingVphoned = false
 
     // Guest state.
     var snapshots = ["orig-fs.disabled.rn-4EC2"]
@@ -84,6 +88,9 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
 
     func ping() -> Bool {
         clock.sleep(0.1)
+        if dyingVphoned {
+            return true
+        }
         if connectDelayPolls > 0 {
             connectDelayPolls -= 1
             return false
@@ -101,9 +108,14 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
         VPhoneGuestCallError(kind: .refused, message: message, detail: detail)
     }
 
-    func call(_ method: String, params: [String: Any], timeout _: TimeInterval) throws -> [String: Any] {
+    func call(_ method: String, params: [String: Any], timeout: TimeInterval) throws -> [String: Any] {
         calls.append(method)
         clock.sleep(0.5)
+        if dyingVphoned, method == "processes.list" {
+            dyingVphoned = false
+            clock.sleep(timeout)
+            throw VPhoneGuestCallError(kind: .transport, message: "no answer from vphone.sock")
+        }
         if downCalls > 0 {
             throw VPhoneGuestCallError(kind: .transport, message: "guest not connected")
         }
@@ -183,6 +195,7 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
         case "system.reboot":
             bootTime += 100
             downCalls = 3
+            dyingVphoned = dyingVphonedTakesAList
             if !servicesKeepRunning {
                 running = []
             }
@@ -589,6 +602,21 @@ struct TemplateSetupBootTests {
         let failure = try #require(run(guest).failed)
         #expect(failure.step == .reboot)
         #expect(guest.killed)
+    }
+
+    @Test func `a list the reboot leaves unanswered holds the step only for the poll timeout`() throws {
+        let quick = try run(FakeGuest(clock: FakeClock())).get()
+        let guest = FakeGuest(clock: FakeClock())
+        guest.dyingVphonedTakesAList = true
+        let outcome = try run(guest).get()
+        let base = try #require(quick.durations[.reboot])
+        let stalled = try #require(outcome.durations[.reboot])
+        // One poll timeout more than an undisturbed reboot, not the 30 s that
+        // made the live step take 33 s.
+        #expect(stalled - base >= VPhoneTemplateSetupTimeouts.standard.rebootPoll)
+        #expect(stalled - base < VPhoneTemplateSetupTimeouts.standard.rebootPoll + 5)
+        #expect(VPhoneTemplateSetupTimeouts.standard.rebootPoll <= 10)
+        #expect(outcome.isComplete)
     }
 
     @Test func `services still running after the reboot fail verification`() throws {
