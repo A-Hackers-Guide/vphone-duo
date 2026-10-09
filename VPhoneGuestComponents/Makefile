@@ -360,6 +360,16 @@ test-vcam-prewarm:
 		Tests/VCamPrewarmScanTests.c VCamCaptured/Prewarm/VCamPrewarmScan.c
 	@$(OUT)/VCamPrewarmScanTests
 
+# Host proof harness for the gate that runs cameracaptured's frame drive only
+# while a camera client exists.
+.PHONY: test-vcam-drive-gate
+test-vcam-drive-gate:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -O1 -Wall -Wextra -Werror -IVCamCaptured/Frames \
+		-o $(OUT)/VCamDriveGateTests \
+		Tests/VCamDriveGateTests.c VCamCaptured/Frames/VCamDriveGate.c
+	@$(OUT)/VCamDriveGateTests
+
 .PHONY: test-installcoordination-persona
 test-installcoordination-persona:
 	@mkdir -p $(OUT)

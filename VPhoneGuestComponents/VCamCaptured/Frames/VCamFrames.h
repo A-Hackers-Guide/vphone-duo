@@ -30,6 +30,10 @@ extern vcc_latest_frame_t vcc_latest_frame;
 // NULL when no frame has arrived. Caller must CFRelease.
 CMSampleBufferRef vcc_build_cmsb_from_shm_fmt(uint32_t fmt_out) CF_RETURNS_RETAINED;
 
+// A frame consumer (viewfinder stream or video sink) appeared: run the 30 Hz
+// drive until none is left (VCamDriveGate.h).
+void vcc_frame_drive_wake(void);
+
 #pragma GCC visibility pop
 
 #endif

@@ -1,5 +1,6 @@
 #include <stdatomic.h>
 
+#include "VCamDriveGate.h"
 #include "VCamFrames.h"
 #include "VCamHooks.h"
 #include "vcam_dataplane.h"
@@ -36,11 +37,12 @@ static uint64_t vcc_sink_drive_ok = 0;
 // viewfinder drive. Graph-built sinks expect the active advertised format's
 // samples — BGRA is what clients see selected (camfix substitutes the first
 // format for third-party sessions).
-static void vcc_drive_sinks_once(void) {
+// Returns whether any sink exists, delivered to or not.
+static bool vcc_drive_sinks_once(void) {
   NSArray *sinks = vcc_driven_sinks_snapshot();
-  if (sinks.count == 0) return;
+  if (sinks.count == 0) return false;
   CMSampleBufferRef cmsb = vcc_build_cmsb_from_shm_fmt(VCC_FMT_BGRA);
-  if (!cmsb) return;
+  if (!cmsb) return true;
   SEL sel = @selector(renderSampleBuffer:forInput:);
   for (id sink in sinks) {
     if (![sink respondsToSelector:sel]) continue;
@@ -62,6 +64,7 @@ static void vcc_drive_sinks_once(void) {
             (unsigned long)sinks.count,
             (unsigned long long)vcc_sink_drive_ok);
   }
+  return true;
 }
 
 typedef id (*VccVfsInitFn)(id self, SEL _cmd);
@@ -93,6 +96,7 @@ static void vcc_vfs_open_hook(id self, SEL _cmd, id dest) {
   [vcc_vf_streams addObject:self];
   NSUInteger total = vcc_vf_streams.count;
   pthread_mutex_unlock(&vcc_vf_streams_lock);
+  vcc_frame_drive_wake();
   vcc_log(@"  [VFS open] captured stream %p (total=%lu)", self, (unsigned long)total);
 }
 
@@ -168,13 +172,14 @@ static CMSampleBufferRef vcc_build_cmsb_from_shm(void) {
   return vcc_build_cmsb_from_shm_fmt(VCC_FMT_420V);
 }
 
-static void vcc_vf_drive_once(void) {
+// Returns whether any stream is open, delivered to or not.
+static bool vcc_vf_drive_once(void) {
   pthread_mutex_lock(&vcc_vf_streams_lock);
   NSArray *streams = vcc_vf_streams ? [vcc_vf_streams copy] : @[];
   pthread_mutex_unlock(&vcc_vf_streams_lock);
-  if (streams.count == 0) return;
+  if (streams.count == 0) return false;
   CMSampleBufferRef cmsb = vcc_build_cmsb_from_shm();
-  if (!cmsb) return;
+  if (!cmsb) return true;
   SEL sel = NSSelectorFromString(@"enqueueVideoSampleBuffer:");
   for (id stream in streams) {
     int ret = ((int (*)(id, SEL, CMSampleBufferRef))objc_msgSend)(
@@ -189,6 +194,60 @@ static void vcc_vf_drive_once(void) {
     }
   }
   CFRelease(cmsb);
+  return true;
+}
+
+// MARK: - drive timer
+//
+// 30 Hz while a viewfinder stream is open or a video sink exists, stopped
+// otherwise (VCamDriveGate.h). Created on first use: a sink can be built
+// before the viewfinder hooks are installed.
+
+static const uint64_t vcc_vf_interval_ns = 33333333ull;
+static const uint64_t vcc_vf_leeway_ns = 2000000ull;
+static vcc_drive_gate_t vcc_vf_gate;
+static uint64_t vcc_vf_starts = 0;
+
+static void vcc_vf_timer_start(void *context) {
+  (void)context;
+  dispatch_source_set_timer(vcc_vf_timer, dispatch_time(DISPATCH_TIME_NOW, 0),
+                            vcc_vf_interval_ns, vcc_vf_leeway_ns);
+  vcc_vf_starts++;
+  vcc_log(@"  viewfinder drive started (30 Hz, start #%llu)",
+          (unsigned long long)vcc_vf_starts);
+}
+
+static void vcc_vf_timer_stop(void *context) {
+  (void)context;
+  dispatch_source_set_timer(vcc_vf_timer, DISPATCH_TIME_FOREVER, 0, 0);
+  vcc_log(@"  viewfinder drive stopped: no stream open, no sink left");
+}
+
+static void vcc_vf_drive_setup(void) {
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    vcc_vf_q = dispatch_queue_create("com.vphone.vcam.vfdrive",
+                                     DISPATCH_QUEUE_SERIAL);
+    vcc_vf_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
+                                          vcc_vf_q);
+    dispatch_source_set_timer(vcc_vf_timer, DISPATCH_TIME_FOREVER, 0, 0);
+    dispatch_source_set_event_handler(vcc_vf_timer, ^{
+      @autoreleasepool {
+        uint64_t seen = vcc_drive_gate_begin_tick(&vcc_vf_gate);
+        bool streams = vcc_vf_drive_once();
+        bool sinks = vcc_drive_sinks_once();
+        vcc_drive_gate_end_tick(&vcc_vf_gate, seen, streams || sinks);
+      }
+    });
+    vcc_drive_gate_init(&vcc_vf_gate, vcc_vf_timer_start, vcc_vf_timer_stop,
+                        NULL);
+    dispatch_resume(vcc_vf_timer);
+  });
+}
+
+void vcc_frame_drive_wake(void) {
+  vcc_vf_drive_setup();
+  vcc_drive_gate_wake(&vcc_vf_gate);
 }
 
 void vcc_install_viewfinder_hooks(void) {
@@ -212,22 +271,7 @@ void vcc_install_viewfinder_hooks(void) {
   }
   vcc_log(@"  swizzled FigCameraViewfinderStream init/open/close");
 
-  // Drive at 30 Hz. Frames are enqueued only when at least one stream is
-  // open AND a fresh shm frame exists (covered by build_cmsb_from_shm).
-  vcc_vf_q = dispatch_queue_create("com.vphone.vcam.vfdrive",
-                                     DISPATCH_QUEUE_SERIAL);
-  vcc_vf_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
-                                          vcc_vf_q);
-  dispatch_source_set_timer(vcc_vf_timer,
-                            dispatch_time(DISPATCH_TIME_NOW, 0),
-                            33333333ull, 2000000ull);
-  dispatch_source_set_event_handler(vcc_vf_timer, ^{
-    @autoreleasepool {
-      vcc_vf_drive_once();
-      vcc_drive_sinks_once();
-    }
-  });
-  dispatch_resume(vcc_vf_timer);
-  vcc_log(@"  viewfinder drive timer armed (30 Hz, delivering '420v' "
-          @"+ camera metadata)");
+  vcc_vf_drive_setup();
+  vcc_log(@"  viewfinder drive ready (30 Hz while a stream or sink exists, "
+          @"delivering '420v' + camera metadata)");
 }
