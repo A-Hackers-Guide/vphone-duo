@@ -518,6 +518,199 @@ struct DiskRebaseTests {
         #expect(try modified(of: machines.targetImage) == 1_000_000_000 * 1_000_000_000)
     }
 
+    // MARK: - Physical sharing
+
+    /// Replaces the target's image with a clone of the base's: every block
+    /// the same, as for two machines cloned from one template.
+    private func cloneBase(_ machines: Machines) throws {
+        unlink(machines.targetImage.path)
+        try #require(clonefile(machines.baseImage.path, machines.targetImage.path, 0) == 0)
+    }
+
+    /// Writes `bytes` over units of an image in place and flushes them, so
+    /// a clone takes new blocks there.
+    private func overwrite(_ url: URL, units: Range<Int>, with bytes: [UInt8]) throws {
+        let fd = open(url.path, O_RDWR)
+        try #require(fd >= 0)
+        defer { close(fd) }
+        let unit = Self.unit
+        let put = bytes[units.lowerBound * unit ..< units.upperBound * unit].withUnsafeBytes {
+            pwrite(fd, $0.baseAddress, $0.count, off_t(units.lowerBound * unit))
+        }
+        try #require(put == units.count * unit)
+        try #require(fcntl(fd, F_FULLFSYNC) == 0)
+    }
+
+    @Test func `identical bytes that already are the base's blocks are not newly shared`() throws {
+        let machines = try makeMachines()
+        defer { try? FileManager.default.removeItem(at: machines.root) }
+        let unit = Self.unit
+        let data = Self.pattern(seed: 81, count: 2 << 20)
+        try writeImage(machines.baseImage, [Extent(0, data)])
+        try cloneBase(machines)
+
+        // A plain clone: everything identical is already shared.
+        let clone = try VPhoneDiskRebase.plan(machines.target, onto: machines.base, options: options(), progress: { _, _, _ in })
+        #expect(clone.sharedBytes == Int64(data.count))
+        #expect(clone.alreadySharedBytes == clone.sharedBytes)
+        #expect(clone.newlySharedBytes == 0)
+
+        // The same bytes written again take blocks of the target's own, which
+        // the rebase gives back; changed bytes are written as before.
+        try overwrite(machines.targetImage, units: 10 ..< 20, with: data)
+        var changed = data
+        for index in 40 * unit ..< 45 * unit {
+            changed[index] ^= 0xFF
+        }
+        try overwrite(machines.targetImage, units: 40 ..< 45, with: changed)
+        #expect(try !shares(machines, at: 10 * unit))
+        #expect(try shares(machines, at: 30 * unit))
+
+        let report = try rebase(machines)
+        #expect(report.writtenBytes == Int64(5 * unit))
+        #expect(report.sharedBytes == Int64(data.count - 5 * unit))
+        #expect(report.newlySharedBytes == Int64(10 * unit))
+        #expect(report.alreadySharedBytes == Int64(data.count - 15 * unit))
+        for index in 0 ..< data.count / unit {
+            #expect(try shares(machines, at: index * unit) == !(40 ..< 45).contains(index), "unit \(index)")
+        }
+
+        // Rebased: nothing left to share.
+        let again = try VPhoneDiskRebase.plan(machines.target, onto: machines.base, options: options(), progress: { _, _, _ in })
+        #expect(again.newlySharedBytes == 0)
+        #expect(again.alreadySharedBytes == again.sharedBytes)
+    }
+
+    @Test func `images written apart share nothing yet, and a hole in the target is no saving`() throws {
+        let machines = try makeMachines()
+        defer { try? FileManager.default.removeItem(at: machines.root) }
+        let unit = Self.unit
+        let data = Self.pattern(seed: 91, count: 1 << 20)
+        // The base also holds zeros where the target has a hole: identical,
+        // but the target stores nothing there to give back.
+        let zeros = [UInt8](repeating: 0, count: 8 * unit)
+        try writeImage(machines.baseImage, [Extent(0, data), Extent(40 << 20, zeros)])
+        try writeImage(machines.targetImage, [Extent(0, data)])
+
+        let baseData = try dataBytes(of: machines.baseImage)
+        let targetData = try dataBytes(of: machines.targetImage)
+        let report = try rebase(machines)
+        // APFS may fill a smaller hole of either image with zeros, which
+        // reads the same; only the target's data is its own.
+        #expect(report.sharedBytes == Int64(baseData))
+        #expect(report.newlySharedBytes == Int64(targetData))
+        #expect(report.alreadySharedBytes >= Int64(zeros.count))
+    }
+
+    @Test func `runs at the same device offset for the same file offset are shared`() {
+        typealias Run = VPhoneDiskRebase.PhysicalRun
+        let target = [
+            Run(logical: 0 ..< 100, physical: 1000), // the base's at 0..<60
+            Run(logical: 100 ..< 200, physical: 5000), // its own
+            Run(logical: 300 ..< 400, physical: 1300), // the base's at 320..<400
+        ]
+        let base = [
+            Run(logical: 0 ..< 60, physical: 1000),
+            Run(logical: 60 ..< 100, physical: 9000),
+            Run(logical: 100 ..< 200, physical: 6000),
+            Run(logical: 320 ..< 500, physical: 1320),
+        ]
+        #expect(VPhoneDiskRebase.sharedRanges(target, base) == [0 ..< 60, 320 ..< 400])
+        #expect(VPhoneDiskRebase.sharedRanges(target, target) == [0 ..< 200, 300 ..< 400])
+        #expect(VPhoneDiskRebase.sharedRanges([], base).isEmpty)
+    }
+
+    // MARK: - Templates
+
+    private func adoptTemplate(_ name: String, in library: VPhoneLibrary) throws -> VPhoneMachineTemplate {
+        try VPhoneMachineTemplates.adopt(
+            machineNamed: name,
+            in: library,
+            record: VPhoneMachineTemplateRecord(key: MachineTemplateKeyTests.key(), sourceMachine: name),
+        )
+    }
+
+    @Test func `a template is a base by identifier or prefix, and a machine with its name wins`() throws {
+        let machines = try makeMachines()
+        defer { try? FileManager.default.removeItem(at: machines.root) }
+        let library = VPhoneLibrary(root: machines.root)
+        let template = try adoptTemplate("base", in: library)
+        let id = template.identifier
+
+        let byIdentifier = try VPhoneDiskRebaseBase.resolve(id, in: library)
+        #expect(byIdentifier.template?.identifier == id)
+        #expect(byIdentifier.bundle.url.standardizedFileURL == template.url.standardizedFileURL)
+        #expect(byIdentifier.label == "template \(id)")
+        #expect(try VPhoneDiskRebaseBase.resolve(String(id.prefix(6)), in: library).template?.identifier == id)
+        #expect(try VPhoneDiskRebaseBase.resolve("target", in: library).template == nil)
+        #expect(throws: VPhoneDiskRebaseError.baseNotFound(name: "nothing")) {
+            try VPhoneDiskRebaseBase.resolve("nothing", in: library)
+        }
+
+        try VPhoneBundleOperations.clone(bundleNamed: "target", to: id, in: library)
+        let machine = try VPhoneDiskRebaseBase.resolve(id, in: library)
+        #expect(machine.template == nil)
+        #expect(machine.bundle.url.standardizedFileURL == library.url(forName: id).standardizedFileURL)
+    }
+
+    @Test func `rebasing onto a template leaves it as it is and makes no clone of it`() throws {
+        let machines = try makeMachines()
+        defer { try? FileManager.default.removeItem(at: machines.root) }
+        let library = VPhoneLibrary(root: machines.root)
+        let extents = [Extent(0, seed: 101, count: 1 << 20), Extent(40 << 20, seed: 102, count: 256 << 10)]
+        try writeImage(machines.baseImage, extents)
+        try writeImage(machines.targetImage, [extents[0], Extent(40 << 20, seed: 103, count: 256 << 10)])
+        let template = try adoptTemplate("base", in: library)
+        let base = try VPhoneDiskRebaseBase.resolve(template.identifier, in: library)
+        let templateImage = template.url.appendingPathComponent("Disk.img")
+        let templateBefore = machines.root.appendingPathComponent("template-before")
+        try #require(clonefile(templateImage.path, templateBefore.path, 0) == 0)
+        let modified = try modified(of: templateImage)
+        let record = try VPhoneMachineTemplates.readRecord(inBundle: template.url)
+
+        let report = try VPhoneDiskRebase.rebase(machines.target, onto: base.bundle, options: options(), progress: { _, _, _ in })
+        #expect(report.sharedBytes >= Int64(extents[0].bytes.count))
+        #expect(report.alreadySharedBytes == 0)
+        for offset in stride(from: 0, to: extents[0].bytes.count, by: Self.unit) {
+            #expect(try physical(machines.targetImage, at: offset) == physical(templateImage, at: offset))
+        }
+        #expect(try sameBytes(templateImage, templateBefore))
+        #expect(try self.modified(of: templateImage) == modified)
+        #expect(try VPhoneMachineTemplates.readRecord(inBundle: template.url) == record)
+        // It shares blocks, but it is not a clone of the template.
+        #expect(VPhoneMachineTemplates.readSource(inBundle: machines.target.url) == nil)
+        #expect(VPhoneMachineTemplates.usage(in: library).isEmpty)
+        #expect(base.commonTemplate(with: machines.target, in: library) == nil)
+    }
+
+    @Test func `machines cloned from one build of a template are noted as already sharing it`() throws {
+        let machines = try makeMachines()
+        defer { try? FileManager.default.removeItem(at: machines.root) }
+        let library = VPhoneLibrary(root: machines.root)
+        try writeImage(machines.baseImage, [Extent(0, seed: 111, count: 1 << 20)])
+        let template = try adoptTemplate("base", in: library)
+        let a = try VPhoneMachineTemplates.cloneMachine(from: template, to: "a", in: library)
+        let b = try VPhoneMachineTemplates.cloneMachine(from: template, to: "b", in: library)
+
+        let onTemplate = try VPhoneDiskRebaseBase.resolve(template.identifier, in: library)
+        let onB = try VPhoneDiskRebaseBase.resolve("b", in: library)
+        #expect(onTemplate.commonTemplate(with: a, in: library) == template.identifier)
+        #expect(onB.commonTemplate(with: a, in: library) == template.identifier)
+        #expect(try VPhoneDiskRebaseBase.resolve("target", in: library).commonTemplate(with: a, in: library) == nil)
+        #expect(onB.commonTemplate(with: machines.target, in: library) == nil)
+
+        let report = try VPhoneDiskRebase.plan(a, onto: b, options: options(), progress: { _, _, _ in })
+        #expect(report.sharedBytes >= Int64(1 << 20))
+        #expect(report.newlySharedBytes == 0)
+
+        // Another build of the template, under the same identifier: b no
+        // longer shares a's blocks, whatever the identifier says.
+        var source = try #require(VPhoneMachineTemplates.readSource(inBundle: b.url))
+        source.build = UUID().uuidString
+        try VPhoneMachineTemplates.writeSource(source, inBundle: b.url)
+        #expect(onB.commonTemplate(with: a, in: library) == nil)
+    }
+
     // MARK: - Ranges and export
 
     @Test func `the union of data ranges is widened to units and merged`() {

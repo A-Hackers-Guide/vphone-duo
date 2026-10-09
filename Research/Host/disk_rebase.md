@@ -77,6 +77,59 @@ filled while a 23 MiB one was kept. Holes punched with `F_PUNCHHOLE` stayed.
 This only matters for the unit tests, which use 64 MiB images with large
 gaps; a 64 GB `Disk.img` keeps its holes.
 
+### Already shared blocks
+
+Byte-identical is not the same as a saving. Two machines cloned from one
+template (`vm create` clones `<library>/.templates/<id>/` with `clonefile`)
+read the same bytes over most of their images because they are the same
+blocks. Until 2026-10-09 every identical unit counted as shared, so a dry run
+of one such clone onto another (live test of PR #633, R1) reported "shared
+17.26 GB, written 0.36 GB" although the target held only about 0.35 GB of
+blocks of its own (by `F_LOG2PHYS_EXT`): the rebase would have freed nothing.
+
+Before comparing, `plan` and `rebase` now map both images with
+`F_LOG2PHYS_EXT`, one call per contiguous extent over the `SEEK_DATA` ranges
+(`ImageFile.physicalRuns`), and intersect the two maps
+(`VPhoneDiskRebase.sharedRanges`): a file offset where both files point at
+the same device offset is already shared. An identical unit then splits
+into:
+
+- **newly shared** (`newlySharedBytes`): the target's data there that is not
+  already the base's. These are the blocks the rebase gives back, so the
+  headline of both outputs is this figure.
+- **already shared** (`alreadySharedBytes`, the rest of `sharedBytes`):
+  blocks that already are the base's, or a hole in the target. Sharing them
+  again frees nothing.
+
+The map is taken from the two original images, before the staging clone
+exists, so a dry run and the rebase report the same figures. Nothing else
+changes: the staging file is a clone of the base, so an already shared unit
+is neither read differently nor written. A volume that does not map files
+gives no ranges, and every identical byte of target data counts as newly
+shared, as before. Unlike APFS's private size, a Time Machine local snapshot
+does not make blocks look shared here: only the two files are compared (see
+the disk-use section of [machine templates](machine_templates.md)).
+
+When the newly shared bytes stay under 0.1 GB the command adds "the rebase
+would free almost nothing" and says why: the identical blocks are already
+shared, or few are identical. Before comparing it also notes when the
+records say both sides come from one template build: the target's
+`TemplateSource.plist` names the template given as `--onto`
+(`VPhoneMachineTemplateSource.isClone(of:)`), or both machines' records name
+the same template and `Build` (`VPhoneDiskRebaseBase.commonTemplate`).
+
+### A template as the base
+
+`--onto` takes a machine name or a template identifier (or unique prefix,
+as `vm template` takes it), resolved by `VPhoneDiskRebaseBase.resolve`; a
+machine whose name matches wins. A frozen template is never booted, so its
+image never drifts, which makes it the base the caveats below ask for. The
+rebase only reads and clones the template's image. The rebased machine gets
+no `TemplateSource.plist`: it keeps its own `SEPStorage`, NVRAM and
+identity and only shares disk blocks, so `vm template list/show`, Launchpad
+and `vm delete`'s "no longer used" note do not count it as a clone. A
+machine that already had a `TemplateSource.plist` keeps it.
+
 ## Caveats
 
 - The space comes back only when the old image's blocks have no other owner.
@@ -84,7 +137,7 @@ gaps; a 64 GB `Disk.img` keeps its holes.
   rebase then costs the written bytes instead of saving the shared ones.
 - `du` and Finder count each image at its full size; `df` is the measure.
 - Both images diverge again as either machine writes. A base that is never
-  booted makes the best one.
+  booted, a template, makes the best one.
 
 ## Measurements
 
@@ -103,6 +156,8 @@ same), so that the old image's blocks had no other owner.
 | `rbtest-a` data / held only by it | 21.04 GB / 21.04 GB | 20.64 GB / 11.95 GB |
 | Free space (`df`, 1K blocks) | 66,360,908 | 75,132,760 (+8.77 GB) |
 | SHA-256 of `rbtest-a/Disk.img` (64 GB) | `c14ced17…c27810d` | `c14ced17…c27810d` |
+
+In the output format of the time, before shared bytes were split:
 
 ```text
 $ vphone-cli vm rebase rbtest-a --onto rbtest-b
@@ -131,4 +186,30 @@ rebased rbtest-a onto rbtest-b in 00:17
   uptime 32 s); no panic in the console log. Stopped with `vm stop`.
 - Deleting the three test machines afterwards returned 12.3 GB: the 11.95 GB
   written plus what `rbtest-boot` wrote while it ran.
+
+Already-shared accounting, 2026-10-09, Release `vphone-cli` on a scratch
+library (no real machine): `rb-a` with 2 GiB of random data at 1 GiB in a
+64 GB sparse image, `rb-b` and `rb-c` `clonefile` copies of it, `rb-b` then
+given 256 MiB of new bytes and 256 MiB rewritten with the same bytes, and
+`rb-d` the same 2 GiB written into a separate file.
+
+```text
+$ vphone-cli vm rebase rb-b --onto rb-c --dry-run
+note: rb-b and rb-c were both cloned from template 3f2a91c0d4e7 and already share its blocks; expect little to be newly shared
+dry run: 0.27 GB would be newly shared with rb-c; compared rb-b in 00:00, nothing was changed
+  disk image      64.00 GB  logical size; 2.15 GB holds data in either image
+  newly shared     0.27 GB  identical to rb-c at the same offset, would be shared
+  already shared   1.61 GB  identical, and already the same blocks on disk (or a hole): frees nothing
+  written          0.27 GB  differs from rb-c, would be written
+  punched          0.00 GB  zeros where rb-c has data, would become holes
+
+$ vphone-cli vm rebase rb-c --onto rb-a --dry-run
+dry run: 0.00 GB would be newly shared with rb-a; …
+note: the rebase would free almost nothing: rb-c already shares its identical blocks with rb-a on disk
+```
+
+(The template note came from hand-written `TemplateSource.plist` files.)
+`vm rebase rb-d --onto rb-a` reported 2.15 GB newly shared and `df` rose by
+2,097,212 KiB (2.15 GB); a dry run of it afterwards reported 0.00 GB newly
+and 2.15 GB already shared. Mapping both images took well under a second.
 

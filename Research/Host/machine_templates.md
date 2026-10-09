@@ -128,6 +128,14 @@ re-resolves with the template's own `PatchSelection.plist`.
   so it no longer says "its space is free now" (retest B8). `--json` (with
   `--force`) prints `deleted`, `path`, `machines`, `blocksFreed` and the
   same `note`.
+- `vm rebase <vm> --onto <id>` takes a template as the base
+  (`VPhoneDiskRebaseBase.resolve`; a machine with that name wins). It only
+  reads and clones the template's image, and writes no `TemplateSource.plist`
+  into the rebased machine: that machine shares disk blocks but keeps its own
+  SEP storage and identity, so `usage` does not count it. Rebasing a clone of
+  a template onto that template, or onto another clone of the same `Build`,
+  frees nearly nothing; the command notes it and reports such blocks as
+  already shared (`F_LOG2PHYS_EXT`, see [disk rebase](disk_rebase.md)).
 - A build happens in `.building-<id>-<uuid>/<id>/` and is frozen by writing
   `Frozen = true` and one `renamex_np(RENAME_EXCL)` to `.templates/<id>`. A
   listed template is always complete; a race with another build of the same
