@@ -122,6 +122,7 @@ struct VPhoneMotionAxisRow: View {
             Text(VPhoneLocalization.text(sensor.axes[index]))
                 .font(.system(.body, design: .monospaced))
             TextField(VPhoneLocalization.text(sensor.axes[index]), text: $text)
+                .labelsHidden()
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
                 .accessibilityLabel(VPhoneLocalization.text(sensor.axes[index]))
