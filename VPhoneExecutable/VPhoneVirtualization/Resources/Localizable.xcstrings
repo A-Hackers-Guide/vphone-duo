@@ -1,6 +1,20 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Show Attitude Dials" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show Attitude Dials" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示姿态刻度盘" } }
+      }
+    },
+    "Drag or scroll a dial to adjust its angle. Hover to show its rotation axis." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag or scroll a dial to adjust its angle. Hover to show its rotation axis." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "按住拖动或滚动刻度盘可调整角度，悬停时显示对应旋转轴。" } }
+      }
+    },
     "Angles describe a stationary pose. Zero is face up. Enable simulation before launching the guest app." : {
       "extractionState" : "manual",
       "localizations" : {

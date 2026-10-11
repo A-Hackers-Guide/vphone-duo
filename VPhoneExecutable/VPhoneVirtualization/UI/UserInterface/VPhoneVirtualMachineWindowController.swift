@@ -22,6 +22,8 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         virtualMachineView
     }
 
+    var displayWindow: NSWindow? { windowController?.window }
+
     func showWindow(
         for vm: VZVirtualMachine,
         screenWidth: Int,

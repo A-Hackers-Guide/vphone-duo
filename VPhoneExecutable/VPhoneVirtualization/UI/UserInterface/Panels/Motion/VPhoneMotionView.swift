@@ -28,16 +28,20 @@ struct VPhoneMotionView: View {
     let model: VPhoneMotionModel
     let sensor: VPhoneMotionSensor
     let connected: @MainActor () -> Bool
+    var attitudeDials: VPhoneAttitudeDialsWindowController? = nil
 
     var body: some View {
-        VPhoneMotionEditor(model: model, sensor: sensor)
-            .task(id: connected()) { await model.connectionChanged(connected()) }
+        VPhoneMotionEditor(model: model, sensor: sensor, attitudeDials: attitudeDials)
+            .task(id: connected()) {
+                if attitudeDials == nil { await model.connectionChanged(connected()) }
+            }
     }
 }
 
 struct VPhoneMotionEditor: View {
     @Bindable var model: VPhoneMotionModel
     let sensor: VPhoneMotionSensor
+    var attitudeDials: VPhoneAttitudeDialsWindowController? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,9 +83,31 @@ struct VPhoneMotionEditor: View {
             }
             .formStyle(.grouped)
             .disabled(!model.canEdit)
+            if let attitudeDials {
+                VPhoneAttitudeDialsToggle(controller: attitudeDials)
+                    .padding(12)
+            }
             Divider()
             VPhoneMotionSyncStatus(model: model, sensor: sensor)
         }
+    }
+}
+
+struct VPhoneAttitudeDialsToggle: View {
+    @Bindable var controller: VPhoneAttitudeDialsWindowController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle(isOn: $controller.isShown) {
+                Text("Show Attitude Dials", bundle: VPhoneLocalization.bundle)
+            }
+            .toggleStyle(.checkbox)
+            .accessibilityIdentifier("attitude-show-dials")
+            Text("Drag or scroll a dial to adjust its angle. Hover to show its rotation axis.", bundle: VPhoneLocalization.bundle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
