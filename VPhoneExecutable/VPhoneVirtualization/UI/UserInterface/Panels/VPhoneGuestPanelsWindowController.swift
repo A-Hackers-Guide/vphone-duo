@@ -38,6 +38,10 @@ enum VPhoneGuestPanel: CaseIterable {
 final class VPhoneGuestPanelsWindowController {
     private let control: VPhoneGuestControl
     private var windows: [VPhoneGuestPanel: VPhoneGuestToolWindow] = [:]
+    private var attitudeDials: VPhoneAttitudeDialsWindowController?
+    weak var displayWindow: NSWindow? {
+        didSet { attitudeDials?.attach(to: displayWindow) }
+    }
 
     init(control: VPhoneGuestControl) {
         self.control = control
@@ -47,6 +51,14 @@ final class VPhoneGuestPanelsWindowController {
         let window = windows[panel] ?? makeWindow(panel)
         windows[panel] = window
         window.show()
+    }
+
+    func attitudeConnectionChanged() {
+        attitudeDials?.connectionChanged(control.isConnected && control.guestCapabilities.contains("motion_attitude"))
+    }
+
+    func closeAttitudeDials() {
+        attitudeDials?.close()
     }
 
     private func makeWindow(_ panel: VPhoneGuestPanel) -> VPhoneGuestToolWindow {
@@ -118,12 +130,16 @@ final class VPhoneGuestPanelsWindowController {
                 read: { try await control.readAttitude() },
                 write: { try await control.setAttitude($0) },
             )
+            let dials = VPhoneAttitudeDialsWindowController(model: model)
+            attitudeDials = dials
+            dials.attach(to: displayWindow)
+            attitudeConnectionChanged()
             return VPhoneGuestToolWindow(
                 title: String(localized: "Device Attitude", bundle: VPhoneLocalization.bundle),
                 autosaveName: "vphone-panel-attitude",
-                size: NSSize(width: 480, height: 440),
-                minSize: NSSize(width: 440, height: 400),
-            ) { VPhoneMotionView(model: model, sensor: .attitude, connected: { control.isConnected }) }
+                size: NSSize(width: 480, height: 520),
+                minSize: NSSize(width: 440, height: 480),
+            ) { VPhoneMotionView(model: model, sensor: .attitude, connected: { control.isConnected }, attitudeDials: dials) }
         }
     }
 }

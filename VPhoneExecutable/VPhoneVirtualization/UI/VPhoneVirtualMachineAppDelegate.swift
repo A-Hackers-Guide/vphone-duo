@@ -181,6 +181,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
             }
 
             let mc = VPhoneMenuController(keySender: keySender, control: control)
+            mc.guestPanelsWindowController.displayWindow = wc.displayWindow
             mc.vm = vm
             mc.onHardwareKeyboardChange = { [weak self] enabled in
                 guard let self else { return }
@@ -469,6 +470,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         hostAudioLatencySync?.stop()
         cameraServer?.disconnect()
         menuController?.stopBatteryMonitoring()
+        menuController?.guestPanelsWindowController.closeAttitudeDials()
         windowController?.closeForRestart()
         // Tool windows belong to the old guest connection too.
         for window in NSApp.windows {

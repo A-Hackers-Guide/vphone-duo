@@ -72,6 +72,7 @@ extension VPhoneMenuController {
     /// Enables the panels the connected agent can serve. An empty list, as on
     /// disconnect, disables them all.
     func updatePanelAvailability(capabilities: [String]) {
+        guestPanelsWindowController.attitudeConnectionChanged()
         for (panel, item) in panelMenuItems {
             item.isEnabled = capabilities.contains(panel.capability)
         }
