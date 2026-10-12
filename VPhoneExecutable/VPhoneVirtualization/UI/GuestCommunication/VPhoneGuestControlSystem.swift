@@ -49,6 +49,22 @@ extension VPhoneGuestControl {
         return result["changed"] as? Bool ?? false
     }
 
+    // MARK: - Clock
+
+    /// Offers the guest the Mac's time. `offset` is the Mac's time less the
+    /// guest's before the offer, `changed` whether the guest moved its clock,
+    /// and `automatic` whether timed sets its clock; a guest with that off
+    /// keeps the time set by hand in its Settings.
+    func setClock() async throws -> (offset: Double, changed: Bool, automatic: Bool) {
+        // Read as late as possible: the guest takes this as the time it is now.
+        let result = try await call("time.clock", params: ["time": Date().timeIntervalSince1970])
+        return (
+            (result["offset"] as? NSNumber)?.doubleValue ?? 0,
+            result["changed"] as? Bool ?? false,
+            result["automatic"] as? Bool ?? true,
+        )
+    }
+
     // MARK: - Audio
 
     /// Tells the guest's sound plugin what the Mac's output device adds after

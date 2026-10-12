@@ -305,7 +305,7 @@ request carries `"force": true`.
 | Darwin notifications | `notify.post {name, state?}` (`postDarwinNotification`; `state` is a UInt64, as a number or a decimal string, stored before the post), `notify.state {name}` (`darwinNotificationState`) |
 | Network, security | `network.capture {seconds, interface?, filter?}` (writes a pcap in the guest scratch directory and returns its path), `network.ipv4.get {interface?}`, `network.ipv4.set {interface?, method, address?, subnet_mask?, router?, dns?}`, `network.hostname.get`, `network.hostname.set {local_host_name?}`, `device.name.get`, `device.name.set {name}` (see below), `network.static_names.get`, `network.static_names.set {entries}`, `network.resolve {host, family?, port?, first_only?, timeout_ms?}` (see below), `security.ssl_killswitch` |
 | Apps | `apps.list`, `search`, `refresh`, `launch`, `terminate`, `foreground`, `open_url`, `install`, `info`, `binary`, `data_dir`, `url_schemes`, `handlers`, `registration`, `register`, `network_policy {repair?}`; `apps.uninstall`, `unregister`, `unregister_dir` **force**; `apps.removed_system`, `apps.remove_system {bundle_ids, backup?, respring?}` **force**, `apps.restore_system {bundle_ids?, respring?}` **force** (removable system apps, see below) |
-| System | `system.uicache`, `system.system_apps {visible?}`, `system.respring` **force**, `system.reboot {userspace?}` **force**, `system.shutdown` **force**, `developer_mode.status`, `developer_mode.enable`, `power.low_power_mode`, `time.timezone {identifier?, automatic?}` (see below), `diagnostics.self_test` |
+| System | `system.uicache`, `system.system_apps {visible?}`, `system.respring` **force**, `system.reboot {userspace?}` **force**, `system.shutdown` **force**, `developer_mode.status`, `developer_mode.enable`, `power.low_power_mode`, `time.timezone {identifier?, automatic?}`, `time.clock {time?, automatic?}` (see below), `diagnostics.self_test` |
 | Files | `files.list`, `mkdir`, `remove`, `rename`, `read {binary?, limit?}`, `write`, `find`, `copy`, `symlink`, `chmod`, `chown`, `plist`, `plist_set {value \| remove}` |
 | APFS snapshots | `apfs.snapshots {mount?}`, `apfs.snapshot.delete {mount?, name? \| prefix?}` **force** (only `orig-fs.disabled.rn-*`, see below) |
 | Preferences, clipboard, location | `settings.get/set/delete`, `clipboard.get/set/clear`, `location.set/clear/current` |
@@ -388,6 +388,22 @@ so SpringBoard's clock changes at once. `{automatic: true}` hands the zone
 back to timed. Both add `changed`. `vphone-vm` sends the Mac's zone after
 every connect and whenever the Mac's zone changes (`VPhoneTimeZoneSync`), so
 the guest's clock reads the same local time as the host.
+
+`time.clock` (capability `clock`; REST `GET/PUT /v1/clock`) returns
+`{time, automatic}`: the guest's clock in seconds since 1970 and whether timed
+sets it (CoreTime's `TMIsAutomaticTimeEnabled`). `{time}` is the Mac's time. A
+guest within a second of it is left alone, and so is one with automatic time
+off, whose clock was set by hand in Settings. Otherwise vphoned offers the
+time to timed as an NTP result (`TMSetSourceTime`, which timed takes only with
+`com.apple.timed` and `NTP` in `com.apple.timed.sources`), up to six times,
+and timed sets the clock and posts the time change itself. The answer adds
+`offset`, the Mac's time less the guest's before the offer, and `changed`. A
+clock that has not moved after six offers fails the request: timed holds a
+time it trusts more. `{automatic}` turns automatic time on or off
+(`TMSetAutomaticTimeEnabled`) and adds `changed`; with `time` it is applied
+first. `vphone-vm` sends the Mac's time after every connect, every minute,
+when the Mac wakes and when the Mac's clock is set (`VPhoneClockSync`). The
+analysis is in `Research/Guest/host_clock_sync.md`.
 
 `audio.host_latency` (capability `audio_host_latency`) reads or sets what the
 Mac's output device adds after its mixer, in seconds, which the guest's
