@@ -14,6 +14,8 @@ If the first installation fails, do not repair it in place. Choose **Apps > Unin
 
 Choose **Apps > Uninstall Bootstrap…**. The VM restarts after removal.
 
+Irisin keeps its data (downloads, journal, settings) in `Documents/wiki.qaq.irisin` under its home. On **roothide** that home is the environment's own `/var/mobile`, so uninstalling removes the data with everything else. On **rootless** it is the system's `/var/mobile`, and the data stays.
+
 Hold Option while opening the **Apps** menu to see two more options:
 
 - **Install Bootstrap from File…:** Installs from a local Irisin `.deb`.

@@ -88,6 +88,10 @@ data and group containers, plug-ins), a refresh registers again any app whose
 record differs from it and leaves a matching one running, and Apple's apps and
 other installers' apps are listed under `skipped`. `apps.register` refuses
 those apps.
+Since icli 0.8.0 a `PlugIns` entry that is not an app extension (a
+`.bundle`, a `.framework`, or an `.appex` without `NSExtension`) no longer
+stalls `apps.register` or `apps.refresh` and fails them with "did not record
+the plug-ins"; a `refresh_incomplete` message names the app and the field.
 `screen.screenshot` uses IcliKit's native screen capture and returns a base64
 JPEG with `mime_type`, `width`, and `height`; the current VM produces 1290×2796.
 The host's Save/Copy Screenshot menu decodes this guest image. It omits the
