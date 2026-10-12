@@ -20,6 +20,7 @@ extension GuestAPI {
             executeSetupAssistant,
             executeFirstBoot,
             executeTimeZone,
+            executeClock,
             executeAudioLatency,
             executeGyroscope,
             executeAttitude,

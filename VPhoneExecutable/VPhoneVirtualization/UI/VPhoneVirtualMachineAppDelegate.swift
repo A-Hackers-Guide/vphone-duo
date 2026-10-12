@@ -14,6 +14,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
     private var appWindowController: VPhoneAppWindowController?
     private var locationProvider: VPhoneLocationProvider?
     private var timeZoneSync: VPhoneTimeZoneSync?
+    private var clockSync: VPhoneClockSync?
     private var hostAudioLatencySync: VPhoneHostAudioLatencySync?
     private var hostAutomationServer: VPhoneHostAutomationServer?
     private var cameraServer: VPhoneCameraServer?
@@ -124,6 +125,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
             let provider = VPhoneLocationProvider(control: control)
             locationProvider = provider
             timeZoneSync = VPhoneTimeZoneSync(control: control)
+            clockSync = VPhoneClockSync(control: control)
             hostAudioLatencySync = VPhoneHostAudioLatencySync(control: control)
 
             let camServer = VPhoneCameraServer()
@@ -256,7 +258,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
             menuController = mc
 
             // Wire location toggle through onConnect/onDisconnect
-            control.onConnect = { [weak self, weak mc, weak provider = locationProvider, weak timeZoneSync, weak hostAudioLatencySync] caps in
+            control.onConnect = { [weak self, weak mc, weak provider = locationProvider, weak timeZoneSync, weak clockSync, weak hostAudioLatencySync] caps in
                 mc?.updateConnectAvailability(available: true)
                 mc?.updateInstallAvailability(available: caps.contains("ipa_install"))
                 mc?.updateBootstrapAvailability(available: caps.contains("bootstrap_install"))
@@ -283,6 +285,9 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 if caps.contains("timezone") {
                     timeZoneSync?.start()
                 }
+                if caps.contains("clock") {
+                    clockSync?.start()
+                }
                 if caps.contains("audio_host_latency") {
                     hostAudioLatencySync?.start()
                 }
@@ -290,7 +295,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                     await self?.installPackageIfRequested(caps: caps)
                 }
             }
-            control.onDisconnect = { [weak mc, weak provider = locationProvider, weak timeZoneSync, weak hostAudioLatencySync] in
+            control.onDisconnect = { [weak mc, weak provider = locationProvider, weak timeZoneSync, weak clockSync, weak hostAudioLatencySync] in
                 mc?.updateConnectAvailability(available: false)
                 mc?.updateInstallAvailability(available: false)
                 mc?.updateBootstrapAvailability(available: false)
@@ -307,11 +312,12 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 provider?.stopForwarding()
                 mc?.updateLocationCapability(available: false)
                 timeZoneSync?.stop()
+                clockSync?.stop()
                 hostAudioLatencySync?.stop()
             }
         } else if !command.dfu {
             // Headless mode: no menu, so the machine's setting alone decides.
-            control.onConnect = { [weak self, weak control, weak provider = locationProvider, weak timeZoneSync, weak hostAudioLatencySync] caps in
+            control.onConnect = { [weak self, weak control, weak provider = locationProvider, weak timeZoneSync, weak clockSync, weak hostAudioLatencySync] caps in
                 if !caps.contains("location") {
                     print("[location] guest does not support location simulation")
                 } else if control?.syncsHostLocation == true {
@@ -320,6 +326,9 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 if caps.contains("timezone") {
                     timeZoneSync?.start()
                 }
+                if caps.contains("clock") {
+                    clockSync?.start()
+                }
                 if caps.contains("audio_host_latency") {
                     hostAudioLatencySync?.start()
                 }
@@ -327,10 +336,11 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                     await self?.installPackageIfRequested(caps: caps)
                 }
             }
-            control.onDisconnect = { [weak provider = locationProvider, weak timeZoneSync, weak hostAudioLatencySync] in
+            control.onDisconnect = { [weak provider = locationProvider, weak timeZoneSync, weak clockSync, weak hostAudioLatencySync] in
                 provider?.stopReplay()
                 provider?.stopForwarding()
                 timeZoneSync?.stop()
+                clockSync?.stop()
                 hostAudioLatencySync?.stop()
             }
         }
@@ -467,6 +477,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         locationProvider?.stopForwarding()
         locationProvider?.stopReplay()
         timeZoneSync?.stop()
+        clockSync?.stop()
         hostAudioLatencySync?.stop()
         cameraServer?.disconnect()
         menuController?.stopBatteryMonitoring()
@@ -484,6 +495,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         appWindowController = nil
         locationProvider = nil
         timeZoneSync = nil
+        clockSync = nil
         hostAudioLatencySync = nil
         cameraServer = nil
         hostAutomationServer = nil

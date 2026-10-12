@@ -543,6 +543,10 @@
 	<true/>
 	<key>com.apple.timed</key>
 	<true/>
+	<key>com.apple.timed.sources</key>
+	<array>
+		<string>NTP</string>
+	</array>
 	<key>com.apple.tzlink.allow</key>
 	<true/>
 	<key>com.apple.usernotification.notificationregistrarproxy</key>

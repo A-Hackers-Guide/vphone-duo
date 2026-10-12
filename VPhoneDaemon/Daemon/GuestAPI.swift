@@ -143,6 +143,7 @@ enum GuestAPI {
                 "network_static_names",
                 "network_resolve",
                 "timezone",
+                "clock",
                 "audio_host_latency",
                 "motion_gyroscope",
                 "motion_gyroscope_toggle",

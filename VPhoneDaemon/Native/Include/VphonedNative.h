@@ -35,6 +35,23 @@ bool vp_screen_undim(void);
 /// accepted, otherwise an errno value. Needs root.
 int vp_system_halt(void);
 
+/// Whether timed sets the clock itself (Settings' Set Automatically): 1 on,
+/// 0 off, -1 when CoreTime does not offer it, -2 when timed did not answer.
+int vp_clock_automatic(void);
+
+/// Turn timed's automatic time on or off, as Set Automatically does for the
+/// clock. timed sends no reply, so the caller reads it back. 0 once sent, -1
+/// when CoreTime does not offer it, -2 when timed did not take it within 3
+/// seconds. Needs com.apple.timed.
+int vp_clock_set_automatic(bool enabled);
+
+/// Offer timed `unixTime`, good to `uncertainty` seconds, as an NTP result.
+/// timed weighs it against what it has and sets the clock itself; nothing is
+/// returned, so the caller reads the clock. 0 once sent, -1 when CoreTime has
+/// no TMSetSourceTime, -2 when timed did not take it within 3 seconds. Needs
+/// com.apple.timed and NTP in com.apple.timed.sources.
+int vp_clock_offer(double unixTime, double uncertainty);
+
 typedef struct {
     int32_t pid;
     int32_t ppid;
