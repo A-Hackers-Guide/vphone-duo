@@ -400,15 +400,15 @@ struct VPhoneCustomFirmwareInstaller {
         // Selected patches this guest has nothing for, so the receipt does not
         // report them as missing forever: the board audio repair on an
         // iPhone17,3, which has no board of its own to present, the iPhone
-        // product repair on a board-presenting guest, whose tree already
-        // carries its board's description, and the build spoof with no value
-        // set. A guest whose board tree could not be recovered is not among
-        // them: its repair is missing, and drift should keep saying so.
+        // product repair on an iPad, and the build spoof with no value set. A
+        // guest whose board tree could not be recovered is not among them: its
+        // repair is missing, and drift should keep saying so.
         var notApplicableGuest = Set<String>()
-        if device.presentsBoard {
-            notApplicableGuest.insert(FirmwareGuestSystemPatchSet.prebootIPhoneProduct)
-        } else {
+        if !device.presentsBoard {
             notApplicableGuest.insert(FirmwareGuestSystemPatchSet.prebootBoardAudio)
+        }
+        if device.isPad {
+            notApplicableGuest.insert(FirmwareGuestSystemPatchSet.prebootIPhoneProduct)
         }
         if buildVersion?.isEmpty ?? true {
             notApplicableGuest.insert("system-systemversion-cfw-build_version")
@@ -2015,7 +2015,11 @@ struct VPhoneCustomFirmwareInstaller {
         if let boardDeviceTree {
             if guestDevice.presentsBoard {
                 repairGroup.append((FirmwareGuestSystemPatchSet.prebootBoardAudio, "patch-dt-board-audio", [boardDeviceTree.path]))
-            } else {
+            }
+            // A board-presenting iPhone's restored tree takes the board's
+            // values only where vphone600 has a placeholder; Camera Control
+            // and the Action Button are added here.
+            if !guestDevice.isPad {
                 repairGroup.append((FirmwareGuestSystemPatchSet.prebootIPhoneProduct, "patch-dt-iphone-product", [boardDeviceTree.path]))
             }
         }
