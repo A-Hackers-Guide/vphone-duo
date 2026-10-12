@@ -118,7 +118,9 @@ vphone-launchpad-cli guest rpc myphone bootstrap.uninstall '{"roots":["<path fro
 Uninstall removes **every listed root**, unloads their daemons, unregisters
 their apps, marks the record uninstalled and **reboots the guest** (add
 `"reboot":false` to skip). The paths must match the current inspection
-exactly. Irisin's data under `/var/mobile/Documents` is kept. It destroys the
+exactly. Rootless Irisin keeps its data in the system's
+`/var/mobile/Documents`, which is kept; RootHide Irisin keeps it in the
+jbroot's `var/mobile`, which goes with the root. It destroys the
 user's installed packages, so run it only when asked or as the stated recovery
 for a failed first install.
 

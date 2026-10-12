@@ -22,35 +22,54 @@ extension GuestIrisinInstaller {
         else { throw GuestAPIError.operationFailed("Irisin release payload is incomplete or has the wrong layout") }
     }
 
-    /// mobile owns /var/mobile/Documents, so either path component may be a
-    /// symlink it planted to have root hand another directory to mobile. Both
-    /// are opened without following a link, and ownership is set through the
-    /// descriptor rather than the path.
-    static func prepareAppData() throws {
-        let documents = "/var/mobile/Documents"
-        let name = "wiki.qaq.irisin"
-        if mkdir(documents, 0o755) != 0, errno != EEXIST {
-            throw GuestAPIError.operationFailed("Could not create \(documents): \(String(cString: strerror(errno)))")
+    /// The bootstrap app's home: RootHide gives an uncontained app the
+    /// jbroot's `/var/mobile` as HOME, and its dpkg puts package data there;
+    /// rootless uses the system's.
+    static func appHome(layout: String, root: String) -> String {
+        layout == "roothide" ? root + "/var/mobile" : "/var/mobile"
+    }
+
+    /// mobile owns its home and Documents, so any of the three mobile-owned
+    /// levels may be a symlink it planted to have root hand another directory
+    /// to mobile. Each is opened relative to its parent without following a
+    /// link, a level vphoned creates is given to mobile, and ownership is set
+    /// through the descriptor rather than the path. A fresh jbroot may have
+    /// no `var` yet; it is created root-owned like the rest of the base.
+    static func prepareAppData(home: String) throws {
+        let parentPath = (home as NSString).deletingLastPathComponent
+        if mkdir(parentPath, 0o755) == 0 {
+            guard chown(parentPath, 0, 0) == 0, chmod(parentPath, 0o755) == 0 else {
+                throw GuestAPIError.operationFailed("Could not set the owner and mode of \(parentPath)")
+            }
+        } else if errno != EEXIST {
+            throw GuestAPIError.operationFailed("Could not create \(parentPath): \(String(cString: strerror(errno)))")
         }
-        let parent = open(documents, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-        guard parent >= 0 else {
-            throw GuestAPIError.operationFailed("\(documents) is not a real directory")
+        var current = open(parentPath, O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        guard current >= 0 else {
+            throw GuestAPIError.operationFailed("\(parentPath) is not a directory")
         }
-        defer { close(parent) }
-        if mkdirat(parent, name, 0o755) != 0, errno != EEXIST {
-            throw GuestAPIError.operationFailed("Could not create Irisin app data: \(String(cString: strerror(errno)))")
-        }
-        var info = stat()
-        guard fstatat(parent, name, &info, AT_SYMLINK_NOFOLLOW) == 0,
-              info.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR)
-        else { throw GuestAPIError.operationFailed("Irisin app data path is not a real directory") }
-        let directory = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-        guard directory >= 0 else {
-            throw GuestAPIError.operationFailed("Irisin app data path is not a real directory")
-        }
-        defer { close(directory) }
-        guard fchown(directory, 501, 501) == 0, fchmod(directory, 0o755) == 0 else {
-            throw GuestAPIError.operationFailed("Could not assign Irisin app data to mobile")
+        defer { close(current) }
+        let levels = [(home as NSString).lastPathComponent, "Documents", "wiki.qaq.irisin"]
+        for (index, name) in levels.enumerated() {
+            let created = mkdirat(current, name, 0o755) == 0
+            if !created, errno != EEXIST {
+                throw GuestAPIError.operationFailed("Could not create Irisin app data: \(String(cString: strerror(errno)))")
+            }
+            var info = stat()
+            guard fstatat(current, name, &info, AT_SYMLINK_NOFOLLOW) == 0,
+                  info.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR)
+            else { throw GuestAPIError.operationFailed("Irisin app data path is not a real directory: \(name)") }
+            let next = openat(current, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard next >= 0 else {
+                throw GuestAPIError.operationFailed("Irisin app data path is not a real directory: \(name)")
+            }
+            close(current)
+            current = next
+            if created || index == levels.count - 1 {
+                guard fchown(current, 501, 501) == 0, fchmod(current, 0o755) == 0 else {
+                    throw GuestAPIError.operationFailed("Could not assign Irisin app data to mobile")
+                }
+            }
         }
     }
 

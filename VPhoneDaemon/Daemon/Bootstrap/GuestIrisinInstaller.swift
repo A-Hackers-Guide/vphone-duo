@@ -316,7 +316,7 @@ enum GuestIrisinInstaller {
         if layout == "roothide" {
             _ = try patchRootHideDaemon(at: plist.path, root: root)
         }
-        try prepareAppData()
+        try prepareAppData(home: appHome(layout: layout, root: root))
 
         let rootURL = URL(fileURLWithPath: root, isDirectory: true)
         let installedApp = rootURL.appendingPathComponent("Applications/irisin.app", isDirectory: true)

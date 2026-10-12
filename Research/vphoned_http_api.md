@@ -117,10 +117,15 @@ It selects the matching architecture, verifies the release
 asset's GitHub SHA-256 digest and Debian control fields, then uses IcliKit to
 extract the `.deb` into a temporary directory. It copies the full payload
 into the bootstrap, creates Irisin's mobile-owned data directory, registers
-the app with IcliKit, and loads the daemon through IcliKit. mobile owns
-`/var/mobile/Documents`, so vphoned opens it and `wiki.qaq.irisin` without
-following a symlink. It refuses an entry that is not a real directory and sets
-the owner and mode through the directory descriptor. It also attempts
+the app with IcliKit, and loads the daemon through IcliKit. The data directory
+is `Documents/wiki.qaq.irisin` in the app's home: the system's `/var/mobile`
+on rootless, the jbroot's `var/mobile` on RootHide, where an uncontained
+bootstrap app gets that as HOME (`CFFIXED_USER_HOME`) and dpkg puts package
+data. mobile owns the home and `Documents`, so vphoned opens each level
+relative to its parent without following a symlink, creates a missing level
+owned by mobile (a missing jbroot `var` root-owned), refuses an entry that is
+not a real directory, and sets the owner and mode through the directory
+descriptor. It also attempts
 to start the daemon; a launchd start error is returned as
 `service_start_warning` while the installed bootstrap remains available.
 On the iOS 26.6.2 RootHide test VM, launchd returned service-configure status
