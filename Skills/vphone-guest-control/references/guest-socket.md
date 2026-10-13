@@ -40,10 +40,11 @@ Unknown `t`, or missing fields, give `{"ok":false,"error":"…"}`.
 Success is `{"ok":true}`, with `result` for `rpc`, `path` for `screenshot`, and
 `image` when a screen is attached. Failure is `{"ok":false,"error":"…"}`.
 
-- `image` is a **small grayscale JPEG, base64**, meant for a quick "did
-  something change" glance. It is not the real screen. For anything you must
-  read (text, colors, layout), take a `screenshot` to a file and open the file,
-  or use `ui.describe` / `ui.ocr`.
+- `image` is a **small color JPEG, base64**: the screen at a third of its
+  size and low quality, meant for a quick "did something change" glance. It is
+  not the real screen. For anything you must read (small text, exact colors,
+  layout), take a `screenshot` to a file and open the file, or use
+  `ui.describe` / `ui.ocr`.
 - `tap`, `swipe`, `key` and `type` attach one by default, 500 ms after the
   action. Add `"screen":false` to skip it; add `"delay":<ms>` for slow
   animations. `rpc` attaches none unless `"screen":true` (CLI: `guest rpc … --screen`).

@@ -7,7 +7,7 @@ for none). The reply is `{"ok":true,"result":{…}}`. On `ok:false` the CLI exit
 (for example `guest not connected` or `Unknown method: …`) on stderr. When
 vphoned itself refused, the last stderr line is its whole error object as JSON
 (`code`, `message` and fields such as `results`, `reason`, `errno`,
-`retryable`); `vphone.sock` carries the same object as `guest_error`. Add `--screen` to also get the small grayscale screen image.
+`retryable`); `vphone.sock` carries the same object as `guest_error`. Add `--screen` to also get the small screen image.
 
 The complete catalog, with REST routes and result details, is
 `Research/vphoned_http_api.md` ("Method catalog"). This file is the working
