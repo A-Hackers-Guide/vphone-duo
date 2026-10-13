@@ -479,7 +479,7 @@ public enum DyldSharedCacheIOMFBForceKernPatcher {
         for site in sites where site.disposition == .forced {
             let address = site.entry.publicAddress
             let data = try chunks.bytesAtVMA(address, length: 16)
-            let instructions = try disassembler.disassemble(data, at: address, count: 4)
+            let instructions = disassembler.disassemble(data, at: address, count: 4)
             guard isConditionalDispatch(instructions, entry: site.entry)
             else {
                 let bytes = data.map { String(format: "%02x", $0) }.joined()
