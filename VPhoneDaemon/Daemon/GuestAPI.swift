@@ -503,8 +503,17 @@ enum GuestAPI {
             return FileManager.default.fileExists(atPath: path, isDirectory: &directory) && directory.boolValue
         }
 
-        // RootHide can expose its root through the injected hook even when a
-        // system-installed vphoned has no adjacent .jbroot or libroot library.
+        // The bootstrap vphoned installed itself, by its completion record.
+        // The probes below look for a jailbreak's own traces, and a RootHide
+        // root vphoned made has none: vphoned is on the system volume, away
+        // from any .jbroot link or libroot library, and vphone's SystemHook
+        // has no get_jbroot.
+        if let installation = try? GuestIrisinInstaller.completedBootstrap(), isDirectory(installation.root) {
+            return ["layout": installation.layout, "jbroot": installation.root, "source": "vphoned bootstrap"]
+        }
+
+        // A foreign RootHide can expose its root through its injected hook even
+        // when vphoned has no adjacent .jbroot or libroot library.
         if let hook = dlopen("systemhook.dylib", RTLD_NOLOAD) {
             defer { dlclose(hook) }
             if let symbol = dlsym(hook, "get_jbroot") {
