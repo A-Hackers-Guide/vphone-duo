@@ -1427,6 +1427,12 @@ struct VPhoneCustomFirmwareInstaller {
         return live
     }
 
+    /// Live dyld patches whose verb runs again on every install. Each is cheap
+    /// and idempotent, and its earlier implementation left records identical to
+    /// the current one's, so `hasOutdatedImplementation` cannot single it out:
+    /// `dyld-boot-maxslide` once left page 0's slot stale, and a re-run repairs it.
+    private static let dyldPatchesRerunWhenLive: Set<String> = ["dyld-boot-maxslide"]
+
     /// Apply the enabled dyld cache patches whose state differs from what was
     /// live before, and revert the disabled ones from the undo log the earlier
     /// install wrote. A patch already in the prior-live set is left alone — no
@@ -1460,7 +1466,14 @@ struct VPhoneCustomFirmwareInstaller {
                 // Already applied; leave it, no scan — unless the bytes on disk
                 // are an earlier implementation of the same identifier. Then put
                 // the originals back and apply the current one, in this run.
-                if let undoLog, undoLog.hasOutdatedImplementation(of: entry.id) {
+                if Self.dyldPatchesRerunWhenLive.contains(entry.id) {
+                    do {
+                        try patch(entry.verb, entry.args + ["--undo-log", undoAbsolute, "--undo-id", entry.id])
+                    } catch {
+                        failures.append(entry.id)
+                        print("  [!] \(entry.id): re-running the applied patch failed, left as it was: \(error)")
+                    }
+                } else if let undoLog, undoLog.hasOutdatedImplementation(of: entry.id) {
                     print("  [*] \(entry.id): an earlier implementation is applied; reverting it and applying the current one")
                     do {
                         try patch("patch-dsc-revert", [dsc, "--undo-log", undoAbsolute, "--patch", entry.id])

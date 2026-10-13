@@ -302,8 +302,10 @@ struct VPhoneCustomFirmwarePatchDyldSharedCacheMaxSlideCommand: ParsableCommand 
         --force zeroes maxSlide even when the cache fits. It is for running this
         verb by hand; `cfw install` never passes it.
 
-        No re-attestation: maxSlide lives in the cache header, which is not one
-        of the cs_validate'd code pages.
+        Page 0's slot is re-attested after the write, and on any run over a
+        header already at maxSlide 0. The kernel does not check that page, but
+        Xcode's dsc_extractor does: with a stale slot it extracts no symbols
+        from the cache, and LLDB reads every system library from the guest.
         """,
     )
 
