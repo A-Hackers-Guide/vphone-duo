@@ -243,7 +243,12 @@ finish before closing the opposite socket, with a five-second drain limit.
 RunningBoard's live focal assertion and accepts it only when one real app owns
 it. iOS 26.6.2 uses `SuspendableRole-UIFocal`; older systems may use
 `Workspace-ForegroundFocal`. The Home screen's widget renderer can also hold
-`UIFocal`, so the Kit excludes it. `apps.foreground` reports the Kit's
+`UIFocal`, so the Kit excludes it. Since icli 0.8.5 it also leaves out every
+app tagged hidden (`SBAppTags`), view services SpringBoard hosts in its own
+interface such as the iPad Dock's folder stack, which made the Home screen
+report `com.apple.DocumentManager.DockFolderViewService`; when several apps
+hold the assertion, as with windows side by side in iOS 27, the one with the
+`ForegroundFocal` jetsam priority wins. `apps.foreground` reports the Kit's
 `verified` and `source` values. If no unique focal app can be confirmed,
 a newly started process is reported with `frontmost_verified=false` and a
 warning. A failed start or an already running app without foreground
