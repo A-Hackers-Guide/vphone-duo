@@ -9,6 +9,7 @@ public enum VPhoneBundleOperations {
         public let diskSizeGB: UInt64
         public let romSource: URL
         public let sepromSource: URL
+        public let networkConfig: VPhoneVirtualMachineManifest.NetworkConfig
 
         public init(
             name: String,
@@ -17,9 +18,11 @@ public enum VPhoneBundleOperations {
             diskSizeGB: UInt64,
             romSource: URL,
             sepromSource: URL,
+            networkConfig: VPhoneVirtualMachineManifest.NetworkConfig = .default,
         ) {
             self.name = name; self.cpuCount = cpuCount; self.memoryMB = memoryMB
             self.diskSizeGB = diskSizeGB; self.romSource = romSource; self.sepromSource = sepromSource
+            self.networkConfig = networkConfig
         }
     }
 
@@ -83,6 +86,7 @@ public enum VPhoneBundleOperations {
             let manifest = VPhoneVirtualMachineManifest(
                 cpuCount: spec.cpuCount,
                 memorySize: spec.memoryMB * 1024 * 1024,
+                networkConfig: spec.networkConfig,
                 romImages: .init(avpBooter: "AVPBooter.vresearch1.bin",
                                  avpSEPBooter: "AVPSEPBooter.vresearch1.bin"),
             )

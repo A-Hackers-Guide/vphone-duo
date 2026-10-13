@@ -1663,6 +1663,9 @@ volume into the VM restore tree and removes the temporary VM. This is the
 default path; `--gpu-driver-bundle` reuses a validated bundle instead. Both
 cloudOS 26.1 and 26.4 PCC AEA key URLs returned HTTP 403 on 2026-09-24, so
 the preparer no longer requests those keys before the temporary restore.
+The temporary VM has no network device (2026-10-13): the restore runs over
+the virtual USB device, and with the default `nat` NIC the Mac's shared vmnet
+network and DHCP service came up for some seconds after the restore.
 Both the JB host-mount installer and the filesystem merge copy this staged
 bundle into the iPhone guest. The 26.4 `23E5207q` restored bundle has
 `DTPlatformVersion=26.4`, `CFBundleVersion=64.4.4`, and binary SHA-256

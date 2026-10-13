@@ -32,6 +32,9 @@ enum VPhonePCCGPURecovery {
             .appending(path: ".pcc-restoration-\(UUID().uuidString)")
         let library = VPhoneLibrary(root: temporaryLibrary)
         let name = "pcc-\(UUID().uuidString.lowercased())"
+        // The restore runs over the virtual USB device, so the machine needs no
+        // NIC. With the default nat one, the Mac's shared vmnet network and its
+        // DHCP service came up between the end of the restore and the stop.
         let vm = try VPhoneBundleOperations.create(.init(
             name: name,
             cpuCount: 8,
@@ -39,6 +42,7 @@ enum VPhonePCCGPURecovery {
             diskSizeGB: 64,
             romSource: VPhoneBundleOperations.defaultROMSource(),
             sepromSource: VPhoneBundleOperations.defaultSEPROMSource(),
+            networkConfig: .init(mode: .off, macAddress: ""),
         ), in: library)
         var diskMayBeAttached = false
         let temporaryRestore = vm.url.appending(path: "iPhonePCC_Restore")
