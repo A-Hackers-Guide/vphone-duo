@@ -19,7 +19,7 @@ import VPhoneCoreKit
 /// and the image comes from the guest's `screen.screenshot`.
 ///
 /// Every response includes an `"image"` field with a compact base64-encoded
-/// grayscale JPEG of the current screen (unless `"screen":false` is sent).
+/// color JPEG of the current screen (unless `"screen":false` is sent).
 ///
 /// Supported commands:
 ///   {"t":"screenshot"}                          → full-res save to Desktop (or explicit path)
@@ -380,7 +380,7 @@ class VPhoneHostAutomationServer {
         return await captureCompactScreenshot()
     }
 
-    /// Capture current screen as a small grayscale JPEG, returned as base64.
+    /// Capture current screen as a small color JPEG, returned as base64.
     private func captureCompactScreenshot() async -> String? {
         guard let cgImage = await captureScreenImage() else { return nil }
         return compactJPEG(cgImage)
@@ -390,24 +390,24 @@ class VPhoneHostAutomationServer {
         let dstW = cgImage.width / Self.compactScale
         let dstH = cgImage.height / Self.compactScale
 
-        // Draw into grayscale context
-        let gray = CGColorSpaceCreateDeviceGray()
-        guard let ctx = CGContext(
-            data: nil,
-            width: dstW,
-            height: dstH,
-            bitsPerComponent: 8,
-            bytesPerRow: dstW,
-            space: gray,
-            bitmapInfo: CGImageAlphaInfo.none.rawValue,
-        ) else { return nil }
+        // Draw into an sRGB context; JPEG has no alpha, so none is kept
+        guard let sRGB = CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(
+                  data: nil,
+                  width: dstW,
+                  height: dstH,
+                  bitsPerComponent: 8,
+                  bytesPerRow: 0,
+                  space: sRGB,
+                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue,
+              )
+        else { return nil }
 
-        // High contrast: bump brightness
         ctx.setShouldAntialias(true)
         ctx.interpolationQuality = .high
         ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: dstW, height: dstH))
 
-        guard let grayImage = ctx.makeImage() else { return nil }
+        guard let scaledImage = ctx.makeImage() else { return nil }
 
         // Encode as low-quality JPEG
         let data = NSMutableData()
@@ -415,7 +415,7 @@ class VPhoneHostAutomationServer {
             return nil
         }
         let options: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: 0.35]
-        CGImageDestinationAddImage(dest, grayImage, options as CFDictionary)
+        CGImageDestinationAddImage(dest, scaledImage, options as CFDictionary)
         guard CGImageDestinationFinalize(dest) else { return nil }
 
         return (data as Data).base64EncodedString()

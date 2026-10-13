@@ -10,7 +10,7 @@
     {
       "id": 2,
       "prompt": "myphone is running. Open Settings, tell me what the screen shows, then read /etc/hosts from the guest. Show me the commands you would run; do not run them.",
-      "expected_output": "Uses guest rpc apps.launch with bundle_id com.apple.Preferences, a screenshot to a file or ui.describe/ui.ocr (not the attached grayscale image), files.read for /etc/hosts; no ssh, no devicectl.",
+      "expected_output": "Uses guest rpc apps.launch with bundle_id com.apple.Preferences, a screenshot to a file or ui.describe/ui.ocr (not the attached small image), files.read for /etc/hosts; no ssh, no devicectl.",
       "files": []
     },
     {
