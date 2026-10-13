@@ -28,6 +28,10 @@ load a disabled job at the next boot. It is the same mechanism
 - **It is not a firmware patch.** The system volume and `launchd.plist` are
   untouched, nothing goes into a patch set, and the Services panel still lists
   every job, disabled ones marked as such.
+- **On iOS 27 it leans on one.** launchd there ignores the override for the
+  jobs the board's jetsam properties mark `DisableAllowed = false`, and
+  `system-jetsamproperties-cfw-disable_allowed` removes that mark
+  ([iOS 27 and DisableAllowed](#ios-27-and-disableallowed)).
 - **It reverts cleanly.** vphoned records the labels it disabled in
   `/var/db/vphoned/service-profile.plist`. `profile: "none"` turns back on
   those labels and no others. A job that was already disabled when the profile
@@ -72,8 +76,9 @@ selects.
 iOS 26 and 27 have a list, both measured on iPhone guests (see
 [iOS 26](#ios-26) for how the 26 list differs). vphoned picks the list by
 the major version alone, so an iPadOS guest of those versions gets the iPhone
-list, which nobody has measured there. Any other version gets "No trimmed
-service list".
+list. An iPad16,1 template builds with it on 26.6.2 and on 27.0.1
+([iOS 27 and DisableAllowed](#ios-27-and-disableallowed)); its idle cost was
+not measured there. Any other version gets "No trimmed service list".
 
 ## Never disabled
 
@@ -227,6 +232,79 @@ CHSIntentReference from" an App Intent. They are launched again on demand,
 and nothing visible was affected; which disabled job the intent reference
 needs was not found. `SiriSearchFeedback` crashed in both configurations.
 
+## iOS 27 and DisableAllowed
+
+On a guest that presents its board, iOS 27 kept five of the profile's jobs
+running after the reboot, and a template's strict setup boot failed its last
+check (2026-10-13, iPad16,1 27.0.1 (24A446), bundle 2.9.3):
+
+```
+[setup] failed at verify: 5 profile service(s) still running:
+com.apple.OTATaskingAgent, com.apple.analyticsd, com.apple.diagnosticextensionsd,
+com.apple.mobile.softwareupdated, com.apple.symptomsd-diag
+```
+
+All 144 overrides were in place (`services.profile` → `disabled`). 139 of
+those jobs were not loaded at all; `services.print` showed the other five with
+`force-enabled` among their properties.
+
+The cause is a key iOS 27 added to the jetsam properties,
+`/System/Library/LaunchDaemons/com.apple.jetsamproperties.<target-type>.plist`.
+Under `Version4` → `Daemon` (and `XPCService`) → `Override` → `<label>`, 19
+entries carry `DisableAllowed = false`: the five above and
+`com.apple.DumpPanic`, `ReportCrash`, `ReportCrash.Root`, `ReportCrashService`,
+`logd`, `logd_helper`, `logd_reporter`, `mobile.obliteration`,
+`mobileactivationd`, `osanalytics.osanalyticshelper` and its `.agent`,
+`pluginkit.pkd`, `sysdiagnose` and `sysdiagnose_helper`. launchd reads the key
+with the other `JetsamProperties` and, when it bootstraps a disabled job that
+has it, logs `Ignoring disabled state because DisableAllowed=false` and loads
+the job anyway. `launchctl print` then lists `force-enabled`.
+
+Which file launchd reads follows the device tree's `target-type`:
+
+- An **iPhone17,3** guest keeps `VPHONE600`. The profile and the
+  [OTA block](ota_software_update_block.md) were measured there, and a slimmed
+  27.0.1 template passes the same check without the patch, so nothing is
+  force-enabled; the image presumably has no jetsam properties under that
+  name, which was not looked at.
+- **Every other guest** presents its board (`VPhoneGuestDevice.presentsBoard`:
+  J410 for the iPad16,1), gets that board's file, and with it the 19 marks.
+- **iOS 26** has the files without the key: the J410 one on 26.6.2 (23G90)
+  holds no `DisableAllowed`, and `services.dump` on that guest shows no
+  `force-enabled` job. A trimmed iPad16,1 template builds there unchanged.
+
+`system-jetsamproperties-cfw-disable_allowed` removes every
+`DisableAllowed = false` from each `com.apple.jetsamproperties.*.plist` during
+`cfw install` and `cfw update-environment`, for iOS 27 only. It keeps a `.bak`
+beside each file and puts it back when the patch is turned off. Nothing else
+in the files changes, and the key has no effect on a job that is not disabled.
+
+Two things did not work from inside the guest. The system volume is read-only
+there, so vphoned cannot edit the file. And `services.remove` unloads the
+three of the five that live in the user domain but is refused for
+`com.apple.analyticsd` and `com.apple.OTATaskingAgent`, which are in the
+system domain ("remove failed: launchd status 3 (No such process)").
+
+Validated on 2026-10-13 with the patch, on iPad16,1 27.0.1 (24A446):
+
+- The failing guest after `cfw update-environment` ("19 DisableAllowed =
+  false removed" for each of J410 and J411): no `force-enabled` job, none of
+  the 144 labels loaded, `services.profile` → `running` empty.
+- A new machine from nothing (`vphone-launchpad-cli vm create --device
+  iPad16,1 --slim on`): every step passed, the strict setup boot in 87 s
+  (settled after 64 s, 144 services owned, verify passed), and the clone of
+  template `0c8682d7c241` reaches the Home Screen with the same three
+  answers.
+
+The same creation on iPadOS 26.6.2 (23G90) passed with bundle 2.9.3, which
+does not have the patch: 138 services owned, setup boot in 90 s, template
+`65cb509bf161`.
+
+An iOS 27 guest restored by an older bundle has the marks until an environment
+update or a reinstall runs with the patch. Until then the five jobs keep
+running, and so does `softwareupdated` on a guest whose OTA block was applied
+by hand.
+
 ## Applying it in a template
 
 A template is changed once, in its setup boot, and frozen; every clone
@@ -310,7 +388,12 @@ not change.
 ## Open items
 
 - **iPadOS.** vphoned picks the list by major version only, so iPad guests on
-  26 and 27 get the iPhone lists. No iPad guest has been measured with them.
+  26 and 27 get the iPhone lists. Templates build with them
+  ([iOS 27 and DisableAllowed](#ios-27-and-disableallowed)), but no iPad
+  guest's idle cost or function checks have been measured.
+- **Other board-presenting iPhones on iOS 27.** They read their board's
+  jetsam properties as an iPad does, so the same patch should apply; only the
+  iPad16,1 was run.
 - **WidgetKit control extensions on iOS 26.** The `ControlAction.init(_:)`
   crashes on 2 of 16 trimmed 26.6.2 boots ([iOS 26](#ios-26)) point at a
   disabled job an App Intent reference needs; which one was not found.

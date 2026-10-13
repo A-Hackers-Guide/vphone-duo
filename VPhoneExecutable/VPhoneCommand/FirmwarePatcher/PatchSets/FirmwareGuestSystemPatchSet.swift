@@ -25,6 +25,7 @@ public enum FirmwareGuestSystemPatchSet {
     public static let attitude = "system-apps-cfw-attitude"
 
     public static let locationdCohorting = "system-locationd-cfw-disable_auto_cohort"
+    public static let jetsamDisableAllowed = "system-jetsamproperties-cfw-disable_allowed"
 
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
 
@@ -54,6 +55,17 @@ public enum FirmwareGuestSystemPatchSet {
                 title: "locationd startup stability",
                 summary: "Uses independent location silos to avoid iOS 27 startup crashes and queue hangs on the research guest.",
                 target: .guestFile(path: "/" + CustomFirmwareLocationdCohorting.relativePath),
+                applicability: ios27,
+            ),
+            VPhonePatchDeclaration(
+                identifier: jetsamDisableAllowed,
+                title: "Disabled services stay off",
+                summary: """
+                Removes the iOS 27 jetsam property that makes launchd load some daemons whatever \
+                its disabled list says. Without it the trimmed service profile and the OTA block \
+                do not hold on a guest that presents its board.
+                """,
+                target: .guestFile(path: "/" + CustomFirmwareJetsamDisableAllowed.directory),
                 applicability: ios27,
             ),
 

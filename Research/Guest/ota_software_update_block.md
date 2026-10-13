@@ -23,6 +23,12 @@ Leave `com.apple.mobileassetd` **enabled** — it serves many non-OTA assets
 (dictionaries, keyboards, Siri, fonts); disabling it breaks unrelated features.
 Leave `akd` alone.
 
+On iOS 27 this holds on a guest that presents its board (every device but the
+iPhone17,3) only with `system-jetsamproperties-cfw-disable_allowed`: the
+board's jetsam properties mark `mobile.softwareupdated` and `OTATaskingAgent`
+`DisableAllowed = false`, and launchd then loads them whatever the override
+says. See [service trimming](service_trimming.md#ios-27-and-disableallowed).
+
 ## The daemons and why these three
 
 `services.list` on the guest, filtered to update machinery, shows the OTA set
