@@ -21,7 +21,8 @@ final class GuestEventPublisher: @unchecked Sendable {
         timer.setEventHandler { [weak self] in self?.publishIfChanged() }
         timer.resume()
         hub.onSubscribedChange = { [weak self] _ in
-            Self.queue.async { self?.updatePolling() }
+            guard let self else { return }
+            Self.queue.async { self.updatePolling() }
         }
     }
 

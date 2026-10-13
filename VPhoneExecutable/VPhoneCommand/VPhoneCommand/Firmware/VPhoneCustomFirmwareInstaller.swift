@@ -2168,7 +2168,7 @@ struct VPhoneCustomFirmwareInstaller {
         // it stands now.
         let folder = "dt-\(UUID().uuidString)"
         _ = try work.directory.directory(folder, create: true, mode: 0o700)
-        defer { try? work.directory.removeItem(folder) }
+        defer { _ = try? work.directory.removeItem(folder) }
         let staged = work.file(folder).appendingPathComponent("devicetree.img4")
         try (hadRepairBackup ? root.readData(backup) : currentBytes).write(to: staged)
 
@@ -2355,7 +2355,7 @@ struct VPhoneCustomFirmwareInstaller {
         // A folder of its own keeps the file's name, extension included.
         let folder = "stage-\(UUID().uuidString)"
         let stage = try work.directory.directory(folder, create: true, mode: 0o700)
-        defer { try? work.directory.removeItem(folder) }
+        defer { _ = try? work.directory.removeItem(folder) }
         let leaf = (relative as NSString).lastPathComponent
         try root.copyFile(from: relative, to: leaf, in: stage)
         let staged = work.file(folder).appendingPathComponent(leaf)
