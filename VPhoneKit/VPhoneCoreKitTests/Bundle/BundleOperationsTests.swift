@@ -45,6 +45,39 @@ struct BundleOperationsTests {
         )
     }
 
+    @Test func `creates bundle with the requested network`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let rom = try fakeROM(); let seprom = try fakeROM()
+        defer { try? FileManager.default.removeItem(at: rom); try? FileManager.default.removeItem(at: seprom) }
+        let lib = VPhoneLibrary(root: root)
+
+        let offline = try VPhoneBundleOperations.create(
+            .init(
+                name: "offline",
+                cpuCount: 2,
+                memoryMB: 2048,
+                diskSizeGB: 1,
+                romSource: rom,
+                sepromSource: seprom,
+                networkConfig: .init(mode: .off, macAddress: ""),
+            ),
+            in: lib,
+        )
+        #expect(offline.manifest.networkConfig.mode == .off)
+        // Persisted, and realized as no NIC at all.
+        let saved = try lib.bundle(named: "offline").manifest.networkConfig
+        #expect(saved.mode == .off)
+        #expect(try VPhoneNetworking.makeNetworkDevice(saved).device == nil)
+
+        // Left out, it is the default.
+        let plain = try VPhoneBundleOperations.create(
+            .init(name: "plain", cpuCount: 2, memoryMB: 2048, diskSizeGB: 1, romSource: rom, sepromSource: seprom),
+            in: lib,
+        )
+        #expect(plain.manifest.networkConfig.mode == .nat)
+    }
+
     @Test func `rejects duplicate name`() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
