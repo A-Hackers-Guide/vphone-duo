@@ -1205,6 +1205,41 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
 
+        // The jetsam properties of every board the image serves: launchd
+        // reads the one the guest's device tree names. Like the locationd
+        // change this is for iOS 27 only, where DisableAllowed first appears.
+        let jetsamID = FirmwareGuestSystemPatchSet.jetsamDisableAllowed
+        let jetsamDirectory = CustomFirmwareJetsamDisableAllowed.directory
+        isolate([jetsamID]) {
+            let names = try system.directory(jetsamDirectory).entries().sorted()
+            if version.hasPrefix("27."), on(jetsamID) {
+                for name in names where CustomFirmwareJetsamDisableAllowed.isJetsamProperties(name) {
+                    let path = "\(jetsamDirectory)/\(name)"
+                    guard try system.isRegularFile(path) else { continue }
+                    try patchCopy(
+                        of: path, in: system, work: work,
+                        verb: "patch-jetsam-disable-allowed", backupSafe: backupSafe(jetsamID),
+                    )
+                }
+                live.insert(jetsamID)
+            } else {
+                var reverted = false
+                for name in names where name.hasSuffix(".bak") {
+                    let original = String(name.dropLast(4))
+                    guard CustomFirmwareJetsamDisableAllowed.isJetsamProperties(original) else { continue }
+                    if try revertCopy(of: "\(jetsamDirectory)/\(original)", in: system) {
+                        reverted = true
+                    }
+                }
+                if reverted {
+                    print("  [+] \(jetsamID): restored the jetsam properties")
+                } else if priorGuest.contains(jetsamID) {
+                    print("  [!] \(jetsamID): no backup to revert (not revertible)")
+                    live.insert(jetsamID)
+                }
+            }
+        }
+
         // 3. The build-version spoof. Off by default (needs a preset parameter
         //    or SPOOF_BUILD). Backed up only when it was not already applied.
         let buildVersion = plan?.parameters[FirmwareGuestSystemPatchSet.buildVersionParameter] ?? spoofBuild

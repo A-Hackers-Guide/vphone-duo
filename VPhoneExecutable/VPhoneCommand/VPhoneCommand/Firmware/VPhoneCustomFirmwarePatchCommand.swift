@@ -200,6 +200,27 @@ struct VPhoneCustomFirmwarePatchLocationdCohortingCommand: ParsableCommand {
     }
 }
 
+// MARK: - patch-jetsam-disable-allowed
+
+struct VPhoneCustomFirmwarePatchJetsamDisableAllowedCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-jetsam-disable-allowed",
+        abstract: "Remove DisableAllowed = false from a staged jetsam properties plist",
+        shouldDisplay: false,
+    )
+
+    @Argument(transform: URL.init(fileURLWithPath:))
+    var plist: URL
+
+    @Flag(name: .customLong("dry-run"))
+    var dryRun = false
+
+    func run() throws {
+        let removed = try CustomFirmwareJetsamDisableAllowed.patch(at: plist, dryRun: dryRun)
+        print("  [\(removed > 0 ? "+" : ".")] \(plist.lastPathComponent): \(removed) DisableAllowed = false removed\(dryRun ? " (dry-run)" : "")")
+    }
+}
+
 // MARK: - patch-build-version
 
 struct VPhoneCustomFirmwarePatchBuildVersionCommand: ParsableCommand {

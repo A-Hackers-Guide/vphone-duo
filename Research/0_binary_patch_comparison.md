@@ -1,5 +1,22 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **iOS 27 disabled services (2026-10-13):**
+> `system-jetsamproperties-cfw-disable_allowed` removes every
+> `DisableAllowed = false` from
+> `System/Library/LaunchDaemons/com.apple.jetsamproperties.*.plist`. The guest
+> system set selects it for iOS 27 only; `cfw install` and environment updates
+> back each file up and restore it when deselected. iOS 27 marks 19 daemons
+> this way, and launchd loads a marked job whatever its disabled override says
+> (`force-enabled` in `launchctl print`). launchd reads the file the device
+> tree's `target-type` names, so every guest but the iPhone17,3 was affected:
+> the trimmed service profile left five jobs running and a slimmed template's
+> setup boot failed its check, and the OTA block could not stop
+> `mobile.softwareupdated`. No executable is patched. On an iPad16,1 24A446
+> guest the patch took 19 marks out of each of J410 and J411; after it no job
+> was force-enabled, none of the profile's 144 was loaded, and a slimmed
+> template built from nothing passed its setup boot. See
+> [evidence and verification](Guest/service_trimming.md#ios-27-and-disableallowed).
+
 > **iOS 27 locationd startup (2026-10-08):**
 > `system-locationd-cfw-disable_auto_cohort` disables only `CLAutoCohort` in
 > `System/Library/FeatureFlags/Domain/CoreLocation.plist`. The guest system set
