@@ -34,29 +34,8 @@
 // The fix is to zero `maxSlide`, so the cache maps at slide 0 and fits — iOS
 // 27.0 leaves ~58 MiB spare. ASLR of the shared cache is lost; nothing else is.
 //
-// This patcher does NOT re-attest, and that is deliberate
-// -------------------------------------------------------
-// Every other DSC patcher in this module rewrites an instruction inside a
-// dylib's `__TEXT` and has to repair the 16 KiB page slot that covers it, or
-// the guest takes a KERN_PROTECTION_FAILURE on the first demand-page-in.
-//
-// `maxSlide` is not that. It is a field of `dyld_cache_header`, read by the
-// kernel while it is setting the mapping up — not a `cs_validate`'d code page.
-// The Python reference states the same thing and backs it with a live test: a
-// cache poked to maxSlide=0 booted with "dyld cache mapped system-wide" and 0
-// panics, and `Research/0_binary_patch_comparison.md` row 10 records the
-// on-device validation on `17,3_27.0_24A5380h` + cloudOS 26.4.
-//
-// So `DyldSharedCacheCodeSignature.reattestRecordedWrites(in:)` is *not* called here, and
-// after this patcher runs the main chunk's page 0 hashes to something its code
-// slot no longer claims. `DyldSharedCacheMaxSlidePatcherTests` pins that state rather than
-// leaving it as a thing someone has to remember.
-//
-// To keep a later batch re-attestation from silently undoing that decision,
-// this patcher opens its own `DyldSharedCacheChunkSet` over the directory instead of
-// borrowing the caller's. Its write is recorded in a chunk set that goes out of
-// scope with the call, so no caller's `reattestRecordedWrites(in:)` can sweep
-// the header page up with the code pages it legitimately owns.
+// Page 0 is re-attested although the kernel boots without it: Xcode's
+// `dsc_extractor` rejects a stale header slot (see row 10 of 0_binary_patch_comparison.md).
 //
 // On the CLAUDE.md patcher guardrails
 // -----------------------------------
@@ -167,13 +146,15 @@ public enum DyldSharedCacheMaxSlidePatcher {
         public let record: PatchRecord?
         /// The span that landed on disk, or `nil` on a dry run or a no-op.
         public let writtenSpan: DyldSharedCacheWriteSpan?
+        /// Page 0's re-attestation, or `nil` when the gate left the header alone.
+        public let reattestation: DyldSharedCacheReattestation?
 
         /// Sites patched — the Python function's return value, which is 0 or 1.
         public var siteCount: Int {
             record == nil ? 0 : 1
         }
 
-        /// Whether bytes actually reached the chunk file.
+        /// Whether the `maxSlide` field was written; slot rewrites are in `reattestation`.
         public var didWrite: Bool {
             writtenSpan != nil
         }
@@ -264,8 +245,6 @@ public enum DyldSharedCacheMaxSlidePatcher {
             throw PatcherError.fileNotFound("main DSC chunk not found: \(mainChunk.path)")
         }
 
-        // The patcher's own chunk set: see the note at the top of the file about
-        // why its write log must not be the caller's.
         let chunks = try DyldSharedCacheChunkSet(
             directory: chunksDirectory, architecture: architecture, captureUndo: captureUndo,
         )
@@ -296,6 +275,18 @@ public enum DyldSharedCacheMaxSlidePatcher {
             )
         }
 
+        let fieldVMA = headerVMA &+ UInt64(HeaderField.maxSlide)
+        let log: ((String) -> Void)? = if verbose { DyldSharedCacheCodeSignature.stderrLog } else { nil }
+        func attestClampedHeader() throws -> DyldSharedCacheReattestation? {
+            guard header.maxSlide == 0 else { return nil }
+            return try DyldSharedCacheCodeSignature.reattest(
+                in: chunks,
+                modifiedSpans: [DyldSharedCacheWriteSpan(vma: fieldVMA, length: 8)],
+                dryRun: dryRun,
+                log: log,
+            )
+        }
+
         let fits = combined <= kernelRegionSize
         if fits, !force {
             if verbose {
@@ -304,26 +295,28 @@ public enum DyldSharedCacheMaxSlidePatcher {
                         + "region \(hex(kernelRegionSize)); no change",
                 )
             }
-            return Result(
+            return try Result(
                 outcome: .fits(combined: combined, region: kernelRegionSize),
                 sharedRegionStart: header.sharedRegionStart,
                 sharedRegionSize: header.sharedRegionSize,
                 maxSlide: header.maxSlide,
                 record: nil,
                 writtenSpan: nil,
+                reattestation: attestClampedHeader(),
             )
         }
         guard header.maxSlide != 0 else {
             if verbose {
                 print("      [=] maxSlide already 0; no change")
             }
-            return Result(
+            return try Result(
                 outcome: .alreadyZero,
                 sharedRegionStart: header.sharedRegionStart,
                 sharedRegionSize: header.sharedRegionSize,
                 maxSlide: header.maxSlide,
                 record: nil,
                 writtenSpan: nil,
+                reattestation: attestClampedHeader(),
             )
         }
 
@@ -338,7 +331,6 @@ public enum DyldSharedCacheMaxSlidePatcher {
             )
         }
 
-        let fieldVMA = headerVMA &+ UInt64(HeaderField.maxSlide)
         let originalBytes = littleEndianBytes(header.maxSlide)
         let patchedBytes = littleEndianBytes(0)
         let record = PatchRecord(
@@ -366,6 +358,7 @@ public enum DyldSharedCacheMaxSlidePatcher {
                 maxSlide: header.maxSlide,
                 record: record,
                 writtenSpan: nil,
+                reattestation: nil,
             )
         }
 
@@ -382,10 +375,7 @@ public enum DyldSharedCacheMaxSlidePatcher {
             )
         }
 
-        // No `DyldSharedCacheCodeSignature.reattestRecordedWrites(in: chunks)` here. See the
-        // file header: this field is kernel-read cache metadata, not a
-        // cs_validate'd code page, and leaving the slot alone is the behaviour
-        // that was validated on device.
+        let reattestation = try DyldSharedCacheCodeSignature.reattestRecordedWrites(in: chunks, log: log)
 
         if verbose {
             print("  [+] DSC maxSlide patch complete")
@@ -397,6 +387,7 @@ public enum DyldSharedCacheMaxSlidePatcher {
             maxSlide: header.maxSlide,
             record: record,
             writtenSpan: span,
+            reattestation: reattestation,
         )
     }
 

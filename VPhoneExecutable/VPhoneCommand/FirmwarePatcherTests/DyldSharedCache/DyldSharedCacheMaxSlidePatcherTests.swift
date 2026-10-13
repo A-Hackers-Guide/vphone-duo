@@ -58,8 +58,9 @@ private enum FrozenReference {
     ///
     /// `cmp -s` against the pristine tree afterwards: exactly one file moved,
     /// the main chunk, to this digest (`shasum -a 256 <output>/…arm64e`). The
-    /// other 79 files were untouched — this patch deliberately does not
-    /// re-attest, so no code-directory slot moves.
+    /// other 79 files were untouched. The reference did not re-attest page 0;
+    /// the Swift now does, so its output matches this digest once page 0's
+    /// slot is put back to the pristine one — see `Digest.sha256(of:splicing:)`.
     static let realChangedChunks: [String: String] = [
         "dyld_shared_cache_arm64e":
             "3d7197cc0714e95c0e49434ab8bbb6311952a96d5b0425b10f87d2cc060c0110",
@@ -292,6 +293,29 @@ private enum Digest {
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
+
+    /// The digest `url` would have with `bytes` written at `offset` — how a
+    /// re-attested chunk is compared with the reference, which left the slot
+    /// alone.
+    static func sha256(of url: URL, splicing bytes: Data, at offset: Int) throws -> String {
+        var data = try Data(contentsOf: url)
+        data.replaceSubrange(offset ..< offset + bytes.count, with: bytes)
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Page 0's stored slot in `chunk`, and where it lives.
+    static func pageZeroSlot(of chunk: URL) throws -> (offset: Int, bytes: Data) {
+        let directory = try #require(try DyldSharedCacheCodeSignature.readCodeDirectory(ofChunk: chunk))
+        let offset = directory.slotOffset(forPage: 0)
+        return (offset, try Bytes.read(chunk, offset: UInt64(offset), length: directory.hashSize))
+    }
+
+    /// The reference's digest, given Swift output whose only extra change is
+    /// page 0's slot.
+    static func referenceDigest(ofSwiftOutput chunk: URL, pristine pristineChunk: URL) throws -> String {
+        let pristineSlot = try pageZeroSlot(of: pristineChunk)
+        return try sha256(of: chunk, splicing: pristineSlot.bytes, at: pristineSlot.offset)
+    }
 }
 
 // MARK: - Byte comparison
@@ -401,7 +425,10 @@ struct DyldSharedCacheMaxSlideRealCacheTests {
         #expect(changed == FrozenReference.realChangedChunks.keys.sorted())
         #expect(unchanged >= 79, "only \(unchanged) files were left alone")
         for name in changed {
-            let digest = try Digest.sha256(of: swiftSide.appendingPathComponent(name))
+            let digest = try Digest.referenceDigest(
+                ofSwiftOutput: swiftSide.appendingPathComponent(name),
+                pristine: pristine.appendingPathComponent(name),
+            )
             let frozen = FrozenReference.realChangedChunks[name] ?? "(not a file the Python moved)"
             #expect(digest == frozen, "\(name): Swift \(digest), reference \(frozen)")
         }
@@ -419,15 +446,14 @@ struct DyldSharedCacheMaxSlideRealCacheTests {
             == Bytes.read(pristineMain, offset: tailOffset, length: tailLength))
     }
 
-    /// The deliberate divergence from every other DSC patcher, pinned so nobody
-    /// "fixes" it: the header page's code slot is left stale on purpose, because
-    /// `maxSlide` is kernel-read cache metadata rather than a `cs_validate`'d
-    /// code page. The code directory must come out of the patch untouched.
+    /// Page 0 carries the header, and `dsc_extractor` checks its slot like any
+    /// other: left stale, `xcodebuild -prepareDeviceSupport` extracts nothing
+    /// from the cache. The patch re-hashes that one slot and no other.
     @Test
-    func `The patch leaves the code directory alone and the header page unattested`() throws {
+    func `The patch re-attests the header page and no other slot`() throws {
         let pristine = try #require(MaxSlideFixture.pristine, MaxSlideFixture.missing)
 
-        let clone = try MaxSlideFixture.cloneMainChunk(named: "noreattest")
+        let clone = try MaxSlideFixture.cloneMainChunk(named: "reattest")
         defer { MaxSlideFixture.discard(clone) }
         let main = clone.appendingPathComponent(MaxSlideFixture.mainChunkName)
         let pristineMain = pristine.appendingPathComponent(MaxSlideFixture.mainChunkName)
@@ -445,32 +471,65 @@ struct DyldSharedCacheMaxSlideRealCacheTests {
 
         let result = try DyldSharedCacheMaxSlidePatcher.patch(chunksDirectory: clone)
         #expect(result.siteCount == 1)
-
-        // The blob itself: byte-identical to pristine, so no slot moved.
-        let mineBlob = try Bytes.read(
-            main,
-            offset: UInt64(directory.blobOffset),
-            length: directory.blobLength,
-        )
-        let pristineBlob = try Bytes.read(
-            pristineMain,
-            offset: UInt64(directory.blobOffset),
-            length: directory.blobLength,
-        )
-        #expect(mineBlob == pristineBlob, "the patch rewrote a code slot it must not rewrite")
+        #expect(result.reattestation?.updated.map(\.pageIndex) == [0])
+        #expect(result.reattestation?.isFullyAttested == true)
 
         let after = try DyldSharedCacheCodeSignature.pageHashes(
             chunkURL: main,
             pageIndex: 0,
             directory: directory,
         )
-        #expect(after.stored == before.stored)
-        #expect(
-            after.computed != after.stored,
-            "page 0's slot still matches, so something re-attested it",
+        #expect(after.computed == after.stored, "page 0's slot does not match the patched header")
+        #expect(after.stored != before.stored)
+
+        // Outside slot 0 the code directory is byte-identical to pristine.
+        let slot = directory.slotOffset(forPage: 0) - directory.blobOffset
+        let mineBlob = try Bytes.read(
+            main,
+            offset: UInt64(directory.blobOffset),
+            length: directory.blobLength,
         )
-        print("[no re-attest] page 0 stored \(after.stored.hex.prefix(16))… "
-            + "computed \(after.computed.hex.prefix(16))… — stale on purpose")
+        var pristineBlob = try Bytes.read(
+            pristineMain,
+            offset: UInt64(directory.blobOffset),
+            length: directory.blobLength,
+        )
+        pristineBlob.replaceSubrange(slot ..< slot + directory.hashSize, with: after.stored)
+        #expect(mineBlob == pristineBlob, "the patch rewrote a code slot other than page 0's")
+    }
+
+    /// A guest clamped before the patch re-attested carries `maxSlide` 0 and
+    /// page 0's pristine slot. A re-run must repair the slot without writing
+    /// the field — the path `cfw update-environment` takes on such a guest.
+    @Test
+    func `A re-run repairs a header clamped without re-attestation`() throws {
+        let pristine = try #require(MaxSlideFixture.pristine, MaxSlideFixture.missing)
+
+        let clone = try MaxSlideFixture.cloneMainChunk(named: "repair")
+        defer { MaxSlideFixture.discard(clone) }
+        let main = clone.appendingPathComponent(MaxSlideFixture.mainChunkName)
+
+        try DyldSharedCacheMaxSlidePatcher.patch(chunksDirectory: clone)
+        let pristineSlot = try Digest.pageZeroSlot(
+            of: pristine.appendingPathComponent(MaxSlideFixture.mainChunkName),
+        )
+        let handle = try FileHandle(forUpdating: main)
+        try handle.seek(toOffset: UInt64(pristineSlot.offset))
+        try handle.write(contentsOf: pristineSlot.bytes)
+        try handle.close()
+
+        let repaired = try DyldSharedCacheMaxSlidePatcher.patch(chunksDirectory: clone)
+        #expect(repaired.siteCount == 0)
+        #expect(!repaired.didWrite)
+        #expect(repaired.reattestation?.updated.map(\.pageIndex) == [0])
+
+        let directory = try #require(try DyldSharedCacheCodeSignature.readCodeDirectory(ofChunk: main))
+        let hashes = try DyldSharedCacheCodeSignature.pageHashes(
+            chunkURL: main,
+            pageIndex: 0,
+            directory: directory,
+        )
+        #expect(hashes.computed == hashes.stored)
     }
 
     /// The reference's `--dry-run` printed `would set maxSlide 0x20000000 ->
@@ -502,7 +561,7 @@ struct DyldSharedCacheMaxSlideRealCacheTests {
     /// second write.
     @Test
     func `A second pass over an already-clamped cache is a no-op`() throws {
-        _ = try #require(MaxSlideFixture.pristine, MaxSlideFixture.missing)
+        let pristine = try #require(MaxSlideFixture.pristine, MaxSlideFixture.missing)
 
         let swiftSide = try MaxSlideFixture.cloneMainChunk(named: "idem_swift")
         defer { MaxSlideFixture.discard(swiftSide) }
@@ -515,6 +574,7 @@ struct DyldSharedCacheMaxSlideRealCacheTests {
         let mineAgain = try DyldSharedCacheMaxSlidePatcher.patch(chunksDirectory: swiftSide)
         #expect(mineAgain.siteCount == 0)
         #expect(!mineAgain.didWrite)
+        #expect(mineAgain.reattestation?.updated.isEmpty == true, "page 0 was attested by the first pass")
         // Which gate stops the second pass is worth being precise about. Once
         // the slide is gone this cache's span fits the region on its own
         // (0x17D504000 <= 0x180000000) — that is the whole point of the patch —
@@ -538,7 +598,11 @@ struct DyldSharedCacheMaxSlideRealCacheTests {
             of: swiftSide.appendingPathComponent(MaxSlideFixture.mainChunkName),
         )
         #expect(afterThird == afterFirst, "a no-op pass rewrote the chunk")
-        #expect(afterThird == FrozenReference.realChangedChunks[MaxSlideFixture.mainChunkName])
+        let referenceDigest = try Digest.referenceDigest(
+            ofSwiftOutput: swiftSide.appendingPathComponent(MaxSlideFixture.mainChunkName),
+            pristine: pristine.appendingPathComponent(MaxSlideFixture.mainChunkName),
+        )
+        #expect(referenceDigest == FrozenReference.realChangedChunks[MaxSlideFixture.mainChunkName])
     }
 }
 
