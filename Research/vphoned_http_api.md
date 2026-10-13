@@ -209,8 +209,14 @@ into memory.
 `jailbreak.source`. The layout is `roothide`, `rootless`, or `rootful` when
 detected. If there is no bootstrap and `/` is read-only, both `layout` and
 `jbroot` are JSON `null`; `/` alone is not evidence of a rootful bootstrap.
-The daemon checks a loaded RootHide `systemhook.dylib` export and `/var/jb`
-at request time so a bootstrap created after daemon startup can be reported.
+The daemon first reports the bootstrap it installed itself, from its
+completion record (`source` is `vphoned bootstrap`). The later probes look
+for a jailbreak's own traces, and a RootHide root vphoned made has none: a
+system-installed vphoned has no `.jbroot` link or libroot library beside it,
+and vphone's SystemHook exports no `get_jbroot`. It then checks a loaded
+RootHide `systemhook.dylib` export, icli's own detection and `/var/jb`. All
+of this runs at request time so a bootstrap created after daemon startup can
+be reported.
 
 For raw guest TCP ports, upgrade `GET /v1/ports/<port>` to WebSocket. Each
 binary WebSocket message carries an unmodified chunk of the TCP byte stream
