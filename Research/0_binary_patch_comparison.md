@@ -3024,7 +3024,8 @@ checks it against `VPHONE_MACHO_PRISTINE`.
 `codesign` over the bundle as for `VirtualAudio.plugin`. Off restores the `.bak`.
 A bundle the same run reinstalled from the restore tree is already pristine, so
 off then needs nothing and the receipt does not keep the patch live. An existing
-VM gets it from its next `cfw install`; `cfw update-environment` runs no patches.
+VM gets it from `cfw update-environment` on the stopped machine: the guest patch
+steps run there too, without the restore tree, over the driver already in place.
 
 **Not covered.** `drawPatches:…`, `drawIndexedPatches:…` and
 `-[PGSerializerBlitCommandEncoder copyFromTexture:…toBuffer:…]` store
