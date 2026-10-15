@@ -409,5 +409,19 @@ Apple TV support in New Machine and ran the iOS template trim and setup boot
 after the install; setup failed at the service profile, which has no TV port.
 That does not touch the steps above, and the guest booted normally afterwards.
 
+Open issue, display freeze on the 4K: after some time of use, mostly after the
+app switcher, `tvtest-4k` stopped updating its screen. Input still reached
+PineBoard, `input.hid` and vphoned kept answering, the GPU task kept gaining
+GPU time and the host kept scanning out the last frame. A guest spindump
+(`/usr/sbin/spindump -notarget 8 10` started as a launchd job through vphoned's
+`services.load`, symbols from `ipsw dyld a2s`) showed
+`com.apple.coreanimation.display.primary`
+(`CA::WindowServer::IOMFBServer::thread_body`) starved while the rest of
+backboardd ran. The HD never froze. A 20-minute soak (launch Settings, move
+focus, open the app switcher, then check that holding the TV button changes
+the screen) found no freeze at 60 Hz (87 cycles, `kernel-cfw-display_promotion`
+blocked) or at 120 Hz (40 cycles), so the refresh rate is not shown to be the
+cause and the trigger is still unknown.
+
 
 Apps, video, long-term stability and Apple services are untested.
