@@ -54,6 +54,11 @@ vphone-launchpad-cli vm create myphone [--bundle <version>] \
   `iPad15,5`, `iPad16,3`, `iPad16,5`, `iPad17,1` or `iPad17,3`. Without sources
   it takes that iPad's newest catalog pairing; with an iPad IPSW that covers
   two sizes it picks the size. See `Documents/Guides/ipados.md`.
+  `AppleTV5,3` makes an Apple TV HD guest on tvOS 26.6: always without a
+  template or slimming, with the `tvos` preset unless `--preset` names
+  another. `AppleTV14,1` makes an Apple TV 4K guest the same way, with the
+  `tvos-4k` preset; `fw prepare` takes its device tree and arm64e userland
+  from the catalog's OTA. See `Research/Firmware/tvos_support.md`.
 - **Units:** `--cpu` is a count, `--memory` is **MB**, `--disk-size` is **GB**.
   Defaults 8, 8192, 64. All must be positive integers.
 - **Name:** letters, digits, `.`, `-`, `_`. Keep it short: the machine path must

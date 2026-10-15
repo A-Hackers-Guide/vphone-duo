@@ -12,7 +12,20 @@ About reports tvOS 26.4 (23L5208m), an IPv4 address, and 1080p HD / 120 Hz.
 The display mode is reported metadata, not measured rendering performance.
 Activation reports Failed and the model is Not Applicable. Apple services,
 audio, video playback, third-party apps and long-term stability remain untested.
-No tvOS pairing is advertised in the firmware catalog.
+
+Later the same day: tvOS 26.6 (23L773), the last release for the Apple TV HD,
+restored on the same cloudOS and booted to TVSetup with vphoned running. The
+guests now run vphoned (see [vphoned on tvOS](#vphoned-on-tvos)), which gives
+the TV button: Home on a press, Control Center when held. The firmware catalog
+lists tvOS 26.6 for the Apple TV HD, and New Machine and `vm create --device
+AppleTV5,3` build it with the `tvos` preset.
+
+tvOS 27 dropped the Apple TV HD, and Apple publishes no IPSW for any Apple TV
+4K: AppleDB lists only OTA packages for AppleTV11,1 and AppleTV14,1, and
+AppleTV18,1 is not released. An Apple TV 4K (AppleTV14,1) guest is the HD's
+26.6 restore with the 4K's identity and arm64e userland taken from its OTA;
+`fw prepare` reads the OTA itself. See
+[Apple TV 4K from its OTA](#apple-tv-4k-from-its-ota).
 
 ## Firmware and storage
 
@@ -21,26 +34,49 @@ No tvOS pairing is advertised in the firmware catalog.
 - [Apple-hosted donor IPSW](https://updates.cdn-apple.com/2026WinterSeed/fullrestores/089-95491/1679DEB6-820D-40A8-9F28-1735EFDFB01D/AppleTV5,3_26.4_23L5208m_Restore.ipsw).
 - Verified SHA-256: `2128c348ffbb0f65096ac3e7be22e901e09773e02c17edbce4c0647769c24ae8`;
   length 5,269,316,627 bytes.
+- [tvOS 26.6 IPSW](https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-67287/F525C1FF-B49B-40AB-A5F4-A6F4A4847407/AppleTV5,3_26.6_23L773_Restore.ipsw),
+  the catalog's pairing. SHA-256
+  `a5f3e397ba4d8cd03c6c46709b3d8f9811af58a5a2e758e2334317fbc68db292`, as AppleDB
+  records it; length 5,269,471,026 bytes.
 - The lab reuses one logical 32 GB disk, about 11 GiB allocated. No second
   VM, template, or automatic PCC GPU recovery disk was created.
 
 The matching release numbers motivated the pairing investigation; they do not establish
-compatibility with other builds. The beta archive, FirmwareOriginals and
+compatibility with other builds. Every TV pairing uses cloudOS 26.4: the kernel
+fix below exists only for its kernel. The beta archive, FirmwareOriginals and
 restore tree are retained locally for reproducibility and rollback.
+
+## Creating an Apple TV machine
+
+In Launchpad, New Machine > Device > Apple TV HD. The sheet picks tvOS 26.6
+and the `tvos` preset, and turns Use Template and Slim System off: both drive
+iOS Setup Assistant and its apps. From the command line:
+
+```zsh
+vphone-launchpad-cli vm create tv --device AppleTV5,3 --cpu 4 --memory 4096 --disk-size 32
+```
+
+The machine is restored on its own and starts at TVSetup. Navigate with the
+arrow keys and Return; Escape goes back, holding it returns to the Home
+screen. The titlebar Home button and the Mac's Home key (fn-←) are the TV
+button: a click or press goes Home, holding either opens Control Center.
+Device > Home Screen (⌘⇧H) and Device > Control Center (⌘⇧T) do the same
+through vphoned.
 
 ## Reproducing the validated configuration
 
 Use the built bundle's `vphone-cli` on a host configured according to
 [host setup](../../Documents/Guides/host-setup.md). Both IPSWs must be supplied
-locally: the donor above and cloudOS 23E5207q. Other pairings are unvalidated.
+locally: a donor above and cloudOS 23E5207q. Other pairings are unvalidated.
 The VM and the installer's temporary directory must share an APFS volume;
 TV guest updates refuse an in-place fallback when cloning is unavailable.
 Copy-on-write updates share unchanged blocks, but require space for changed data.
 
 For a **new** VM only, run these commands in zsh, replacing the three paths.
 Do not run `vm new` or restore against an existing VM you want to preserve.
-This manual pipeline creates one 32 GB disk and no template. The historical
-`--iphone-source` option accepts the TV donor.
+This manual pipeline creates one 32 GB disk and no template, as `vm create
+--device AppleTV5,3` does. The historical `--iphone-source` option accepts the
+TV donor.
 
 ```zsh
 cli='/absolute/path/to/VPhone.bundle/Contents/MacOS/vphone-cli'
@@ -49,44 +85,7 @@ cloud_ipsw='/absolute/path/to/cloudOS_23E5207q_Restore.ipsw'
 export VPHONE_LIBRARY_ROOT="$HOME/vphone-tvos"
 vm='tvos-26_4-beta'
 "$cli" vm new "$vm" --cpu 4 --memory 4096 --disk-size 32
-"$cli" fw set-patches "$vm" --preset standard \
-  --allow kernel-exp-tv_tpro_pagers \
-  --allow system-dyld-exp-tv_tpro \
-  --block dyld-boot-iomfb_force_kern \
-  --block dyld-boot-iomfb_swapend \
-  --block dyld-boot-lockdown_mode \
-  --block dyld-boot-lsd_embedded_reg \
-  --block dyld-boot-maxslide \
-  --block dyld-boot-xpc_lwcr \
-  --block dyld-cfw-camera \
-  --block preboot-cfw-devicetree_board_audio \
-  --block preboot-cfw-devicetree_haptics \
-  --block preboot-cfw-devicetree_iphone_product \
-  --block preboot-cfw-devicetree_microphone_array \
-  --block system-apps-cfw-attitude \
-  --block system-backboardd-cfw-gyroscope \
-  --block system-campo-cfw-entitlements \
-  --block system-debugserver-cfw-install \
-  --block system-diskimagesiod-cfw-is_mount_complete \
-  --block system-extensions-boot-gpu_bundle \
-  --block system-installcoordination_proxy-cfw-persona_lookup \
-  --block system-jetsamproperties-cfw-disable_allowed \
-  --block system-launchd-boot-jetsam_panic_guard_bypass \
-  --block system-launchd_cache_loader-boot-unsecure_cache_gate \
-  --block system-launchdaemons-boot-environment \
-  --block system-locationd-cfw-disable_auto_cohort \
-  --block system-mobileactivationd-boot-should_hactivate \
-  --block system-paravirt_gpu-cfw-heap_index_offset \
-  --block system-systemversion-cfw-build_version \
-  --block system-virtiosound-cfw-hal_plugin \
-  --block system-virtualaudio-cfw-microphone_graph_chains \
-  --block system-virtualaudio-cfw-mute_set_throw \
-  --block system-virtualaudio-cfw-speaker_graph_chains \
-  --block system-virtualaudio-cfw-speaker_protection_gate \
-  --block system-virtualaudio-cfw-speaker_raw_chains \
-  --block system-virtualaudio-cfw-speaker_route_throws \
-  --block system-virtualaudio-cfw-volume_mode_precondition \
-  --block system-vphoned-boot-install
+"$cli" fw set-patches "$vm" --preset tvos
 "$cli" fw prepare "$vm" --device AppleTV5,3 \
   --iphone-source "$tv_ipsw" --cloudos-source "$cloud_ipsw"
 "$cli" fw patch "$vm"
@@ -105,10 +104,11 @@ sudo "$cli" cfw install --library-root "$VPHONE_LIBRARY_ROOT" "$vm" --keep-artif
 
 If host preflight refuses the VM binary, run its printed allowlist command and
 retry the launch. Navigate setup with arrows and Return; Escape goes back.
-No vphoned first-boot probe is appropriate for this configuration.
+`vphone-cli vm wait`, or `vphone-launchpad-cli vm wait`, reports when vphoned
+answers.
 
-`fw set-patches` replaces all overrides, so always retain the entire selection
-above. On an installed, stopped VM, guest-side changes use `sudo "$cli" cfw
+`fw set-patches` replaces all overrides; the `tvos` preset holds the whole
+Apple TV selection. On an installed, stopped VM, guest-side changes use `sudo "$cli" cfw
 update-environment --library-root "$VPHONE_LIBRARY_ROOT" "$vm"`; kernel changes
 use `sudo "$cli" cfw update-kernel --library-root "$VPHONE_LIBRARY_ROOT" "$vm"`.
 Neither requires another restore. A prior research installation must first
@@ -130,15 +130,19 @@ does not contain those removed patch implementations.
    `Ap,SystemVolumeCanonicalMetadata` with SHA-384 in the hybrid manifest.
    J42d's SHA-1 donor digests failed PCC metadata authentication and sealing;
    the corrected hybrid restore completed.
-4. Apply the existing seputil/gigalocker repair. Block unvalidated iOS guest
-   payloads, graphics/audio hooks and shared-cache patches. Preparation now
-   respects the GPU patch selection, avoiding an unnecessary recovery VM.
-5. Explicitly enable `system-dyld-exp-tv_tpro` and
-   `kernel-exp-tv_tpro_pagers`. Both are off in Standard. Keep the donor's
+4. Apply the existing seputil/gigalocker repair, vphoned and the launchd
+   cache gate its job needs. Block unvalidated iOS guest payloads,
+   graphics/audio hooks and shared-cache patches; the `tvos` preset does both.
+   Preparation skips the GPU driver for an Apple TV, avoiding an unnecessary
+   recovery VM whatever order the selection is recorded in.
+5. Enable `system-dyld-exp-tv_tpro` and `kernel-exp-tv_tpro_pagers`. Both
+   are off in Standard and on in `tvos`, and apply to every tvOS 26 userland
+   on cloudOS 26.4. Keep the donor's
    native shared cache and page-in linking intact.
 6. Forward Escape to the TV's native virtual keyboard instead of consuming
    it as an iPhone edge swipe. Device > Back uses the same keyboard path,
-   without vphoned. Backspace remains available for editing text.
+   without vphoned. Backspace remains available for editing text. Home and
+   Control Center go through vphoned (below).
 
 The dyld operation rewrites only the exact `dyld_hw_tpro` and
 `dyld_hw_tpro_pagers` parameter-name prefixes to `vphn`, in both standalone
@@ -172,7 +176,9 @@ with an executable initializer. It accepts only defaults 0 or 1. Both segment
 bounds and actual file bounds are checked. The fileset's outer `__DATA` contains
 the embedded `__KLDDATA`. No observed offsets or instruction words are baked
 into the patch; unsupported or ambiguous layouts fail the selected operation.
-Its applicability is limited to the 26.4 donor/kernel pairing.
+The tunable lives in the cloudOS 26.4 kernel, whatever tvOS userland it runs,
+so the patch applies to every tvOS 26 donor on that kernel. tvOS 26.6 (23L773)
+needed the same fix and booted with it.
 
 `cfw update-kernel` rebuilt from FirmwareOriginals and replaced only the
 installed Preboot kernel payload, retaining the manifest and volumes. A normal
@@ -205,8 +211,8 @@ seputil/gigalocker repairs. TV environment updates recognize the guest receipt
 when vphoned is omitted. Unreadable cache undo logs abort instead of being
 silently replaced.
 
-The titlebar Home button requires vphoned and remains disabled in this
-configuration. Native arrow, Return and Escape input does not require it.
+Native arrow, Return and Escape input does not require vphoned; the titlebar
+Home button and Control Center do, and work now that the guest runs it.
 Activation, model metadata, audio and Apple services retain the limitations
 listed above; this validation does not establish full Apple TV compatibility.
 
@@ -214,3 +220,194 @@ Research helpers and the prior bundle are retained locally under
 `.build/tvos-research/pr-backup`, outside the PR. Boot evidence is in
 `.build/tvos-research/pr-clean-boot.log`; the Settings screenshot and earlier
 native runtime transcripts remain beside it. No second VM disk was created.
+
+## vphoned on tvOS
+
+vphoned is an arm64 Mach-O, so the plain-arm64 TV userland can run it, and
+every symbol it imports resolves in the tvOS 26.4 shared cache, UIPasteboard
+and UIScreen included. Installed unchanged, it never started: each launch
+left a crash report, `Library not loaded: …/Foundation.framework/Foundation …
+(wrong platform to load into process)`. dyld takes the process platform from
+the main executable, and vphoned's `LC_BUILD_VERSION` says iOS (2) while every
+library in the cache says tvOS (3).
+
+The bundle build now ships `guest-resources/vphoned-tvos`: the same binary
+with `vtool -set-build-version tvos 15.0 <sdk> -replace`, signed with
+vphoned's entitlements. `ValidateBundle.sh` requires it to be TVOS and every
+other guest binary to be IOS. `cfw install` installs it for an Apple TV guest,
+and launch stages it as `.vphoned.signed`, so the host's hash check keeps the
+TV copy current instead of replacing it with the iOS one.
+
+Its launchd job goes into `/System/Library/xpc/launchd.plist` as on iOS. The
+`launchd_cache_loader` gate patch found and NOPed the same branch in the
+plain-arm64 loader (`0xB00` in 23L5208m), and the console then shows `Using
+unsecure cache: /System/Library/xpc/launchd.plist`. Both are now admitted for
+TV (`FirmwareGuestPatchResolution.tvSupportedGuestPatches`). The environment
+hooks (`system-launchdaemons-boot-environment`) stay blocked; they have no TV
+port.
+
+Verified on 23L5208m and 23L773: `vm wait` returns, `device.info` reports
+`own_name` "Apple TV", screenshots and `apps.launch` work, and consumer-page
+HID input moves the TVSetup focus.
+
+## TV button, Home and Control Center
+
+A USB keyboard cannot press the TV button: no keyboard-page key maps to it.
+UIKit's `_UIEventHIDPressTypeForKeyboardHIDEvent` (UIKitCore, 23L5208m) maps
+consumer page `0x0C`:
+
+| Usage | Press type | Button |
+| --- | --- | --- |
+| `0x40` Menu | 17 | TV / Home |
+| `0x1C0` | 500 | TV / Home (second type) |
+| `0x223` AC Home | 101 | game controller Home |
+| `0x30` Power | 104 | Power |
+| `0x41`–`0x46` | 4, 0–3, 5 | Select, arrows, Menu |
+| `0xE9` / `0xEA` | 102 / 103 | Volume |
+
+PineBoard's `+[PBSystemGestureRecipe recipeForType:]` presents Control Center
+(system gesture `0x1d`) on a long press of press types 17 or 500, on a press of
+104 when the `allowPowerButtonToOpenControlCenter` default is set, or on the
+game controller's Home. A long press of Menu (5) runs
+`_cleanUpUIStackAndLaunchKioskAppWithReason:@"Long MENU press"`, so holding
+Escape also returns to the Home screen.
+
+vphoned's `input.hid` injects consumer events inside the guest. The existing
+Home Screen action already sends `0x0C/0x40`. For an Apple TV guest the titlebar
+Home button sends the press when the mouse goes down and the release when it
+comes up, and the Mac's Home key (fn-← on a laptop) does the same with its
+key down and up, so either one held opens Control Center. Device > Control Center, shown
+only for an Apple TV guest, holds the same usage for 1.2 s. On 23L5208m a
+`0x0C/0x40` press over `input.hid` returned from Settings to the Home screen,
+and a 1.5 s hold opened Control Center.
+
+## Apple TV 4K from its OTA
+
+Apple publishes no IPSW for any Apple TV 4K. The full tvOS 26.6 (23L773) OTA
+for AppleTV14,1 (J255, A15) is a 4.76 GB AEA archive whose key AppleDB records.
+Its userland is arm64e and, like the HD's, monolithic: no cryptexes. It ships
+the IOGPU Metal stack, and every import of the paravirtual GPU driver resolves
+in its shared cache. The OTA has no root filesystem image, only 37
+`payloadv2/payload.NNN` chunks, each a `pbzx`-compressed Apple Archive with
+owners, modes, BSD flags and APFS compression per entry, plus the root
+filesystem's `.mtree` (an IM4P `msys` around a `pbze`/LZFSE Apple Archive
+manifest), `.root_hash` and `.trustcache`, and the J255 device tree.
+
+An Apple TV 4K guest is the Apple TV HD's 26.6 IPSW (same build) restored with
+the J255 identity, its userland swapped for the OTA's in `cfw install`.
+
+### Creating one
+
+```zsh
+vphone-launchpad-cli vm create tv4k --device AppleTV14,1 --cpu 4 --memory 4096 --disk-size 48
+```
+
+or `vphone-cli vm create tv4k --device AppleTV14,1`, or in Launchpad New
+Machine > Device > Apple TV 4K (3rd generation). The firmware catalog pairs the
+4K with the HD's 26.6 IPSW and cloudOS 26.4, and lists the OTA's URL, length
+and key; `fw prepare` downloads the OTA into `<ipsw cache>/ota/` under
+`AppleTV14,1_26.6_23L773_OTA.aea`, or uses the copy already there. The machine
+gets the `tvos-4k` preset. Step by step, with local files:
+
+```zsh
+"$cli" vm new tv4k --cpu 4 --memory 4096 --disk-size 48
+"$cli" fw set-patches tv4k --preset tvos-4k
+"$cli" fw prepare tv4k --device AppleTV14,1 \
+  --iphone-source "$hd_266_ipsw" --cloudos-source "$cloud_ipsw" \
+  --ota-source ~/.vphone/ipsws/ota/AppleTV14,1_26.6_23L773_OTA.aea
+"$cli" fw patch tv4k
+```
+
+then DFU, `restore`, `cfw install` and launch as for the HD. `--ota-key
+<base64>` gives the key for an OTA the catalog does not list; a local OTA of a
+listed build takes the catalog's key.
+
+### What `fw prepare` does
+
+`fw prepare --device AppleTV14,1` resolves the IPSW as the HD's
+(`VPhoneGuestDevice.restoreBase`), so the restore tree is
+`iPhoneOS_AppleTV5,3_26.6_23L773_Restore` and the hybrid manifest is built
+from the HD's identity, as for an HD guest. Then, with
+`VPhoneOTAArchive` (`VPhoneKit/VPhoneArchiveKit/Transfer`):
+
+1. Before any IPSW is unpacked, the OTA is decrypted far enough to read
+   `AssetData/boot/BuildManifest.plist`: it must list AppleTV14,1 and be the
+   IPSW's build. A wrong key fails here too.
+2. After the restore tree is built, one pass over the OTA writes
+   `AssetData/boot/Firmware/all_flash/DeviceTree.j255ap.im4p` into the
+   tree's `Firmware/all_flash`, beside J42d's, and every
+   `AssetData/payloadv2/payload.NNN` plus `payload_chunks.txt` into
+   `<vm>/OTAUserland`. The `.ecc` files, firmware, kernel and BOMs are skipped.
+   The chunks must be numbered from 0 and match the list one for one. The
+   folder is assembled under a temporary name and renamed into place; a
+   prepare for any other firmware removes a stale one.
+3. `config.plist` records AppleTV14,1 and its 3840x2160 @2x screen. The
+   paravirtual GPU driver and compiler plugin are staged into `.pcc-gpu` as for
+   an iPhone: only a plain-arm64 guest skips them.
+
+The reader uses the system AppleArchive framework (`libAppleArchive`), no
+`ipsw`, `aea` or `aa` process. `ArchiveEncryptionContext` reads the AEA
+header and takes the symmetric key; `ArchiveByteStream.decryptionStream`
+returns nil for a wrong key. The decrypted archive is segmented: its top-level
+entries are metadata (`TYP=M`), and each `YOP=E` (extract) entry's `DAT` blob
+is another, uncompressed Apple Archive with the next run of files; `YOP=M` is
+the segment manifest and `YOP=O` the owner and mode fix-ups. Each segment is
+decoded from its parent's blob through a custom byte stream, and members stream
+to disk in 8 MiB blocks, so the 4.76 GB OTA is read once and never held in
+memory: the pass over the real OTA takes about a second. A decrypted archive
+(`AA01`, or `pbz*` compressed) reads the same way without a key.
+AppleArchive's Swift wrappers close their stream when released and a decoder
+does not retain its input, so every layer is kept alive until the read ends;
+without that the first header read fails with `ioError`.
+
+`fw patch` keeps the recorded AppleTV14,1 although the HD manifest does not
+list it, and `cfw install` takes the guest's own board tree when J42d's is
+there too.
+
+### What `cfw install` does
+
+`system-tv-exp-ota_userland` empties the System volume and runs `/usr/bin/aa
+extract` for each chunk as root, before every other guest step, then records
+the chunk list on the volume so an environment update does not extract it
+again. The GPU driver and compiler plugin get `LC_BUILD_VERSION` platform tvOS
+(`MachOBuildPlatform`), an Apple ad-hoc re-sign and a resealed bundle; AMFI's
+trust-cache check is already patched to accept any cdhash, so the HD's static
+trust cache does not matter.
+
+The `tvos-4k` preset is `tvos` with the GPU bundle and
+`system-tv-exp-ota_userland` on and both TV TPRO patches off: arm64e dyld
+handles hardware TPRO, and those patches are for plain-arm64 dyld only. The
+installer admits the GPU bundle and the userland swap only for an arm64e TV
+guest (`FirmwareGuestPatchResolution.tvArm64eGuestPatches`).
+
+### Results
+
+Prototype, 2026-10-15 (VM `tvtest-4k`, staged by hand with `ipsw`): the guest
+boots to the tvOS home screen. vphoned answers with `model` AppleTV14,1, tvOS
+26.6, a 1920x1080-point screen at 2x; screenshots are 3840x2160. Control
+Center's platters and the dock shelf render as materials. On the host the VM
+has five `ParavirtualizedGraphicsGPUTask` processes (each HD guest has two),
+and one had used 4.5 s of GPU time while every HD guest task read 0: the guest
+renders through the paravirtual GPU. Settings > About reports tvOS 26.6
+(23L773) and 2160p UHD at 120 Hz. Holding the TV button over `input.hid`
+opened Control Center with frosted tiles, and the VM's GPU task (attributed to
+its launcher by `responsibility_get_pid_responsible_for_pid`) gained GPU time
+meanwhile.
+
+Native path, 2026-10-15 (VM `tv4k-native`, `vphone-launchpad-cli vm create
+--device AppleTV14,1 --preset tvos-4k --no-template` with the local HD and
+cloudOS IPSWs): `fw prepare` found the OTA already in `~/.vphone/ipsws/ota/`
+under its catalog name, checked its manifest, and staged J255's tree and the 37
+chunks; the staged chunks are byte-identical to `ipsw`'s. Restore and `cfw
+install` (93 patches, userland extracted, GPU driver retargeted) completed and
+vphoned answered on the first boot. The guest starts at TVSetup's Language
+screen at 3840x2160 with the Siri Remote artwork of the 4K, `device.info`
+reports tvOS 26.6, and the VM has four `ParavirtualizedGraphicsGPUTask`
+processes, one of whose GPU time went from 0.27 s to 0.95 s over twelve focus
+moves sent with `input.hid`. The installed Launchpad (2.9.2) predates the
+Apple TV support in New Machine and ran the iOS template trim and setup boot
+after the install; setup failed at the service profile, which has no TV port.
+That does not touch the steps above, and the guest booted normally afterwards.
+
+
+Apps, video, long-term stability and Apple services are untested.
