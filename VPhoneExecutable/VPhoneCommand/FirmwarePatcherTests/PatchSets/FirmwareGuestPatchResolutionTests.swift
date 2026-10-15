@@ -13,6 +13,46 @@ import VPhonePatchKit
 @Suite("Guest patch resolution")
 struct FirmwareGuestPatchResolutionTests {
     @Test
+    func `TV serial selection excludes iOS payloads and cache patches`() throws {
+        let standard = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.standardPreset,
+            patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("26.4"),
+            cloudOS: VPhoneVersion("26.4"),
+        )
+        let unvalidated = FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: standard.enabled)
+        #expect(unvalidated.contains("system-vphoned-boot-install"))
+        #expect(unvalidated.contains("system-launchdaemons-boot-environment"))
+        #expect(unvalidated.contains("system-extensions-boot-gpu_bundle"))
+        #expect(unvalidated.contains("dyld-cfw-camera"))
+        #expect(!unvalidated.contains("system-seputil-boot-gigalocker_uuid"))
+        #expect(!unvalidated.contains("system-gigalocker-boot-rename"))
+        let serial = standard.enabled.subtracting(unvalidated)
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: serial).isEmpty)
+        #expect(serial.intersection(FirmwareGuestPatchResolution.guestTargetIdentifiers)
+            == FirmwareGuestPatchResolution.tvSupportedGuestPatches.subtracting([FirmwareGuestSystemPatchSet.tvTPRO]))
+        #expect(serial.subtracting(FirmwareGuestPatchResolution.guestTargetIdentifiers)
+            == standard.enabled.subtracting(FirmwareGuestPatchResolution.guestTargetIdentifiers))
+    }
+
+    @Test
+    func `TV TPRO is opt in and retains the TV guest guard`() throws {
+        let identifier = FirmwareGuestSystemPatchSet.tvTPRO
+        let standard = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.standardPreset,
+            patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("26.4"), cloudOS: VPhoneVersion("26.4"),
+        )
+        #expect(!standard.enabled.contains(identifier))
+        let serial = standard.enabled.subtracting(
+            FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: standard.enabled),
+        ).union([identifier])
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: serial).isEmpty)
+        #expect(!serial.contains("system-vphoned-boot-install"))
+        #expect(!serial.contains("system-extensions-boot-gpu_bundle"))
+    }
+
+    @Test
     func `Guest target identifiers include the guest patches and exclude the boot chain`() {
         let guest = FirmwareGuestPatchResolution.guestTargetIdentifiers
 

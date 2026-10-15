@@ -26,6 +26,7 @@ public enum FirmwareGuestSystemPatchSet {
 
     public static let locationdCohorting = "system-locationd-cfw-disable_auto_cohort"
     public static let jetsamDisableAllowed = "system-jetsamproperties-cfw-disable_allowed"
+    public static let tvTPRO = "system-dyld-exp-tv_tpro"
 
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
 
@@ -50,6 +51,13 @@ public enum FirmwareGuestSystemPatchSet {
         name: "Guest System",
         summary: "Shared-cache policy gates, patched system daemons and the vphone guest payload",
         patches: [
+            VPhonePatchDeclaration(
+                identifier: tvTPRO,
+                title: "TV TPRO feature detection",
+                summary: "Plain-arm64 TVOS compatibility: stops standalone and cached dyld enabling cloudOS-advertised hardware TPRO and pager modes, preserving page-in linking and all fixups.",
+                target: .guestExecutable(path: "/usr/lib/dyld"),
+                applicability: VPhonePatchApplicability(iOSBase: .release(major: 26, minor: 4)),
+            ),
             VPhonePatchDeclaration(
                 identifier: locationdCohorting,
                 title: "locationd startup stability",

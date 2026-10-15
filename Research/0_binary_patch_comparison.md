@@ -1,5 +1,23 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **tvOS 26.4 support (2026-10-15).** AppleTV5,3 / J42d uses a
+> monolithic arm64 TVOS userland with the cloudOS 26.4 vphone600ap kernel.
+> `devicetree-cfw-tv_app_architecture` copies the donor's concrete app architecture.
+> `system-dyld-exp-tv_tpro` reversibly disables the two hardware-TPRO parameter
+> lookups in standalone and cached dyld, preserving native page-in linking.
+> `kernel-exp-tv_tpro_pagers` changes the native tunable's four-byte default
+> through validated name/descriptor/startup-registration discovery. Both TPRO
+> operations are opt-in, off in Standard. The persistent kernel fix allowed a
+> normal four-CPU boot into TVSetup and Settings, with arrow/Return/Escape input.
+> Activation remains Failed; audio and third-party apps are unverified.
+> Diagnostic helpers and unused approaches are excluded from this PR;
+> a normal boot and Escape navigation were confirmed after their removal.
+> TV dyld installation requires a private APFS disk clone and validates its original
+> standalone backup and cache undo before modifying an existing patch. Paired
+> errors abort the install before disk replacement; rollback retires the undo
+> record only after cache re-attestation and standalone restoration succeed.
+> Details and evidence: [tvOS support](Firmware/tvos_support.md).
+
 > **iOS 27 disabled services (2026-10-13):**
 > `system-jetsamproperties-cfw-disable_allowed` removes every
 > `DisableAllowed = false` from

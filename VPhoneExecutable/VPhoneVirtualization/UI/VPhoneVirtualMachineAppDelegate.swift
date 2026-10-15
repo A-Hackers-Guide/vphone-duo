@@ -166,7 +166,8 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                     .resolvingSymlinksInPath()
                     .path,
             )
-            wc.captureView?.escapeIsBackGesture = !options.isPadGuest
+            wc.captureView?.escapeIsBackGesture = !options.isPadGuest && !options.isTVGuest
+            wc.captureView?.isTVGuest = options.isTVGuest
             windowController = wc
 
             let fileWC = VPhoneFileWindowController()

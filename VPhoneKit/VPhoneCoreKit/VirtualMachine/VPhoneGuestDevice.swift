@@ -18,6 +18,15 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     public enum Family: String, Codable, Sendable {
         case iPhone
         case iPad
+        case appleTV
+
+        public var osName: String {
+            switch self {
+            case .iPhone: "iOS"
+            case .iPad: "iPadOS"
+            case .appleTV: "tvOS"
+            }
+        }
     }
 
     public let family: Family
@@ -27,7 +36,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     public let deviceClass: String
     /// The marketing name, for logs and prompts.
     public let productName: String
-    /// The guest display, as the device's panel has it.
+    /// The guest display: a device panel, or a provisional virtual TV canvas.
     public let screen: VPhoneVirtualMachineManifest.ScreenConfig
 
     public init(
@@ -136,6 +145,18 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     /// iPad Pro 13-inch (M5): 2064x2752, 1032x1376 points.
     public static let iPad17_3 = iPad("iPad17,3", "j820ap", "iPad Pro 13-inch (M5)", width: 2064, height: 2752)
 
+    /// Apple TV HD donor; the documented 26.4 beta pairing boots
+    /// with explicit TV patches. No general catalog pairing is advertised.
+    /// J42d's device tree supplies the TV idiom and 1x scale. The 1080p canvas
+    /// and 72 ppi are provisional VM settings, not an attached television's density.
+    public static let appleTV5_3 = VPhoneGuestDevice(
+        family: .appleTV,
+        productType: "AppleTV5,3",
+        deviceClass: "j42dap",
+        productName: "Apple TV HD",
+        screen: .init(width: 1920, height: 1080, pixelsPerInch: 72, scale: 1.0),
+    )
+
     public static let known: [VPhoneGuestDevice] = [
         iPhone17_3,
         iPhone17_4, iPhone17_1, iPhone17_2, iPhone17_5,
@@ -145,6 +166,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         iPad15_3, iPad15_5,
         iPad16_3, iPad16_5,
         iPad17_1, iPad17_3,
+        appleTV5_3,
     ]
 
     /// Cellular models that ship in the same IPSW as a known Wi-Fi model and map
@@ -174,12 +196,12 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     /// The folder `fw prepare` builds the restore tree in.
     ///
     /// Every reader of the tree — restore, `cfw install`, Launchpad's cleanup —
-    /// matches `iPhone*_Restore`, so an iPad tree keeps that prefix: the
-    /// prefix names the iPhoneOS restore format, not the device.
+    /// matches `iPhone*_Restore`, so non-iPhone trees keep that prefix as a
+    /// restore-tree compatibility convention.
     public func restoreTreeName(version: String, build: String) -> String {
         switch family {
         case .iPhone: "\(productType)_\(version)_\(build)_Restore"
-        case .iPad: "iPhoneOS_\(productType)_\(version)_\(build)_Restore"
+        case .iPad, .appleTV: "iPhoneOS_\(productType)_\(version)_\(build)_Restore"
         }
     }
 

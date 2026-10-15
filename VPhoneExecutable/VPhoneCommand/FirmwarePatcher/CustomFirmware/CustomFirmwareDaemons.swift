@@ -6,6 +6,7 @@
 // patchers.
 
 import Foundation
+import VPhoneCoreKit
 
 // MARK: - CustomFirmwareDaemons
 
@@ -45,6 +46,44 @@ public enum CustomFirmwareDaemons {
             self.systemOS = systemOS
             self.appOS = appOS
         }
+    }
+
+    /// tvOS on AppleTV5,3 carries its frameworks and cache in the OS image,
+    /// rather than the two cryptexes iPhone/iPad firmware supplies. This is
+    /// manifest admission only; it does not establish that the userland boots.
+    public enum FilesystemLayout: Sendable, Equatable {
+        case cryptex(CryptexPaths)
+        case monolithic
+    }
+
+    public static func filesystemLayout(buildManifest url: URL) throws -> FilesystemLayout {
+        let manifest = try loadPlist(url)
+        guard let identities = manifest["BuildIdentities"] as? [PlistDict], !identities.isEmpty else {
+            throw DaemonError.invalidPlist(url.path)
+        }
+        // A partial or malformed cryptex declaration is never evidence for a
+        // monolithic image. Keep the original lookup and its path validation.
+        let hasCryptex = identities.contains { identity in
+            let entries = identity["Manifest"] as? PlistDict ?? [:]
+            return entries["Cryptex1,SystemOS"] != nil || entries["Cryptex1,AppOS"] != nil
+        }
+        if hasCryptex {
+            return .cryptex(try cryptexPaths(buildManifest: url))
+        }
+        guard let products = manifest["SupportedProductTypes"] as? [String], !products.isEmpty,
+              products.allSatisfy({ VPhoneGuestDevice.named($0)?.family == .appleTV }),
+              let erase = identities.first(where: {
+                  ($0["Info"] as? PlistDict)?["RestoreBehavior"] as? String == "Erase"
+              }),
+              erase["Ap,SDKPlatform"] as? String == "appletvos",
+              let entries = erase["Manifest"] as? PlistDict
+        else { throw DaemonError.cryptexPathsNotFound(url.path) }
+        for component in ["OS", "SystemVolume", "StaticTrustCache", "Ap,SystemVolumeCanonicalMetadata"] {
+            let path = componentPath(entries, component)
+            guard !path.isEmpty else { throw DaemonError.invalidPlist(url.path) }
+            guard isPlainRelativePath(path) else { throw DaemonError.unsafeCryptexPath(path) }
+        }
+        return .monolithic
     }
 
     /// Extract the Cryptex DMG paths from a BuildManifest.

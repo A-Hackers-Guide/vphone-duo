@@ -36,6 +36,9 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
     /// a patcher built directly writes what the reference records were taken from.
     public var applyProMotion = false
 
+    /// Opt-in plain-arm64 tvOS shared-cache compatibility; off by default.
+    public var applyTVTPROPagers = false
+
     /// On a base older than 27: a narrow allowlist at the same sandbox gate, so a
     /// process outside an app sandbox can open the paravirtual GPU, video decoder,
     /// Neural Engine and IOSurface scaler user clients and nothing else. Set from
@@ -49,6 +52,12 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
         buildBLIndex()
         buildSymbolTable()
         findPanic()
+
+        if applyTVTPROPagers {
+            guard patchTVTPROPagers() else {
+                throw NSError(domain: "FirmwarePatcher.TVTPROPagers", code: 1, userInfo: [NSLocalizedDescriptionKey: "Cannot validate sprr_tpro_pagers tunable; kernel unchanged by this operation"])
+            }
+        }
 
         // Group A
         patchAmfiCdhashInTrustcache()

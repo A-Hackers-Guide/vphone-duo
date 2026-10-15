@@ -15,6 +15,8 @@ import VPhonePatchKit
 public enum FirmwareKernelCustomFirmwarePatchSet {
     public static let identifier = "com.vphone.patchset.kernel.cfw"
 
+    public static let tvTPROPagers = "kernel-exp-tv_tpro_pagers"
+
     /// Only applies to an iOS 27 userland.
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
 
@@ -23,6 +25,13 @@ public enum FirmwareKernelCustomFirmwarePatchSet {
         name: "Kernel Custom Firmware",
         summary: "Trust cache admission, writable root, task ports and the guest's extra syscall surface",
         patches: [
+            VPhonePatchDeclaration(
+                identifier: tvTPROPagers,
+                title: "TV TPRO pager compatibility",
+                summary: "Defaults sprr_tpro_pagers to zero so plain-arm64 tvOS dyld can make DATA_CONST writable. Pair with the TV dyld TPRO patch.",
+                target: .firmware(.kernelcache),
+                applicability: VPhonePatchApplicability(iOSBase: .release(major: 26, minor: 4), cloudOS: .release(major: 26, minor: 4)),
+            ),
             // MARK: Trust Cache and Code Signing
 
             VPhonePatchDeclaration(

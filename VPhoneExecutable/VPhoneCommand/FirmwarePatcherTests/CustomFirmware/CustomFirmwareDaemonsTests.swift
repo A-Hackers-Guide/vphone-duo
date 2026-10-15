@@ -235,6 +235,66 @@ struct CustomFirmwareDaemonsTests {
     // MARK: - Cryptex paths
 
     @Test
+    func `tvOS without cryptexes admits only a complete monolithic erase image`() throws {
+        let directory = try CustomFirmwareDaemonsFixtures.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appending(path: "BuildManifest.plist")
+        var entries: PlistDict = [:]
+        for component in ["OS", "SystemVolume", "StaticTrustCache", "Ap,SystemVolumeCanonicalMetadata"] {
+            entries[component] = ["Info": ["Path": "Firmware/\(component).img"]] as PlistDict
+        }
+        func manifest(products: [String] = ["AppleTV5,3"], entries: PlistDict) -> PlistDict {
+            ["SupportedProductTypes": products, "BuildIdentities": [[
+                "Ap,SDKPlatform": "appletvos",
+                "Info": ["RestoreBehavior": "Erase"],
+                "Manifest": entries,
+            ] as PlistDict]]
+        }
+        try CustomFirmwareDaemons.savePlist(manifest(entries: entries), to: url)
+        #expect(try CustomFirmwareDaemons.filesystemLayout(buildManifest: url) == .monolithic)
+
+        // Broken iPhone firmware and an uninspected TV board must not gain a
+        // fallback merely because the expected cryptex entries are missing.
+        for products in [["iPhone17,3"], ["AppleTV14,1"], []] {
+            try CustomFirmwareDaemons.savePlist(manifest(products: products, entries: entries), to: url)
+            #expect(throws: CustomFirmwareDaemons.DaemonError.self) {
+                try CustomFirmwareDaemons.filesystemLayout(buildManifest: url)
+            }
+        }
+        var partial = entries
+        partial["Cryptex1,SystemOS"] = ["Info": ["Path": "SystemOS.dmg"]] as PlistDict
+        try CustomFirmwareDaemons.savePlist(manifest(entries: partial), to: url)
+        #expect(throws: CustomFirmwareDaemons.DaemonError.self) {
+            try CustomFirmwareDaemons.filesystemLayout(buildManifest: url)
+        }
+        entries.removeValue(forKey: "SystemVolume")
+        try CustomFirmwareDaemons.savePlist(manifest(entries: entries), to: url)
+        #expect(throws: CustomFirmwareDaemons.DaemonError.self) {
+            try CustomFirmwareDaemons.filesystemLayout(buildManifest: url)
+        }
+    }
+
+    @Test
+    func `monolithic image paths and platform remain validated`() throws {
+        let directory = try CustomFirmwareDaemonsFixtures.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appending(path: "BuildManifest.plist")
+        for (platform, osPath) in [("iphoneos", "OS.dmg"), ("appletvos", "../OS.dmg"), ("appletvos", "/OS.dmg")] {
+            var entries: PlistDict = [:]
+            for component in ["OS", "SystemVolume", "StaticTrustCache", "Ap,SystemVolumeCanonicalMetadata"] {
+                entries[component] = ["Info": ["Path": component == "OS" ? osPath : "Firmware/image"]] as PlistDict
+            }
+            try CustomFirmwareDaemons.savePlist([
+                "SupportedProductTypes": ["AppleTV5,3"],
+                "BuildIdentities": [["Ap,SDKPlatform": platform, "Info": ["RestoreBehavior": "Erase"], "Manifest": entries] as PlistDict],
+            ], to: url)
+            #expect(throws: CustomFirmwareDaemons.DaemonError.self) {
+                try CustomFirmwareDaemons.filesystemLayout(buildManifest: url)
+            }
+        }
+    }
+
+    @Test
     func `Cryptex paths are found in a later identity, not just the first`() throws {
         let directory = try CustomFirmwareDaemonsFixtures.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -256,6 +316,7 @@ struct CustomFirmwareDaemonsTests {
         let paths = try CustomFirmwareDaemons.cryptexPaths(buildManifest: url)
         #expect(paths.systemOS == "043-70113-702.dmg.aea")
         #expect(paths.appOS == "043-69297-784.dmg")
+        #expect(try CustomFirmwareDaemons.filesystemLayout(buildManifest: url) == .cryptex(paths))
     }
 
     @Test

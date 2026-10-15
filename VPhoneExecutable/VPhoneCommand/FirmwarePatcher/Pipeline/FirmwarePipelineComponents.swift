@@ -244,6 +244,7 @@ extension FirmwarePipeline {
                         applyIOS27: applyIOS27,
                         applyFrida: applyFrida,
                         applyProMotion: applyProMotion,
+                        applyTVTPROPagers: isEnabled(FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers, fallback: false),
                         applyParavirtUserClients: applyParavirtUserClients,
                         includeBase: includeKernelBase,
                         includeCustomFirmware: includeKernelCustomFirmware,
@@ -392,6 +393,7 @@ extension FirmwarePipeline {
         applyIOS27: Bool,
         applyFrida: Bool,
         applyProMotion: Bool,
+        applyTVTPROPagers: Bool,
         applyParavirtUserClients: Bool,
         includeBase: Bool,
         includeCustomFirmware: Bool,
@@ -412,6 +414,7 @@ extension FirmwarePipeline {
                 p.applyIOS27 = applyIOS27
                 p.applyFrida = applyFrida
                 p.applyProMotion = applyProMotion
+                p.applyTVTPROPagers = applyTVTPROPagers
                 p.applyParavirtUserClients = applyParavirtUserClients
                 p.gate = gate
                 return p

@@ -214,6 +214,14 @@ public enum FirmwareDeviceTreePatchSet {
                 "iPad audio configuration",
                 "Takes the audio node from the iPad's tree, so its acoustic ID names tunings the iPad image ships.",
             ),
+
+            // MARK: TV Guest
+
+            property(
+                "devicetree-cfw-tv_app_architecture",
+                "TV app architecture",
+                "Copies app-macho-architecture from a TV board's own device tree into the installed tree, so its userland sees the donor's architecture. Restore, iPhone and iPad trees are unchanged.",
+            ),
         ],
         provides: ["vphone.devicetree"],
     )

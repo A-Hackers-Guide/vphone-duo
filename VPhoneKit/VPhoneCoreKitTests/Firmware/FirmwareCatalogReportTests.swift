@@ -16,9 +16,10 @@ struct FirmwareCatalogReportTests {
         }
     }
 
-    @Test func `lists every known guest device`() {
+    @Test func `lists curated guests without advertising unlisted TV pairings`() {
         let report = VPhoneFirmwareCatalog.report
-        #expect(report.devices.map(\.productType) == VPhoneGuestDevice.known.map(\.productType))
+        #expect(report.devices.map(\.productType) == VPhoneGuestDevice.known.filter { $0.family != .appleTV }.map(\.productType))
+        #expect(VPhoneFirmwareCatalog.pairings(for: "AppleTV5,3").isEmpty)
         #expect(report.devices.first?.pairings == report.pairings)
         for device in report.devices.dropFirst() {
             #expect(device.family == VPhoneGuestDevice.named(device.productType)?.family.rawValue)
