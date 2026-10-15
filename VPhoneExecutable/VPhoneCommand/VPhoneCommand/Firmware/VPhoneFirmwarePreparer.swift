@@ -44,6 +44,17 @@ enum VPhoneFirmwarePreparer {
         resources: VPhoneResources,
     ) throws {
         let fm = FileManager.default
+        // A source naming a catalog OTA, such as a tvOS the Apple TV HD never
+        // got, restores the OTA's base IPSW and stages that OTA.
+        var iPhoneSource = iPhoneSource, otaSource = otaSource, productType = productType
+        if let release = VPhoneFirmwareCatalog.otaRelease(source: iPhoneSource) {
+            guard let base = VPhoneFirmwareCatalog.restoreBaseURL(for: release) else {
+                throw ValidationError("The firmware catalog has no \(release.baseVersion) IPSW to restore the \(release.productType) OTA \(release.version) over.")
+            }
+            otaSource = otaSource ?? iPhoneSource
+            iPhoneSource = base
+            productType = productType ?? release.productType
+        }
         let existing = try fm.contentsOfDirectory(
             at: bundle.url,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -114,7 +125,7 @@ enum VPhoneFirmwarePreparer {
             blockedPatches: Set(selection.blockedPatches),
             allowedPatches: Set(selection.allowedPatches),
         )
-        guard let plan = try pipeline.resolvePlan(iOSBase: VPhoneVersion(phone.version), cloudOS: VPhoneVersion(cloud.version)) else {
+        guard let plan = try pipeline.resolvePlan(iOSBase: VPhoneVersion(ota?.version ?? phone.version), cloudOS: VPhoneVersion(cloud.version)) else {
             throw ValidationError("Patch preset '\(selection.presetIdentifier)' did not resolve.")
         }
 
@@ -147,7 +158,10 @@ enum VPhoneFirmwarePreparer {
         try FirmwareManifest.generate(iPhoneDir: phoneTree, cloudOSDir: cloudTree, device: restored, verbose: true)
         let userland = staging.appendingPathComponent(VPhoneOTAArchive.userlandDirectoryName, isDirectory: true)
         if let ota {
-            try stageOTA(ota, device: device, build: phone.build, restoreTree: phoneTree, userland: userland)
+            try stageOTA(ota, device: device, restoreTree: phoneTree, userland: userland)
+            let version: [String: String] = ["ProductVersion": ota.version, "ProductBuildVersion": ota.build]
+            try PropertyListSerialization.data(fromPropertyList: version, format: .xml, options: 0)
+                .write(to: phoneTree.appendingPathComponent(FirmwarePipeline.otaVersionFileName))
         }
         // A plain-arm64 Apple TV cannot load the arm64e paravirtual GPU driver,
         // and a creation may record its patch selection only after preparing.
@@ -248,8 +262,8 @@ enum VPhoneFirmwarePreparer {
     // MARK: - OTA userland
 
     /// The OTA a device without an IPSW takes its device tree and userland
-    /// from, with its key: `source` and `key` when given, else the catalog's
-    /// OTA of the IPSW's build, downloaded into the IPSW cache's `ota` folder
+    /// from, with its key, version and build: `source` and `key` when given,
+    /// else the catalog's OTA of the IPSW's build, downloaded into the IPSW cache's `ota` folder
     /// unless it is already there. Its manifest is checked now, before any
     /// IPSW is unpacked for it.
     static func resolveOTA(
@@ -259,8 +273,12 @@ enum VPhoneFirmwarePreparer {
         build: String,
         ipswCacheDirectory: URL,
         downloadConnections: Int,
-    ) throws -> (file: URL, key: String?) {
-        let release = VPhoneFirmwareCatalog.otaRelease(for: device.productType, build: build)
+    ) throws -> (file: URL, key: String?, version: String, build: String) {
+        // A catalog OTA is of its own build, which differs from the IPSW's
+        // when it is restored over its base's last release.
+        let release = source.flatMap(VPhoneFirmwareCatalog.otaRelease(source:))
+            ?? VPhoneFirmwareCatalog.otaRelease(for: device.productType, build: build)
+        let build = release?.build ?? build
         guard source != nil || release != nil else {
             throw ValidationError("The firmware catalog has no \(device.productType) OTA for build \(build). Pass the device's full OTA of that build with --ota-source, and its key with --ota-key.")
         }
@@ -281,15 +299,14 @@ enum VPhoneFirmwarePreparer {
         let key = key ?? release?.key
         let identity = try VPhoneOTAArchive.checkIdentity(of: file, key: key, device: device, build: build)
         print("[+] \(device.productType) OTA \(identity.version) (\(identity.build)): \(file.path)")
-        return (file, key)
+        return (file, key, identity.version, identity.build)
     }
 
     /// The device's own device tree into the restore tree, beside its base's,
     /// and the OTA's payload chunks into `userland`.
     private static func stageOTA(
-        _ ota: (file: URL, key: String?),
+        _ ota: (file: URL, key: String?, version: String, build: String),
         device: VPhoneGuestDevice,
-        build: String,
         restoreTree: URL,
         userland: URL,
     ) throws {
@@ -303,7 +320,7 @@ enum VPhoneFirmwarePreparer {
             from: ota.file,
             key: ota.key,
             device: device,
-            build: build,
+            build: ota.build,
             deviceTreeDirectory: flash,
             userlandDirectory: userland,
         ) { name in

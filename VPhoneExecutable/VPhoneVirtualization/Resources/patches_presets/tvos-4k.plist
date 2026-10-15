@@ -84,12 +84,7 @@
 			<string>dyld-exp-mis_trust_auth</string>
 			<string>system-preferences-exp-root_rows</string>
 			<string>dyld-exp-settings_software_update_row</string>
-			<string>dyld-boot-iomfb_force_kern</string>
 			<string>dyld-boot-iomfb_swapend</string>
-			<string>dyld-boot-lockdown_mode</string>
-			<string>dyld-boot-lsd_embedded_reg</string>
-			<string>dyld-boot-maxslide</string>
-			<string>dyld-boot-xpc_lwcr</string>
 			<string>dyld-cfw-camera</string>
 			<string>preboot-cfw-devicetree_board_audio</string>
 			<string>preboot-cfw-devicetree_haptics</string>

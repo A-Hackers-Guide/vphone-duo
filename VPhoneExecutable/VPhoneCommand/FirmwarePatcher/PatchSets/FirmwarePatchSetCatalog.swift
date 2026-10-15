@@ -252,6 +252,18 @@ public enum FirmwarePatchSetCatalog {
         "system-virtualaudio-cfw-volume_mode_precondition",
     ]
 
+    /// The iOS 27 shared-cache patches a 27 userland needs on the 26.4 kernel,
+    /// the display swap through the kernel among them. The Apple TV 4K keeps
+    /// them on for its tvOS 27 OTA; each is gated on 27, so a 26 userland
+    /// never meets them.
+    public static let tvOS27UserlandPatches: Set<String> = [
+        "dyld-boot-iomfb_force_kern",
+        "dyld-boot-lockdown_mode",
+        "dyld-boot-lsd_embedded_reg",
+        "dyld-boot-maxslide",
+        "dyld-boot-xpc_lwcr",
+    ]
+
     /// Standard for an Apple TV guest: the TV TPRO compatibility on, and
     /// ``tvOSBlockedPatches`` off. The shipped `tvos.plist` must match this.
     public static let tvOSPreset = VPhonePatchPreset(
@@ -268,8 +280,9 @@ public enum FirmwarePatchSetCatalog {
 
     /// The Apple TV preset for an arm64e Apple TV 4K whose userland comes from
     /// its OTA: the paravirtual GPU driver, which the HD cannot load, and the
-    /// userland swap on; the TV TPRO patches, which only plain-arm64 dyld
-    /// needs, off. The shipped `tvos-4k.plist` must match this.
+    /// userland swap and ``tvOS27UserlandPatches`` on; the TV TPRO patches,
+    /// which only plain-arm64 dyld needs, off. The shipped `tvos-4k.plist`
+    /// must match this.
     public static let tvOS4KPreset = VPhonePatchPreset(
         identifier: VPhonePatchPreset.tvOS4KIdentifier,
         title: "Apple TV 4K",
@@ -278,7 +291,7 @@ public enum FirmwarePatchSetCatalog {
         selection: .block(
             manualOnlyPatches
                 .subtracting([FirmwareGuestSystemPatchSet.tvOTAUserland])
-                .union(tvOSBlockedPatches.subtracting(["system-extensions-boot-gpu_bundle"])),
+                .union(tvOSBlockedPatches.subtracting(["system-extensions-boot-gpu_bundle"]).subtracting(tvOS27UserlandPatches)),
         ),
     )
 

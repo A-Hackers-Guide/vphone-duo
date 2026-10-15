@@ -35,12 +35,12 @@ public enum FirmwareGuestPatchResolution {
     ]
 
     /// An arm64e Apple TV (the 4K, from its OTA) also admits the paravirtual
-    /// GPU driver, which a plain-arm64 userland cannot load, and the OTA
-    /// userland swap itself.
-    public static let tvArm64eGuestPatches: Set<String> = [
+    /// GPU driver, which a plain-arm64 userland cannot load, the OTA userland
+    /// swap itself, and the iOS 27 shared-cache patches its tvOS 27 OTA meets.
+    public static let tvArm64eGuestPatches: Set<String> = Set([
         "system-extensions-boot-gpu_bundle",
         FirmwareGuestSystemPatchSet.tvOTAUserland,
-    ]
+    ]).union(FirmwarePatchSetCatalog.tvOS27UserlandPatches)
 
     public static func unvalidatedTVGuestPatches(enabled: Set<String>, arm64eUserland: Bool = false) -> [String] {
         let admitted = arm64eUserland ? tvSupportedGuestPatches.union(tvArm64eGuestPatches) : tvSupportedGuestPatches

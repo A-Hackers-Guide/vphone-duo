@@ -86,6 +86,17 @@ struct FirmwareGuestPatchResolutionTests {
         #expect(!tv4K.isEnabled(FirmwareGuestSystemPatchSet.paravirtGPUIndexOffset))
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: tv4K.enabled, arm64eUserland: true).isEmpty)
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: tv4K.enabled) == [gpu, ota].sorted())
+        // The 27 shared-cache patches are on but meet only a 27 userland.
+        #expect(tv4K.enabled.isDisjoint(with: FirmwarePatchSetCatalog.tvOS27UserlandPatches))
+        let tv4K27 = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.tvOS4KPreset,
+            patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("27.0"),
+            cloudOS: VPhoneVersion("26.4"),
+        )
+        #expect(tv4K27.enabled.isSuperset(of: FirmwarePatchSetCatalog.tvOS27UserlandPatches))
+        #expect(tv4K27.isEnabled("kernel-boot-iomfb_swapend"))
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: tv4K27.enabled, arm64eUserland: true).isEmpty)
 
         // The HD's preset is the mirror image.
         let tvHD = try plan(FirmwarePatchSetCatalog.tvOSPreset)

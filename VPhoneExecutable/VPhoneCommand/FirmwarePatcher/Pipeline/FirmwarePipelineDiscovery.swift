@@ -46,9 +46,16 @@ extension FirmwarePipeline {
         return version
     }
 
-    /// iPhone base version (`iPhone-BuildManifest.plist`, preserved by fw_prepare).
+    /// The version of the OTA a device without an IPSW takes its userland
+    /// from, which `fw prepare` records beside the base's manifest: the
+    /// userland, not the restored IPSW, is what the guest patches meet.
+    public static let otaVersionFileName = "OTA-SystemVersion.plist"
+
+    /// iPhone base version: the staged OTA's when there is one, else
+    /// `iPhone-BuildManifest.plist`'s, preserved by fw_prepare.
     static func readBaseProductVersion(_ restoreDir: URL) -> String? {
-        readProductVersion(restoreDir, manifest: "iPhone-BuildManifest.plist")
+        readProductVersion(restoreDir, manifest: otaVersionFileName)
+            ?? readProductVersion(restoreDir, manifest: "iPhone-BuildManifest.plist")
     }
 
     /// The device whose IPSW supplied the guest OS: the one `fw prepare`
