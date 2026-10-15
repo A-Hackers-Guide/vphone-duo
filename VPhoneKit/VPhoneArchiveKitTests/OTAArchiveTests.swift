@@ -1,0 +1,385 @@
+import AppleArchive
+import CryptoKit
+import Foundation
+import System
+import Testing
+@testable import VPhoneArchiveKit
+import VPhoneCoreKit
+
+/// Staging an Apple TV 4K's device tree and userland from its OTA with the
+/// system AppleArchive framework. The OTAs here are synthetic but shaped like
+/// Apple's: AEA around a segmented archive whose extract segments carry the
+/// files, plus the manifest and fix-up segments staging ignores.
+@Suite("OTA userland staging", .serialized)
+struct OTAArchiveTests {
+    // MARK: - Fixtures
+
+    private let key = SymmetricKey(size: .bits256)
+    private var keyText: String {
+        key.withUnsafeBytes { Data($0) }.base64EncodedString()
+    }
+
+    private func makeRoot() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    private enum Entry {
+        case file(String, Data)
+        case directory(String)
+        /// A top-level metadata entry: `yop` and an archive of `entries` in its blob.
+        case segment(Character, [Entry])
+    }
+
+    private func field(_ key: String, _ value: UInt64) -> ArchiveHeader.Field {
+        .uint(key: ArchiveHeader.FieldKey(key), value: value)
+    }
+
+    private func ascii(_ character: Character) -> UInt64 {
+        UInt64(character.asciiValue!)
+    }
+
+    /// The Apple Archive encoding of `entries`.
+    private func encode(_ entries: [Entry], in root: URL) throws -> Data {
+        let file = root.appendingPathComponent("\(UUID().uuidString).aar")
+        let stream = try #require(ArchiveByteStream.fileStream(
+            path: FilePath(file.path),
+            mode: .writeOnly,
+            options: [.create, .truncate],
+            permissions: FilePermissions(rawValue: 0o644),
+        ))
+        let encoder = try #require(ArchiveStream.encodeStream(writingTo: stream))
+        for entry in entries {
+            let header = ArchiveHeader()
+            let blob: Data?
+            switch entry {
+            case let .file(path, data):
+                header.append(field("TYP", ascii("F")))
+                header.append(.string(key: ArchiveHeader.FieldKey("PAT"), value: path))
+                blob = data
+            case let .directory(path):
+                header.append(field("TYP", ascii("D")))
+                header.append(.string(key: ArchiveHeader.FieldKey("PAT"), value: path))
+                blob = nil
+            case let .segment(yop, inner):
+                header.append(field("TYP", ascii("M")))
+                header.append(field("YOP", ascii(yop)))
+                header.append(.string(key: ArchiveHeader.FieldKey("LBL"), value: "main"))
+                blob = try encode(inner, in: root)
+            }
+            if let blob {
+                header.append(.blob(key: ArchiveHeader.FieldKey("DAT"), size: UInt64(blob.count)))
+            }
+            try encoder.writeHeader(header)
+            if let blob, !blob.isEmpty {
+                try blob.withUnsafeBytes { try encoder.writeBlob(key: ArchiveHeader.FieldKey("DAT"), from: $0) }
+            }
+        }
+        try encoder.close()
+        try stream.close()
+        defer { try? FileManager.default.removeItem(at: file) }
+        return try Data(contentsOf: file)
+    }
+
+    /// `archive` encrypted as Apple encrypts an OTA.
+    private func encrypt(_ archive: Data, to file: URL, with key: SymmetricKey) throws {
+        let stream = try #require(ArchiveByteStream.fileStream(
+            path: FilePath(file.path),
+            mode: .writeOnly,
+            options: [.create, .truncate],
+            permissions: FilePermissions(rawValue: 0o644),
+        ))
+        let context = ArchiveEncryptionContext(profile: .hkdf_sha256_aesctr_hmac__symmetric__none, compressionAlgorithm: .lzfse)
+        try context.setSymmetricKey(key)
+        let encrypted = try #require(ArchiveByteStream.encryptionStream(writingTo: stream, encryptionContext: context))
+        _ = try archive.withUnsafeBytes { try encrypted.write(from: $0) }
+        try encrypted.close()
+        try stream.close()
+    }
+
+    private func manifest(productTypes: [String] = ["AppleTV14,1"], build: String = "23L773") throws -> Data {
+        try PropertyListSerialization.data(fromPropertyList: [
+            "ProductVersion": "26.6",
+            "ProductBuildVersion": build,
+            "SupportedProductTypes": productTypes,
+        ], format: .xml, options: 0)
+    }
+
+    private func chunk(_ index: Int) -> Data {
+        Data("chunk \(index) ".utf8) + Data(repeating: UInt8(index), count: 1000 + index)
+    }
+
+    /// The members Apple's AppleTV14,1 26.6 OTA has, in its order: the
+    /// manifest and device trees in one extract segment, the payload chunks
+    /// split across two more, `.ecc` files staging skips, and fix-ups.
+    private func otaEntries(
+        manifest: Data,
+        chunks: Int = 3,
+        list: String? = nil,
+        deviceTree: Bool = true,
+    ) -> [Entry] {
+        let listed = list ?? (0 ..< chunks).map { "\($0): \(1000 + $0)" }.joined(separator: "\n") + "\n"
+        let payload = (0 ..< chunks).flatMap { index -> [Entry] in
+            let name = String(format: "AssetData/payloadv2/payload.%03d", index)
+            return [.file(name, chunk(index)), .file(name + ".ecc", Data("ecc".utf8))]
+        }
+        let split = payload.count / 2
+        var firmware: [Entry] = [
+            .file("AssetData/Info.plist", Data("info".utf8)),
+            .file("AssetData/boot/BuildManifest.plist", manifest),
+            .file("AssetData/boot/Firmware/all_flash/LLB.j255.RELEASE.im4p", Data("llb".utf8)),
+        ]
+        if deviceTree {
+            firmware.append(.file("AssetData/boot/Firmware/all_flash/DeviceTree.j255ap.im4p", Data("tree j255ap".utf8)))
+        }
+        return [
+            .segment("M", [.directory("")]),
+            .segment("E", [.directory("AssetData"), .directory("AssetData/payloadv2")]),
+            .segment("E", firmware),
+            .segment("E", Array(payload[..<split]) + [.file("AssetData/payloadv2/fixup.manifest", Data("fixup".utf8))]),
+            .segment("E", Array(payload[split...]) + [
+                .file("AssetData/payloadv2/payload_chunks.txt", Data(listed.utf8)),
+                .file("AssetData/payloadv2/prepare_payload", Data("pbzx".utf8)),
+            ]),
+            .segment("O", [.file("AssetData/payloadv2/payload.000", Data())]),
+        ]
+    }
+
+    private func makeOTA(in root: URL, _ entries: [Entry], key: SymmetricKey? = nil) throws -> URL {
+        let file = root.appendingPathComponent("AppleTV14,1_26.6_23L773_OTA.aea")
+        try encrypt(encode(entries, in: root), to: file, with: key ?? self.key)
+        return file
+    }
+
+    private func stage(_ ota: URL, in root: URL, key: String?, build: String = "23L773") throws -> VPhoneOTAArchive.StagedUserland {
+        let flash = root.appendingPathComponent("restore/Firmware/all_flash", isDirectory: true)
+        try FileManager.default.createDirectory(at: flash, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("vm"), withIntermediateDirectories: true)
+        return try VPhoneOTAArchive.stageUserland(
+            from: ota,
+            key: key,
+            device: .appleTV14_1,
+            build: build,
+            deviceTreeDirectory: flash,
+            userlandDirectory: root.appendingPathComponent("vm/OTAUserland", isDirectory: true),
+        )
+    }
+
+    private func vmFolder(_ root: URL) throws -> [String] {
+        let vm = root.appendingPathComponent("vm")
+        try FileManager.default.createDirectory(at: vm, withIntermediateDirectories: true)
+        return try FileManager.default.contentsOfDirectory(atPath: vm.path)
+    }
+
+    // MARK: - Staging
+
+    @Test func `an encrypted OTA stages its device tree, payload chunks and chunk list`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        _ = try vmFolder(root)
+        let ota = try makeOTA(in: root, otaEntries(manifest: manifest()))
+
+        let staged = try stage(ota, in: root, key: keyText)
+
+        #expect(staged.version == "26.6" && staged.build == "23L773")
+        #expect(staged.chunks == ["payload.000", "payload.001", "payload.002"])
+        #expect(try Data(contentsOf: staged.deviceTree) == Data("tree j255ap".utf8))
+        #expect(staged.deviceTree.path.hasSuffix("restore/Firmware/all_flash/DeviceTree.j255ap.im4p"))
+        let userland = root.appendingPathComponent("vm/OTAUserland")
+        let names = try FileManager.default.contentsOfDirectory(atPath: userland.path).sorted()
+        #expect(names == ["payload.000", "payload.001", "payload.002", "payload_chunks.txt"])
+        for index in 0 ..< 3 {
+            #expect(try Data(contentsOf: userland.appendingPathComponent(String(format: "payload.%03d", index))) == chunk(index))
+        }
+        #expect(try String(contentsOf: userland.appendingPathComponent("payload_chunks.txt"), encoding: .utf8) == "0: 1000\n1: 1001\n2: 1002\n")
+        // Nothing else from the OTA lands beside the device tree.
+        let flash = try FileManager.default.contentsOfDirectory(atPath: staged.deviceTree.deletingLastPathComponent().path)
+        #expect(flash == ["DeviceTree.j255ap.im4p"])
+        #expect(try vmFolder(root) == ["OTAUserland"])
+    }
+
+    @Test func `a decrypted archive stages without a key`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        _ = try vmFolder(root)
+        let ota = root.appendingPathComponent("decrypted.aar")
+        try encode(otaEntries(manifest: manifest()), in: root).write(to: ota)
+
+        let staged = try stage(ota, in: root, key: nil)
+        #expect(staged.chunks.count == 3)
+    }
+
+    @Test func `an encrypted OTA needs its own key`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ota = try makeOTA(in: root, otaEntries(manifest: manifest()))
+
+        #expect {
+            try stage(ota, in: root, key: nil)
+        } throws: { error in
+            if case .keyRequired(ota)? = error as? VPhoneOTAArchive.Error { true } else { false }
+        }
+        let other = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }.base64EncodedString()
+        #expect {
+            try stage(ota, in: root, key: other)
+        } throws: { error in
+            if case .wrongKey? = error as? VPhoneOTAArchive.Error { true } else { false }
+        }
+        #expect(try vmFolder(root).isEmpty)
+    }
+
+    @Test func `another device's OTA stops before any chunk is written`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ota = try makeOTA(in: root, otaEntries(manifest: manifest(productTypes: ["AppleTV11,1"])))
+
+        #expect {
+            try stage(ota, in: root, key: keyText)
+        } throws: { error in
+            guard case let .wrongDevice(_, types, expected)? = error as? VPhoneOTAArchive.Error else { return false }
+            return types == ["AppleTV11,1"] && expected == "AppleTV14,1"
+        }
+        #expect(try vmFolder(root).isEmpty)
+        let flash = root.appendingPathComponent("restore/Firmware/all_flash")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: flash.path).isEmpty)
+    }
+
+    @Test func `the OTA must be the IPSW's build`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ota = try makeOTA(in: root, otaEntries(manifest: manifest(build: "23L760")))
+
+        #expect {
+            try stage(ota, in: root, key: keyText)
+        } throws: { error in
+            guard case let .wrongBuild(_, build, expected)? = error as? VPhoneOTAArchive.Error else { return false }
+            return build == "23L760" && expected == "23L773"
+        }
+        #expect(try vmFolder(root).isEmpty)
+    }
+
+    @Test func `a chunk list that does not match the chunks leaves no userland`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ota = try makeOTA(in: root, otaEntries(manifest: manifest(), list: "0: 1000\n1: 1001\n2: 1002\n3: 1003\n"))
+
+        #expect {
+            try stage(ota, in: root, key: keyText)
+        } throws: { error in
+            if case .inconsistentChunks? = error as? VPhoneOTAArchive.Error { true } else { false }
+        }
+        #expect(try vmFolder(root).isEmpty)
+    }
+
+    @Test func `an OTA without the device's tree is refused`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ota = try makeOTA(in: root, otaEntries(manifest: manifest(), deviceTree: false))
+
+        #expect {
+            try stage(ota, in: root, key: keyText)
+        } throws: { error in
+            guard case let .missingMember(member, _)? = error as? VPhoneOTAArchive.Error else { return false }
+            return member.hasSuffix("DeviceTree.j255ap.im4p")
+        }
+        #expect(try vmFolder(root).isEmpty)
+    }
+
+    @Test func `an existing userland folder is not replaced`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let userland = root.appendingPathComponent("vm/OTAUserland")
+        try FileManager.default.createDirectory(at: userland, withIntermediateDirectories: true)
+        let ota = try makeOTA(in: root, otaEntries(manifest: manifest()))
+
+        #expect {
+            try stage(ota, in: root, key: keyText)
+        } throws: { error in
+            if case .existingUserland? = error as? VPhoneOTAArchive.Error { true } else { false }
+        }
+    }
+
+    @Test func `a file that is neither AEA nor Apple Archive is not an OTA`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let zip = root.appendingPathComponent("AppleTV5,3_26.6_23L773_Restore.ipsw")
+        try Data("PK\u{3}\u{4}not an ota".utf8).write(to: zip)
+
+        #expect {
+            try stage(zip, in: root, key: keyText)
+        } throws: { error in
+            if case .notAnOTA? = error as? VPhoneOTAArchive.Error { true } else { false }
+        }
+    }
+
+    // MARK: - Names and keys
+
+    @Test func `only numbered payload chunks are staged`() {
+        #expect(VPhoneOTAArchive.isChunkName("payload.000"))
+        #expect(VPhoneOTAArchive.isChunkName("payload.036"))
+        #expect(!VPhoneOTAArchive.isChunkName("payload.000.ecc"))
+        #expect(!VPhoneOTAArchive.isChunkName("payload."))
+        #expect(!VPhoneOTAArchive.isChunkName("payload_chunks.txt"))
+        #expect(!VPhoneOTAArchive.isChunkName("payload.0/../x"))
+        #expect(!VPhoneOTAArchive.isChunkName("../payload.000"))
+    }
+
+    @Test func `keys are 32 bytes of base64, with or without aea's prefix`() throws {
+        let raw = keyText
+        let plain = try VPhoneOTAArchive.symmetricKey(raw)
+        let prefixed = try VPhoneOTAArchive.symmetricKey("base64:\(raw)\n")
+        #expect(plain == key && prefixed == key)
+        #expect(throws: VPhoneOTAArchive.Error.self) { try VPhoneOTAArchive.symmetricKey("not base64") }
+        #expect(throws: VPhoneOTAArchive.Error.self) {
+            try VPhoneOTAArchive.symmetricKey(Data(repeating: 1, count: 16).base64EncodedString())
+        }
+    }
+
+    // MARK: - Source
+
+    @Test func `a local OTA is read in place and a cached catalog OTA is reused`() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let local = root.appendingPathComponent("local.aea")
+        try Data("AEA1local".utf8).write(to: local)
+        #expect(try await VPhoneOTAArchive.resolve(local.path, release: nil, in: root) == local)
+
+        let cached = Data("AEA1".utf8) + Data(repeating: 0, count: 60)
+        let release = VPhoneOTARelease(
+            productType: "AppleTV14,1",
+            version: "26.6",
+            build: "23L773",
+            url: "https://example.invalid/ota.aea",
+            size: Int64(cached.count),
+            key: keyText,
+        )
+        let ota = root.appendingPathComponent("ota", isDirectory: true)
+        try FileManager.default.createDirectory(at: ota, withIntermediateDirectories: true)
+        let file = ota.appendingPathComponent(release.fileName)
+        try cached.write(to: file)
+        #expect(try await VPhoneOTAArchive.resolve(nil, release: release, in: root) == file)
+        #expect(try await VPhoneOTAArchive.resolve(release.url, release: release, in: root) == file)
+    }
+
+    @Test func `a cached OTA of the wrong length is removed`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("AppleTV14,1_26.6_23L773_OTA.aea")
+        try Data("AEA1short".utf8).write(to: file)
+
+        #expect(try !VPhoneOTAArchive.reusable(file, size: 4_764_729_344))
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        try Data("AEA1".utf8).write(to: file)
+        #expect(try VPhoneOTAArchive.reusable(file, size: 4))
+        try Data("PK..".utf8).write(to: file)
+        #expect(try !VPhoneOTAArchive.reusable(file, size: 4))
+    }
+
+    @Test func `a remote OTA outside the catalog gets a cache name of its own`() throws {
+        let url = try #require(URL(string: "https://updates.cdn-apple.com/x/com_apple_MobileAsset_SoftwareUpdate/9daea812.aea"))
+        let name = VPhoneOTAArchive.cacheName(for: url)
+        #expect(name.hasPrefix("9daea812-") && name.hasSuffix(".aea"))
+        #expect(name != VPhoneOTAArchive.cacheName(for: try #require(URL(string: "https://other.example/9daea812.aea"))))
+    }
+}

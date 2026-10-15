@@ -21,13 +21,25 @@ struct GuestDeviceTests {
         let tv = ["SupportedProductTypes": ["AppleTV5,3"]]
         #expect(VPhoneGuestDevice.detect(buildManifest: tv) == .appleTV5_3)
         #expect(VPhoneGuestDevice.covered(by: tv) == [.appleTV5_3])
-        #expect(VPhoneGuestDevice.detect(buildManifest: ["SupportedProductTypes": ["AppleTV14,1"]]) == nil)
+        #expect(VPhoneGuestDevice.detect(buildManifest: ["SupportedProductTypes": ["AppleTV11,1"]]) == nil)
         #expect(!VPhoneGuestDevice.appleTV5_3.isPad)
         #expect(VPhoneGuestDevice.appleTV5_3.presentsBoard)
         #expect(VPhoneGuestDevice.appleTV5_3.family.osName == "tvOS")
         #expect(VPhoneGuestDevice.appleTV5_3.boardDeviceTreePath == "Firmware/all_flash/DeviceTree.j42dap.im4p")
         #expect(VPhoneGuestDevice.appleTV5_3.restoreTreeName(version: "26.4", build: "23L243")
             == "iPhoneOS_AppleTV5,3_26.4_23L243_Restore")
+    }
+
+    @Test
+    func `the Apple TV 4K is an arm64e TV guest at 2x restored over the Apple TV HD`() throws {
+        let tv4k = try #require(VPhoneGuestDevice.named("AppleTV14,1"))
+        #expect(tv4k == .appleTV14_1 && tv4k.family == .appleTV)
+        #expect(tv4k.boardDeviceTreePath == "Firmware/all_flash/DeviceTree.j255ap.im4p")
+        #expect(tv4k.screen == .init(width: 3840, height: 2160, pixelsPerInch: 144, scale: 2.0))
+        #expect(!tv4k.hasPlainArm64Userland && VPhoneGuestDevice.appleTV5_3.hasPlainArm64Userland)
+        #expect(!VPhoneGuestDevice.iPhone17_3.hasPlainArm64Userland)
+        #expect(tv4k.restoreBase == .appleTV5_3)
+        #expect(VPhoneGuestDevice.appleTV5_3.restoreBase == nil && VPhoneGuestDevice.iPhone17_3.restoreBase == nil)
     }
 
     @Test

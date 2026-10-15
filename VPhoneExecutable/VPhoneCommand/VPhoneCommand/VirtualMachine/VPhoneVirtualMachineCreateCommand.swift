@@ -52,6 +52,13 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         valueName: "product-type",
     ))
     var device: String?
+    @Option(help: ArgumentHelp(
+        "Full OTA (.aea) URL or local path for a device Apple ships no IPSW for (AppleTV14,1) (default: the catalog's OTA of the IPSW's build)",
+        valueName: "ota",
+    ))
+    var otaSource: String?
+    @Option(help: ArgumentHelp("The OTA's AEA key in base64, as AppleDB lists it (default: the catalog's)", valueName: "base64"))
+    var otaKey: String?
     @Option(name: .shortAndLong, help: "Disk size (GB, default 64)") var diskSize: UInt64?
     @Option(
         name: .customLong("preset"),
@@ -79,12 +86,37 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
     @Flag(name: .customShort("v"), help: "Increase verbosity: -v tool detail, -vv guest serial, -vvv internal trace")
     var verboseCount: Int
 
+    private var isAppleTV: Bool {
+        VPhoneGuestDevice.named(device)?.family == .appleTV
+    }
+
+    /// An Apple TV takes the TV preset; one whose userland comes from an OTA
+    /// takes the arm64e one, with the GPU driver and the userland swap.
+    private var defaultPreset: String {
+        guard let guest = VPhoneGuestDevice.named(device), guest.family == .appleTV else {
+            return VPhonePatchPreset.standardIdentifier
+        }
+        return guest.restoreBase == nil ? VPhonePatchPreset.tvOSIdentifier : VPhonePatchPreset.tvOS4KIdentifier
+    }
+
     func validate() throws {
         if template != nil, noTemplate {
             throw ValidationError("--template and --no-template exclude each other.")
         }
         if noTemplate, try !slimming.request.isEmpty {
             throw ValidationError("The slimming switches shape a template; --no-template builds the VM without one.")
+        }
+        if otaSource != nil || otaKey != nil, VPhoneGuestDevice.named(device)?.restoreBase == nil {
+            throw ValidationError("--ota-source and --ota-key are for a device Apple ships no IPSW for, such as --device AppleTV14,1.")
+        }
+        if isAppleTV {
+            // Templates and their setup boot drive iOS Setup Assistant and its apps.
+            if template != nil {
+                throw ValidationError("An Apple TV guest is built without a template; --template cannot be used.")
+            }
+            if try !slimming.request.isEmpty {
+                throw ValidationError("An Apple TV guest is built without a template; the slimming switches do not apply.")
+            }
         }
         _ = try slimming.resolve()
         if template != nil {
@@ -110,7 +142,7 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         let unlocks = try unlockAtStartup.map { try VPhoneVirtualMachineConfigCommand.parseSwitch($0, option: "--unlock-at-startup") }
         let templateUse: VPhoneVirtualMachineCreator.TemplateUse = if let template {
             .identifier(template)
-        } else if noTemplate {
+        } else if noTemplate || isAppleTV {
             .none
         } else {
             .automatic
@@ -149,7 +181,9 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
                 URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true)
             } ?? VPhoneResources.ipswCacheDirectory(),
             device: device,
-            patchPreset: preset ?? VPhonePatchPreset.standardIdentifier,
+            otaSource: otaSource,
+            otaKey: otaKey,
+            patchPreset: preset ?? defaultPreset,
             cpuCount: cpu ?? 8,
             memoryMB: memory ?? 8192,
             diskSizeGB: diskSize ?? 64,

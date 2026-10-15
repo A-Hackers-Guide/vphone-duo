@@ -170,7 +170,7 @@ struct VPhoneFirmwareManifestCommand: ParsableCommand {
 struct VPhoneFirmwareCatalogCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "catalog",
-        abstract: "Show the known iOS/iPadOS ↔ cloudOS firmware pairings (recommended per build)",
+        abstract: "Show the known iOS/iPadOS/tvOS ↔ cloudOS firmware pairings (recommended per build)",
     )
 
     @Flag(name: .shortAndLong, help: "Emit JSON") var json = false
@@ -195,7 +195,7 @@ struct VPhoneFirmwareCatalogCommand: ParsableCommand {
                 print("")
             }
             print("Firmware catalog (\(entry.productType), \(entry.name))")
-            let os = entry.family == "iPad" ? "iPadOS" : "iOS"
+            let os = VPhoneGuestDevice.Family(rawValue: entry.family)?.osName ?? "iOS"
             let width = max(os.count, entry.pairings.map(\.ios.name.count).max() ?? 0)
             print("\(os.padding(toLength: width, withPad: " ", startingAt: 0))  recommended cloudOS")
             for e in entry.pairings {
@@ -231,6 +231,16 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
         valueName: "product-type",
     ))
     var device: String?
+    @Option(help: ArgumentHelp(
+        "Full OTA (.aea) URL or local path for a device Apple ships no IPSW for (AppleTV14,1), restored over its base's IPSW of the same build (default: the catalog's OTA of that build)",
+        valueName: "ota",
+    ))
+    var otaSource: String?
+    @Option(help: ArgumentHelp(
+        "The OTA's AEA key in base64, as AppleDB lists it (default: the catalog's key for that build)",
+        valueName: "base64",
+    ))
+    var otaKey: String?
     @Flag(help: "List downloadable IPSWs and exit") var list = false
     @Option(name: .shortAndLong, help: "Resource base override (default: inferred from the running binary path)")
     var projectRoot: String?
@@ -246,11 +256,15 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
         if let device, VPhoneGuestDevice.named(device) == nil {
             throw ValidationError("vphone runs \(VPhoneGuestDevice.known.map(\.productType).joined(separator: ", ")) guests, not \(device).")
         }
+        if otaSource != nil || otaKey != nil, VPhoneGuestDevice.named(device)?.restoreBase == nil {
+            throw ValidationError("--ota-source and --ota-key are for a device Apple ships no IPSW for, such as --device AppleTV14,1.")
+        }
         guard (1 ... 16).contains(downloadConnections) else {
             throw ValidationError("--download-connections takes 1 to 16, not \(downloadConnections).")
         }
         let chosenDevice = device
-        let device = device ?? VPhoneFirmwareCatalog.device
+        // A device without an IPSW lists and resolves its restore base's.
+        let device = VPhoneGuestDevice.named(device)?.restoreBase?.productType ?? device ?? VPhoneFirmwareCatalog.device
         let urls = if needsCatalog {
             try vphoneRunBlocking {
                 try await VPhoneFirmwareIndex.restoreURLs(forDevice: device)
@@ -309,6 +323,8 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
             } ?? VPhoneResources.ipswCacheDirectory(),
             downloadConnections: downloadConnections,
             device: chosenDevice,
+            otaSource: otaSource,
+            otaKey: otaKey,
             bundle: bundle,
             resources: resources,
         )

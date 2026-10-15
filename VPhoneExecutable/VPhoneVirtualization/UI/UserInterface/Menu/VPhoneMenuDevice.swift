@@ -21,6 +21,17 @@ extension VPhoneMenuController {
             modifiers: [.command, .shift],
             symbol: "house",
         ))
+        // Shown only for an Apple TV guest; see `showsTVControls`.
+        let controlCenter = makeItem(
+            "Control Center",
+            action: #selector(sendTVControlCenter),
+            keyEquivalent: "t",
+            modifiers: [.command, .shift],
+            symbol: "switch.2",
+        )
+        controlCenter.isHidden = true
+        tvControlCenterItem = controlCenter
+        menu.addItem(controlCenter)
         // iOS has no back key, so this item and the Esc key both replay the
         // system back gesture. The key equivalent is here so the menu can show
         // it; VPhoneApplication intercepts Esc before the menu is consulted,
@@ -126,6 +137,10 @@ extension VPhoneMenuController {
 
     @objc func sendHome() {
         keySender.sendHome()
+    }
+
+    @objc func sendTVControlCenter() {
+        keySender.sendTVControlCenter()
     }
 
     /// iOS has no back key. Esc and this item both replay the system back

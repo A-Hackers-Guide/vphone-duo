@@ -24,6 +24,10 @@ public extension VPhoneVirtualMachineCreator {
         public var ipswCacheDirectory: URL
         /// The guest device to take from an IPSW that covers several models.
         public var device: String?
+        /// For a device without an IPSW: its full OTA and the OTA's key. Nil
+        /// takes the catalog's for the IPSW's build.
+        public var otaSource: String?
+        public var otaKey: String?
         /// Which patch preset the new VM is built with. Individual patches are
         /// turned on or off per VM afterwards, through its patch selection.
         public var patchPreset: String
@@ -54,6 +58,8 @@ public extension VPhoneVirtualMachineCreator {
             gpuDriverBundle: URL? = nil,
             ipswCacheDirectory: URL = VPhoneResources.ipswCacheDirectory(),
             device: String? = nil,
+            otaSource: String? = nil,
+            otaKey: String? = nil,
             patchPreset: String = VPhonePatchPreset.standardIdentifier,
             cpuCount: UInt = 8,
             memoryMB: UInt64 = 8192,
@@ -73,6 +79,8 @@ public extension VPhoneVirtualMachineCreator {
             self.gpuDriverBundle = gpuDriverBundle
             self.ipswCacheDirectory = ipswCacheDirectory
             self.device = device
+            self.otaSource = otaSource
+            self.otaKey = otaKey
             self.patchPreset = patchPreset
             self.cpuCount = cpuCount
             self.memoryMB = memoryMB

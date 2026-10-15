@@ -56,6 +56,18 @@ class VPhoneVirtualMachineKeySender {
         control.sendHIDPress(page: 0x0C, usage: 0x40)
     }
 
+    /// tvOS reads consumer Menu (0x0C/0x40) as the TV button and opens
+    /// Control Center when it is held. A USB keyboard has no such key, so
+    /// this goes through vphoned like Home.
+    func sendTVControlCenter() {
+        guard requireConnection() else { return }
+        control.sendHIDDown(page: 0x0C, usage: 0x40)
+        Task { [control] in
+            try? await Task.sleep(for: .milliseconds(1200))
+            control.sendHIDUp(page: 0x0C, usage: 0x40)
+        }
+    }
+
     func sendPower() {
         guard requireConnection() else { return }
         control.sendHIDPress(page: 0x0C, usage: 0x30)

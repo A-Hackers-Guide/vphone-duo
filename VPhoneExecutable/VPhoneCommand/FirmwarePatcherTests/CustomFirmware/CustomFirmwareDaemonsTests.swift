@@ -255,7 +255,7 @@ struct CustomFirmwareDaemonsTests {
 
         // Broken iPhone firmware and an uninspected TV board must not gain a
         // fallback merely because the expected cryptex entries are missing.
-        for products in [["iPhone17,3"], ["AppleTV14,1"], []] {
+        for products in [["iPhone17,3"], ["AppleTV11,1"], []] {
             try CustomFirmwareDaemons.savePlist(manifest(products: products, entries: entries), to: url)
             #expect(throws: CustomFirmwareDaemons.DaemonError.self) {
                 try CustomFirmwareDaemons.filesystemLayout(buildManifest: url)
