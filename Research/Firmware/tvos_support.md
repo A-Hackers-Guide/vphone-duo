@@ -76,6 +76,7 @@ vm='tvos-26_4-beta'
   --block system-launchdaemons-boot-environment \
   --block system-locationd-cfw-disable_auto_cohort \
   --block system-mobileactivationd-boot-should_hactivate \
+  --block system-paravirt_gpu-cfw-heap_index_offset \
   --block system-systemversion-cfw-build_version \
   --block system-virtiosound-cfw-hal_plugin \
   --block system-virtualaudio-cfw-microphone_graph_chains \

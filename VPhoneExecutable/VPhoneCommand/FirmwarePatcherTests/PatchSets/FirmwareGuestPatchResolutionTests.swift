@@ -24,6 +24,7 @@ struct FirmwareGuestPatchResolutionTests {
         #expect(unvalidated.contains("system-vphoned-boot-install"))
         #expect(unvalidated.contains("system-launchdaemons-boot-environment"))
         #expect(unvalidated.contains("system-extensions-boot-gpu_bundle"))
+        #expect(unvalidated.contains(FirmwareGuestSystemPatchSet.paravirtGPUIndexOffset))
         #expect(unvalidated.contains("dyld-cfw-camera"))
         #expect(!unvalidated.contains("system-seputil-boot-gigalocker_uuid"))
         #expect(!unvalidated.contains("system-gigalocker-boot-rename"))
