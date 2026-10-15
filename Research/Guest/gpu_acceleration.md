@@ -331,6 +331,88 @@ On a guest, check these:
 This does not fix the driver. NRF or RawDF processing during a real capture,
 or any other heap texture upload, would still fault.
 
+## Heap Index Buffers
+
+Unity games drew their meshes scrambled: the right vertices joined into the
+wrong triangles, so scenes broke into spikes and stretched faces, and a
+full-screen quad came out as one triangle. Textures were correct. Seen on
+2026-10-14 in Wing Fighter on iPhone17,3 iOS 27.0.1 and in Subway Surfers on
+an iPad16,1 iPadOS 26.6.2 guest, both on the cloudOS 26.4 (23E5207q) driver,
+bundle 2.9.4, host macOS 27.0.1 on an M4. It is not the userland version: both
+bases showed it.
+
+### Measured
+
+A probe run from a launchd job draws a quad that should cover a 64×64 target
+and counts the lit pixels. Every path through plain buffers covered 100%:
+indexed and non-indexed draws, 16- and 32-bit indices, `indexBufferOffset`
+from 0 to 128 and unaligned, `baseVertex`, instancing, `stage_in` layouts with
+strides 12 to 44 and attribute offsets, half, short-normalised and
+uchar-normalised formats, several streams, per-instance step functions,
+`setVertexBytes`, shared buffers rewritten between frames, a 4 MiB
+write-combined ring, blit uploads into private buffers, a 64 MiB buffer read
+16 and 64 MiB in, and `newBufferWithBytesNoCopy`.
+
+Buffers carved from an `MTLHeap` split by role. A shared heap of 8 MiB, its
+first buffer filled with decoys, then six 64 KiB buffers each holding the
+quad's vertices at 0 and its indices at 1024:
+
+```
+heap buf#1..#6 vb only (plain ib)              cover 100.0%  OK
+heap buf#1..#6 ib only (plain vb)              cover   0.0%  BAD
+heap ib, indexBufferOffset 70000 (64-bit cmd)  cover 100.0%  OK
+heap ib, indexBufferOffset 1000 (16-bit cmd)   cover   0.0%  BAD
+heap ib instanceCount:1 variant                cover   0.0%  BAD
+heap ib baseVertex variant                     cover   0.0%  BAD
+```
+
+Vertex buffers from a heap work at any offset; index buffers from a heap fail,
+unless the draw's own `indexBufferOffset` is large. Compute kernels read and
+write heap buffers correctly, so the memory is right and the draw is wrong. One
+more symptom points the same way: every heap buffer reports `heapOffset` 0.
+
+### Why
+
+`-[PGSerializerRenderCommandEncoder drawIndexedPrimitives:…]` has two
+encodings per method: a compact command with 16-bit fields and a full one with
+64-bit fields. In the 23E5207q driver:
+
+| Method | Compact / full command | Choice | Truncating store |
+| --- | --- | --- | --- |
+| `…indexBufferOffset:` | 0x7 / 0x6 | `0x1421c cbnz x27` | `0x14284 strh w8, [x25, #0xa]` |
+| `…indexBufferOffset:instanceCount:` | 0x9 / 0x8 | `0x140b0 cbnz x28` | `0x14120 strh w8, [x26, #0xa]` |
+| `…instanceCount:baseVertex:baseInstance:` | 0x1d / 0x1c and 0xb / 0xa | `0x143b4 cbnz x20`, `0x143c4 cbz w24` | `0x14450 strh w8, [x26, #0x8]` |
+
+The choice tests only the draw's own arguments: `indexCount`,
+`indexBufferOffset` and, where the method has them, the instance and base
+values must each fit in 16 bits. The stored value is `[indexBuffer parentResourceOffset]
++ indexBufferOffset`, and `parentResourceOffset` is a sub-allocated buffer's
+offset in its heap, which the test never sees. An index buffer 64 KiB or more
+into a heap is read from `(heapOffset + indexBufferOffset) mod 65536`: another
+mesh's indices, which reference vertices that exist, so nothing faults. Vertex
+bindings go through `setBuffers:offsets:…` with 64-bit offsets, and the
+indirect `drawIndexedPrimitives:indexType:indexBuffer:indexBufferOffset:indirectBuffer:…`
+has only a 64-bit form.
+
+Two more methods store `parentResourceOffset` in 16 bits and are not patched:
+`drawPatches:…:patchIndexBuffer:…` and `drawIndexedPatches:…` (tessellation),
+and `-[PGSerializerBlitCommandEncoder copyFromTexture:…toBuffer:…]` at
+`0x230e0`. Mobile games rarely tessellate; the blit was not measured.
+
+### The patch
+
+`system-paravirt_gpu-cfw-heap_index_offset` turns each selecting branch into an
+unconditional `b` to the full command, which the driver already sends whenever
+a value does not fit, so the host accepts it. Each site is found by the
+compact command's `mov w2, #size ; mov w3, #command` pair, unique in `__text`,
+and the branch must lead to the full command's own pair; a driver laid out
+otherwise is refused unchanged (`CustomFirmwareParavirtGPUIndexOffset`). The
+cost is 12 to 28 bytes more per indexed draw.
+
+Verified on the iPad guest with the patched driver in place: every heap row
+above covers 100%, the plain-buffer probe is unchanged, and Subway Surfers
+draws its menu scene and gameplay correctly.
+
 ## Settings That Do Nothing Here
 
 Both are private properties of `VZMacGraphicsDeviceConfiguration`, tried on

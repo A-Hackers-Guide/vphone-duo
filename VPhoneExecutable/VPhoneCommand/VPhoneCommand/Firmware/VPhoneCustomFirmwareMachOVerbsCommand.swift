@@ -508,6 +508,39 @@ struct VPhoneCustomFirmwarePatchVirtualAudioCommand: ParsableCommand {
     }
 }
 
+// MARK: - patch-paravirt-gpu-index-offset
+
+struct VPhoneCustomFirmwarePatchParavirtGPUIndexOffsetCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-paravirt-gpu-index-offset",
+        abstract: "Send every indexed draw from the paravirtual GPU driver with 64-bit offsets",
+        discussion: """
+        The cloudOS 26.4 AppleParavirtGPUMetalIOGPUFamily picks a compact
+        drawIndexedPrimitives command when indexBufferOffset fits in 16 bits,
+        then stores the index buffer's heap offset plus indexBufferOffset in
+        that 16-bit field. An index buffer 64 KiB or more into an MTLHeap is
+        read from the wrong address, and meshes draw with another mesh's
+        indices. Each selecting cbz/cbnz becomes a b to the full command.
+
+        Each site is found by the compact command's mov w2/mov w3 setup, which
+        is unique in __text, and the branch must lead to the full command's
+        setup. Nothing is written unless all four resolve.
+
+        Idempotent: a site already branching to the full command is reported
+        and the file is not rewritten.
+        """,
+    )
+
+    @Argument(help: "Path to the AppleParavirtGPUMetalIOGPUFamily Mach-O, patched in place", transform: URL.init(fileURLWithPath:))
+    var binary: URL
+
+    func run() throws {
+        try requireUntruncatedMachO(at: binary)
+        // No re-attestation: the caller re-signs.
+        try CustomFirmwareParavirtGPUIndexOffset.patch(fileAt: binary, log: machOVerbLog)
+    }
+}
+
 enum VPhoneCustomFirmwareMachOVerbs {
     /// Registered into `vphone-cli cfw` by `VPhoneCustomFirmwareCommand`.
     ///
@@ -526,6 +559,7 @@ enum VPhoneCustomFirmwareMachOVerbs {
             VPhoneCustomFirmwarePatchVirtualAudioMuteCommand.self,
             VPhoneCustomFirmwarePatchVirtualAudioSPGateCommand.self,
             VPhoneCustomFirmwarePatchVirtualAudioVolumeGateCommand.self,
+            VPhoneCustomFirmwarePatchParavirtGPUIndexOffsetCommand.self,
         ]
     }
 }

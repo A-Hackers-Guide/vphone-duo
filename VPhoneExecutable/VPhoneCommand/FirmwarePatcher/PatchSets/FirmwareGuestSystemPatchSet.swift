@@ -24,6 +24,10 @@ public enum FirmwareGuestSystemPatchSet {
     public static let gyroscope = "system-backboardd-cfw-gyroscope"
     public static let attitude = "system-apps-cfw-attitude"
 
+    public static let paravirtGPUIndexOffset = "system-paravirt_gpu-cfw-heap_index_offset"
+    public static let paravirtGPUDriverPath =
+        "System/Library/Extensions/AppleParavirtGPUMetalIOGPUFamily.bundle/AppleParavirtGPUMetalIOGPUFamily"
+
     public static let locationdCohorting = "system-locationd-cfw-disable_auto_cohort"
     public static let jetsamDisableAllowed = "system-jetsamproperties-cfw-disable_allowed"
 
@@ -209,6 +213,18 @@ public enum FirmwareGuestSystemPatchSet {
                 summary: "Installs the GPU bundle the virtual display needs.",
                 target: .guestFile(path: "/System/Library/Extensions"),
                 bootEssential: true,
+            ),
+            VPhonePatchDeclaration(
+                identifier: paravirtGPUIndexOffset,
+                title: "GPU heap index buffers",
+                summary: """
+                Makes the paravirtual GPU driver send every indexed draw with 64-bit offsets. Its \
+                compact command keeps an index buffer's heap offset in 16 bits, so meshes whose \
+                indices sit 64 KiB or more into an MTLHeap (Unity games) draw with another \
+                mesh's indices.
+                """,
+                target: .guestExecutable(path: "/\(paravirtGPUDriverPath)"),
+                applicability: VPhonePatchApplicability(cloudOS: .release(major: 26, minor: 4)),
             ),
             VPhonePatchDeclaration(
                 identifier: "system-vphoned-boot-install",
