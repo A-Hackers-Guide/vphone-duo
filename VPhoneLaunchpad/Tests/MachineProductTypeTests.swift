@@ -30,6 +30,9 @@ struct MachineProductTypeTests {
         let phone = root.appendingPathComponent("research-01", isDirectory: true)
         try manager.createDirectory(at: phone.appendingPathComponent("FirmwareOriginals/iPhone17,3_27.0_24A435_Restore"), withIntermediateDirectories: true)
         expect(VPhoneLaunchpadMachine.guestProductType(in: phone) == "iPhone17,3", "iPhone restore tree")
+        let tv = root.appendingPathComponent("tv-01", isDirectory: true)
+        try manager.createDirectory(at: tv.appendingPathComponent("FirmwareOriginals/iPhoneOS_AppleTV5,3_26.6_23L773_Restore"), withIntermediateDirectories: true)
+        expect(VPhoneLaunchpadMachine.guestProductType(in: tv) == "AppleTV5,3", "Apple TV restore tree")
         expect(VPhoneLaunchpadMachine.guestProductType(in: root.appendingPathComponent("missing")) == nil, "nothing to read")
 
         // restore-info.json's device is the restore identity's, not the guest's.
@@ -42,6 +45,8 @@ struct MachineProductTypeTests {
         expect(machine.osName == "iOS" && !machine.isPad, "unknown type reads as iOS")
         machine.guestProductType = VPhoneLaunchpadMachine.guestProductType(in: pad)
         expect(machine.isPad && machine.osName == "iPadOS", "iPad guest")
+        machine.guestProductType = VPhoneLaunchpadMachine.guestProductType(in: tv)
+        expect(machine.isAppleTV && !machine.isPad && machine.osName == "tvOS", "Apple TV guest")
         print("Machine product type tests passed: config, restore trees, OS name")
     }
 }

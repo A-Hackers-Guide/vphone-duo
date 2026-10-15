@@ -198,7 +198,7 @@ struct VPhoneLaunchpadNewMachineView: View {
         // Off when there is no template to clone; it can still be turned on
         // to build one.
         .onChange(of: templateAvailable, initial: true) {
-            if let templateAvailable {
+            if let templateAvailable, !isAppleTVGuest {
                 usesTemplate = templateAvailable
             }
         }
@@ -240,9 +240,9 @@ struct VPhoneLaunchpadNewMachineView: View {
                         hardwarePage
                         advancedSections(.hardware)
                     case .template:
-                        VPhoneLaunchpadSlimmingSections(part: .template, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming)
+                        VPhoneLaunchpadSlimmingSections(part: .template, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, forAppleTV: isAppleTVGuest)
                     case .slimming:
-                        VPhoneLaunchpadSlimmingSections(part: .slimming, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming)
+                        VPhoneLaunchpadSlimmingSections(part: .slimming, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, forAppleTV: isAppleTVGuest)
                     case .firmware:
                         bundleSection
                         firmwareSourceSection
@@ -316,7 +316,7 @@ struct VPhoneLaunchpadNewMachineView: View {
                 // The count is for choosing; the closed menu names the device.
                 Text(verbatim: selectedGuest?.name ?? "")
             }
-            Picker(selectedGuest?.isPad == true ? "iPadOS" : "iOS", selection: $pairing) {
+            Picker(LocalizedStringKey(selectedGuest?.osName ?? "iOS"), selection: $pairing) {
                 ForEach((selectedGuest?.pairings ?? []).reversed()) { pairing in
                     let title = "\(pairing.ios.name) (\(pairing.build))"
                     Text(verbatim: isDownloaded(pairing) ? "\(title) ✓" : title).tag(Optional(pairing.id))
@@ -677,8 +677,29 @@ struct VPhoneLaunchpadNewMachineView: View {
 
     /// Select a guest device and its newest release.
     private func choose(_ productType: String?) {
+        let wasAppleTV = isAppleTVGuest
+        let wasGuest = guest
         guest = productType
         pairing = selectedGuest?.defaultPairing?.id
+        // Each Apple TV starts from a preset of its own.
+        guard isAppleTVGuest != wasAppleTV || isAppleTVGuest && wasGuest != productType else { return }
+        // An Apple TV guest is restored on its own with a tvOS preset:
+        // templates and slimming drive iOS Setup Assistant and its apps.
+        patches = VPhoneLaunchpadPatchSelection()
+        if isAppleTVGuest {
+            patches.preset = VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: productType)
+            usesTemplate = false
+            slimming.slim = false
+        } else {
+            usesTemplate = templateAvailable ?? true
+            slimming = VPhoneLaunchpadSlimming()
+        }
+        Task { await loadPatchCatalog() }
+    }
+
+    /// An Apple TV from the catalog, which is built without a template.
+    private var isAppleTVGuest: Bool {
+        !usesCustomSources && selectedGuest?.isAppleTV == true
     }
 
     /// Read again whenever the preset or the version changes: `inPreset`, which
@@ -726,8 +747,9 @@ struct VPhoneLaunchpadNewMachineView: View {
             bundleVersion: bundleVersion,
             iphoneSource: iphone,
             cloudOSSource: cloudOS,
-            // An iPad IPSW often covers two sizes; name the one chosen.
-            device: usesCustomSources ? nil : selectedGuest.flatMap { $0.isPad ? $0.productType : nil },
+            // An iPad IPSW often covers two sizes; name the one chosen. An
+            // Apple TV is named too, so the restore tree and log say which.
+            device: usesCustomSources ? nil : selectedGuest.flatMap { $0.isPad || $0.isAppleTV ? $0.productType : nil },
             cpuCount: cpu,
             memoryMB: memoryMB,
             diskSizeGB: diskSizeGB,
