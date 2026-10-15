@@ -1352,14 +1352,41 @@ struct VPhoneCustomFirmwareInstaller {
         // The paravirtual GPU bundle comes from the restore tree, so an
         // environment update cannot (re)install it; an installed guest already
         // carries it, so record it live when on and skip with a note.
+        var gpuBundleReinstalled = false
         if on("system-extensions-boot-gpu_bundle") {
             isolate(["system-extensions-boot-gpu_bundle"]) {
                 if let restore {
                     try installGPUBundle(restore: restore, system: system, owner: owner)
+                    gpuBundleReinstalled = true
                 } else {
                     print("  [·] system-extensions-boot-gpu_bundle: no restore tree; GPU bundle left as installed")
                 }
                 live.insert("system-extensions-boot-gpu_bundle")
+            }
+        }
+
+        // The driver's compact indexed-draw commands truncate a heap index
+        // buffer's offset to 16 bits. After the bundle step on purpose:
+        // `installGPUBundle` replaces the whole bundle, `.bak` included, so the
+        // backup taken here is always the staged driver — and a bundle it just
+        // reinstalled is already pristine, which is what "off" means.
+        let gpuIndexOffset = FirmwareGuestSystemPatchSet.paravirtGPUIndexOffset
+        let gpuDriver = FirmwareGuestSystemPatchSet.paravirtGPUDriverPath
+        let gpuBundle = "System/Library/Extensions/\(VPhonePCCGPUDriver.name)"
+        isolate([gpuIndexOffset]) {
+            if on(gpuIndexOffset) {
+                try patchMachO(
+                    system: system, work: work, path: gpuDriver,
+                    verbs: ["patch-paravirt-gpu-index-offset"],
+                    identifier: "com.apple.driver.AppleParavirtGPUMetalIOGPUFamily",
+                )
+                try sealGuestBundle(system: system, bundle: gpuBundle)
+                live.insert(gpuIndexOffset)
+            } else if try revertMachO(system: system, work: work, path: gpuDriver, bundle: gpuBundle) {
+                print("  [+] \(gpuIndexOffset): restored \(gpuDriver) from backup")
+            } else if priorGuest.contains(gpuIndexOffset), !gpuBundleReinstalled {
+                print("  [!] \(gpuIndexOffset): off now but no backup to revert; leaving the patched driver (not revertible)")
+                live.insert(gpuIndexOffset)
             }
         }
 
