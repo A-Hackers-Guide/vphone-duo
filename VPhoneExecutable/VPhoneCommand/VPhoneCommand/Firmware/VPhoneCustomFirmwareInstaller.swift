@@ -933,9 +933,18 @@ struct VPhoneCustomFirmwareInstaller {
         for path in paths {
             var metadata = stat()
             guard stat(path, &metadata) == 0, seen.insert(metadata.st_dev).inserted else { continue }
-            let capacity =
+            var capacity =
                 try URL(fileURLWithPath: path).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
                     .volumeAvailableCapacityForImportantUsage ?? 0
+            // Fallback: Some external volumes return 0 for volumeAvailableCapacityForImportantUsageKey.
+            // Use statfs as a fallback to get actual available space.
+            if capacity == 0 {
+                var fs = statfs()
+                if statfs(path, &fs) == 0 {
+                    capacity = Int64(fs.f_bavail) * Int64(fs.f_bsize)
+                    fputs("warning: Volume at \(path) reported 0 available space via resource keys, using statfs fallback: \(capacity / (1024 * 1024 * 1024)) GiB\n", stderr)
+                }
+            }
             guard capacity > 50 * 1024 * 1024 * 1024 else {
                 throw ValidationError("Less than 50 GiB of disk space is available on the volume holding \(path). Free up space, then install CFW again.")
             }
