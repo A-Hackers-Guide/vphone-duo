@@ -123,13 +123,16 @@ struct DeviceTreeGuestDeviceTests {
         unique: String = "J410AP",
         subtype: UInt32 = 2266,
         disablesStageManager: Bool = true,
+        idiom: String = "pad",
+        scale: UInt32 = 2,
+        appArchitecture: Property? = nil,
     ) -> Node {
         var product: [Property] = [
             .string("name", "product"),
-            .string("artwork-device-idiom", "pad"),
+            .string("artwork-device-idiom", idiom),
             .integer("artwork-device-subtype", subtype),
-            .integer("artwork-scale-factor", 2),
-            .string("product-name", "iPad"),
+            .integer("artwork-scale-factor", scale),
+            .string("product-name", idiom == "tv" ? "Apple TV" : "iPad"),
             .string("fdr-product-type", model),
             .string("sub-product-type", model),
             .string("unique-model", unique),
@@ -142,6 +145,9 @@ struct DeviceTreeGuestDeviceTests {
         ]
         if disablesStageManager {
             product.append(.integer("disable-chamois", 1))
+        }
+        if let appArchitecture {
+            product.append(appArchitecture)
         }
         let target = String(unique.dropLast(2))
         return Node(
@@ -157,6 +163,13 @@ struct DeviceTreeGuestDeviceTests {
                 Node(properties: [.string("name", "buttons"), .string("button-names", "volup")], children: []),
             ],
         )
+    }
+
+    /// J42d's TV idiom, scale and app architecture from the 23L243/23L5208m trees.
+    static func tvBoard() -> Node {
+        board(model: "AppleTV5,3", unique: "J42dAP", subtype: 0,
+              disablesStageManager: false, idiom: "tv", scale: 1,
+              appArchitecture: .string("app-macho-architecture", "arm64"))
     }
 
     // MARK: - Reading the result
@@ -222,16 +235,22 @@ struct DeviceTreeGuestDeviceTests {
         case iPhone
         case iPad
         case iPadRestore
+        case appleTV
+        case appleTVRestore
 
         var device: VPhoneGuestDevice {
-            self == .iPhone ? .default : .iPad16_1
+            switch self {
+            case .iPhone: .default
+            case .iPad, .iPadRestore: .iPad16_1
+            case .appleTV, .appleTVRestore: .appleTV5_3
+            }
         }
 
         var role: DeviceTreePatcher.TreeRole {
             switch self {
             case .iPhone: .shared
-            case .iPad: .installed
-            case .iPadRestore: .restore
+            case .iPad, .appleTV: .installed
+            case .iPadRestore, .appleTVRestore: .restore
             }
         }
     }
@@ -245,7 +264,7 @@ struct DeviceTreeGuestDeviceTests {
     ) throws -> (data: Data, records: [PatchRecord]) {
         let patcher = DeviceTreePatcher(
             data: tree, verbose: false, device: guest.device, role: guest.role,
-            sourceTree: board().serialized(),
+            sourceTree: (guest.device.family == .appleTV ? tvBoard() : board()).serialized(),
         )
         patcher.gate = gate
         let records = try patcher.findAll()
@@ -266,6 +285,50 @@ struct DeviceTreeGuestDeviceTests {
     }
 
     // MARK: - Tests
+
+    @Test func `a TV installed tree takes its donor app architecture while restore keeps the virtual board`() throws {
+        let (installedData, records) = try Self.patched(Self.tree.serialized(), as: .appleTV)
+        let installed = Self.read(installedData)
+        #expect(Self.string(installed["device-tree"]?["model"]) == "AppleTV5,3")
+        #expect(Self.string(installed["device-tree/product"]?["artwork-device-idiom"]) == "tv")
+        #expect(Self.integer(installed["device-tree/product"]?["artwork-scale-factor"]) == 1)
+        #expect(Self.string(installed["device-tree/product"]?["app-macho-architecture"]) == "arm64")
+        #expect(records.filter { $0.patchID == DeviceTreePatcher.tvAppArchitecturePatch }.count == 1)
+
+        let (restoreData, restoreRecords) = try Self.patched(Self.tree.serialized(), as: .appleTVRestore)
+        let restore = Self.read(restoreData)
+        #expect(Self.string(restore["device-tree"]?["model"]) == "iPhone99,11")
+        #expect(Self.string(restore["device-tree/product"]?["artwork-device-idiom"]) == "phone")
+        #expect(restore["device-tree/product"]?["app-macho-architecture"] == nil)
+        #expect(!restoreRecords.contains { $0.patchID == DeviceTreePatcher.tvAppArchitecturePatch })
+    }
+
+    @Test func `the TV architecture edit is declared and obeys its gate`() throws {
+        let declared = Set(FirmwareDeviceTreePatchSet.manifest.patches.map(\.identifier))
+        #expect(declared.contains(DeviceTreePatcher.tvAppArchitecturePatch))
+        let gate = VPhonePatchGate(declared: declared, enabled: declared.subtracting([DeviceTreePatcher.tvAppArchitecturePatch]))
+        let (data, records) = try Self.patched(Self.tree.serialized(), as: .appleTV, gate: gate)
+        #expect(Self.read(data)["device-tree/product"]?["app-macho-architecture"] == nil)
+        #expect(!records.contains { $0.patchID == DeviceTreePatcher.tvAppArchitecturePatch })
+        #expect(Self.string(Self.read(data)["device-tree/product"]?["artwork-device-idiom"]) == "tv")
+    }
+
+    @Test func `non-TV board presentation never edits app architecture`() throws {
+        let parser = DeviceTreePatcher(data: Data(), verbose: false)
+        for idiom in ["phone", "pad"] {
+            let source = Self.board(idiom: idiom, appArchitecture: .string("app-macho-architecture", "arm64"))
+            let edits = try DeviceTreePatcher.guestEdits(from: parser.parsePayload(source.serialized()))
+            #expect(!edits.contains { $0.patchID == DeviceTreePatcher.tvAppArchitecturePatch })
+            #expect(!edits.contains { $0.property == "app-macho-architecture" })
+        }
+    }
+
+    @Test func `a TV board architecture placeholder cannot be copied as data`() throws {
+        let source = Self.board(idiom: "tv", appArchitecture: .placeholder("app-macho-architecture", "arch"))
+        let parser = DeviceTreePatcher(data: Data(), verbose: false)
+        let parsed = try parser.parsePayload(source.serialized())
+        #expect(throws: (any Error).self) { try DeviceTreePatcher.guestEdits(from: parsed) }
+    }
 
     @Test func `an iPad's installed tree presents the iPad`() throws {
         let tree = try Self.patch(device: .iPad16_1, role: .installed)

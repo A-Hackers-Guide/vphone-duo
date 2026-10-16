@@ -68,6 +68,12 @@ final class VPhoneApplication: NSApplication {
             forwardGlobe(event, view: view)
             return false
         }
+        // tvOS consumes Escape as Back/Menu through its native keyboard.
+        // Bypass both the phone swipe and the menu equivalent, forwarding the
+        // matching press/release. Backspace remains available for text editing.
+        if event.keyCode == Self.escapeKeyCode, view.isTVGuest {
+            return false
+        }
         // Esc replays the guest's back gesture: iOS has no back key, and a
         // forwarded Escape only reads as cancel. The press and its release both
         // stop here, so the guest sees neither. An iPad has a real Esc key —

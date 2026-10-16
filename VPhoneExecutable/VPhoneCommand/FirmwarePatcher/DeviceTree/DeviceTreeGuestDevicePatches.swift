@@ -61,6 +61,7 @@ extension DeviceTreePatcher {
     static let iPadButtonsPatch = "devicetree-cfw-ipad_buttons"
     static let iPadIdentityPatch = "devicetree-cfw-ipad_identity"
     static let iPadAudioPatch = "devicetree-cfw-ipad_audio"
+    static let tvAppArchitecturePatch = "devicetree-cfw-tv_app_architecture"
     static let hapticsPatch = "devicetree-cfw-product_haptics_node"
     static let microphoneArrayPatch = "devicetree-cfw-product_audio_microphone_array"
 
@@ -156,6 +157,19 @@ extension DeviceTreePatcher {
                   property.flags & placeholderFlag == 0
             else { return nil }
             return property.value
+        }
+
+        // J42d's tvOS tree declares arm64 apps. Keep the source's concrete
+        // value rather than the virtual phone's architecture; this edit is TV
+        // presentation only and must not change existing phone or pad output.
+        if let idiom = value(sourceProduct, "artwork-device-idiom"),
+           String(decoding: idiom.prefix { $0 != 0 }, as: UTF8.self) == "tv"
+        {
+            guard let architecture = value(sourceProduct, "app-macho-architecture"), !architecture.isEmpty else {
+                throw PatcherError.patchSiteNotFound("DeviceTree: the TV board's tree has no concrete app-macho-architecture")
+            }
+            edits.append(GuestEdit(nodePath: product, property: "app-macho-architecture",
+                                   action: .set(architecture), patchID: tvAppArchitecturePatch))
         }
 
         for (name, patchID) in copiedProductProperties {

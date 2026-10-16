@@ -1,5 +1,7 @@
 @testable import FirmwarePatcher
 import Foundation
+import CryptoKit
+import VPhoneCoreKit
 import Testing
 
 /// Identity selection for the hybrid manifest.
@@ -17,6 +19,54 @@ import Testing
 /// pinned here without a firmware image, which is what these do.
 @Suite("Hybrid manifest identity selection")
 struct FirmwareManifestSelectionTests {
+    @Test
+    func `TV donor digests authenticate unchanged payloads using PCC SHA384`() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let payload = Data("unchanged donor payload".utf8)
+        try payload.write(to: root.appending(path: "payload.im4p"))
+        let names = ["Ap,SystemVolumeCanonicalMetadata", "OS", "StaticTrustCache", "SystemVolume"]
+        let entry: PlistDict = ["Digest": Data(Insecure.SHA1.hash(data: payload)),
+                                "Trusted": true, "Info": ["Path": "payload.im4p"]]
+        var components = PlistDict()
+        for name in names { components[name] = entry }
+        components["KernelCache"] = entry
+        let identity: PlistDict = ["Manifest": components]
+        let normalized = try FirmwareManifest.normalizeGuestComponentDigests(
+            identity, device: .appleTV5_3, restoreDir: root,
+        )
+        let result = try #require(normalized["Manifest"] as? PlistDict)
+        for name in names {
+            let component = try #require(result[name] as? PlistDict)
+            #expect(component["Digest"] as? Data == Data(SHA384.hash(data: payload)))
+            #expect(component["Trusted"] as? Bool == true)
+        }
+        #expect((result["KernelCache"] as? PlistDict)?["Digest"] as? Data == entry["Digest"] as? Data)
+        #expect(try Data(contentsOf: root.appending(path: "payload.im4p")) == payload)
+    }
+
+    @Test
+    func `phone and pad manifest digests remain unchanged without reading files`() throws {
+        let identity: PlistDict = ["Manifest": ["OS": ["Digest": Data([1, 2, 3])]]]
+        for device in [VPhoneGuestDevice.iPhone17_3, .iPad16_1] {
+            let result = try FirmwareManifest.normalizeGuestComponentDigests(
+                identity, device: device, restoreDir: URL(fileURLWithPath: "/missing"),
+            )
+            #expect(NSDictionary(dictionary: result).isEqual(to: identity))
+        }
+    }
+
+    @Test
+    func `TV digest normalization rejects paths outside the restore tree`() {
+        let identity: PlistDict = ["Manifest": ["Ap,SystemVolumeCanonicalMetadata": ["Info": ["Path": "../outside"]]]]
+        #expect(throws: (any Error).self) {
+            try FirmwareManifest.normalizeGuestComponentDigests(
+                identity, device: .appleTV5_3, restoreDir: URL(fileURLWithPath: "/missing"),
+            )
+        }
+    }
+
     // MARK: - Fixtures
 
     static func identity(

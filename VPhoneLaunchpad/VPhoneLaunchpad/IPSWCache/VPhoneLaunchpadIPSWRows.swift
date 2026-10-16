@@ -136,8 +136,9 @@ nonisolated enum VPhoneLaunchpadIPSWRows {
         switch kind {
         case .iPhone: 0
         case .iPad: 1
-        case .cloudOS: 2
-        case .unknown: 3
+        case .appleTV: 2
+        case .cloudOS: 3
+        case .unknown: 4
         }
     }
 
@@ -157,6 +158,7 @@ nonisolated enum VPhoneLaunchpadIPSWRows {
         switch kind {
         case .iPhone: String(localized: "iPhone")
         case .iPad: String(localized: "iPad")
+        case .appleTV: String(localized: "Apple TV")
         case .cloudOS: String(localized: "cloudOS")
         case .unknown: String(localized: "Unknown")
         }

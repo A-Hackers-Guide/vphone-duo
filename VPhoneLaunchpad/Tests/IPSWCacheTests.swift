@@ -39,6 +39,11 @@ struct IPSWCacheTests {
         expect(pad?.productTypes == ["iPad16,1", "iPad16,2"], "\(String(describing: pad?.productTypes))")
         expect(pad?.kind == .iPad && pad?.title == "iPadOS 26.6.2 (23G90)", "iPad title")
 
+        let tv = VPhoneLaunchpadIPSW(fileName: "AppleTV5,3_26.4_23L243_Restore.ipsw")
+        expect(tv?.productTypes == ["AppleTV5,3"], "TV product type")
+        expect(tv?.kind == .appleTV && tv?.title == "tvOS 26.4 (23L243)", "TV title")
+        expect(VPhoneLaunchpadIPSWRows.kindLabel(.appleTV) == "Apple TV", "TV family label")
+
         let cachedPad = VPhoneLaunchpadIPSW(fileName: "iPad16_1_iPad16_2_26.6.2_23G90_Restore-0123456789ab.ipsw")
         expect(cachedPad?.productTypes == ["iPad16,1", "iPad16,2"], "\(String(describing: cachedPad?.productTypes))")
 

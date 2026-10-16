@@ -40,6 +40,17 @@ class VPhoneVirtualMachineKeySender {
 
     // MARK: - Hardware Keys (Consumer Page 0x0C)
 
+    /// The TV's Back/Menu key through the same native keyboard as arrows and
+    /// Return. This works without the guest daemon, including during setup.
+    func sendTVBack() {
+        guard let keyboard = firstKeyboard else { return }
+        for type in [0, 1] {
+            if let event = Dynamic._VZKeyEvent(type: type, keyCode: UInt16(0x35)).asAnyObject {
+                Dynamic(keyboard).sendKeyEvents([event] as NSArray)
+            }
+        }
+    }
+
     func sendHome() {
         guard requireConnection() else { return }
         control.sendHIDPress(page: 0x0C, usage: 0x40)

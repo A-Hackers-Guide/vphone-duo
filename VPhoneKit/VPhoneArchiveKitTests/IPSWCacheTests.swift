@@ -533,6 +533,30 @@ struct IPSWCacheTests {
         }
     }
 
+    @Test func `a known TV donor pairs with cloudOS without admitting unknown TVs`() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let tv = try ipsw(in: root, "tv", productTypes: ["AppleTV5,3"], deviceClasses: ["J42DAP"])
+        let cloud = try ipsw(in: root, "cloud", productTypes: ["iProd99,1"], deviceClasses: ["vresearch101ap", "vphone600ap"])
+        let otherTV = try ipsw(in: root, "other-tv", productTypes: ["AppleTV14,1"], deviceClasses: ["j255ap"])
+
+        try VPhoneIPSWCache.checkPair(iPhone: tv, cloudOS: cloud)
+        #expect(VPhoneIPSWCache.guestDevice(for: tv) == .appleTV5_3)
+        #expect(tv.deviceClasses == ["j42dap"])
+        #expect(VPhoneIPSWCache.guestProductTypes.contains("AppleTV5,3"))
+        #expect {
+            try VPhoneIPSWCache.checkPair(iPhone: otherTV, cloudOS: cloud)
+        } throws: { error in
+            if case .notIPhoneSource? = error as? VPhoneIPSWCache.Error { true } else { false }
+        }
+        #expect {
+            try VPhoneIPSWCache.checkPair(iPhone: cloud, cloudOS: tv)
+        } throws: { error in
+            if case .swappedSources? = error as? VPhoneIPSWCache.Error { true } else { false }
+        }
+    }
+
     @Test func `an iPad IPSW the guest device list knows pairs with cloudOS`() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

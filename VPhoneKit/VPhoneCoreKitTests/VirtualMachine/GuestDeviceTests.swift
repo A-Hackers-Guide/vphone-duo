@@ -17,6 +17,34 @@ struct GuestDeviceTests {
     }
 
     @Test
+    func `a supported TV donor is detected without admitting unknown TVs`() {
+        let tv = ["SupportedProductTypes": ["AppleTV5,3"]]
+        #expect(VPhoneGuestDevice.detect(buildManifest: tv) == .appleTV5_3)
+        #expect(VPhoneGuestDevice.covered(by: tv) == [.appleTV5_3])
+        #expect(VPhoneGuestDevice.detect(buildManifest: ["SupportedProductTypes": ["AppleTV14,1"]]) == nil)
+        #expect(!VPhoneGuestDevice.appleTV5_3.isPad)
+        #expect(VPhoneGuestDevice.appleTV5_3.presentsBoard)
+        #expect(VPhoneGuestDevice.appleTV5_3.family.osName == "tvOS")
+        #expect(VPhoneGuestDevice.appleTV5_3.boardDeviceTreePath == "Firmware/all_flash/DeviceTree.j42dap.im4p")
+        #expect(VPhoneGuestDevice.appleTV5_3.restoreTreeName(version: "26.4", build: "23L243")
+            == "iPhoneOS_AppleTV5,3_26.4_23L243_Restore")
+    }
+
+    @Test
+    func `a TV guest persists its identity and provisional landscape canvas`() throws {
+        let manifest = VPhoneVirtualMachineManifest.newVM().updating(guestDevice: .appleTV5_3)
+        #expect(manifest.guestProductType == "AppleTV5,3")
+        #expect(manifest.screenConfig == .init(width: 1920, height: 1080, pixelsPerInch: 72, scale: 1.0))
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).plist")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try manifest.write(to: url)
+        let loaded = try VPhoneVirtualMachineManifest.load(from: url)
+        #expect(loaded.guestDevice == .appleTV5_3)
+        #expect(loaded.screenConfig == manifest.screenConfig)
+        #expect(loaded.updating(cpuCount: 4).guestProductType == "AppleTV5,3")
+    }
+
+    @Test
     func `an iPad restore tree keeps the prefix every reader matches`() {
         let name = VPhoneGuestDevice.iPad16_1.restoreTreeName(version: "26.6.2", build: "23G90")
         #expect(name == "iPhoneOS_iPad16,1_26.6.2_23G90_Restore")

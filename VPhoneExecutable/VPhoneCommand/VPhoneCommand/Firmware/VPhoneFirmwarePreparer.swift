@@ -1,8 +1,10 @@
+import ArgumentParser
 import Darwin
 import FirmwarePatcher
 import Foundation
 import VPhoneArchiveKit
 import VPhoneCoreKit
+import VPhonePatchKit
 
 /// Builds one restore tree from two IPSWs without a shell or a second full
 /// copy of either source archive. All extraction and merging happens in one
@@ -71,6 +73,26 @@ enum VPhoneFirmwarePreparer {
             downloadConnections: downloadConnections,
         )
 
+        // Preparation must use the same selection as patch/install: a serial
+        // configuration with the GPU disabled must not restore another PCC VM
+        // merely to recover a driver that will never be installed.
+        let selection = VPhonePatchPresetStore.selection(forVM: bundle.url)
+        guard let preset = VPhonePatchPresetStore.preset(named: selection.presetIdentifier) else {
+            let available = VPhonePatchPresetStore.availablePresets().map(\.identifier)
+            throw ValidationError("Unknown patch preset '\(selection.presetIdentifier)'. Available: \(available.joined(separator: ", "))")
+        }
+        let pipeline = FirmwarePipeline(
+            vmDirectory: bundle.url,
+            variant: .jb,
+            verbose: false,
+            preset: preset,
+            blockedPatches: Set(selection.blockedPatches),
+            allowedPatches: Set(selection.allowedPatches),
+        )
+        guard let plan = try pipeline.resolvePlan(iOSBase: VPhoneVersion(phone.version), cloudOS: VPhoneVersion(cloud.version)) else {
+            throw ValidationError("Patch preset '\(selection.presetIdentifier)' did not resolve.")
+        }
+
         let name = device.restoreTreeName(version: phone.version, build: phone.build)
         let destination = bundle.url.appendingPathComponent(name)
         let staging = bundle.url.appendingPathComponent(".firmware-prepare-\(UUID().uuidString)")
@@ -98,45 +120,49 @@ enum VPhoneFirmwarePreparer {
         let originalManifest = phoneTree.appendingPathComponent("BuildManifest.plist")
         try clone(originalManifest, to: phoneTree.appendingPathComponent("iPhone-BuildManifest.plist"))
         try FirmwareManifest.generate(iPhoneDir: phoneTree, cloudOSDir: cloudTree, device: device, verbose: true)
-        let cachedDriver = cachedGPUDriver(for: cloud)
-        if let gpuDriverBundle {
-            print("[*] Staging GPU driver from local bundle...")
-            try VPhonePCCGPUDriver.stage(
-                from: gpuDriverBundle,
+        if plan.isEnabled("system-extensions-boot-gpu_bundle") {
+            let cachedDriver = cachedGPUDriver(for: cloud)
+            if let gpuDriverBundle {
+                print("[*] Staging GPU driver from local bundle...")
+                try VPhonePCCGPUDriver.stage(
+                    from: gpuDriverBundle,
+                    into: phoneTree,
+                    expectedPlatformVersion: cloud.version,
+                )
+            } else if (try? VPhonePCCGPUDriver.stage(
+                from: cachedDriver,
                 into: phoneTree,
                 expectedPlatformVersion: cloud.version,
-            )
-        } else if (try? VPhonePCCGPUDriver.stage(
-            from: cachedDriver,
-            into: phoneTree,
-            expectedPlatformVersion: cloud.version,
-        )) != nil {
-            print("[+] GPU driver reused from cloudOS \(cloud.version) (\(cloud.build)) cache")
-        } else {
-            print("[*] Restoring cloudOS in a temporary vphone VM to extract its GPU driver...")
-            try VPhonePCCGPURecovery.stage(
-                cloudOSDirectory: cloudTree,
-                into: phoneTree,
-                expectedPlatformVersion: cloud.version,
-            )
-            // Every later machine on this cloudOS build skips the restore.
-            do {
-                try storeGPUDriver(VPhonePCCGPUDriver.stagedBundle(in: phoneTree), at: cachedDriver)
-            } catch {
-                fputs("warning: could not cache the GPU driver at \(cachedDriver.path): \(error.localizedDescription)\n", stderr)
+            )) != nil {
+                print("[+] GPU driver reused from cloudOS \(cloud.version) (\(cloud.build)) cache")
+            } else {
+                print("[*] Restoring cloudOS in a temporary vphone VM to extract its GPU driver...")
+                try VPhonePCCGPURecovery.stage(
+                    cloudOSDirectory: cloudTree,
+                    into: phoneTree,
+                    expectedPlatformVersion: cloud.version,
+                )
+                // Every later machine on this cloudOS build skips the restore.
+                do {
+                    try storeGPUDriver(VPhonePCCGPUDriver.stagedBundle(in: phoneTree), at: cachedDriver)
+                } catch {
+                    fputs("warning: could not cache the GPU driver at \(cachedDriver.path): \(error.localizedDescription)\n", stderr)
+                }
             }
-        }
 
-        let source = resources.gpuCompilerPlugin
-        guard fm.fileExists(atPath: source.path) else { throw Error.missingComponent(source) }
-        print("[*] Merging bundled GPU compiler plugin...")
-        let pluginName = "libAppleParavirtCompilerPluginIOGPUFamily.dylib"
-        let destinationPlugin = VPhonePCCGPUDriver.stagedBundle(in: phoneTree).appendingPathComponent(pluginName)
-        if fm.fileExists(atPath: destinationPlugin.path) {
-            try fm.removeItem(at: destinationPlugin)
+            let source = resources.gpuCompilerPlugin
+            guard fm.fileExists(atPath: source.path) else { throw Error.missingComponent(source) }
+            print("[*] Merging bundled GPU compiler plugin...")
+            let pluginName = "libAppleParavirtCompilerPluginIOGPUFamily.dylib"
+            let destinationPlugin = VPhonePCCGPUDriver.stagedBundle(in: phoneTree).appendingPathComponent(pluginName)
+            if fm.fileExists(atPath: destinationPlugin.path) {
+                try fm.removeItem(at: destinationPlugin)
+            }
+            try fm.copyItem(at: source, to: destinationPlugin)
+            try fm.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: destinationPlugin.path)
+        } else {
+            print("[*] GPU bundle is off in the patch selection; skipping driver recovery and compiler plugin staging")
         }
-        try fm.copyItem(at: source, to: destinationPlugin)
-        try fm.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: destinationPlugin.path)
 
         // The destination did not exist at entry and the staging directory is
         // on the same volume. One rename exposes the complete restore tree.

@@ -22,6 +22,20 @@ import Foundation
 import VPhonePatchKit
 
 public enum FirmwareGuestPatchResolution {
+    /// TV admits the gigalocker repair and opt-in dyld TPRO compatibility.
+    /// Payloads, other cache patches and shell integration need a TV port and
+    /// validation before the installer can select them.
+    public static let tvSupportedGuestPatches: Set<String> = [
+        "system-seputil-boot-gigalocker_uuid",
+        "system-gigalocker-boot-rename",
+        FirmwareGuestSystemPatchSet.tvTPRO,
+    ]
+
+    public static func unvalidatedTVGuestPatches(enabled: Set<String>) -> [String] {
+        let admitted = tvSupportedGuestPatches
+        return enabled.intersection(guestTargetIdentifiers).subtracting(admitted).sorted()
+    }
+
     /// Every bundled-set patch whose bytes the guest half of an install writes —
     /// the dyld shared cache, a guest Mach-O, its entitlements, a guest file, or
     /// the Preboot device tree. The complement is the boot chain, which `fw

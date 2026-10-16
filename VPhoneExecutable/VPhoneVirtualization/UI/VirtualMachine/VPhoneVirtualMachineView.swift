@@ -10,6 +10,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     /// Whether Esc replays the back gesture (an iPhone, which has no Esc key)
     /// or reaches the guest as Esc (an iPad). See `VPhoneApplication`.
     var escapeIsBackGesture = true
+    var isTVGuest = false
     var hardwareKeyboardEnabled = true
 
     /// Whether trackpad scroll/pinch gestures are replayed as guest touches.
@@ -760,6 +761,10 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     private var backGestureInFlight = false
 
     func performBackGesture() {
+        if isTVGuest {
+            keySender?.sendTVBack()
+            return
+        }
         guard !backGestureInFlight, let display = recordingGraphicsDisplay else { return }
         let size = display.sizeInPixels
         guard size.width > 0, size.height > 0 else { return }

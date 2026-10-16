@@ -82,7 +82,6 @@ struct VPhoneCustomFirmwareInstaller {
     /// cache travels with it. `verifiedDyldCacheDirectory` admits it — it is a
     /// plain single-link file, and `enumerateChunks` never mistakes a dotfile
     /// for a `dyld_shared_cache_arm64e*` chunk.
-    private static let dscCacheRelative = "System/Cryptexes/OS/System/Library/Caches/com.apple.dyld"
     private static let dscUndoLogLeaf = ".vphone-dsc-undo.json"
 
     /// Root-owned and sticky, outside every user's tree. The work folder is
@@ -200,6 +199,16 @@ struct VPhoneCustomFirmwareInstaller {
         let restore = mode == .full
             ? try restoreTree(in: bundleDirectory, path: bundlePath, owner: callerUID)
             : nil
+        let device = configuredGuestDevice(in: bundleDirectory) ?? guestDevice(of: restore)
+        if device.family == .appleTV {
+            guard let plan else {
+                throw ValidationError("tvOS installation needs an explicit patch plan. Resolve a TV selection with `fw set-patches` and `fw patch` first.")
+            }
+            let unvalidated = FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: Set(plan.enabledPatches))
+            guard unvalidated.isEmpty else {
+                throw ValidationError("These guest patches have not been validated for tvOS. Block them with `fw set-patches` before installation: \(unvalidated.joined(separator: ", "))")
+            }
+        }
         // Before any disk work, so what it says is not buried under it.
         recoverBoardDeviceTree(in: bundleDirectory, restore: restore, plan: plan, invokingUser: invokingUser)
 
@@ -218,6 +227,12 @@ struct VPhoneCustomFirmwareInstaller {
         // and a failed install leaves the original untouched.
         let image: URL
         let cloned = try work.directory.clone(disk, to: "Disk.img")
+        if device.family == .appleTV {
+            // A paired dyld edit must never fall back to mutating the live disk.
+            // Its errors propagate below, so this clone is committed only after
+            // the whole install succeeds.
+            try CustomFirmwareTVTPROInstallation.requirePrivateClone(cloned)
+        }
         if cloned {
             image = work.file("Disk.img")
         } else {
@@ -334,7 +349,9 @@ struct VPhoneCustomFirmwareInstaller {
             // `installVphoned`, so it is the signal that the guest is not
             // pristine. A VM that was never installed has nothing applied, so
             // its prior set is empty whatever a stale plan might say.
-            let wasInstalled = (try? systemRoot.exists("System/Library/xpc/launchd.plist.bak")) ?? false
+            let hasLaunchdBackup = (try? systemRoot.exists("System/Library/xpc/launchd.plist.bak")) ?? false
+            // TV installs deliberately omit vphoned and its launchd backup.
+            let wasInstalled = hasLaunchdBackup || (device.family == .appleTV && receiptGuest != nil)
             priorGuest = receiptGuest ?? (wasInstalled ? priorFallback : [])
             switch mode {
             case .kernelUpdate:
@@ -344,6 +361,7 @@ struct VPhoneCustomFirmwareInstaller {
                     throw ValidationError("A full CFW install needs a prepared restore tree.")
                 }
                 liveGuest = try applyGuestPatches(
+                    guestDevice: device,
                     system: systemRoot,
                     xart: xartRoot,
                     restore: restore,
@@ -362,6 +380,7 @@ struct VPhoneCustomFirmwareInstaller {
                     )
                 }
                 liveGuest = try applyGuestPatches(
+                    guestDevice: device,
                     system: systemRoot,
                     xart: nil,
                     restore: nil,
@@ -386,7 +405,6 @@ struct VPhoneCustomFirmwareInstaller {
         let boardDeviceTree = try stageBoardDeviceTree(in: bundleDirectory, work: work)
         // An environment update has no restore tree to read the device from;
         // the VM's configuration says which board repair its tree takes.
-        let device = configuredGuestDevice(in: bundleDirectory) ?? guestDevice(of: restore)
         try liveGuest.formUnion(patchPreboot(
             volumes: volumes,
             work: work,
@@ -400,15 +418,18 @@ struct VPhoneCustomFirmwareInstaller {
         // Selected patches this guest has nothing for, so the receipt does not
         // report them as missing forever: the board audio repair on an
         // iPhone17,3, which has no board of its own to present, the iPhone
-        // product repair on an iPad, and the build spoof with no value set. A
+        // product repair on a non-iPhone, and the build spoof with no value set. A
         // guest whose board tree could not be recovered is not among them: its
         // repair is missing, and drift should keep saying so.
         var notApplicableGuest = Set<String>()
         if !device.presentsBoard {
             notApplicableGuest.insert(FirmwareGuestSystemPatchSet.prebootBoardAudio)
         }
-        if device.isPad {
+        if device.family != .iPhone {
             notApplicableGuest.insert(FirmwareGuestSystemPatchSet.prebootIPhoneProduct)
+        }
+        if device.family != .appleTV {
+            notApplicableGuest.insert(FirmwareGuestSystemPatchSet.tvTPRO)
         }
         if buildVersion?.isEmpty ?? true {
             notApplicableGuest.insert("system-systemversion-cfw-build_version")
@@ -437,11 +458,15 @@ struct VPhoneCustomFirmwareInstaller {
             try work.directory.setMode("Disk.img", disk.mode & 0o777)
             try work.directory.rename("Disk.img", to: "Disk.img", in: bundleDirectory)
         }
-        try installSignedDaemonCopy(
-            in: bundleDirectory,
-            work: work,
-            owner: invokingUser.map { ($0.uid, $0.gid) },
-        )
+        // A serial-only research selection can leave vphoned off. Its host
+        // copy exists only after installVphoned staged it successfully.
+        if try work.directory.isRegularFile("vphoned") {
+            try installSignedDaemonCopy(
+                in: bundleDirectory,
+                work: work,
+                owner: invokingUser.map { ($0.uid, $0.gid) },
+            )
+        }
         // Record what is live in the guest now. Written through the pinned
         // bundle descriptor as the caller, 0777 like every other host VM
         // artifact, replacing only the `Guest` part so a boot-chain part a
@@ -455,7 +480,11 @@ struct VPhoneCustomFirmwareInstaller {
         )
         switch mode {
         case .full:
-            print("[+] CFW system install complete; vphoned is installed, no package bootstrap was staged")
+            if liveGuest.contains("system-vphoned-boot-install") {
+                print("[+] CFW system install complete; vphoned is installed, no package bootstrap was staged")
+            } else {
+                print("[+] CFW system install complete; vphoned is not installed")
+            }
         case .environmentOnly:
             print("[+] Guest environment updated; start the VM to pick it up")
         case .kernelUpdate:
@@ -1001,7 +1030,8 @@ struct VPhoneCustomFirmwareInstaller {
     /// (a library absent from the VM stays absent, no `/vh` alias is created) and
     /// no restore-tree step runs.
     ///
-    /// Each patch runs in isolation: one patch failing — a verb rejecting an
+    /// Paired TV dyld updates abort on failure and discard the private disk
+    /// clone, preserving the original disk and receipt. Other patches run in isolation: one patch failing — a verb rejecting an
     /// unexpected prologue on an older VM, say — is reported and the patch is
     /// left in its prior state, but the run continues and the vphoned redeploy,
     /// done first, is never blocked. Non-patch failures (a volume that will not
@@ -1009,6 +1039,7 @@ struct VPhoneCustomFirmwareInstaller {
     /// failures; they are printed as `[!]` lines and summarised at the end.
     @discardableResult
     private func applyGuestPatches(
+        guestDevice: VPhoneGuestDevice,
         system: VPhoneConfinedDirectory,
         xart: VPhoneConfinedDirectory?,
         restore: VPhoneConfinedDirectory?,
@@ -1111,7 +1142,13 @@ struct VPhoneCustomFirmwareInstaller {
         //    still has the stock 6 GiB and must still be refused. A VM with no
         //    kernelcache receipt falls back to the patch's applicability, the
         //    27.x base.
-        let dsc = try verifiedDyldCacheDirectory(system: system)
+        // The selected TV donor has a native arm64 cache. Keep its directory
+        // intact; cryptex symlinks would point into images it does not ship.
+        let cacheRelative = guestDevice.family == .appleTV
+            ? "System/Library/Caches/com.apple.dyld"
+            : "System/Cryptexes/OS/System/Library/Caches/com.apple.dyld"
+        let cacheArchitecture = guestDevice.family == .appleTV ? "arm64" : "arm64e"
+        let dsc = try verifiedDyldCacheDirectory(system: system, relative: cacheRelative)
         let widenedRegion = kernelPatches.map { $0.contains("kernel-boot-shared_region_size") }
             ?? version.hasPrefix("27.")
         let kernelRegionSize = widenedRegion
@@ -1120,12 +1157,27 @@ struct VPhoneCustomFirmwareInstaller {
         do {
             try DyldSharedCacheMaxSlidePatcher.requireFitsAtSlideZero(
                 chunksDirectory: URL(fileURLWithPath: dsc),
+                architecture: cacheArchitecture,
                 kernelRegionSize: kernelRegionSize,
             )
         } catch let overflow as DyldSharedCacheMaxSlidePatcher.RegionOverflow {
             throw overflow
         } catch {
             print("  [!] shared region check skipped: \(error)")
+        }
+
+        if guestDevice.family == .appleTV {
+            let identifier = FirmwareGuestSystemPatchSet.tvTPRO
+            let enabled = on(identifier)
+            // Unlike independent optional patches, dyld's two copies form a
+            // boot-critical pair. Abort on any error; never commit a partial
+            // pair or describe it as unchanged via isolate's catch-and-continue.
+            let applied = try updateTVDyld(
+                identifier: identifier, enabled: enabled, system: system, work: work,
+                cacheDirectory: URL(fileURLWithPath: dsc), cacheRelative: cacheRelative,
+                priorApplied: priorGuest.contains(identifier),
+            )
+            if applied { live.insert(identifier) }
         }
 
         // 1. The redeploy first, so no later patch failure can block it. vphoned
@@ -1182,7 +1234,7 @@ struct VPhoneCustomFirmwareInstaller {
             ("dyld-cfw-camera", "patch-camera-dsc", [dsc, (dsc as NSString).appendingPathComponent("dyld_shared_cache_arm64e")]),
         ]
         applyDyldPatches(
-            dyld, dsc: dsc, system: system, plan: plan, priorGuest: priorGuest,
+            dyld, dsc: dsc, cacheRelative: cacheRelative, system: system, plan: plan, priorGuest: priorGuest,
             live: &live, failures: &failures,
         )
 
@@ -1505,6 +1557,7 @@ struct VPhoneCustomFirmwareInstaller {
     private func applyDyldPatches(
         _ dyld: [(id: String, verb: String, args: [String])],
         dsc: String,
+        cacheRelative: String,
         system: VPhoneConfinedDirectory,
         plan: VPhoneVirtualMachinePatchPlan?,
         priorGuest: Set<String>,
@@ -1515,7 +1568,7 @@ struct VPhoneCustomFirmwareInstaller {
             plan?.isEnabled(id) ?? !FirmwareGuestSystemPatchSet.settingsRowPatches.contains(id)
         }
         let undoAbsolute = (dsc as NSString).appendingPathComponent(Self.dscUndoLogLeaf)
-        let undoRelative = "\(Self.dscCacheRelative)/\(Self.dscUndoLogLeaf)"
+        let undoRelative = "\(cacheRelative)/\(Self.dscUndoLogLeaf)"
         let undoLog = (try? system.readData(undoRelative)).flatMap { try? DyldSharedCacheUndoLog.decode($0) }
         let recorded = undoLog?.patchIDs ?? []
 
@@ -1695,8 +1748,7 @@ struct VPhoneCustomFirmwareInstaller {
     /// files in it, and hand the tools that verified path. The path is
     /// stable: the volume is mounted inside the root-only work folder and
     /// nothing else writes to it during the install.
-    private func verifiedDyldCacheDirectory(system: VPhoneConfinedDirectory) throws -> String {
-        let relative = "System/Cryptexes/OS/System/Library/Caches/com.apple.dyld"
+    private func verifiedDyldCacheDirectory(system: VPhoneConfinedDirectory, relative: String) throws -> String {
         let directory = try system.directory(relative)
         for name in try directory.entries() {
             guard let metadata = try directory.status(name) else { continue }
@@ -1726,7 +1778,10 @@ struct VPhoneCustomFirmwareInstaller {
         if !(populated(os) && populated(app)) {
             let manifest = work.file("iPhone-BuildManifest.plist")
             try restore.readData("iPhone-BuildManifest.plist").write(to: manifest)
-            let paths = try CustomFirmwareDaemons.cryptexPaths(buildManifest: manifest)
+            guard case let .cryptex(paths) = try CustomFirmwareDaemons.filesystemLayout(buildManifest: manifest) else {
+                print("[*] Monolithic tvOS system image: no cryptex files to install")
+                return
+            }
             // Root attaches and decrypts only private copies of the images,
             // taken from descriptors verified to be the caller's own files.
             let systemImage = try stageCryptexImage(paths.systemOS, from: restore, as: "SystemOS-source.dmg", work: work, owner: owner)
@@ -2094,7 +2149,7 @@ struct VPhoneCustomFirmwareInstaller {
             // A board-presenting iPhone's restored tree takes the board's
             // values only where vphone600 has a placeholder; Camera Control
             // and the Action Button are added here.
-            if !guestDevice.isPad {
+            if guestDevice.family == .iPhone {
                 repairGroup.append((FirmwareGuestSystemPatchSet.prebootIPhoneProduct, "patch-dt-iphone-product", [boardDeviceTree.path]))
             }
         }
@@ -2535,6 +2590,74 @@ struct VPhoneCustomFirmwareInstaller {
             options: .init(identifier: identifier, entitlements: entitlements, mergesExisting: true, style: .appleAdHoc),
         )
         try system.replaceFile(path, fromFileAt: staged, mode: 0o755, owner: Self.guestOwner)
+    }
+
+    private func updateTVDyld(
+        identifier: String,
+        enabled: Bool,
+        system: VPhoneConfinedDirectory,
+        work: WorkDirectory,
+        cacheDirectory: URL,
+        cacheRelative: String,
+        priorApplied: Bool,
+    ) throws -> Bool {
+        let path = "usr/lib/dyld"
+        let backup = "\(path).bak"
+        let undoPath = "\(cacheRelative)/\(Self.dscUndoLogLeaf)"
+        // A corrupt or unreadable undo record is not an absent record: never
+        // overwrite it and lose the only original cache bytes.
+        let undo = try system.exists(undoPath)
+            ? DyldSharedCacheUndoLog.decode(system.readData(undoPath))
+            : nil
+        let hasUndo = undo?.patchIDs.contains(identifier) == true
+        if !enabled, !priorApplied, !hasUndo { return false }
+        try CustomFirmwareTVTPROInstallation.validateBackup(
+            priorApplied: priorApplied, hasUndo: hasUndo,
+            backupExists: system.exists(backup), backupIsRegular: system.isRegularFile(backup),
+        )
+        let chunks = try DyldSharedCacheChunkSet(directory: cacheDirectory, architecture: "arm64", captureUndo: enabled)
+        func patchStandalone(_ staged: URL) throws {
+            try CustomFirmwareTVTPRO.patchStandalone(fileAt: staged, log: { print($0) })
+        }
+        func patchCache(dryRun: Bool = false) throws -> Bool {
+            return try CustomFirmwareTVTPRO.patchCache(in: chunks, dryRun: dryRun, log: { print($0) }).outcome == .alreadyPatched
+        }
+        if enabled {
+            if try !system.exists(backup) { try system.copyFile(from: path, to: backup) }
+            let staged = work.file("dyld-tv")
+            try work.directory.removeItem("dyld-tv")
+            try system.copyFile(from: backup, to: "dyld-tv", in: work.directory)
+            if try patchCache(dryRun: true), !hasUndo {
+                throw ValidationError("\(identifier): cached dyld is already modified but has no undo record.")
+            }
+            // Fully validate and re-attest the private standalone copy before
+            // changing the cache; a bad signature must not leave half a pair.
+            try patchStandalone(staged)
+            _ = try patchCache()
+            if let captured = chunks.takeUndoLog(),
+               let merged = DyldSharedCacheUndoLog.updated(existing: undo, captured: captured, patchID: identifier)
+            {
+                try system.writeFile(undoPath, contents: merged.encoded(), mode: 0o644, owner: Self.guestOwner)
+            }
+            try system.replaceFile(path, fromFileAt: staged, mode: 0o755, owner: Self.guestOwner)
+            return true
+        }
+        try CustomFirmwareTVTPROInstallation.restorePair {
+            guard let undo, hasUndo else { return }
+            let spans = try undo.restore(patchIDs: [identifier], in: cacheDirectory, log: { print($0) })
+            let attestation = try DyldSharedCacheCodeSignature.reattest(in: chunks, modifiedSpans: spans, log: { print($0) })
+            guard attestation.isFullyAttested else {
+                throw ValidationError("\(identifier): restored cache pages could not be fully re-attested; keeping the undo record.")
+            }
+        } restoreStandalone: {
+            try system.copyFile(from: backup, to: "dyld-tv-original", in: work.directory)
+            try system.replaceFile(path, fromFileAt: work.file("dyld-tv-original"), mode: 0o755, owner: Self.guestOwner)
+        } retireUndo: {
+            guard let undo, hasUndo else { return }
+            try system.writeFile(undoPath, contents: undo.removing(patchIDs: [identifier]).encoded(), mode: 0o644, owner: Self.guestOwner)
+        }
+        print("  [+] \(identifier): restored standalone and cached dyld")
+        return false
     }
 
     /// Re-seal a code-signed bundle on the mounted guest system volume.

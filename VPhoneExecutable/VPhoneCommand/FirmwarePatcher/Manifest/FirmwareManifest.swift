@@ -6,6 +6,7 @@
 // (device tree, SEP, kernel) and iPhone OS images into a single DFU erase-install
 // Build Identity.
 
+import CryptoKit
 import Foundation
 import VPhoneCoreKit
 
@@ -85,7 +86,7 @@ public enum FirmwareManifest {
         }
 
         // Build the single DFU erase identity.
-        let buildIdentity = try buildEraseIdentity(
+        let sourceIdentity = try buildEraseIdentity(
             cloudIdentities: cloudIdentities,
             iPhoneIdentities: iPhoneIdentities,
             prod: prod,
@@ -93,6 +94,9 @@ public enum FirmwareManifest {
             vp: vp,
             vpr: vpr,
             iErase: iErase,
+        )
+        let buildIdentity = try normalizeGuestComponentDigests(
+            sourceIdentity, device: device, restoreDir: iPhoneDir,
         )
         let guestIdentity = try separateGuestDeviceTree(
             for: device,
@@ -255,6 +259,35 @@ public enum FirmwareManifest {
     }
 
     // MARK: - Build Identity Construction
+
+    /// J42d uses SHA-1 digests, but the PCC restore environment authenticates
+    /// Image4 payloads with SHA-384. Keeping the donor digest makes canonical
+    /// metadata execution fail with ENOEXEC before sealing. Hash the unchanged
+    /// guest components for the hybrid ticket; other guest families retain
+    /// their existing manifest entries and signature-bypass behavior.
+    static func normalizeGuestComponentDigests(
+        _ identity: PlistDict,
+        device: VPhoneGuestDevice,
+        restoreDir: URL,
+    ) throws -> PlistDict {
+        guard device.family == .appleTV else { return identity }
+        guard var manifest = identity["Manifest"] as? PlistDict else {
+            throw ManifestError.missingKey("Manifest in the hybrid build identity")
+        }
+        for name in ["Ap,SystemVolumeCanonicalMetadata", "OS", "StaticTrustCache", "SystemVolume"] {
+            guard var component = manifest[name] as? PlistDict,
+                  let info = component["Info"] as? PlistDict,
+                  let path = info["Path"] as? String,
+                  CustomFirmwareDaemons.isPlainRelativePath(path)
+            else { throw ManifestError.missingKey("Safe Path for \(name) in the hybrid build identity") }
+            let data = try Data(contentsOf: restoreDir.appending(path: path), options: .mappedIfSafe)
+            component["Digest"] = Data(SHA384.hash(data: data))
+            manifest[name] = component
+        }
+        var normalized = identity
+        normalized["Manifest"] = manifest
+        return normalized
+    }
 
     /// Deep-copy a single Manifest entry from a build identity.
     static func entry(
