@@ -73,6 +73,40 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
     ]
     var undeletableReports: Set<String> = []
     var crashListRefused = false
+    /// The first boot stalls: `setup.settle` answers unsettled with
+    /// `stallSignals` until a reboot (or for good, `stallSurvivesReboot`).
+    var stalledBoot = false
+    var stallSurvivesReboot = false
+    /// Each stalled answer has one app fewer staged: slow, not stalled.
+    var stallProgresses = false
+    var stallSignals: [String: Any] = [
+        "staged_system_apps": 46, "app_count": 220, "app_counts": [220, 220, 220],
+        "installd_pid": 312, "installd_cpu_seconds": 1.25, "installd_cpu_delta": 0.0,
+        "setup_pending": true, "data_migration_done": false,
+    ]
+    /// The guest refuses the spindump job (an older vphoned, a guest without
+    /// spindump).
+    var spindumpRefused = false
+    var spindumpJobRunning = false
+    var spindumpReport = """
+    Date/Time:        2026-10-15 16:40:01 +0000
+    Process:          SpringBoard [40]
+      Thread 0x1a   1000 samples
+        1000  start + 6000 (dyld + 0)
+    Binary Images:
+      0x100000000 SpringBoard
+
+    Process:          installd [312]
+    Path:             /usr/libexec/installd
+      Thread 0x2b   DispatchQueue "com.apple.installd.staged"   1000 samples
+        1000  __workq_kernreturn + 8 (libsystem_kernel.dylib + 1234)
+    Binary Images:
+      0x100000000 installd
+
+    Process:          com.apple.datamigrator [205]
+      Thread 0x3c   1000 samples
+        1000  mach_msg2_trap + 8 (libsystem_kernel.dylib + 4567)
+    """
 
     init(clock: FakeClock) {
         self.clock = clock
@@ -145,6 +179,16 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
         case "setup.settle":
             let wait = params["timeout_s"] as? Int ?? 90
             #expect(wait <= 30)
+            if stalledBoot {
+                clock.sleep(TimeInterval(wait))
+                if stallProgresses, let staged = stallSignals["staged_system_apps"] as? Int {
+                    stallSignals["staged_system_apps"] = max(staged - 1, 1)
+                }
+                return [
+                    "settled": false, "elapsed_s": wait, "signals": stallSignals,
+                    "reasons": ["staged_system_apps has 46 entries", "data migration has not finished"],
+                ]
+            }
             if unsettledAnswers > 0 {
                 unsettledAnswers -= 1
                 clock.sleep(TimeInterval(wait))
@@ -191,9 +235,56 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
             let record: Any = profile == "none" ? NSNull() : ["profile": profile, "groups": groups, "labels": Array(disabled)]
             return ["profile": profile, "record": record, "disabled": Array(disabled), "running": running]
         case "processes.list":
-            return ["processes": [["pid": 1, "start_time": bootTime], ["pid": 53, "start_time": bootTime + 4]], "count": 2]
+            return ["processes": [
+                ["pid": 1, "start_time": bootTime],
+                ["pid": 53, "start_time": bootTime + 4],
+                ["pid": 312, "name": "installd", "executable": "/usr/libexec/installd", "cpu_seconds": 1.25, "start_time": bootTime + 5],
+                ["pid": 205, "name": "com.apple.datami", "cpu_seconds": 0.5, "start_time": bootTime + 6,
+                 "executable": "/System/Library/PrivateFrameworks/DataMigration.framework/XPCServices/com.apple.datamigrator.xpc/com.apple.datamigrator"],
+            ], "count": 4]
+        case "services.print":
+            return ["label": params["label"] ?? "", "domain": "user", "description": """
+            user/501/com.apple.mobile.installd = {
+            \tactive count = 2
+            \tstate = running
+            \tendpoints = {
+            \t\t"com.apple.mobile.installd" = {
+            \t\t\tactive = 1
+            \t\t}
+            \t}
+            \truns = 1
+            \tpid = 312
+            \timmediate reason = ipc (mach)
+            \tlast exit code = (never exited)
+            }
+            """]
+        case "files.write":
+            #expect(params["path"] as? String == VPhoneTemplateSetupBoot.stallSpindumpJobPath)
+            let content = params["content"] as? String ?? ""
+            #expect(content.contains("/usr/sbin/spindump") && content.contains(VPhoneTemplateSetupBoot.stallSpindumpReportPath))
+            return ["path": params["path"] ?? "", "bytes": content.utf8.count]
+        case "services.load":
+            if spindumpRefused {
+                throw refused("launchctl bootstrap failed: 5", ["code": "failed"])
+            }
+            spindumpJobRunning = true
+            return ["loaded": params["paths"] ?? []]
+        case "services.status":
+            // Running for one more poll, then done.
+            let running = spindumpJobRunning
+            spindumpJobRunning = false
+            return ["label": params["label"] ?? "", "running": running, "pid": running ? 900 : 0]
+        case "files.read":
+            #expect(params["path"] as? String == VPhoneTemplateSetupBoot.stallSpindumpReportPath)
+            return ["path": params["path"] ?? "", "content": spindumpReport, "encoding": "utf8", "truncated": false]
+        case "services.unload":
+            #expect(params["force"] as? Bool == true)
+            return ["unloaded": params["paths"] ?? []]
         case "system.reboot":
             bootTime += 100
+            if !stallSurvivesReboot {
+                stalledBoot = false
+            }
             downCalls = 3
             dyingVphoned = dyingVphonedTakesAList
             if !servicesKeepRunning {
@@ -449,6 +540,185 @@ struct TemplateSetupBootTests {
             == "  waiting for the guest's first-boot data migration (12 s); also staged_system_apps has 3 entries")
         #expect(VPhoneTemplateSetupBoot.settleProgress(["app count changed: 250 → 258"], elapsed: 70)
             == "  waiting for first-boot work (70 s): app count changed: 250 → 258")
+    }
+
+    // MARK: Settle stalls
+
+    private func stallRun(_ guest: FakeGuest) -> (Result<VPhoneTemplateSetupOutcome, VPhoneTemplateSetupFailure>, [String]) {
+        var lines: [String] = []
+        let boot = VPhoneTemplateSetupBoot(
+            machine: guest,
+            plan: VPhoneTemplateSetupPlan(slimming: VPhoneTemplateSlimmingRequest.defaultSlimming, requiresEveryApp: true),
+            clock: guest.clock,
+            log: { lines.append($0) },
+        )
+        do {
+            return try (.success(boot.run()), lines)
+        } catch let failure as VPhoneTemplateSetupFailure {
+            return (.failure(failure), lines)
+        } catch {
+            Issue.record("unexpected \(error)")
+            return (.failure(VPhoneTemplateSetupFailure(step: .boot, reason: "\(error)", outcome: .init())), lines)
+        }
+    }
+
+    /// The 27.0.1 setup boot of 2026-10-15: 46 apps stayed staged and
+    /// installd idle for 600 s; a reboot finished the migration in 45 s.
+    @Test func `a stalled first boot is captured, rebooted once and settles`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.migrationPending = true
+        guest.stalledBoot = true
+        let (result, lines) = stallRun(guest)
+        let outcome = try result.get()
+
+        #expect(outcome.isComplete)
+        #expect(outcome.settleReboots == 1)
+        #expect(outcome.warnings.contains { $0.contains("first-boot work stalled") && $0.contains("46 apps staged") })
+        // Capture, reboot, then settle again before anything is slimmed.
+        #expect(inOrder(guest.calls, [
+            "setup.settle", "processes.list", "services.print", "files.write", "services.load",
+            "services.status", "files.read", "services.unload", "files.remove", "files.remove",
+            "processes.list", "system.reboot", "processes.list", "setup.settle", "apps.remove_system",
+        ]))
+        #expect(guest.calls.count(where: { $0 == "system.reboot" }) == 2)
+        // Detected after the stall window, not at the 600 s deadline.
+        let settle = try #require(outcome.durations[.settle])
+        #expect(settle > 180 && settle < 400)
+
+        #expect(lines.contains { $0.contains("made no progress for") && $0.contains("46 apps staged, 220 apps, installd 312") })
+        #expect(lines.contains { $0.hasPrefix("    /usr/libexec/installd pid 312: 1.25 s CPU, started ") })
+        #expect(lines.contains { $0.contains("/com.apple.datamigrator pid 205: 0.50 s CPU, started ") })
+        #expect(lines.contains("    installd in launchd: state = running; active count = 2; runs = 1; pid = 312; immediate reason = ipc (mach); last exit code = (never exited)"))
+        #expect(lines.contains("    | Process:          installd [312]"))
+        #expect(lines.contains { $0.contains("__workq_kernreturn") })
+        #expect(lines.contains("    | Process:          com.apple.datamigrator [205]"))
+        #expect(!lines.contains { $0.contains("SpringBoard [40]") || $0.contains("0x100000000") })
+        #expect(lines.contains("  rebooting the guest once to resume first-boot work"))
+        #expect(lines.contains { $0.hasPrefix("  settled after ") })
+    }
+
+    @Test func `a stall that outlasts the reboot fails at the new deadline after one reboot`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.stalledBoot = true
+        guest.stallSurvivesReboot = true
+        let (result, _) = stallRun(guest)
+        let failure = try #require(result.failed)
+        #expect(failure.step == .settle)
+        #expect(failure.reason.contains("of the reboot that was to resume it"))
+        #expect(failure.outcome.settleReboots == 1)
+        #expect(guest.calls.count(where: { $0 == "system.reboot" }) == 1)
+        #expect(guest.killed)
+    }
+
+    @Test func `a capture that fails does not hold the reboot back`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.stalledBoot = true
+        guest.spindumpRefused = true
+        let (result, lines) = stallRun(guest)
+        let outcome = try result.get()
+        #expect(outcome.settleReboots == 1)
+        #expect(lines.contains { $0.hasPrefix("    spindump: services.load: launchctl bootstrap failed") })
+        // The job is removed even though it never loaded.
+        #expect(inOrder(guest.calls, ["services.load", "services.unload", "files.remove", "files.remove", "system.reboot"]))
+    }
+
+    @Test func `a first boot that keeps progressing is never rebooted`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        // Slow to the point of failing at the deadline, but every answer
+        // shows one more app expanded.
+        guest.stalledBoot = true
+        guest.stallSurvivesReboot = true
+        guest.stallProgresses = true
+        let (result, _) = stallRun(guest)
+        let failure = try #require(result.failed)
+        #expect(failure.step == .settle)
+        #expect(failure.outcome.settleReboots == 0)
+        #expect(!guest.calls.contains("system.reboot"))
+        #expect(!failure.reason.contains("of the reboot"))
+    }
+
+    @Test func `the stall watch counts any change or installd work as progress`() {
+        typealias Signals = VPhoneTemplateSetupBoot.SettleSignals
+        let start = Date(timeIntervalSince1970: 0)
+        let stuck = Signals(stagedSystemApps: 46, appCounts: [220, 220], installdPID: 312, installdCPUSeconds: 1, installdCPUDelta: 0, dataMigrationDone: false)
+        var watch = VPhoneTemplateSetupBoot.SettleStallWatch(window: 180)
+        #expect(watch.observe(stuck, at: start) == nil)
+        #expect(watch.observe(stuck, at: start + 179) == nil)
+        #expect(watch.observe(stuck, at: start + 180) == 180)
+
+        func progressed(_ change: (inout Signals) -> Void) -> Bool {
+            var later = stuck
+            change(&later)
+            return VPhoneTemplateSetupBoot.SettleStallWatch.progressed(from: stuck, to: later)
+        }
+        #expect(!progressed { _ in })
+        #expect(progressed { $0.stagedSystemApps = 45 })
+        #expect(progressed { $0.appCounts = [220, 221] })
+        #expect(progressed { $0.appCounts = [221, 221] })
+        #expect(progressed { $0.installdPID = 400 })
+        #expect(progressed { $0.installdCPUSeconds = 1.3 })
+        #expect(!progressed { $0.installdCPUSeconds = 1.1 })
+        #expect(progressed { $0.installdCPUDelta = 0.25 })
+        #expect(progressed { $0.dataMigrationDone = true })
+
+        // Progress restarts the window.
+        var moving = VPhoneTemplateSetupBoot.SettleStallWatch(window: 180)
+        _ = moving.observe(stuck, at: start)
+        var next = stuck
+        next.stagedSystemApps = 10
+        #expect(moving.observe(next, at: start + 170) == nil)
+        #expect(moving.observe(next, at: start + 340) == nil)
+        #expect(moving.observe(next, at: start + 350) == 180)
+
+        // An unknown or finished migration never stalls; no signals say nothing.
+        var unknown = VPhoneTemplateSetupBoot.SettleStallWatch(window: 180)
+        var quiet = stuck
+        quiet.dataMigrationDone = nil
+        _ = unknown.observe(quiet, at: start)
+        #expect(unknown.observe(quiet, at: start + 1000) == nil)
+        #expect(unknown.observe(nil, at: start + 2000) == nil)
+    }
+
+    @Test func `settle signals are read from vphoned's answer`() throws {
+        let signals = try #require(VPhoneTemplateSetupBoot.SettleSignals([
+            "staged_system_apps": NSNumber(value: 46), "app_count": NSNumber(value: 220),
+            "app_counts": [NSNumber(value: 216), NSNull(), NSNumber(value: 220)],
+            "installd_pid": NSNumber(value: 312), "installd_cpu_seconds": NSNumber(value: 1.5),
+            "installd_cpu_delta": NSNull(), "data_migration_done": NSNumber(value: false),
+        ]))
+        #expect(signals == VPhoneTemplateSetupBoot.SettleSignals(
+            stagedSystemApps: 46, appCounts: [216, nil, 220], installdPID: 312,
+            installdCPUSeconds: 1.5, installdCPUDelta: nil, dataMigrationDone: false,
+        ))
+        #expect(signals.summary == "46 apps staged, 220 apps, installd 312")
+        #expect(VPhoneTemplateSetupBoot.SettleSignals(nil) == nil)
+        #expect(VPhoneTemplateSetupBoot.SettleSignals([:])?.summary == "? apps staged, installd not running")
+    }
+
+    @Test func `a spindump excerpt keeps the named processes without their images, cut to a limit`() {
+        let report = """
+        Process:          installd [312]
+          Thread 0x1
+            a
+            b
+            c
+        Binary Images:
+          0x1 installd
+        Process:          locationd [90]
+          Thread 0x9
+        """
+        let lines = VPhoneTemplateSetupBoot.spindumpExcerpt(report, maximumLines: 3) { $0 == "installd" }
+        #expect(lines == ["Process:          installd [312]", "  Thread 0x1", "    a", "… (cut at 3 lines)"])
+        #expect(VPhoneTemplateSetupBoot.spindumpExcerpt(report, maximumLines: 10) { $0 == "nothing" }.isEmpty)
+        #expect(VPhoneTemplateSetupBoot.isStallProcess(name: "com.apple.datami", executable: ""))
+        #expect(VPhoneTemplateSetupBoot.isStallProcess(name: "com.apple.datamigrator", executable: ""))
+        #expect(!VPhoneTemplateSetupBoot.isStallProcess(name: "installcoordinationd", executable: "/usr/libexec/installcoordinationd"))
+    }
+
+    @Test func `launchd's record is cut to the lines that show a stuck job`() {
+        #expect(VPhoneTemplateSetupBoot.launchdSummary("") == "no record")
+        #expect(VPhoneTemplateSetupBoot.launchdSummary("x = {\n\tstate = waiting\n\t\tstate = active\n\truns = 3\n}")
+            == "state = waiting; runs = 3")
     }
 
     /// 2.9.0's vphoned restarts SpringBoard in every skip and is refused

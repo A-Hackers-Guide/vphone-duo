@@ -525,7 +525,7 @@ setup boot is the guest's first boot). It talks to vphoned through
 | connect | `ping` every second | 300 s | vphoned answers |
 | 0 snapshot | `apfs.snapshot.delete {force}` | 120 s | no `orig-fs.disabled.rn-*` in `remaining`/`after` (none to begin with is fine) |
 | a skip | `setup.skip {force}`, any refusal retried | 600 s | `setup_done` |
-| b settle | `setup.settle {timeout_s ≤ 30}` repeated, a progress line after each | 600 s overall | `settled` (system apps expanded and data migration finished) |
+| b settle | `setup.settle {timeout_s ≤ 30}` repeated, a progress line after each; after 180 s without progress, a capture and one reboot | 600 s overall, again from that reboot | `settled` (system apps expanded and data migration finished) |
 | c apps | `apps.remove_system {bundle_ids, force}` | 300 s | every app `removed`, `absent` or `unregistered_stale` |
 | d/e profile | `services.profile.apply {profile, groups, force}`, `services.profile` | 180 s | no `failed`; the record holds `signin_followup` and the extra groups; followupd and appleidsetupd disabled |
 | f reboot | `processes.list` (launchd's `start_time`), `system.reboot {force}`, then `ping` and `processes.list` (10 s timeout) every 3 s | 300 s | vphoned answers with another launchd start time |
@@ -581,6 +581,39 @@ own deadline is 600 s too: a 2.9.0 vphoned (refused until migration ends)
 gets through, and its refusals print `waiting for the guest's first-boot data
 migration before SpringBoard can restart (N s)` at most every 30 s instead of
 one error line each.
+
+A first boot can also stall rather than run slowly. On a Launchpad template
+build of iPhone17,3 27.0.1 (24A446) on 2026-10-15, the app expansion stopped
+after four apps (216 → 220 registered). `staged_system_apps` then kept its 46
+entries, installd used no CPU and DataMigrator kept running, all for the full
+600 s. `vm template setup` run again on the same machine, which is a second
+boot, settled in 45 s. The cause is not known. It looks like the iOS 27
+userland on the 26.4 kernel losing a dispatch wake-up
+(`Research/Guest/locationd_startup_deadlock.md`), but nothing from that boot
+survived to show it. The settle step therefore watches the `signals` of each
+`setup.settle` answer (`SettleStallWatch`). Progress is any change in the
+staged count, the app count, installd's pid or the migration's state, or
+installd using 0.2 s of CPU. When data migration has not finished and
+nothing has progressed for `settleStall` (180 s; the quietest healthy
+stretch, `SpringBoard.migrator`, took 26–67 s), the step does three things:
+
+1. It captures the stall into the build log, best effort, within 120 s:
+   installd's and DataMigrator's `processes.list` rows, installd's launchd
+   record (`state`, `active count`, `runs`, `pid`, `immediate reason`,
+   `last exit code`), and a 5 s whole-system spindump. vphoned cannot run a
+   program, so the spindump runs as a launchd job
+   (`com.vphone.settle-stall.spindump`, plist and report in
+   `/private/var/tmp`). Its `installd` and `com.apple.datamigrator` sections
+   are logged without their binary images, at most 250 lines each. The job
+   and the report are removed afterwards, so a template frozen from the boot
+   does not carry them.
+2. It reboots the guest the way step f does.
+3. It waits `settle` again, from the reboot.
+
+A stall after that reboot is not rebooted again: the step fails at the new
+deadline with "… within 600 s of the reboot that was to resume it". The
+outcome records `settleReboots` and a warning, which `vm template setup`
+prints in its summary.
 
 The migration's length varies between runs, and so does the boot. Measured
 from the end of migration, the old and the new flow both reach remove-apps

@@ -105,6 +105,16 @@ public struct VPhoneTemplateSetupTimeouts: Equatable, Sendable {
     /// seconds each. The first boot's data migration ended 60–180 s after
     /// the VM started on a fast Mac (2026-10-09); a slow host takes longer.
     public var settle: TimeInterval = 600
+    /// No progress for this long while data migration has not finished is a
+    /// stall: the settle step captures what installd and DataMigrator are
+    /// doing, reboots the guest once and waits `settle` again. On a 27.0.1
+    /// setup boot (2026-10-15) the app expansion stopped with 46 apps staged
+    /// and installd idle for all 600 s; the next boot finished it in 45 s.
+    /// A healthy boot's longest quiet stretch, `SpringBoard.migrator` after
+    /// the expansion, took 26–67 s.
+    public var settleStall: TimeInterval = 180
+    /// For capturing a stall before the reboot, spindump included.
+    public var stallCapture: TimeInterval = 120
     /// How often a waiting step prints its progress.
     public var progressInterval: TimeInterval = 30
     public var removeApps: TimeInterval = 300
@@ -241,6 +251,8 @@ public struct VPhoneTemplateSetupOutcome: Equatable, Sendable {
     public var snapshotsGone = false
     public var setupSkipped = false
     public var settled = false
+    /// Reboots the settle step made to resume a stalled first boot (0 or 1).
+    public var settleReboots = 0
     public var apps: [VPhoneTemplateSetupAppResult] = []
     public var serviceProfile = "none"
     public var serviceGroups: [String] = []
@@ -493,15 +505,19 @@ public final class VPhoneTemplateSetupBoot {
     /// it is called again until the overall deadline, printing what it waits
     /// for in between. It settles once the system apps are expanded and data
     /// migration has ended, which is also when SpringBoard reads the keys
-    /// `setup.skip` wrote.
+    /// `setup.skip` wrote. A first boot that stops making progress
+    /// (`SettleStallWatch`) is captured and rebooted once; data migration
+    /// carries on in the next boot, and the deadline starts again.
     private func settle() throws {
         let start = clock.now()
-        let end = deadline(timeouts.settle)
+        var end = deadline(timeouts.settle)
+        var watch = SettleStallWatch(window: timeouts.settleStall)
         var reasons: [String] = []
         while true {
             let remaining = end.timeIntervalSince(clock.now())
             guard remaining > 0 else {
                 throw StepError("first-boot work did not settle within \(Int(timeouts.settle)) s"
+                    + (outcome.settleReboots > 0 ? " of the reboot that was to resume it" : "")
                     + (reasons.isEmpty ? "" : ": \(reasons.joined(separator: "; "))"))
             }
             let wait = Int(min(Double(Self.settleCallLimit), max(10, remaining.rounded(.up))))
@@ -514,7 +530,275 @@ public final class VPhoneTemplateSetupBoot {
             }
             reasons = strings(result["reasons"])
             log(Self.settleProgress(reasons, elapsed: elapsed))
+
+            let signals = SettleSignals(result["signals"] as? [String: Any])
+            guard let quiet = watch.observe(signals, at: clock.now()), outcome.settleReboots == 0 else { continue }
+            let summary = signals?.summary ?? "no signals"
+            log("  first-boot work made no progress for \(Int(quiet)) s (\(summary)); data migration has not finished")
+            captureStall()
+            log("  rebooting the guest once to resume first-boot work")
+            try restartGuest(deadline: deadline(timeouts.reboot))
+            outcome.settleReboots += 1
+            outcome.warnings.append("first-boot work stalled at \(elapsed) s (\(summary)); the guest was rebooted once to resume it")
+            end = deadline(timeouts.settle)
+            watch = SettleStallWatch(window: timeouts.settleStall)
         }
+    }
+
+    /// What one `setup.settle` answer's `signals` say about progress.
+    struct SettleSignals: Equatable {
+        var stagedSystemApps: Int?
+        /// The app counts of the answer's last polls, oldest first.
+        var appCounts: [Int?]
+        var installdPID: Int?
+        var installdCPUSeconds: Double?
+        /// installd's CPU between the answer's last two polls.
+        var installdCPUDelta: Double?
+        var dataMigrationDone: Bool?
+
+        init(
+            stagedSystemApps: Int? = nil, appCounts: [Int?] = [], installdPID: Int? = nil,
+            installdCPUSeconds: Double? = nil, installdCPUDelta: Double? = nil, dataMigrationDone: Bool? = nil,
+        ) {
+            self.stagedSystemApps = stagedSystemApps
+            self.appCounts = appCounts
+            self.installdPID = installdPID
+            self.installdCPUSeconds = installdCPUSeconds
+            self.installdCPUDelta = installdCPUDelta
+            self.dataMigrationDone = dataMigrationDone
+        }
+
+        /// Nil without `signals` (a vphoned that does not send them).
+        init?(_ signals: [String: Any]?) {
+            guard let signals else { return nil }
+            func int(_ key: String) -> Int? {
+                VPhoneTemplateSetupBoot.number(signals[key]).flatMap { Int(exactly: $0.rounded()) }
+            }
+            self.init(
+                stagedSystemApps: int("staged_system_apps"),
+                appCounts: (signals["app_counts"] as? [Any] ?? []).map { VPhoneTemplateSetupBoot.number($0).map { Int($0) } },
+                installdPID: int("installd_pid"),
+                installdCPUSeconds: VPhoneTemplateSetupBoot.number(signals["installd_cpu_seconds"]),
+                installdCPUDelta: VPhoneTemplateSetupBoot.number(signals["installd_cpu_delta"]),
+                dataMigrationDone: signals["data_migration_done"] as? Bool,
+            )
+        }
+
+        var appCount: Int? {
+            appCounts.last ?? nil
+        }
+
+        /// `46 apps staged, 220 apps, installd 312 idle`.
+        var summary: String {
+            var parts = ["\(stagedSystemApps.map(String.init) ?? "?") apps staged"]
+            if let appCount {
+                parts.append("\(appCount) apps")
+            }
+            parts.append(installdPID.map { "installd \($0)" } ?? "installd not running")
+            return parts.joined(separator: ", ")
+        }
+    }
+
+    /// Tells a slow first boot from a stalled one across `setup.settle`
+    /// answers. Progress is any change in the staged apps, the app count,
+    /// installd's pid or the migration's state, or installd using CPU
+    /// (vphoned's idle threshold, 0.2 s between polls). Stalled: no progress
+    /// for `window` while data migration has not finished; an unknown
+    /// migration state never stalls.
+    struct SettleStallWatch {
+        static let installdBusyCPUSeconds = 0.2
+
+        let window: TimeInterval
+        private var last: SettleSignals?
+        private var lastProgress: Date?
+
+        init(window: TimeInterval) {
+            self.window = window
+        }
+
+        /// The seconds without progress once that reaches `window`, else nil.
+        mutating func observe(_ signals: SettleSignals?, at now: Date) -> TimeInterval? {
+            guard let signals else { return nil }
+            if let last, lastProgress != nil, !Self.progressed(from: last, to: signals) {
+                // No progress: keep the time it was last made.
+            } else {
+                lastProgress = now
+            }
+            last = signals
+            guard signals.dataMigrationDone == false, let lastProgress else { return nil }
+            let quiet = now.timeIntervalSince(lastProgress)
+            return quiet >= window ? quiet : nil
+        }
+
+        static func progressed(from earlier: SettleSignals, to later: SettleSignals) -> Bool {
+            if earlier.stagedSystemApps != later.stagedSystemApps || earlier.installdPID != later.installdPID
+                || earlier.dataMigrationDone != later.dataMigrationDone || earlier.appCount != later.appCount
+            {
+                return true
+            }
+            if Set(later.appCounts.compactMap(\.self)).count > 1 {
+                return true
+            }
+            if (later.installdCPUDelta ?? 0) >= installdBusyCPUSeconds {
+                return true
+            }
+            if let before = earlier.installdCPUSeconds, let after = later.installdCPUSeconds,
+               after - before >= installdBusyCPUSeconds
+            {
+                return true
+            }
+            return false
+        }
+    }
+
+    // MARK: Stall capture
+
+    /// A launchd job that spindumps every process for `stallSpindumpSeconds`.
+    static let stallSpindumpLabel = "com.vphone.settle-stall.spindump"
+    static let stallSpindumpJobPath = "/private/var/tmp/com.vphone.settle-stall.spindump.plist"
+    static let stallSpindumpReportPath = "/private/var/tmp/com.vphone.settle-stall.spindump.txt"
+    static let stallSpindumpSeconds = 5
+    /// At most this many lines of each process from the report.
+    static let stallSpindumpLinesPerProcess = 250
+
+    /// The first-boot processes a stall capture reports: installd, which
+    /// expands the staged system apps, and DataMigrator's XPC service
+    /// (`com.apple.datamigrator`; the kernel cuts its name to `com.apple.datami`).
+    static func isStallProcess(name: String, executable: String) -> Bool {
+        executable.hasSuffix("/installd") || name == "installd"
+            || executable.hasSuffix("/com.apple.datamigrator") || name.hasPrefix("com.apple.datami")
+    }
+
+    /// Best effort, within `timeouts.stallCapture`: what installd and
+    /// DataMigrator are doing, into the log, before the reboot ends them.
+    /// Each part that fails says so and the capture goes on.
+    private func captureStall() {
+        let end = deadline(timeouts.stallCapture)
+        log("  capturing the stall:")
+        do {
+            let rows = try call("processes.list", [:], deadline: end)["processes"] as? [[String: Any]] ?? []
+            let picked = rows.filter {
+                Self.isStallProcess(name: $0["name"] as? String ?? "", executable: $0["executable"] as? String ?? "")
+            }
+            if picked.isEmpty {
+                log("    neither installd nor DataMigrator is running")
+            }
+            for row in picked {
+                let cpu = Self.number(row["cpu_seconds"]).map { String(format: "%.2f s CPU", $0) } ?? "CPU ?"
+                let started = Self.number(row["start_time"])
+                    .map { "started \(Int(clock.now().timeIntervalSince1970 - $0)) s ago" } ?? "start ?"
+                log("    \(row["executable"] as? String ?? row["name"] as? String ?? "?") pid \(row["pid"] ?? "?"): \(cpu), \(started)")
+            }
+        } catch {
+            log("    processes.list: \(error)")
+        }
+        do {
+            let text = try call("services.print", ["label": "com.apple.mobile.installd"], deadline: end)["description"] as? String ?? ""
+            log("    installd in launchd: \(Self.launchdSummary(text))")
+        } catch {
+            log("    services.print com.apple.mobile.installd: \(error)")
+        }
+        do {
+            let report = try stallSpindump(deadline: end)
+            let excerpt = Self.spindumpExcerpt(report, maximumLines: Self.stallSpindumpLinesPerProcess) {
+                Self.isStallProcess(name: $0, executable: "")
+            }
+            log(excerpt.isEmpty
+                ? "    spindump (\(report.utf8.count) bytes) has neither installd nor DataMigrator"
+                : "    spindump, \(Self.stallSpindumpSeconds) s:")
+            for line in excerpt {
+                log("    | \(line)")
+            }
+        } catch {
+            log("    spindump: \(error)")
+        }
+    }
+
+    /// The few lines of a `launchctl print` that say whether a job is stuck:
+    /// `state = running; active count = 2; runs = 1; …`.
+    static func launchdSummary(_ description: String) -> String {
+        let keys = ["state", "active count", "runs", "pid", "immediate reason", "last exit code"]
+        var found: [String: String] = [:]
+        for line in description.split(separator: "\n") {
+            // The job's own keys are one tab deep; nested blocks are deeper.
+            guard line.hasPrefix("\t"), !line.hasPrefix("\t\t") else { continue }
+            let parts = line.dropFirst().split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            guard parts.count == 2, keys.contains(parts[0]), found[parts[0]] == nil else { continue }
+            found[parts[0]] = parts[1]
+        }
+        let summary = keys.compactMap { key in found[key].map { "\(key) = \($0)" } }
+        return summary.isEmpty ? "no record" : summary.joined(separator: "; ")
+    }
+
+    /// The sections of a spindump report whose `Process:` line names a
+    /// process `matches` accepts, each without its `Binary Images` list and
+    /// cut to `maximumLines`.
+    static func spindumpExcerpt(_ report: String, maximumLines: Int, matches: (String) -> Bool) -> [String] {
+        var lines: [String] = []
+        var taken = 0
+        var inSection = false
+        var inImages = false
+        for raw in report.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(raw)
+            if line.hasPrefix("Process:") {
+                // `Process:          installd [312]`
+                let name = line.dropFirst("Process:".count).trimmingCharacters(in: .whitespaces)
+                    .components(separatedBy: " [").first ?? ""
+                inSection = matches(name)
+                inImages = false
+                taken = 0
+            } else if line.hasPrefix("Binary Images:") {
+                inImages = true
+            }
+            guard inSection, !inImages else { continue }
+            if taken == maximumLines {
+                lines.append("… (cut at \(maximumLines) lines)")
+            }
+            if taken < maximumLines {
+                lines.append(line)
+            }
+            taken += 1
+        }
+        return lines
+    }
+
+    /// The guest spindumps itself: vphoned cannot run a program, so a launchd
+    /// job does, and the report is read back. The job and the report are
+    /// removed afterwards, whatever happened.
+    private func stallSpindump(deadline end: Date) throws -> String {
+        let job: [String: Any] = [
+            "Label": Self.stallSpindumpLabel,
+            "ProgramArguments": [
+                "/usr/sbin/spindump", "-notarget", "\(Self.stallSpindumpSeconds)", "10",
+                "-file", Self.stallSpindumpReportPath,
+            ],
+            "RunAtLoad": true,
+        ]
+        let data = try PropertyListSerialization.data(fromPropertyList: job, format: .xml, options: 0)
+        defer {
+            _ = try? machine.call("services.unload", params: ["paths": [Self.stallSpindumpJobPath], "force": true], timeout: 10)
+            _ = try? machine.call("files.remove", params: ["path": Self.stallSpindumpJobPath], timeout: 10)
+            _ = try? machine.call("files.remove", params: ["path": Self.stallSpindumpReportPath], timeout: 10)
+        }
+        _ = try? machine.call("files.remove", params: ["path": Self.stallSpindumpReportPath], timeout: 10)
+        _ = try call("files.write", ["path": Self.stallSpindumpJobPath, "content": String(decoding: data, as: UTF8.self)], deadline: end)
+        _ = try call("services.load", ["paths": [Self.stallSpindumpJobPath]], deadline: end)
+        clock.sleep(TimeInterval(Self.stallSpindumpSeconds))
+        while true {
+            let status = try call("services.status", ["label": Self.stallSpindumpLabel], deadline: end)
+            if status["running"] as? Bool != true {
+                break
+            }
+            guard clock.now().addingTimeInterval(timeouts.retryInterval) < end else {
+                throw StepError("did not finish within \(Int(timeouts.stallCapture)) s")
+            }
+            clock.sleep(timeouts.retryInterval)
+        }
+        let read = try call("files.read", ["path": Self.stallSpindumpReportPath, "limit": 24 << 20], deadline: end, timeout: 60)
+        guard let content = read["content"] as? String else {
+            throw StepError("no report at \(Self.stallSpindumpReportPath)")
+        }
+        return content
     }
 
     static let migrationReason = "data migration has not finished"
@@ -643,7 +927,10 @@ public final class VPhoneTemplateSetupBoot {
     /// f. Reboots the guest and waits for vphoned of the next boot: launchd's
     /// start time (pid 1) tells the boots apart.
     private func reboot() throws {
-        let end = deadline(timeouts.reboot)
+        try restartGuest(deadline: deadline(timeouts.reboot))
+    }
+
+    private func restartGuest(deadline end: Date) throws {
         let before = try bootMarker(deadline: end)
         do {
             _ = try machine.call("system.reboot", params: ["force": true], timeout: 30)
@@ -679,7 +966,7 @@ public final class VPhoneTemplateSetupBoot {
     }
 
     /// A number from JSON (NSNumber) or from a dictionary built in Swift.
-    private static func number(_ value: Any?) -> Double? {
+    static func number(_ value: Any?) -> Double? {
         switch value {
         case let value as Int: Double(value)
         case let value as Double: value
