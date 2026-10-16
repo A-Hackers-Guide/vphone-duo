@@ -216,6 +216,11 @@ struct VPhoneCustomFirmwareInstaller {
             guard unvalidated.isEmpty else {
                 throw ValidationError("These guest patches have not been validated for tvOS. Block them with `fw set-patches` before installation: \(unvalidated.joined(separator: ", "))")
             }
+            // Without the swap the base device's userland would boot on this
+            // one, which panics at first boot.
+            if mode == .full, let base = device.restoreBase, !plan.enabledPatches.contains(FirmwareGuestSystemPatchSet.tvOTAUserland) {
+                throw ValidationError("\(device.productType) has no IPSW of its own, and \(FirmwareGuestSystemPatchSet.tvOTAUserland) is not in its patch plan, so the \(base.productType) userland would boot on it. Allow it with `fw set-patches`, then run `fw patch` again.")
+            }
         }
         // Before any disk work, so what it says is not buried under it.
         recoverBoardDeviceTree(in: bundleDirectory, restore: restore, plan: plan, invokingUser: invokingUser)

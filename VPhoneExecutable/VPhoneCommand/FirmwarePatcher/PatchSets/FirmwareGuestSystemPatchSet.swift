@@ -70,7 +70,7 @@ public enum FirmwareGuestSystemPatchSet {
                 title: "Apple TV 4K userland from OTA",
                 summary: "Research: replaces the System volume with the arm64e tvOS userland staged in the VM's OTAUserland folder, extracted with aa so ownership, modes, flags and compression survive.",
                 target: .guestFile(path: "/"),
-                applicability: VPhonePatchApplicability(iOSBase: .major(26)),
+                applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 26, minor: 0)),
             ),
             VPhonePatchDeclaration(
                 identifier: locationdCohorting,

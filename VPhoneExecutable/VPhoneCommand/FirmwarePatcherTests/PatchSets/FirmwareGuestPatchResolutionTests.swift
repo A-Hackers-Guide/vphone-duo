@@ -94,6 +94,8 @@ struct FirmwareGuestPatchResolutionTests {
             iOSBase: VPhoneVersion("27.0"),
             cloudOS: VPhoneVersion("26.4"),
         )
+        // The userland swap and the GPU driver carry on to the 27 OTA.
+        #expect(tv4K27.isEnabled(gpu) && tv4K27.isEnabled(ota))
         #expect(tv4K27.enabled.isSuperset(of: FirmwarePatchSetCatalog.tvOS27UserlandPatches))
         #expect(tv4K27.isEnabled("kernel-boot-iomfb_swapend"))
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: tv4K27.enabled, arm64eUserland: true).isEmpty)
