@@ -1,0 +1,575 @@
+import AppleArchive
+import CryptoKit
+import Foundation
+import System
+import VPhoneCoreKit
+
+/// A full OTA update, read with the system AppleArchive framework: no `ipsw`,
+/// no `aea` or `aa` process, nothing from Homebrew.
+///
+/// An OTA is an AEA file (`AEA1`): an Apple Archive encrypted and
+/// authenticated with a symmetric key that Apple does not publish and AppleDB
+/// records. The archive inside is segmented: its top-level entries are
+/// metadata (`TYP=M`), and each one whose `YOP` is `E` (extract) carries in its
+/// `DAT` blob another, uncompressed Apple Archive holding the next run of
+/// files. `YOP=M` is the segment manifest and `YOP=O` the owner and mode
+/// fix-ups applied after extraction, neither of which staging needs. An
+/// archive that `aea decrypt` already wrote out (`AA01`, or a `pbz*`
+/// compressed one) is read the same way, without a key.
+///
+/// Members stream from the file to their destination in fixed-size blocks,
+/// so a multi-gigabyte OTA is read once and never held in memory.
+public enum VPhoneOTAArchive {
+    public enum Error: Swift.Error, LocalizedError {
+        case missingFile(URL)
+        case notAnOTA(URL)
+        case invalidKey
+        case keyRequired(URL)
+        case wrongKey(URL)
+        case unreadable(URL, String)
+        case missingMember(String, URL)
+        case wrongDevice(URL, productTypes: [String], expected: String)
+        case wrongBuild(URL, build: String, expected: String)
+        case inconsistentChunks(URL, String)
+        case unexpectedSize(URL, expected: Int64, actual: Int64)
+        case existingUserland(URL)
+        case noSource(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case let .missingFile(file):
+                "OTA not found at \(file.path). Check the path and try again."
+            case let .notAnOTA(file):
+                "\(file.lastPathComponent) is not an OTA: it is neither an AEA file nor an Apple Archive. Choose the device's full OTA (.aea)."
+            case .invalidKey:
+                "The OTA key must be 32 bytes in base64, as AppleDB lists it under the OTA's decryptionKey."
+            case let .keyRequired(file):
+                "\(file.lastPathComponent) is encrypted, and the firmware catalog has no key for it. Pass its key with --ota-key."
+            case let .wrongKey(file):
+                "\(file.lastPathComponent) did not decrypt with the given key. Check the key against AppleDB's entry for this OTA."
+            case let .unreadable(file, reason):
+                "\(file.lastPathComponent) could not be read: \(reason). Download the OTA again."
+            case let .missingMember(member, file):
+                "\(file.lastPathComponent) has no \(member). Choose the device's full OTA, not a delta update."
+            case let .wrongDevice(file, productTypes, expected):
+                "\(file.lastPathComponent) is for \(productTypes.isEmpty ? "no listed device" : productTypes.joined(separator: ", ")), not \(expected). Choose the \(expected) OTA."
+            case let .wrongBuild(file, build, expected):
+                "\(file.lastPathComponent) is build \(build), but the IPSW is \(expected). The OTA and the IPSW must be the same build."
+            case let .inconsistentChunks(file, reason):
+                "\(file.lastPathComponent) has an inconsistent payload: \(reason). Download the OTA again."
+            case let .unexpectedSize(file, expected, actual):
+                "\(file.lastPathComponent) is \(actual) bytes, not the \(expected) the catalog lists. Download the OTA again."
+            case let .existingUserland(folder):
+                "\(folder.path) already exists. Remove it, then prepare the firmware again."
+            case let .noSource(productType):
+                "The firmware catalog has no OTA for \(productType) at this build. Pass the device's full OTA with --ota-source."
+            }
+        }
+    }
+
+    /// What to do with one member, by its archive path.
+    public enum Disposition: Sendable {
+        case skip
+        /// Write it to this file, replacing whatever is there.
+        case file(URL)
+        /// Read it into memory and hand it to `received`. For small plists only.
+        case memory
+    }
+
+    /// The largest member `Disposition.memory` takes.
+    static let memoryLimit: UInt64 = 64 << 20
+    /// Bytes per blob read.
+    static let blockSize = 8 << 20
+
+    private static var typKey: ArchiveHeader.FieldKey { ArchiveHeader.FieldKey("TYP") }
+    private static var yopKey: ArchiveHeader.FieldKey { ArchiveHeader.FieldKey("YOP") }
+    private static var patKey: ArchiveHeader.FieldKey { ArchiveHeader.FieldKey("PAT") }
+    private static var datKey: ArchiveHeader.FieldKey { ArchiveHeader.FieldKey("DAT") }
+    /// `TYP` and `YOP` values are one ASCII letter.
+    private static let regularFile = UInt64(UInt8(ascii: "F"))
+    private static let extractSegment = UInt64(UInt8(ascii: "E"))
+
+    // MARK: - Key
+
+    /// The symmetric key from base64, with or without `aea`'s `base64:` prefix.
+    public static func symmetricKey(_ text: String) throws -> SymmetricKey {
+        var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("base64:") {
+            text.removeFirst("base64:".count)
+        }
+        guard let data = Data(base64Encoded: text), data.count == 32 else {
+            throw Error.invalidKey
+        }
+        return SymmetricKey(data: data)
+    }
+
+    // MARK: - Reading
+
+    /// Streams every regular file of the OTA's archive, in archive order, to
+    /// where `select` sends it. `received` is called after each member that
+    /// was not skipped, with its bytes for `.memory`; throwing from it stops
+    /// the read before any later member is written.
+    public static func readMembers(
+        _ ota: URL,
+        key: String?,
+        select: (String) throws -> Disposition,
+        received: (String, Data?) throws -> Void,
+    ) throws {
+        let opened = try openArchive(ota, key: key)
+        let outer = opened.archive
+        var buffer = [UInt8](repeating: 0, count: blockSize)
+        // AppleArchive's wrappers close their stream when released, and a
+        // decoder does not keep the stream it reads: every layer stays
+        // referenced until the read ends.
+        try withExtendedLifetime(opened) {
+            while let header = try readHeader(outer, of: ota) {
+                if case .uint(_, extractSegment)? = header.field(forKey: yopKey),
+                   case let .blob(_, size, _)? = header.field(forKey: datKey)
+                {
+                    let segment = SegmentByteStream(outer: outer, size: size)
+                    guard let bytes = ArchiveByteStream.customStream(instance: segment),
+                          let inner = ArchiveStream.decodeStream(readingFrom: bytes)
+                    else {
+                        throw Error.unreadable(ota, "an extract segment is not an Apple Archive")
+                    }
+                    try withExtendedLifetime((segment, bytes)) {
+                        while let entry = try readHeader(inner, of: ota) {
+                            try member(entry, of: inner, in: ota, buffer: &buffer, select: select, received: received)
+                        }
+                        try inner.close()
+                        try bytes.close()
+                    }
+                } else {
+                    // A plain archive keeps its files at the top level.
+                    try member(header, of: outer, in: ota, buffer: &buffer, select: select, received: received)
+                }
+            }
+            try outer.close()
+            for stream in opened.streams.reversed() {
+                try stream.close()
+            }
+        }
+    }
+
+    private struct OpenedArchive {
+        let archive: ArchiveStream
+        /// The file, then any decryption or decompression over it.
+        let streams: [ArchiveByteStream]
+    }
+
+    /// The decoded top-level archive: decrypted when the file is AEA,
+    /// decompressed when it is a compressed archive.
+    private static func openArchive(_ ota: URL, key: String?) throws -> OpenedArchive {
+        let magic = try readMagic(ota)
+        guard let file = ArchiveByteStream.fileStream(
+            path: FilePath(ota.path),
+            mode: .readOnly,
+            options: [],
+            permissions: FilePermissions(rawValue: 0o644),
+        ) else {
+            throw Error.unreadable(ota, "it could not be opened")
+        }
+        let plain: ArchiveByteStream
+        switch magic.prefix(3) {
+        case Data("AEA".utf8):
+            guard let key else { throw Error.keyRequired(ota) }
+            let symmetric = try symmetricKey(key)
+            guard let context = ArchiveEncryptionContext(from: file) else {
+                throw Error.unreadable(ota, "its AEA header is damaged")
+            }
+            try context.setSymmetricKey(symmetric)
+            guard let decrypted = ArchiveByteStream.decryptionStream(readingFrom: file, encryptionContext: context) else {
+                throw Error.wrongKey(ota)
+            }
+            plain = decrypted
+        case Data("pbz".utf8):
+            guard let decompressed = ArchiveByteStream.decompressionStream(readingFrom: file) else {
+                throw Error.unreadable(ota, "it could not be decompressed")
+            }
+            plain = decompressed
+        case Data("AA0".utf8), Data("YAA".utf8):
+            plain = file
+        default:
+            throw Error.notAnOTA(ota)
+        }
+        guard let archive = ArchiveStream.decodeStream(readingFrom: plain) else {
+            throw Error.notAnOTA(ota)
+        }
+        return OpenedArchive(archive: archive, streams: plain === file ? [file] : [file, plain])
+    }
+
+    private static func readMagic(_ file: URL) throws -> Data {
+        guard FileManager.default.fileExists(atPath: file.path) else { throw Error.missingFile(file) }
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        return try handle.read(upToCount: 4) ?? Data()
+    }
+
+    /// AppleArchive reports a failed AEA authentication or a truncated file
+    /// as an error from the read; name the file it came from.
+    private static func readHeader(_ stream: ArchiveStream, of ota: URL) throws -> ArchiveHeader? {
+        do {
+            return try stream.readHeader()
+        } catch {
+            throw Error.unreadable(ota, "\(error)")
+        }
+    }
+
+    private static func member(
+        _ header: ArchiveHeader,
+        of stream: ArchiveStream,
+        in ota: URL,
+        buffer: inout [UInt8],
+        select: (String) throws -> Disposition,
+        received: (String, Data?) throws -> Void,
+    ) throws {
+        guard case .uint(_, regularFile)? = header.field(forKey: typKey),
+              case let .string(_, path)? = header.field(forKey: patKey)
+        else { return }
+        let size: UInt64 = if case let .blob(_, size, _)? = header.field(forKey: datKey) { size } else { 0 }
+        switch try select(path) {
+        case .skip:
+            return
+        case let .file(destination):
+            let fm = FileManager.default
+            if fm.fileExists(atPath: destination.path) {
+                try fm.removeItem(at: destination)
+            }
+            guard fm.createFile(atPath: destination.path, contents: nil) else {
+                throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: destination.path])
+            }
+            let handle = try FileHandle(forWritingTo: destination)
+            defer { try? handle.close() }
+            try readBlob(size, from: stream, in: ota, buffer: &buffer) { try handle.write(contentsOf: $0) }
+            try handle.close()
+            try received(path, nil)
+        case .memory:
+            guard size <= memoryLimit else {
+                throw Error.unreadable(ota, "\(path) is \(size) bytes, larger than expected")
+            }
+            var data = Data(capacity: Int(size))
+            try readBlob(size, from: stream, in: ota, buffer: &buffer) { data.append($0) }
+            try received(path, data)
+        }
+    }
+
+    private static func readBlob(
+        _ size: UInt64,
+        from stream: ArchiveStream,
+        in ota: URL,
+        buffer: inout [UInt8],
+        consume: (Data) throws -> Void,
+    ) throws {
+        var left = size
+        while left > 0 {
+            let count = Int(min(UInt64(buffer.count), left))
+            let block = try buffer.withUnsafeMutableBytes { raw in
+                let slice = UnsafeMutableRawBufferPointer(rebasing: raw[0 ..< count])
+                do {
+                    try stream.readBlob(key: datKey, into: slice)
+                } catch {
+                    throw Error.unreadable(ota, "\(error)")
+                }
+                return Data(slice)
+            }
+            try consume(block)
+            left -= UInt64(count)
+        }
+    }
+
+    /// One extract segment's `DAT` blob, read in order from the enclosing
+    /// archive as the segment's own decoder asks for it.
+    private final class SegmentByteStream: ArchiveByteStreamProtocol {
+        let outer: ArchiveStream
+        var remaining: UInt64
+
+        init(outer: ArchiveStream, size: UInt64) {
+            self.outer = outer
+            remaining = size
+        }
+
+        func read(into buffer: UnsafeMutableRawBufferPointer) throws -> Int {
+            let count = Int(min(UInt64(buffer.count), remaining))
+            guard count > 0 else { return 0 }
+            try outer.readBlob(key: VPhoneOTAArchive.datKey, into: UnsafeMutableRawBufferPointer(rebasing: buffer[0 ..< count]))
+            remaining -= UInt64(count)
+            return count
+        }
+
+        func read(into _: UnsafeMutableRawBufferPointer, atOffset _: Int64) throws -> Int {
+            throw Errno.notSupported
+        }
+
+        func write(from _: UnsafeRawBufferPointer) throws -> Int {
+            throw Errno.notSupported
+        }
+
+        func write(from _: UnsafeRawBufferPointer, atOffset _: Int64) throws -> Int {
+            throw Errno.notSupported
+        }
+
+        func seek(toOffset _: Int64, relativeTo _: FileDescriptor.SeekOrigin) throws -> Int64 {
+            throw Errno.notSupported
+        }
+
+        func cancel() {}
+
+        func close() throws {}
+    }
+
+    // MARK: - Userland
+
+    /// The OTA's restore manifest, its device tree, and the root filesystem
+    /// payload: `payloadv2/payload.NNN`, each an Apple Archive of part of
+    /// the System volume with its owners, modes, flags and compression, and
+    /// `payload_chunks.txt`, which numbers them.
+    static let manifestPath = "AssetData/boot/BuildManifest.plist"
+    static let firmwarePrefix = "AssetData/boot/"
+    static let payloadPrefix = "AssetData/payloadv2/"
+    public static let chunkListName = "payload_chunks.txt"
+    /// The VM folder's copy of the payload, which `cfw install` extracts
+    /// over the restored System volume (`system-tv-exp-ota_userland`).
+    public static let userlandDirectoryName = "OTAUserland"
+
+    public struct StagedUserland: Sendable, Equatable {
+        public let version: String
+        public let build: String
+        /// The device's own `DeviceTree.<board>.im4p`.
+        public let deviceTree: URL
+        /// `payload.NNN`, in order.
+        public let chunks: [String]
+    }
+
+    /// Takes from `ota` what an OTA-userland guest needs: `device`'s device
+    /// tree into `deviceTreeDirectory`, beside the base IPSW's, and the payload
+    /// chunks with their list into `userlandDirectory`, which must not exist.
+    /// The OTA must be for `device` and of `build`, the base IPSW's; that is
+    /// checked from its manifest, which comes before the payload, so a wrong
+    /// OTA stops before the gigabytes of chunks are written. The folder is
+    /// created next to `userlandDirectory` and renamed into place complete.
+    public static func stageUserland(
+        from ota: URL,
+        key: String?,
+        device: VPhoneGuestDevice,
+        build: String,
+        deviceTreeDirectory: URL,
+        userlandDirectory: URL,
+        progress: ((String) -> Void)? = nil,
+    ) throws -> StagedUserland {
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: userlandDirectory.path) else { throw Error.existingUserland(userlandDirectory) }
+        let pending = userlandDirectory.deletingLastPathComponent()
+            .appendingPathComponent(".\(userlandDirectory.lastPathComponent).\(UUID().uuidString).partial", isDirectory: true)
+        try fm.createDirectory(at: pending, withIntermediateDirectories: false)
+        defer { try? fm.removeItem(at: pending) }
+
+        let deviceTreeName = (device.boardDeviceTreePath as NSString).lastPathComponent
+        let deviceTreeMember = firmwarePrefix + device.boardDeviceTreePath
+        let deviceTree = deviceTreeDirectory.appendingPathComponent(deviceTreeName)
+        var identity: (version: String, build: String)?
+        var wroteDeviceTree = false
+        var chunks: [String] = []
+        var chunkList: Data?
+
+        try readMembers(ota, key: key, select: { path in
+            if path == manifestPath { return .memory }
+            if path == deviceTreeMember {
+                guard identity != nil else { throw Error.missingMember(manifestPath, ota) }
+                return .file(deviceTree)
+            }
+            guard path.hasPrefix(payloadPrefix) else { return .skip }
+            let name = String(path.dropFirst(payloadPrefix.count))
+            if name == chunkListName { return .memory }
+            guard isChunkName(name) else { return .skip }
+            guard identity != nil else { throw Error.missingMember(manifestPath, ota) }
+            return .file(pending.appendingPathComponent(name))
+        }, received: { path, data in
+            if path == manifestPath {
+                identity = try checkManifest(data ?? Data(), of: ota, device: device, build: build)
+                progress?("OTA \(identity!.version) (\(identity!.build)) for \(device.productType)")
+            } else if path == deviceTreeMember {
+                wroteDeviceTree = true
+            } else if path == payloadPrefix + chunkListName {
+                chunkList = data
+            } else {
+                let name = String(path.dropFirst(payloadPrefix.count))
+                chunks.append(name)
+                progress?(name)
+            }
+        })
+
+        guard let identity else { throw Error.missingMember(manifestPath, ota) }
+        guard wroteDeviceTree else { throw Error.missingMember(deviceTreeMember, ota) }
+        guard let chunkList else { throw Error.missingMember(payloadPrefix + chunkListName, ota) }
+        chunks.sort()
+        try checkChunks(chunks, list: chunkList, of: ota)
+        try chunkList.write(to: pending.appendingPathComponent(chunkListName))
+        try fm.moveItem(at: pending, to: userlandDirectory)
+        try VPhoneHostFilePermissions.makeAccessible(at: userlandDirectory)
+        return StagedUserland(version: identity.version, build: identity.build, deviceTree: deviceTree, chunks: chunks)
+    }
+
+    /// The OTA's version and build, after checking that it is for `device`
+    /// and of `build`, read from its manifest without going further: a wrong
+    /// OTA or key is found before an IPSW is unpacked for it.
+    public static func checkIdentity(
+        of ota: URL,
+        key: String?,
+        device: VPhoneGuestDevice,
+        build: String,
+    ) throws -> (version: String, build: String) {
+        struct Found: Swift.Error {}
+        var identity: (version: String, build: String)?
+        do {
+            try readMembers(ota, key: key, select: { $0 == manifestPath ? .memory : .skip }, received: { _, data in
+                identity = try checkManifest(data ?? Data(), of: ota, device: device, build: build)
+                throw Found()
+            })
+        } catch is Found {}
+        guard let identity else { throw Error.missingMember(manifestPath, ota) }
+        return identity
+    }
+
+    /// `payload.NNN`: digits only, so no name the archive supplies can leave
+    /// the folder.
+    public static func isChunkName(_ name: String) -> Bool {
+        guard name.hasPrefix("payload.") else { return false }
+        let number = name.dropFirst("payload.".count)
+        return !number.isEmpty && number.allSatisfy(\.isASCIIDigit)
+    }
+
+    static func checkManifest(
+        _ data: Data,
+        of ota: URL,
+        device: VPhoneGuestDevice,
+        build expected: String,
+    ) throws -> (version: String, build: String) {
+        guard let manifest = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let version = manifest["ProductVersion"] as? String,
+              let build = manifest["ProductBuildVersion"] as? String
+        else {
+            throw Error.unreadable(ota, "its BuildManifest.plist is not a restore manifest")
+        }
+        let types = manifest["SupportedProductTypes"] as? [String] ?? []
+        guard types.contains(device.productType) else {
+            throw Error.wrongDevice(ota, productTypes: types, expected: device.productType)
+        }
+        guard build == expected else { throw Error.wrongBuild(ota, build: build, expected: expected) }
+        return (version, build)
+    }
+
+    /// `payload_chunks.txt` has one `index: size` line per chunk, numbered
+    /// from 0; every listed chunk must be there and nothing else.
+    static func checkChunks(_ chunks: [String], list: Data, of ota: URL) throws {
+        let lines = String(decoding: list, as: UTF8.self)
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let indices = lines.compactMap { Int($0.split(separator: ":").first ?? "") }
+        guard !chunks.isEmpty, indices.count == lines.count else {
+            throw Error.inconsistentChunks(ota, "\(chunkListName) does not list the chunks")
+        }
+        guard indices == Array(0 ..< indices.count) else {
+            throw Error.inconsistentChunks(ota, "\(chunkListName) is not numbered from 0")
+        }
+        let numbers = chunks.compactMap { Int($0.dropFirst("payload.".count)) }
+        guard numbers == indices else {
+            throw Error.inconsistentChunks(ota, "\(chunks.count) chunks for \(indices.count) listed")
+        }
+    }
+
+    // MARK: - Source
+
+    /// The OTA file to read: `source` when given, a local path read in place
+    /// or an HTTP(S) URL downloaded into the cache's `ota` folder; else the
+    /// catalog's `release`, downloaded there under its own name unless a copy
+    /// of its listed length is already there.
+    public static func resolve(
+        _ source: String?,
+        release: VPhoneOTARelease?,
+        in cacheDirectory: URL,
+        session: URLSession = URLSession(configuration: .ephemeral),
+        connections: Int = VPhoneIPSWCache.defaultDownloadConnections,
+        progress: (@Sendable (Int64, Int64) -> Void)? = nil,
+    ) async throws -> URL {
+        let remote: URL
+        let name: String
+        var expectedSize: Int64?
+        if let source {
+            guard let url = URL(string: source), let scheme = url.scheme?.lowercased(), scheme != "file" else {
+                let file = URL(string: source).flatMap { $0.isFileURL ? $0 : nil } ?? URL(fileURLWithPath: (source as NSString).expandingTildeInPath)
+                guard FileManager.default.fileExists(atPath: file.path) else { throw Error.missingFile(file) }
+                return file
+            }
+            guard scheme == "http" || scheme == "https" else { throw VPhoneIPSWCache.Error.unsupportedSource(source) }
+            remote = url
+            if let release, release.url == source {
+                name = release.fileName
+                expectedSize = release.size
+            } else {
+                name = cacheName(for: url)
+            }
+        } else if let release, let url = URL(string: release.url) {
+            remote = url
+            name = release.fileName
+            expectedSize = release.size
+        } else {
+            throw Error.noSource(release?.productType ?? "this device")
+        }
+
+        let fm = FileManager.default
+        let directory = cacheDirectory.appendingPathComponent("ota", isDirectory: true)
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        try VPhoneHostFilePermissions.makeDirectoryAccessible(at: directory)
+        let cache = directory.appendingPathComponent(name)
+        if try reusable(cache, size: expectedSize) {
+            return cache
+        }
+        let pending = directory.appendingPathComponent(".\(name).\(UUID().uuidString).partial")
+        defer { try? fm.removeItem(at: pending) }
+        guard fm.createFile(atPath: pending.path, contents: nil) else { throw CocoaError(.fileWriteUnknown) }
+        try await VPhoneIPSWCache.download(remote, into: pending, session: session, connections: connections, progress: progress)
+        let actual = try (fm.attributesOfItem(atPath: pending.path)[.size] as? NSNumber)?.int64Value ?? 0
+        if let expectedSize, actual != expectedSize {
+            throw Error.unexpectedSize(remote, expected: expectedSize, actual: actual)
+        }
+        guard try readMagic(pending).starts(with: Data("AEA1".utf8)) else { throw Error.notAnOTA(remote) }
+        if fm.fileExists(atPath: cache.path) {
+            try fm.removeItem(at: cache)
+        }
+        try fm.moveItem(at: pending, to: cache)
+        try VPhoneHostFilePermissions.makeAccessible(at: cache)
+        return cache
+    }
+
+    /// A cached copy of the right length that starts as an AEA file. One of
+    /// another length is a damaged download and is removed.
+    static func reusable(_ cache: URL, size: Int64?) throws -> Bool {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: cache.path) else { return false }
+        let actual = (try? fm.attributesOfItem(atPath: cache.path)[.size] as? NSNumber)?.int64Value
+        let magic = (try? readMagic(cache)) ?? Data()
+        if let size, actual != size {
+            try fm.removeItem(at: cache)
+            return false
+        }
+        return magic.starts(with: Data("AEA1".utf8))
+    }
+
+    static func cacheName(for url: URL) -> String {
+        let stem = (url.lastPathComponent as NSString).deletingPathExtension
+        let safe = String(stem.prefix(48).unicodeScalars.map { scalar in
+            CharacterSet.alphanumerics.contains(scalar) && scalar.isASCII || "-._".unicodeScalars.contains(scalar)
+                ? Character(scalar) : "_"
+        })
+        let digest = SHA256.hash(data: Data(url.absoluteString.utf8))
+        let suffix = digest.prefix(6).map { String(format: "%02x", $0) }.joined()
+        return "\(safe.isEmpty ? "ota" : safe)-\(suffix).aea"
+    }
+}
+
+private extension Character {
+    var isASCIIDigit: Bool {
+        isASCII && isNumber
+    }
+}

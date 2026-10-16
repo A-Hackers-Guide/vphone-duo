@@ -13,7 +13,7 @@ import VPhonePatchKit
 @Suite("Guest patch resolution")
 struct FirmwareGuestPatchResolutionTests {
     @Test
-    func `TV serial selection excludes iOS payloads and cache patches`() throws {
+    func `TV selection keeps vphoned and excludes iOS payloads and cache patches`() throws {
         let standard = try VPhonePatchPlan.resolve(
             preset: FirmwarePatchSetCatalog.standardPreset,
             patchSets: FirmwarePatchSetCatalog.bundled,
@@ -21,7 +21,8 @@ struct FirmwareGuestPatchResolutionTests {
             cloudOS: VPhoneVersion("26.4"),
         )
         let unvalidated = FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: standard.enabled)
-        #expect(unvalidated.contains("system-vphoned-boot-install"))
+        #expect(!unvalidated.contains("system-vphoned-boot-install"))
+        #expect(!unvalidated.contains("system-launchd_cache_loader-boot-unsecure_cache_gate"))
         #expect(unvalidated.contains("system-launchdaemons-boot-environment"))
         #expect(unvalidated.contains("system-extensions-boot-gpu_bundle"))
         #expect(unvalidated.contains(FirmwareGuestSystemPatchSet.paravirtGPUIndexOffset))
@@ -49,8 +50,78 @@ struct FirmwareGuestPatchResolutionTests {
             FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: standard.enabled),
         ).union([identifier])
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: serial).isEmpty)
-        #expect(!serial.contains("system-vphoned-boot-install"))
+        #expect(serial.contains("system-vphoned-boot-install"))
         #expect(!serial.contains("system-extensions-boot-gpu_bundle"))
+    }
+
+    @Test
+    func `only an arm64e TV admits the GPU driver and the OTA userland`() {
+        let gpu = "system-extensions-boot-gpu_bundle"
+        let ota = FirmwareGuestSystemPatchSet.tvOTAUserland
+        let selection: Set<String> = [gpu, ota, "system-vphoned-boot-install"]
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: selection) == [gpu, ota].sorted())
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: selection, arm64eUserland: true).isEmpty)
+        // The iOS payloads stay out for both.
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: ["dyld-cfw-camera"], arm64eUserland: true) == ["dyld-cfw-camera"])
+    }
+
+    @Test
+    func `the Apple TV 4K preset swaps in the OTA userland with the GPU driver and no TPRO patches`() throws {
+        let gpu = "system-extensions-boot-gpu_bundle"
+        let ota = FirmwareGuestSystemPatchSet.tvOTAUserland
+        let tpro: Set = [FirmwareGuestSystemPatchSet.tvTPRO, FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers]
+        func plan(_ preset: VPhonePatchPreset) throws -> VPhonePatchPlan {
+            try VPhonePatchPlan.resolve(
+                preset: preset,
+                patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: VPhoneVersion("26.6"),
+                cloudOS: VPhoneVersion("26.4"),
+            )
+        }
+        let tv4K = try plan(FirmwarePatchSetCatalog.tvOS4KPreset)
+        #expect(tv4K.isEnabled(gpu) && tv4K.isEnabled(ota))
+        #expect(tv4K.enabled.isDisjoint(with: tpro))
+        #expect(tv4K.isEnabled("system-vphoned-boot-install"))
+        // The upstream GPU heap index patch stays out, as for every TV guest.
+        #expect(!tv4K.isEnabled(FirmwareGuestSystemPatchSet.paravirtGPUIndexOffset))
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: tv4K.enabled, arm64eUserland: true).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: tv4K.enabled) == [gpu, ota].sorted())
+        // The 27 shared-cache patches are on but meet only a 27 userland.
+        #expect(tv4K.enabled.isDisjoint(with: FirmwarePatchSetCatalog.tvOS27UserlandPatches))
+        let tv4K27 = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.tvOS4KPreset,
+            patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("27.0"),
+            cloudOS: VPhoneVersion("26.4"),
+        )
+        // The userland swap and the GPU driver carry on to the 27 OTA.
+        #expect(tv4K27.isEnabled(gpu) && tv4K27.isEnabled(ota))
+        #expect(tv4K27.enabled.isSuperset(of: FirmwarePatchSetCatalog.tvOS27UserlandPatches))
+        #expect(tv4K27.isEnabled("kernel-boot-iomfb_swapend"))
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: tv4K27.enabled, arm64eUserland: true).isEmpty)
+
+        // The HD's preset is the mirror image.
+        let tvHD = try plan(FirmwarePatchSetCatalog.tvOSPreset)
+        #expect(!tvHD.isEnabled(gpu) && !tvHD.isEnabled(ota))
+        #expect(tvHD.enabled.isSuperset(of: tpro))
+        // Otherwise the two agree.
+        #expect(tv4K.enabled.symmetricDifference(tvHD.enabled) == tpro.union([gpu, ota]))
+    }
+
+    @Test
+    func `TV TPRO patches apply to every tvOS 26 userland on the 26.4 kernel`() throws {
+        let tv: Set = [FirmwareGuestSystemPatchSet.tvTPRO, FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers]
+        for build in ["26.4", "26.6"] {
+            let plan = try VPhonePatchPlan.resolve(
+                preset: FirmwarePatchSetCatalog.standardPreset,
+                patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: VPhoneVersion(build),
+                cloudOS: VPhoneVersion("26.4"),
+                allowed: tv,
+            )
+            #expect(plan.enabled.isSuperset(of: tv), "\(build)")
+            #expect(plan.skippedByVersion.isDisjoint(with: tv), "\(build)")
+        }
     }
 
     @Test

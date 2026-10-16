@@ -22,17 +22,28 @@ import Foundation
 import VPhonePatchKit
 
 public enum FirmwareGuestPatchResolution {
-    /// TV admits the gigalocker repair and opt-in dyld TPRO compatibility.
-    /// Payloads, other cache patches and shell integration need a TV port and
+    /// TV admits the gigalocker repair, opt-in dyld TPRO compatibility, and
+    /// vphoned with the launchd cache gate its launchd.plist entry needs.
+    /// Other payloads, cache patches and shell integration need a TV port and
     /// validation before the installer can select them.
     public static let tvSupportedGuestPatches: Set<String> = [
         "system-seputil-boot-gigalocker_uuid",
         "system-gigalocker-boot-rename",
         FirmwareGuestSystemPatchSet.tvTPRO,
+        "system-vphoned-boot-install",
+        "system-launchd_cache_loader-boot-unsecure_cache_gate",
     ]
 
-    public static func unvalidatedTVGuestPatches(enabled: Set<String>) -> [String] {
-        let admitted = tvSupportedGuestPatches
+    /// An arm64e Apple TV (the 4K, from its OTA) also admits the paravirtual
+    /// GPU driver, which a plain-arm64 userland cannot load, the OTA userland
+    /// swap itself, and the iOS 27 shared-cache patches its tvOS 27 OTA meets.
+    public static let tvArm64eGuestPatches: Set<String> = Set([
+        "system-extensions-boot-gpu_bundle",
+        FirmwareGuestSystemPatchSet.tvOTAUserland,
+    ]).union(FirmwarePatchSetCatalog.tvOS27UserlandPatches)
+
+    public static func unvalidatedTVGuestPatches(enabled: Set<String>, arm64eUserland: Bool = false) -> [String] {
+        let admitted = arm64eUserland ? tvSupportedGuestPatches.union(tvArm64eGuestPatches) : tvSupportedGuestPatches
         return enabled.intersection(guestTargetIdentifiers).subtracting(admitted).sorted()
     }
 

@@ -38,6 +38,41 @@ public struct VPhoneCloudOSOption: Sendable, Equatable {
     }
 }
 
+// MARK: - VPhoneOTARelease
+
+/// A full OTA update for a device Apple ships no IPSW for. `fw prepare`
+/// restores the base device's IPSW of `baseVersion` and takes this device's
+/// device tree and userland from the OTA (`VPhoneGuestDevice.restoreBase`).
+public struct VPhoneOTARelease: Sendable, Equatable {
+    public let productType: String
+    public let version: String
+    public let build: String
+    public let url: String
+    /// The `.aea` file's length, which a cached copy must have.
+    public let size: Int64
+    /// The AEA archive's symmetric key, base64, as AppleDB records it.
+    public let key: String
+    /// The version of the base device's IPSW the OTA is restored over. The
+    /// same as `version` while the base still gets releases; a later OTA goes
+    /// over the base's last one, since only the userland is taken from it.
+    public let baseVersion: String
+
+    public init(productType: String, version: String, build: String, url: String, size: Int64, key: String, baseVersion: String? = nil) {
+        self.productType = productType
+        self.version = version
+        self.build = build
+        self.url = url
+        self.size = size
+        self.key = key
+        self.baseVersion = baseVersion ?? version
+    }
+
+    /// The name the IPSW cache keeps it under, in its `ota` folder.
+    public var fileName: String {
+        "\(productType)_\(version)_\(build)_OTA.aea"
+    }
+}
+
 // MARK: - VPhoneFirmwareCatalog
 
 /// The known downloadable restore/cloudOS pairings, per guest device. Prompts
@@ -380,19 +415,85 @@ public enum VPhoneFirmwareCatalog {
         ]),
     ]
 
+    /// tvOS releases of the Apple TV HD, one entry per IPSW, oldest first. Only
+    /// builds that have booted on the 26.4 kernel are listed; tvOS 27 dropped
+    /// the device, and no later Apple TV ships an IPSW.
+    static let tvReleases: [(devices: [String], releases: [(version: String, url: String)])] = [
+        (devices: ["AppleTV5,3"], releases: [
+            ("26.6", "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-67287/F525C1FF-B49B-40AB-A5F4-A6F4A4847407/AppleTV5,3_26.6_23L773_Restore.ipsw"),
+        ]),
+    ]
+
+    /// Full OTAs of devices without an IPSW, oldest first. Each has a
+    /// `tvReleases` entry of its `baseVersion` for its `restoreBase`. The keys
+    /// are AppleDB's.
+    public static let otaReleases: [VPhoneOTARelease] = [
+        .init(
+            productType: "AppleTV14,1",
+            version: "26.6",
+            build: "23L773",
+            url: "https://updates.cdn-apple.com/2026SummerFCS/mobileassets/140-66625/46AFA27F-8E4E-4D21-AF03-8029192EF95D/com_apple_MobileAsset_SoftwareUpdate/9daea812eb5bdb959d1ea256bc95ad7258951fd5218eb3944d162ba868d463f7.aea",
+            size: 4_764_729_344,
+            key: "zm99NLG9ucGRIqHjpHC5BVHS3v55gz7bBmVfeizDMv0=",
+        ),
+        // tvOS 27 dropped the Apple TV HD, so the 27 userland goes over its
+        // last IPSW.
+        .init(
+            productType: "AppleTV14,1",
+            version: "27.0",
+            build: "24J361",
+            url: "https://updates.cdn-apple.com/2026FallFCS/fbf3c544-b770-4756-9cca-abfb2d3cb65e/com_apple_MobileAsset_SoftwareUpdate/9bf3ad6ac49c25016599bbb77d8ea1c612cb745eb7ee9e502af1926c860b7e18.aea",
+            size: 4_831_838_208,
+            key: "L3wZrfSYx2pFDbJSYtEteNDspB26qBv0lxLlkWrKTYk=",
+            baseVersion: "26.6",
+        ),
+    ]
+
+    /// The full OTA of `productType` at `build`, or nil when the catalog has none.
+    public static func otaRelease(for productType: String, build: String) -> VPhoneOTARelease? {
+        otaReleases.first { $0.productType == productType && $0.build == build }
+    }
+
+    /// The catalog OTA a firmware source names, by its URL or by the name the
+    /// IPSW cache keeps it under, or nil for any other source.
+    public static func otaRelease(source: String) -> VPhoneOTARelease? {
+        let name = (source as NSString).lastPathComponent
+        return otaReleases.first { $0.url == source || $0.fileName == name }
+    }
+
+    /// The URL of the base device's IPSW `release` is restored over.
+    public static func restoreBaseURL(for release: VPhoneOTARelease) -> String? {
+        guard let base = VPhoneGuestDevice.named(release.productType)?.restoreBase else { return nil }
+        let releases = (iPhoneReleases + iPadReleases + tvReleases).first { $0.devices.contains(base.productType) }?.releases
+        return releases?.first { $0.version == release.baseVersion }?.url
+    }
+
     /// The pairings for one guest device, oldest first: the iPhone17,3 list,
     /// or another model's releases with the cloudOS an iPhone17,3 of that
-    /// release uses. A cellular iPad gets its Wi-Fi model's; an unknown device
+    /// release uses. A cellular iPad gets its Wi-Fi model's; an Apple TV gets
+    /// cloudOS 26.4, the only kernel its TPRO compatibility patch covers; a
+    /// device without an IPSW gets one per OTA for it, named for the OTA: the
+    /// base's IPSW when the OTA is of the same version, else the OTA itself,
+    /// which `fw prepare` restores over its base's IPSW; an unknown device
     /// gets none.
     public static func pairings(for device: String) -> [VPhoneFirmwarePairing] {
         guard let guest = VPhoneGuestDevice.named(device) else { return [] }
         guard guest.presentsBoard else { return pairings }
-        let releases = (iPhoneReleases + iPadReleases).first { $0.devices.contains(guest.productType) }?.releases ?? []
+        let restored = guest.restoreBase ?? guest
+        var releases = (iPhoneReleases + iPadReleases + tvReleases).first { $0.devices.contains(restored.productType) }?.releases ?? []
+        if restored != guest {
+            releases = otaReleases.filter { $0.productType == guest.productType }.compactMap { ota in
+                guard let base = releases.first(where: { $0.version == ota.baseVersion }) else { return nil }
+                return (version: ota.version, url: ota.version == base.version ? base.url : ota.url)
+            }
+        }
         return releases.map { release in
-            let cloudOS = recommendedCloudOS(forVersion: release.version)
+            let cloudOS = guest.family == .appleTV
+                ? VPhoneCloudOSOption(name: "cloudOS 26.4", url: cloud264)
+                : recommendedCloudOS(forVersion: release.version)
             return VPhoneFirmwarePairing(
                 device: guest.productType,
-                iosName: "\(guest.isPad ? "iPadOS" : "iOS") \(release.version)",
+                iosName: "\(guest.family.osName) \(release.version)",
                 iosURL: release.url,
                 cloudosName: cloudOS.name,
                 cloudosURL: cloudOS.url,
@@ -478,7 +579,7 @@ public struct VPhoneFirmwareCatalogReport: Codable, Equatable, Sendable {
         public let productType: String
         /// The marketing name, such as `iPad mini (A17 Pro)`.
         public let name: String
-        /// `iPhone` or `iPad`.
+        /// `iPhone`, `iPad` or `appleTV`.
         public let family: String
         public let pairings: [Entry]
         public init(productType: String, name: String, family: String, pairings: [Entry]) {

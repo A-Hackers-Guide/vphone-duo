@@ -1,6 +1,24 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "An Apple TV is restored on its own, with keys of its own. Templates are made for iPhone and iPad." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "An Apple TV is restored on its own, with keys of its own. Templates are made for iPhone and iPad." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Apple TV は独自のキーで個別に復元されます。テンプレートは iPhone と iPad 用です。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Apple TV는 자체 키로 개별 복원됩니다. 템플릿은 iPhone과 iPad용입니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Apple TV được khôi phục riêng, với khóa của riêng nó. Mẫu dành cho iPhone và iPad." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Apple TV 单独恢复，使用自己的密钥。模板只用于 iPhone 和 iPad。" } }
+      }
+    },
+    "An Apple TV keeps every file, service and app." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "An Apple TV keeps every file, service and app." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Apple TV はすべてのファイル、サービス、App を保持します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Apple TV는 모든 파일, 서비스, 앱을 유지합니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Apple TV giữ lại mọi tệp, dịch vụ và ứng dụng." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Apple TV 会保留所有文件、服务和 App。" } }
+      }
+    },
     "%@ Guest System" : {
       "localizations" : {
         "en" : {

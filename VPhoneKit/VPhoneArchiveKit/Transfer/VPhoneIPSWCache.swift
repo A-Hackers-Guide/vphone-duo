@@ -621,16 +621,18 @@ public enum VPhoneIPSWCache {
     public static let guestDeviceClass = "vphone600ap"
 
     /// Every product whose IPSW can supply the guest OS: the iPhone17,3 the
-    /// catalog targets, and the iPads `VPhoneGuestDevice` knows.
+    /// catalog targets, and the iPads and Apple TV `VPhoneGuestDevice` knows.
+    /// A device restored over another's IPSW (`restoreBase`) is not one.
     public static var guestProductTypes: [String] {
-        VPhoneGuestDevice.known.map(\.productType)
+        VPhoneGuestDevice.known.filter { $0.restoreBase == nil }.map(\.productType)
     }
 
     /// The guest device an IPSW supplies, or nil for any other product. An IPSW
     /// that covers several models gives `preferring` when it is one of them, and
     /// its first known model otherwise.
     public static func guestDevice(for archive: Archive, preferring productType: String? = nil) -> VPhoneGuestDevice? {
-        VPhoneGuestDevice.detect(buildManifest: ["SupportedProductTypes": archive.productTypes], preferring: productType)
+        let types = archive.productTypes.filter { VPhoneGuestDevice.named($0)?.restoreBase == nil }
+        return VPhoneGuestDevice.detect(buildManifest: ["SupportedProductTypes": types], preferring: productType)
     }
 
     /// Checks each BuildManifest before anything is extracted, so a swapped

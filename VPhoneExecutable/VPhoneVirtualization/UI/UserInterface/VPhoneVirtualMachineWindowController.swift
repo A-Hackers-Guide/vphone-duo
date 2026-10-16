@@ -10,6 +10,11 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
     private weak var virtualMachineView: VPhoneVirtualMachineView?
     private(set) var touchIDMonitor: VPhoneTouchIDMonitor?
     private var homeButton: NSButton?
+    /// An Apple TV's TV button: holding the titlebar button holds it in the
+    /// guest, so a click goes Home and a hold opens Control Center.
+    var homeButtonHoldsInGuest = false {
+        didSet { applyHomeButtonHold() }
+    }
     private var subtitleLabel: NSTextField?
     private var timers: [Timer] = []
     private var keyStateObservers: [NSObjectProtocol] = []
@@ -417,7 +422,7 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
     }()
 
     private func makeHomeAccessory() -> NSTitlebarAccessoryViewController {
-        let button = NSButton(image: Self.homeImage, target: self, action: #selector(homePressed))
+        let button = VPhoneHomeButton(image: Self.homeImage, target: self, action: #selector(homePressed))
         if #available(macOS 26.0, *) {
             button.bezelStyle = .glass
             button.borderShape = .circle
@@ -428,6 +433,7 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         button.toolTip = VPhoneLocalization.text("Home Button")
         button.translatesAutoresizingMaskIntoConstraints = false
         homeButton = button
+        applyHomeButtonHold()
 
         // A titlebar accessory takes its width from the view's frame, so the
         // container is sized explicitly; otherwise the button collapses to 0.
@@ -464,6 +470,38 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
     // MARK: - Actions
 
     @objc private func homePressed() {
+        // A held button already sent its press and release.
+        guard !homeButtonHoldsInGuest else { return }
         control?.sendHIDPress(page: 0x0C, usage: 0x40)
+    }
+
+    private func applyHomeButtonHold() {
+        (homeButton as? VPhoneHomeButton)?.onHold = homeButtonHoldsInGuest
+            ? { [weak self] down in
+                if down {
+                    self?.control?.sendHIDDown(page: 0x0C, usage: 0x40)
+                } else {
+                    self?.control?.sendHIDUp(page: 0x0C, usage: 0x40)
+                }
+            }
+            : nil
+    }
+}
+
+// MARK: - Home Button
+
+/// Reports the press and the release around AppKit's tracking loop, which
+/// returns only when the mouse is released, inside the button or not.
+private final class VPhoneHomeButton: NSButton {
+    var onHold: ((Bool) -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        guard isEnabled, let onHold else {
+            super.mouseDown(with: event)
+            return
+        }
+        onHold(true)
+        super.mouseDown(with: event)
+        onHold(false)
     }
 }

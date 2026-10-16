@@ -157,6 +157,33 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         screen: .init(width: 1920, height: 1080, pixelsPerInch: 72, scale: 1.0),
     )
 
+    /// Apple TV 4K (3rd generation), research only: Apple ships it no IPSW,
+    /// so its arm64e userland comes from an OTA over a restored Apple TV HD
+    /// (`system-tv-exp-ota_userland`). J255's device tree supplies the 2x
+    /// identity; 3840x2160 is the panel it drives at 4K.
+    public static let appleTV14_1 = VPhoneGuestDevice(
+        family: .appleTV,
+        productType: "AppleTV14,1",
+        deviceClass: "j255ap",
+        productName: "Apple TV 4K (3rd generation)",
+        screen: .init(width: 3840, height: 2160, pixelsPerInch: 144, scale: 2.0),
+    )
+
+    /// Whether the guest's userland is plain arm64 rather than arm64e: only
+    /// the Apple TV HD's. It has no paravirtual GPU driver to load, and its
+    /// dyld needs the TV TPRO patches.
+    public var hasPlainArm64Userland: Bool {
+        self == .appleTV5_3
+    }
+
+    /// The device whose IPSW is restored under this one, for a device Apple
+    /// ships no IPSW for: the Apple TV HD under the Apple TV 4K, whose own
+    /// device tree and userland `fw prepare` takes from its OTA. Nil for every
+    /// device restored from its own IPSW.
+    public var restoreBase: VPhoneGuestDevice? {
+        self == .appleTV14_1 ? .appleTV5_3 : nil
+    }
+
     public static let known: [VPhoneGuestDevice] = [
         iPhone17_3,
         iPhone17_4, iPhone17_1, iPhone17_2, iPhone17_5,
@@ -166,7 +193,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         iPad15_3, iPad15_5,
         iPad16_3, iPad16_5,
         iPad17_1, iPad17_3,
-        appleTV5_3,
+        appleTV5_3, appleTV14_1,
     ]
 
     /// Cellular models that ship in the same IPSW as a known Wi-Fi model and map

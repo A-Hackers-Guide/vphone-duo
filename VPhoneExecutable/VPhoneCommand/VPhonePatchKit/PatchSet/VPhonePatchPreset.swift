@@ -74,6 +74,14 @@ public struct VPhonePatchPreset: Sendable, Hashable, Codable, Identifiable {
     /// The identifier a VM gets when nothing asked for another preset.
     public static let standardIdentifier = "standard"
 
+    /// The identifier an Apple TV guest gets when nothing asked for another
+    /// preset: standard without the iOS payloads tvOS has no port of.
+    public static let tvOSIdentifier = "tvos"
+
+    /// The preset an Apple TV 4K guest gets: the TV preset for an arm64e
+    /// userland taken from the device's OTA.
+    public static let tvOS4KIdentifier = "tvos-4k"
+
     /// Whether this is the preset a VM gets by default.
     public var isStandard: Bool {
         identifier == Self.standardIdentifier

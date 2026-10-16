@@ -17,6 +17,45 @@
 > errors abort the install before disk replacement; rollback retires the undo
 > record only after cache re-attestation and standalone restoration succeed.
 > Details and evidence: [tvOS support](Firmware/tvos_support.md).
+>
+> **tvOS follow-up (2026-10-15).** Apple TV guests run vphoned. tvOS dyld
+> refused the iOS-platform daemon (`wrong platform to load into process`), so the
+> bundle also ships `vphoned-tvos`, the same arm64 binary with `LC_BUILD_VERSION`
+> platform tvOS, chosen by guest family at install and launch.
+> `system-vphoned-boot-install` and `system-launchd_cache_loader-boot-unsecure_cache_gate`
+> are admitted for TV; the cache-gate patcher NOPs the same branch in the
+> plain-arm64 loader unchanged. `system-dyld-exp-tv_tpro` and
+> `kernel-exp-tv_tpro_pagers` now apply to every tvOS 26 userland on cloudOS 26.4
+> rather than 26.4 alone: the tunable is the cloudOS kernel's, and tvOS 26.6
+> (23L773) needed and booted with both. The new `tvos` preset is Standard with
+> both on and the iOS display, camera, audio, sensor, GPU and shared-cache
+> patches off. vphoned's consumer `0x0C/0x40` is the TV button (press type
+> 17): Home on a press, Control Center when held.
+>
+> **Apple TV 4K (2026-10-15).** New research patch
+> `system-tv-exp-ota_userland` (manual-only; on only in the `tvos-4k` preset) empties
+> the restored System volume and `aa extract`s the AppleTV14,1 OTA's
+> `payloadv2` chunks staged in `<vm>/OTAUserland`, over an Apple TV HD 26.6
+> restore with the J255 identity. On an arm64e TV guest the installer also admits
+> `system-extensions-boot-gpu_bundle` and rewrites the paravirtual GPU driver's
+> and compiler plugin's `LC_BUILD_VERSION` to tvOS (`MachOBuildPlatform`) before
+> re-signing; the guest then renders through the paravirtual GPU at 2160p.
+> `fw prepare --device AppleTV14,1` stages the OTA natively (system
+> AppleArchive: AEA decryption, segmented archive) and the `tvos-4k` preset is
+> `tvos` with the GPU bundle and the userland swap on and both TV TPRO patches
+> off. See
+> [tvOS support](Firmware/tvos_support.md#apple-tv-4k-from-its-ota).
+
+> **tvOS 27 on the Apple TV 4K (2026-10-16).** No new patch. The 4K's tvOS 27.0
+> (24J361) OTA goes over the HD's 26.6 IPSW, and the plan resolves for the OTA's
+> version. `system-tv-exp-ota_userland` now applies from 26.0 on (it was gated on
+> 26, so a 27 plan dropped it and the HD userland booted and panicked). The
+> `tvos-4k` preset and arm64e TV admission add the iOS 27 shared-cache patches
+> `dyld-boot-iomfb_force_kern`, `dyld-boot-lockdown_mode`,
+> `dyld-boot-lsd_embedded_reg`, `dyld-boot-maxslide` and `dyld-boot-xpc_lwcr`,
+> all gated on 27. Validated on `tv27-4k`: TVSetup at 2160p in the host window,
+> input, GPU time, vphoned. See
+> [tvOS support](Firmware/tvos_support.md#tvos-27-on-the-apple-tv-4k).
 
 > **iOS 27 disabled services (2026-10-13):**
 > `system-jetsamproperties-cfw-disable_allowed` removes every

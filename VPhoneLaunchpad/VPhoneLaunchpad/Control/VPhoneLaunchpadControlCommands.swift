@@ -585,9 +585,27 @@ struct VPhoneLaunchpadControlCommands {
             }
             return value
         }
-        let (patches, guestPatches) = try await Self.patches(request, commandLine: commandLine, emit: emit)
-        let usesTemplate = !request.flag("no-template")
-        let slimming = try Self.slimming(request, usesTemplate: usesTemplate)
+        // An Apple TV is restored on its own with the tvOS preset: templates
+        // and slimming drive iOS Setup Assistant and its apps.
+        let isAppleTV = device?.hasPrefix("AppleTV") == true
+        let (patches, guestPatches) = try await Self.patches(
+            request,
+            commandLine: commandLine,
+            defaultPreset: VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: device),
+            emit: emit,
+        )
+        let usesTemplate = !request.flag("no-template") && !isAppleTV
+        let slimming: VPhoneLaunchpadSlimming
+        if isAppleTV {
+            if !Self.slimmingSwitches(request).isEmpty {
+                throw VPhoneLaunchpadError("An Apple TV is created without a template; the slimming switches do not apply.")
+            }
+            var off = VPhoneLaunchpadSlimming()
+            off.slim = false
+            slimming = off
+        } else {
+            slimming = try Self.slimming(request, usesTemplate: usesTemplate)
+        }
         let options = try VPhoneLaunchpadCreationPipeline.Options(
             name: machine.name,
             libraryRoot: machine.libraryRoot,
@@ -616,12 +634,11 @@ struct VPhoneLaunchpadControlCommands {
     private static func patches(
         _ request: VPhoneLaunchpadControlRequest,
         commandLine: VPhoneLaunchpadCommandLine,
+        defaultPreset: String,
         emit: Emit,
     ) async throws -> (VPhoneLaunchpadPatchSelection, guest: Set<String>) {
         var selection = VPhoneLaunchpadPatchSelection()
-        if let preset = request.option("preset") {
-            selection.preset = preset
-        }
+        selection.preset = request.option("preset") ?? defaultPreset
         let block = request.values("block")
         let allow = request.values("allow")
         guard !block.isEmpty || !allow.isEmpty else {
@@ -658,6 +675,12 @@ struct VPhoneLaunchpadControlCommands {
         return (selection, overrides.guestPatches)
     }
 
+    /// The slimming switches the request names.
+    private static func slimmingSwitches(_ request: VPhoneLaunchpadControlRequest) -> [String] {
+        ["slim", "trim", "keep-languages", "service-profile", "remove-apps", "keep-apps"].filter { request.option($0) != nil }
+            + (request.flag("accounts-off") ? ["accounts-off"] : [])
+    }
+
     /// The template switches, refused where `vphone-cli vm create` refuses
     /// them: with `--no-template`, after `--slim off`, `--accounts-off`
     /// without the trimmed profile, an app outside the removable list.
@@ -672,8 +695,7 @@ struct VPhoneLaunchpadControlCommands {
             default: throw VPhoneLaunchpadError("--\(option) takes on or off, not \(value).")
             }
         }
-        let parts = ["trim", "keep-languages", "service-profile", "remove-apps", "keep-apps"].filter { request.option($0) != nil }
-            + (request.flag("accounts-off") ? ["accounts-off"] : [])
+        let parts = slimmingSwitches(request).filter { $0 != "slim" }
         if !usesTemplate, !parts.isEmpty || request.option("slim") != nil {
             throw VPhoneLaunchpadError("The slimming switches shape a template; --no-template creates the machine without one.")
         }

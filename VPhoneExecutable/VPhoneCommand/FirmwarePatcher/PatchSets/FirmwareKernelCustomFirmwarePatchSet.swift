@@ -30,7 +30,7 @@ public enum FirmwareKernelCustomFirmwarePatchSet {
                 title: "TV TPRO pager compatibility",
                 summary: "Defaults sprr_tpro_pagers to zero so plain-arm64 tvOS dyld can make DATA_CONST writable. Pair with the TV dyld TPRO patch.",
                 target: .firmware(.kernelcache),
-                applicability: VPhonePatchApplicability(iOSBase: .release(major: 26, minor: 4), cloudOS: .release(major: 26, minor: 4)),
+                applicability: VPhonePatchApplicability(iOSBase: .major(26), cloudOS: .release(major: 26, minor: 4)),
             ),
             // MARK: Trust Cache and Code Signing
 

@@ -98,9 +98,13 @@ public enum VPhoneFirmwarePicker {
         read: () -> String?,
         write: (String) -> Void,
     ) throws -> VPhoneFirmwarePairing {
-        let os = VPhoneGuestDevice.named(pairings.first?.device)?.isPad == true ? "iPadOS" : "iPhone"
+        let os = switch VPhoneGuestDevice.named(pairings.first?.device)?.family {
+        case .iPad: "an iPadOS"
+        case .appleTV: "a tvOS"
+        case .iPhone, nil: "an iPhone"
+        }
         let idx = try choose(
-            "Select an \(os) firmware to download:",
+            "Select \(os) firmware to download:",
             pairings.map(\.iosName),
             maxRetries: maxRetries,
             read: read,

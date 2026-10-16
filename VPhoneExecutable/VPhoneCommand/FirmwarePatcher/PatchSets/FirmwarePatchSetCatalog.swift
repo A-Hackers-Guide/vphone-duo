@@ -62,7 +62,7 @@ public enum FirmwarePatchSetCatalog {
         Set(FirmwareKernelFridaPatchSet.manifest.patches.map(\.identifier))
             .union(hypervisorConcealmentPatches)
             .union(experimentalIdentityPatches)
-            .union([FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers, misTrustAuthPatch, FirmwareGuestSystemPatchSet.settingsRootRows, FirmwareGuestSystemPatchSet.settingsSoftwareUpdate, FirmwareGuestSystemPatchSet.tvTPRO])
+            .union([FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers, misTrustAuthPatch, FirmwareGuestSystemPatchSet.settingsRootRows, FirmwareGuestSystemPatchSet.settingsSoftwareUpdate, FirmwareGuestSystemPatchSet.tvTPRO, FirmwareGuestSystemPatchSet.tvOTAUserland])
 
     /// ProMotion: the 120 Hz timing for the paravirtual display.
     ///
@@ -213,6 +213,88 @@ public enum FirmwarePatchSetCatalog {
         selection: .all,
     )
 
+    /// The iOS payloads, hooks and shared-cache patches an Apple TV guest has no
+    /// validated port of: display, camera, audio, sensors, the GPU driver (a
+    /// plain-arm64 HD cannot load it), debugserver and the environment hooks.
+    public static let tvOSBlockedPatches: Set<String> = [
+        "dyld-boot-iomfb_force_kern",
+        "dyld-boot-iomfb_swapend",
+        "dyld-boot-lockdown_mode",
+        "dyld-boot-lsd_embedded_reg",
+        "dyld-boot-maxslide",
+        "dyld-boot-xpc_lwcr",
+        "dyld-cfw-camera",
+        "preboot-cfw-devicetree_board_audio",
+        "preboot-cfw-devicetree_haptics",
+        "preboot-cfw-devicetree_iphone_product",
+        "preboot-cfw-devicetree_microphone_array",
+        "system-apps-cfw-attitude",
+        "system-backboardd-cfw-gyroscope",
+        "system-campo-cfw-entitlements",
+        "system-debugserver-cfw-install",
+        "system-diskimagesiod-cfw-is_mount_complete",
+        "system-extensions-boot-gpu_bundle",
+        "system-installcoordination_proxy-cfw-persona_lookup",
+        "system-jetsamproperties-cfw-disable_allowed",
+        "system-launchd-boot-jetsam_panic_guard_bypass",
+        "system-launchdaemons-boot-environment",
+        "system-locationd-cfw-disable_auto_cohort",
+        "system-mobileactivationd-boot-should_hactivate",
+        "system-paravirt_gpu-cfw-heap_index_offset",
+        "system-systemversion-cfw-build_version",
+        "system-virtiosound-cfw-hal_plugin",
+        "system-virtualaudio-cfw-microphone_graph_chains",
+        "system-virtualaudio-cfw-mute_set_throw",
+        "system-virtualaudio-cfw-speaker_graph_chains",
+        "system-virtualaudio-cfw-speaker_protection_gate",
+        "system-virtualaudio-cfw-speaker_raw_chains",
+        "system-virtualaudio-cfw-speaker_route_throws",
+        "system-virtualaudio-cfw-volume_mode_precondition",
+    ]
+
+    /// The iOS 27 shared-cache patches a 27 userland needs on the 26.4 kernel,
+    /// the display swap through the kernel among them. The Apple TV 4K keeps
+    /// them on for its tvOS 27 OTA; each is gated on 27, so a 26 userland
+    /// never meets them.
+    public static let tvOS27UserlandPatches: Set<String> = [
+        "dyld-boot-iomfb_force_kern",
+        "dyld-boot-lockdown_mode",
+        "dyld-boot-lsd_embedded_reg",
+        "dyld-boot-maxslide",
+        "dyld-boot-xpc_lwcr",
+    ]
+
+    /// Standard for an Apple TV guest: the TV TPRO compatibility on, and
+    /// ``tvOSBlockedPatches`` off. The shipped `tvos.plist` must match this.
+    public static let tvOSPreset = VPhonePatchPreset(
+        identifier: VPhonePatchPreset.tvOSIdentifier,
+        title: "Apple TV",
+        summary: "Standard for an Apple TV HD guest: plain-arm64 TPRO compatibility and vphoned, without the iOS display, camera, audio, sensor and shared-cache patches tvOS has no validated port of.",
+        patchSets: bundledReferences,
+        selection: .block(
+            manualOnlyPatches
+                .subtracting([FirmwareGuestSystemPatchSet.tvTPRO, FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers])
+                .union(tvOSBlockedPatches),
+        ),
+    )
+
+    /// The Apple TV preset for an arm64e Apple TV 4K whose userland comes from
+    /// its OTA: the paravirtual GPU driver, which the HD cannot load, and the
+    /// userland swap and ``tvOS27UserlandPatches`` on; the TV TPRO patches,
+    /// which only plain-arm64 dyld needs, off. The shipped `tvos-4k.plist`
+    /// must match this.
+    public static let tvOS4KPreset = VPhonePatchPreset(
+        identifier: VPhonePatchPreset.tvOS4KIdentifier,
+        title: "Apple TV 4K",
+        summary: "Research: the Apple TV preset for an Apple TV 4K restored over the Apple TV HD, with its arm64e userland from the OTA and the paravirtual GPU driver, without the plain-arm64 TPRO patches.",
+        patchSets: bundledReferences,
+        selection: .block(
+            manualOnlyPatches
+                .subtracting([FirmwareGuestSystemPatchSet.tvOTAUserland])
+                .union(tvOSBlockedPatches.subtracting(["system-extensions-boot-gpu_bundle"]).subtracting(tvOS27UserlandPatches)),
+        ),
+    )
+
     /// The presets the bundle ships.
-    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, experimentalPreset]
+    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, experimentalPreset, tvOSPreset, tvOS4KPreset]
 }

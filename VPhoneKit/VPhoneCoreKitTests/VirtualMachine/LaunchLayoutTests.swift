@@ -187,6 +187,32 @@ struct LaunchLayoutTests {
         #expect(try layout.stageVphoned(into: bundle) == false)
     }
 
+    @Test func `stage vphoned picks the tvOS daemon for an Apple TV guest`() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let guest = root.appendingPathComponent("guest-resources")
+        try FileManager.default.createDirectory(at: guest, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data([1]).write(to: guest.appendingPathComponent("vphoned"))
+        try Data([2]).write(to: guest.appendingPathComponent("vphoned-tvos"))
+        let resources = VPhoneResources(base: root)
+        #expect(resources.vphoned.lastPathComponent == "vphoned")
+        #expect(resources.vphoned(for: .iPad).lastPathComponent == "vphoned")
+        #expect(resources.vphoned(for: .appleTV).lastPathComponent == "vphoned-tvos")
+
+        let base = VPhoneVirtualMachineManifest(
+            cpuCount: 2,
+            memorySize: 1024 * 1024,
+            romImages: .init(avpBooter: "a", avpSEPBooter: "b"),
+        )
+        for (device, expected) in [(VPhoneGuestDevice.appleTV5_3, Data([2])), (.iPhone17_3, Data([1]))] {
+            let bundleDir = root.appendingPathComponent(device.productType)
+            try FileManager.default.createDirectory(at: bundleDir, withIntermediateDirectories: true)
+            let bundle = VPhoneBundle(url: bundleDir, manifest: base.updating(guestDevice: device))
+            #expect(try VPhoneLaunchLayout(resources: resources).stageVphoned(into: bundle))
+            #expect(try Data(contentsOf: bundleDir.appendingPathComponent(".vphoned.signed")) == expected)
+        }
+    }
+
     @Test func `stage vphoned fails when source absent`() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

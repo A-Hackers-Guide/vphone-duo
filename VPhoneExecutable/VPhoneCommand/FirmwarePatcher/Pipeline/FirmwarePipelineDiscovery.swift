@@ -46,9 +46,16 @@ extension FirmwarePipeline {
         return version
     }
 
-    /// iPhone base version (`iPhone-BuildManifest.plist`, preserved by fw_prepare).
+    /// The version of the OTA a device without an IPSW takes its userland
+    /// from, which `fw prepare` records beside the base's manifest: the
+    /// userland, not the restored IPSW, is what the guest patches meet.
+    public static let otaVersionFileName = "OTA-SystemVersion.plist"
+
+    /// iPhone base version: the staged OTA's when there is one, else
+    /// `iPhone-BuildManifest.plist`'s, preserved by fw_prepare.
     static func readBaseProductVersion(_ restoreDir: URL) -> String? {
-        readProductVersion(restoreDir, manifest: "iPhone-BuildManifest.plist")
+        readProductVersion(restoreDir, manifest: otaVersionFileName)
+            ?? readProductVersion(restoreDir, manifest: "iPhone-BuildManifest.plist")
     }
 
     /// The device whose IPSW supplied the guest OS: the one `fw prepare`
@@ -57,6 +64,12 @@ extension FirmwarePipeline {
     /// names none.
     func readGuestDevice(_ restoreDir: URL) -> VPhoneGuestDevice {
         let recorded = try? VPhoneVirtualMachineManifest.load(from: vmDirectory.appendingPathComponent("config.plist"))
+        // An Apple TV 4K has no IPSW: it is built over an Apple TV HD restore
+        // and takes its userland from an OTA, so the HD's manifest never lists
+        // it. Its own device tree, placed in the restore tree, presents it.
+        if recorded?.guestDevice == .appleTV14_1 {
+            return .appleTV14_1
+        }
         return VPhoneGuestDevice.detect(
             buildManifestAt: restoreDir.appendingPathComponent("iPhone-BuildManifest.plist"),
             preferring: recorded?.guestProductType,

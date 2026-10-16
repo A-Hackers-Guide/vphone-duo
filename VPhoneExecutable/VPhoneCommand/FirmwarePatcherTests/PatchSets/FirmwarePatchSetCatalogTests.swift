@@ -132,10 +132,15 @@ struct FirmwarePatchSetCatalogTests {
                         cloudOS: VPhoneVersion(cloud),
                     )
                     #expect(!plan.enabled.isEmpty)
-                    // Nothing a shipped preset does should drop a boot-essential
-                    // patch: these are the combinations we claim boot.
+                    // Nothing a shipped iOS preset does should drop a boot-essential
+                    // patch: these are the combinations we claim boot. The tvOS
+                    // presets drop exactly the iOS ones an Apple TV has no port of.
+                    let tvPresets = [VPhonePatchPreset.tvOSIdentifier, VPhonePatchPreset.tvOS4KIdentifier]
+                    let expected = tvPresets.contains(preset.identifier)
+                        ? Set(plan.droppedBootEssentials).isSubset(of: FirmwarePatchSetCatalog.tvOSBlockedPatches)
+                        : plan.droppedBootEssentials.isEmpty
                     #expect(
-                        plan.droppedBootEssentials.isEmpty,
+                        expected,
                         "\(preset.identifier) on \(base)/\(cloud) drops \(plan.droppedBootEssentials)",
                     )
                 }
@@ -342,7 +347,7 @@ struct FirmwarePatchSetCatalogTests {
                         on.isEmpty || on == pair,
                         "\(preset.identifier) on \(base)/\(cloud) enabled only \(on)",
                     )
-                    #expect(on.isEmpty == preset.isStandard)
+                    #expect(on.isEmpty == (preset.identifier != "experimental"))
                 }
             }
         }

@@ -275,6 +275,24 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
     /// only add noise, so the pipeline omits the flag for this one value.
     static let defaultPreset = "standard"
 
+    /// The preset an Apple TV guest gets, mirroring
+    /// `VPhonePatchPreset.tvOSIdentifier`.
+    static let tvOSPreset = "tvos"
+
+    /// The preset an Apple TV 4K guest gets, mirroring
+    /// `VPhonePatchPreset.tvOS4KIdentifier`: its arm64e userland comes from
+    /// the OTA, with the paravirtual GPU driver.
+    static let tvOS4KPreset = "tvos-4k"
+
+    /// The preset a new machine of `productType` starts from.
+    static func defaultPreset(forDevice productType: String?) -> String {
+        switch productType {
+        case "AppleTV14,1": tvOS4KPreset
+        case let type? where type.hasPrefix("AppleTV"): tvOSPreset
+        default: defaultPreset
+        }
+    }
+
     var preset = defaultPreset
     /// Patches the preset turns on that this VM leaves off.
     var blocked: Set<String> = []

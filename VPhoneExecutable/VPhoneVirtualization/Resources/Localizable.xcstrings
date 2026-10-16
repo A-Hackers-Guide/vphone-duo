@@ -1,6 +1,15 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Control Center" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Control Center" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "コントロールセンター" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "제어 센터" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Trung tâm điều khiển" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "控制中心" } }
+      }
+    },
     "Show Attitude Dials" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -84,6 +84,10 @@ final class VPhoneGuestControl {
     /// that has just started connects, from the manifest. Read at each connect,
     /// so a change from the menu holds from the next guest start.
     @ObservationIgnored var unlocksAtStartup = false
+    /// Whether the bundle's /usr/lib hooks are kept in step with the guest.
+    /// Off for an Apple TV: its preset leaves the environment out, and the
+    /// iOS hooks have no tvOS port.
+    @ObservationIgnored var syncsGuestEnvironment = true
     /// Whether the Mac's location is forwarded to the guest, from the manifest.
     /// The VM window's Location menu starts from it and writes it back.
     @ObservationIgnored var syncsHostLocation = false
@@ -245,7 +249,7 @@ final class VPhoneGuestControl {
                         Task { await unlockAtStartup() }
                     }
                 }
-                if capabilities.contains("environment_update") {
+                if syncsGuestEnvironment, capabilities.contains("environment_update") {
                     Task { await syncEnvironment() }
                 }
                 if capabilities.contains("network_ipv4"), let setting = guestIPv4Setting {

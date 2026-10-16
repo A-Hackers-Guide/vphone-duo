@@ -104,12 +104,24 @@ public struct VPhoneResources: Sendable {
     }
 
     public var vphoned: URL {
-        let bundled = guestResources.appendingPathComponent("vphoned")
+        vphoned(for: .iPhone)
+    }
+
+    /// The vphoned a guest of this family runs. Apple TV takes the same arm64
+    /// daemon marked as a tvOS executable: tvOS dyld refuses to load its
+    /// system libraries into an iOS-platform process.
+    public func vphoned(for family: VPhoneGuestDevice.Family) -> URL {
+        let name = Self.vphonedName(for: family)
+        let bundled = guestResources.appendingPathComponent(name)
         if FileManager.default.fileExists(atPath: bundled.path) {
             return bundled
         }
         // Dev fallback for a source build outside the bundle.
-        return base.appendingPathComponent(".build/vphoned.signed")
+        return base.appendingPathComponent(".build/\(name).signed")
+    }
+
+    public static func vphonedName(for family: VPhoneGuestDevice.Family) -> String {
+        family == .appleTV ? "vphoned-tvos" : "vphoned"
     }
 
     public var gpuCompilerPlugin: URL {

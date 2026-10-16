@@ -38,10 +38,23 @@ enum VPhoneFirmwarePreparer {
         ipswCacheDirectory: URL = VPhoneResources.ipswCacheDirectory(),
         downloadConnections: Int = VPhoneIPSWCache.defaultDownloadConnections,
         device productType: String? = nil,
+        otaSource: String? = nil,
+        otaKey: String? = nil,
         bundle: VPhoneBundle,
         resources: VPhoneResources,
     ) throws {
         let fm = FileManager.default
+        // A source naming a catalog OTA, such as a tvOS the Apple TV HD never
+        // got, restores the OTA's base IPSW and stages that OTA.
+        var iPhoneSource = iPhoneSource, otaSource = otaSource, productType = productType
+        if let release = VPhoneFirmwareCatalog.otaRelease(source: iPhoneSource) {
+            guard let base = VPhoneFirmwareCatalog.restoreBaseURL(for: release) else {
+                throw ValidationError("The firmware catalog has no \(release.baseVersion) IPSW to restore the \(release.productType) OTA \(release.version) over.")
+            }
+            otaSource = otaSource ?? iPhoneSource
+            iPhoneSource = base
+            productType = productType ?? release.productType
+        }
         let existing = try fm.contentsOfDirectory(
             at: bundle.url,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -64,6 +77,13 @@ enum VPhoneFirmwarePreparer {
             print("[*] Removing boot-chain originals kept for the previous firmware...")
             try fm.removeItem(at: staleOriginals)
         }
+        // The same for a userland staged from an OTA: `cfw install` extracts it
+        // whenever it is there and its patch is on.
+        let bundleUserland = bundle.url.appendingPathComponent(VPhoneOTAArchive.userlandDirectoryName, isDirectory: true)
+        if fm.fileExists(atPath: bundleUserland.path) {
+            print("[*] Removing the OTA userland staged for the previous firmware...")
+            try fm.removeItem(at: bundleUserland)
+        }
 
         let (phone, cloud, device) = try resolveSources(
             iPhoneSource: iPhoneSource,
@@ -72,6 +92,22 @@ enum VPhoneFirmwarePreparer {
             device: productType,
             downloadConnections: downloadConnections,
         )
+        let ota = try device.restoreBase.map { _ in
+            try resolveOTA(
+                otaSource,
+                key: otaKey,
+                device: device,
+                build: phone.build,
+                ipswCacheDirectory: ipswCacheDirectory,
+                downloadConnections: downloadConnections,
+            )
+        }
+        if ota == nil, otaSource != nil || otaKey != nil {
+            throw ValidationError("--ota-source and --ota-key are for a device Apple ships no IPSW for, such as AppleTV14,1, not \(device.productType).")
+        }
+        // Such a device is restored from its base's IPSW, so the tree and its
+        // manifest are the base's; the VM records the device itself.
+        let restored = device.restoreBase ?? device
 
         // Preparation must use the same selection as patch/install: a serial
         // configuration with the GPU disabled must not restore another PCC VM
@@ -89,11 +125,11 @@ enum VPhoneFirmwarePreparer {
             blockedPatches: Set(selection.blockedPatches),
             allowedPatches: Set(selection.allowedPatches),
         )
-        guard let plan = try pipeline.resolvePlan(iOSBase: VPhoneVersion(phone.version), cloudOS: VPhoneVersion(cloud.version)) else {
+        guard let plan = try pipeline.resolvePlan(iOSBase: VPhoneVersion(ota?.version ?? phone.version), cloudOS: VPhoneVersion(cloud.version)) else {
             throw ValidationError("Patch preset '\(selection.presetIdentifier)' did not resolve.")
         }
 
-        let name = device.restoreTreeName(version: phone.version, build: phone.build)
+        let name = restored.restoreTreeName(version: phone.version, build: phone.build)
         let destination = bundle.url.appendingPathComponent(name)
         let staging = bundle.url.appendingPathComponent(".firmware-prepare-\(UUID().uuidString)")
         let phoneTree = staging.appendingPathComponent(name)
@@ -110,7 +146,7 @@ enum VPhoneFirmwarePreparer {
         try fm.createDirectory(at: phoneTree, withIntermediateDirectories: false)
         try fm.createDirectory(at: cloudTree, withIntermediateDirectories: false)
 
-        print("[*] Extracting \(device.productType) IPSW...")
+        print("[*] Extracting \(restored.productType) IPSW...")
         try VPhoneArchiveExtractor.extract(phone.file, into: phoneTree, options: .intoHostDirectory)
         print("[*] Extracting cloudOS IPSW...")
         try VPhoneArchiveExtractor.extract(cloud.file, into: cloudTree, options: .intoHostDirectory)
@@ -119,8 +155,17 @@ enum VPhoneFirmwarePreparer {
         try mergeCloudOS(from: cloudTree, into: phoneTree)
         let originalManifest = phoneTree.appendingPathComponent("BuildManifest.plist")
         try clone(originalManifest, to: phoneTree.appendingPathComponent("iPhone-BuildManifest.plist"))
-        try FirmwareManifest.generate(iPhoneDir: phoneTree, cloudOSDir: cloudTree, device: device, verbose: true)
-        if plan.isEnabled("system-extensions-boot-gpu_bundle") {
+        try FirmwareManifest.generate(iPhoneDir: phoneTree, cloudOSDir: cloudTree, device: restored, verbose: true)
+        let userland = staging.appendingPathComponent(VPhoneOTAArchive.userlandDirectoryName, isDirectory: true)
+        if let ota {
+            try stageOTA(ota, device: device, restoreTree: phoneTree, userland: userland)
+            let version: [String: String] = ["ProductVersion": ota.version, "ProductBuildVersion": ota.build]
+            try PropertyListSerialization.data(fromPropertyList: version, format: .xml, options: 0)
+                .write(to: phoneTree.appendingPathComponent(FirmwarePipeline.otaVersionFileName))
+        }
+        // A plain-arm64 Apple TV cannot load the arm64e paravirtual GPU driver,
+        // and a creation may record its patch selection only after preparing.
+        if !device.hasPlainArm64Userland, plan.isEnabled("system-extensions-boot-gpu_bundle") {
             let cachedDriver = cachedGPUDriver(for: cloud)
             if let gpuDriverBundle {
                 print("[*] Staging GPU driver from local bundle...")
@@ -161,7 +206,7 @@ enum VPhoneFirmwarePreparer {
             try fm.copyItem(at: source, to: destinationPlugin)
             try fm.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: destinationPlugin.path)
         } else {
-            print("[*] GPU bundle is off in the patch selection; skipping driver recovery and compiler plugin staging")
+            print("[*] GPU bundle is off for this guest; skipping driver recovery and compiler plugin staging")
         }
 
         // The destination did not exist at entry and the staging directory is
@@ -169,6 +214,10 @@ enum VPhoneFirmwarePreparer {
         guard !fm.fileExists(atPath: destination.path) else { throw Error.existingRestore(destination) }
         try fm.moveItem(at: phoneTree, to: destination)
         print("[+] Restore tree ready: \(destination.path)")
+        if ota != nil {
+            try fm.moveItem(at: userland, to: bundleUserland)
+            print("[+] OTA userland ready: \(bundleUserland.path)")
+        }
         try recordGuestDevice(device, in: bundle)
     }
 
@@ -195,13 +244,91 @@ enum VPhoneFirmwarePreparer {
             cloudOSSource, in: ipswCacheDirectory, connections: downloadConnections, label: "downloading cloudOS IPSW",
         )
         try VPhoneIPSWCache.checkPair(iPhone: phone, cloudOS: cloud)
-        let device = VPhoneIPSWCache.guestDevice(for: phone, preferring: productType) ?? .default
-        if let productType, VPhoneGuestDevice.named(productType) != device {
-            throw Error.deviceNotInSource(productType, available: phone.productTypes)
+        // A device without an IPSW of its own is restored from its base's,
+        // so the IPSW must cover the base.
+        let wanted = VPhoneGuestDevice.named(productType)
+        let base = wanted?.restoreBase
+        let restored = VPhoneIPSWCache.guestDevice(for: phone, preferring: base?.productType ?? productType) ?? .default
+        if let productType, (base ?? wanted) != restored {
+            throw Error.deviceNotInSource(base?.productType ?? productType, available: phone.productTypes)
         }
-        try checkIPhoneName(iPhoneSource, archive: phone, device: device)
-        print("[+] \(device.productType) \(phone.version) (\(phone.build)); cloudOS \(cloud.version) (\(cloud.build))")
+        try checkIPhoneName(iPhoneSource, archive: phone, device: restored)
+        let device = base == nil ? restored : wanted ?? restored
+        let over = base.map { " over the \($0.productName) IPSW" } ?? ""
+        print("[+] \(device.productType) \(phone.version) (\(phone.build))\(over); cloudOS \(cloud.version) (\(cloud.build))")
         return (phone, cloud, device)
+    }
+
+    // MARK: - OTA userland
+
+    /// The OTA a device without an IPSW takes its device tree and userland
+    /// from, with its key, version and build: `source` and `key` when given,
+    /// else the catalog's OTA of the IPSW's build, downloaded into the IPSW cache's `ota` folder
+    /// unless it is already there. Its manifest is checked now, before any
+    /// IPSW is unpacked for it.
+    static func resolveOTA(
+        _ source: String?,
+        key: String?,
+        device: VPhoneGuestDevice,
+        build: String,
+        ipswCacheDirectory: URL,
+        downloadConnections: Int,
+    ) throws -> (file: URL, key: String?, version: String, build: String) {
+        // A catalog OTA is of its own build, which differs from the IPSW's
+        // when it is restored over its base's last release.
+        let release = source.flatMap(VPhoneFirmwareCatalog.otaRelease(source:))
+            ?? VPhoneFirmwareCatalog.otaRelease(for: device.productType, build: build)
+        let build = release?.build ?? build
+        guard source != nil || release != nil else {
+            throw ValidationError("The firmware catalog has no \(device.productType) OTA for build \(build). Pass the device's full OTA of that build with --ota-source, and its key with --ota-key.")
+        }
+        print("[*] Resolving \(device.productType) OTA...")
+        let bar = VPhoneProgressBar(label: "downloading OTA")
+        let file = try vphoneRunBlocking {
+            try await VPhoneOTAArchive.resolve(
+                source,
+                release: release,
+                in: ipswCacheDirectory,
+                connections: downloadConnections,
+            ) { done, total in
+                bar.update(done: done, total: total)
+            }
+        }
+        bar.finish()
+        // A local file of the catalog's build takes the catalog's key too.
+        let key = key ?? release?.key
+        let identity = try VPhoneOTAArchive.checkIdentity(of: file, key: key, device: device, build: build)
+        print("[+] \(device.productType) OTA \(identity.version) (\(identity.build)): \(file.path)")
+        return (file, key, identity.version, identity.build)
+    }
+
+    /// The device's own device tree into the restore tree, beside its base's,
+    /// and the OTA's payload chunks into `userland`.
+    private static func stageOTA(
+        _ ota: (file: URL, key: String?, version: String, build: String),
+        device: VPhoneGuestDevice,
+        restoreTree: URL,
+        userland: URL,
+    ) throws {
+        print("[*] Staging \(device.productType) device tree and userland from the OTA...")
+        let flash = restoreTree.appendingPathComponent(
+            (device.boardDeviceTreePath as NSString).deletingLastPathComponent,
+            isDirectory: true,
+        )
+        try FileManager.default.createDirectory(at: flash, withIntermediateDirectories: true)
+        let staged = try VPhoneOTAArchive.stageUserland(
+            from: ota.file,
+            key: ota.key,
+            device: device,
+            build: ota.build,
+            deviceTreeDirectory: flash,
+            userlandDirectory: userland,
+        ) { name in
+            if VPhoneOTAArchive.isChunkName(name) {
+                print("    \(name)")
+            }
+        }
+        print("[+] \(staged.deviceTree.lastPathComponent) and \(staged.chunks.count) payload chunks staged")
     }
 
     /// Resolves one source, with a progress bar while it downloads. Launchpad

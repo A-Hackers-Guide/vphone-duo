@@ -17,10 +17,12 @@ public struct VPhoneLaunchLayout: Sendable {
         resources.vphoned
     }
 
-    /// Copy the built vphoned into the bundle if present and different.
+    /// Copy the built vphoned for the machine's guest family into the bundle
+    /// if present and different.
     @discardableResult
     public func stageVphoned(into bundle: VPhoneBundle) throws -> Bool {
         let fm = FileManager.default
+        let vphoned = resources.vphoned(for: bundle.manifest.guestDevice.family)
         guard fm.fileExists(atPath: vphoned.path) else {
             throw VPhoneGuestBinaries.Error.missing("vphoned.signed", [vphoned])
         }

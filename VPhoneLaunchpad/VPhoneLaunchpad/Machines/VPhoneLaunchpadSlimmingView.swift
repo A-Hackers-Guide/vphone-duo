@@ -15,6 +15,9 @@ struct VPhoneLaunchpadSlimmingSections: View {
     /// IPSWs, which the list cannot be matched against.
     var templateAvailable: Bool?
     @Binding var slimming: VPhoneLaunchpadSlimming
+    /// An Apple TV is restored on its own and not slimmed: templates and
+    /// slimming drive iOS Setup Assistant and its apps.
+    var forAppleTV = false
     @State private var choosesApps = false
 
     var body: some View {
@@ -24,8 +27,12 @@ struct VPhoneLaunchpadSlimmingSections: View {
         case .slimming:
             Section {
                 Toggle("Slim System", isOn: $slimming.slim)
+                    .disabled(forAppleTV)
             } footer: {
-                if !usesTemplate, slimming.slim {
+                if forAppleTV {
+                    Text("An Apple TV keeps every file, service and app.")
+                        .foregroundStyle(.secondary)
+                } else if !usesTemplate, slimming.slim {
                     Text("Without a template the machine is slimmed on its own, with a setup boot of its own. Setup Assistant is skipped.")
                         .foregroundStyle(.secondary)
                 }
@@ -38,20 +45,25 @@ struct VPhoneLaunchpadSlimmingSections: View {
     private var templateSection: some View {
         Section {
             Toggle("Use Template", isOn: $usesTemplate)
+                .disabled(forAppleTV)
         } header: {
             Text("Template")
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
-                if templateAvailable == false {
-                    Text("No template is available for this firmware. Turning this on saves a sample of the machine in the template library.")
-                }
-                Text(usesTemplate
-                    ? "Machines from one template share its SEP root secret and Data volume keys. Turn this off for a machine that needs keys of its own."
-                    : slimming.slim
-                    ? "The machine is restored on its own, with keys of its own."
-                    : "The machine is restored on its own, with keys of its own. It starts at Setup Assistant.")
-                if usesTemplate, !slimming.slim {
-                    Text("Slim System is off, so the template keeps every file, service and app.")
+                if forAppleTV {
+                    Text("An Apple TV is restored on its own, with keys of its own. Templates are made for iPhone and iPad.")
+                } else {
+                    if templateAvailable == false {
+                        Text("No template is available for this firmware. Turning this on saves a sample of the machine in the template library.")
+                    }
+                    Text(usesTemplate
+                        ? "Machines from one template share its SEP root secret and Data volume keys. Turn this off for a machine that needs keys of its own."
+                        : slimming.slim
+                        ? "The machine is restored on its own, with keys of its own."
+                        : "The machine is restored on its own, with keys of its own. It starts at Setup Assistant.")
+                    if usesTemplate, !slimming.slim {
+                        Text("Slim System is off, so the template keeps every file, service and app.")
+                    }
                 }
             }
             .foregroundStyle(.secondary)

@@ -31,6 +31,9 @@ public enum FirmwareGuestSystemPatchSet {
     public static let locationdCohorting = "system-locationd-cfw-disable_auto_cohort"
     public static let jetsamDisableAllowed = "system-jetsamproperties-cfw-disable_allowed"
     public static let tvTPRO = "system-dyld-exp-tv_tpro"
+    /// Replaces the restored System volume with an Apple TV 4K userland
+    /// staged from its OTA. Research only: no IPSW exists for that device.
+    public static let tvOTAUserland = "system-tv-exp-ota_userland"
 
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
 
@@ -60,7 +63,14 @@ public enum FirmwareGuestSystemPatchSet {
                 title: "TV TPRO feature detection",
                 summary: "Plain-arm64 TVOS compatibility: stops standalone and cached dyld enabling cloudOS-advertised hardware TPRO and pager modes, preserving page-in linking and all fixups.",
                 target: .guestExecutable(path: "/usr/lib/dyld"),
-                applicability: VPhonePatchApplicability(iOSBase: .release(major: 26, minor: 4)),
+                applicability: VPhonePatchApplicability(iOSBase: .major(26)),
+            ),
+            VPhonePatchDeclaration(
+                identifier: tvOTAUserland,
+                title: "Apple TV 4K userland from OTA",
+                summary: "Research: replaces the System volume with the arm64e tvOS userland staged in the VM's OTAUserland folder, extracted with aa so ownership, modes, flags and compression survive.",
+                target: .guestFile(path: "/"),
+                applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 26, minor: 0)),
             ),
             VPhonePatchDeclaration(
                 identifier: locationdCohorting,
