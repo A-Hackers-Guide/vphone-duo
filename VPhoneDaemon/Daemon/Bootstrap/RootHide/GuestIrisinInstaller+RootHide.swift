@@ -22,8 +22,15 @@ extension GuestIrisinInstaller {
 
     /// Every valid `.jbroot-<16 hex>` directory entry, sorted. Only
     /// `roothideRoot` is used; the others are listed so they can be removed.
+    ///
+    /// tvOS has no `/private/var/containers/Bundle/Application` until a
+    /// bootstrap creates it (performInstall does, with intermediate
+    /// directories). A missing parent means there are no roots yet, so return
+    /// an empty list rather than throwing — otherwise every install, uninstall
+    /// and status call on a fresh tvOS guest fails before it starts.
     static func roothideRoots() throws -> [String] {
-        try FileManager.default.contentsOfDirectory(atPath: roothideParent)
+        guard try directoryExistsWithoutSymlink(roothideParent) else { return [] }
+        return try FileManager.default.contentsOfDirectory(atPath: roothideParent)
             .sorted()
             .filter(roothideName)
             .map { roothideParent + "/" + $0 }
