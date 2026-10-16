@@ -67,6 +67,9 @@ public struct VPhoneOTARelease: Sendable, Equatable {
         self.baseVersion = baseVersion ?? version
     }
 
+    /// The IPSW cache's folder for OTAs.
+    public static let cacheDirectoryName = "ota"
+
     /// The name the IPSW cache keeps it under, in its `ota` folder.
     public var fileName: String {
         "\(productType)_\(version)_\(build)_OTA.aea"
@@ -526,8 +529,15 @@ public enum VPhoneFirmwareCatalog {
     public static var report: VPhoneFirmwareCatalogReport {
         func entries(_ pairings: [VPhoneFirmwarePairing]) -> [VPhoneFirmwareCatalogReport.Entry] {
             pairings.map {
-                .init(
-                    ios: .init(name: $0.iosName, url: $0.iosURL),
+                let ota = otaRelease(source: $0.iosURL)
+                let base = ota.flatMap(restoreBaseURL(for:)).map { ($0 as NSString).lastPathComponent }
+                return .init(
+                    ios: .init(
+                        name: $0.iosName,
+                        url: $0.iosURL,
+                        build: ota?.build,
+                        files: ota.map { ["\(VPhoneOTARelease.cacheDirectoryName)/\($0.fileName)"] + (base.map { [$0] } ?? []) },
+                    ),
                     recommendedCloudOS: .init(name: $0.cloudosName, url: $0.cloudosURL),
                 )
             }
@@ -559,8 +569,14 @@ public struct VPhoneFirmwareCatalogReport: Codable, Equatable, Sendable {
     public struct Firmware: Codable, Equatable, Sendable {
         public let name: String
         public let url: String
-        public init(name: String, url: String) {
-            self.name = name; self.url = url
+        /// The build, when `url`'s file name does not carry it: an OTA's.
+        public let build: String?
+        /// The files `fw prepare` needs in the IPSW cache, relative to it, when
+        /// `url`'s file alone is not all: an OTA in `ota/` and the base IPSW it
+        /// is restored over. Absent for an IPSW.
+        public let files: [String]?
+        public init(name: String, url: String, build: String? = nil, files: [String]? = nil) {
+            self.name = name; self.url = url; self.build = build; self.files = files
         }
     }
 
