@@ -425,3 +425,53 @@ cause and the trigger is still unknown.
 
 
 Apps, video, long-term stability and Apple services are untested.
+
+## tvOS 27 on the Apple TV 4K
+
+tvOS 27 dropped the Apple TV HD (AppleTV5,3) and the first 4K (AppleTV6,2);
+AppleDB lists 27.0 (24J361) and the 27.2 betas for AppleTV11,1 and AppleTV14,1
+only, as OTAs and recovery images, with no IPSW for any device. The 27.0 full
+OTA for AppleTV14,1 is a 4.83 GB AEA archive whose key AppleDB records. Its
+layout is the 26.6 one: monolithic, no cryptex, `payloadv2` chunks, the root
+filesystem's `.mtree`, `.root_hash` and `.trustcache`, and the J255 device tree.
+(Checked on the AppleTV11,1 27.0 OTA, a plain zip, from its central directory.)
+
+So a 27 guest is the 26.6 one with a later OTA: the HD's last IPSW, 26.6, is
+the restore base and only the userland changes. `VPhoneOTARelease.baseVersion`
+records the base an OTA goes over. The 4K's tvOS 27.0 pairing names the OTA
+itself, and `fw prepare` maps a catalog OTA given as `--iphone-source` to its
+base IPSW and stages that OTA:
+
+```zsh
+vphone-launchpad-cli vm create tv27 --device AppleTV14,1 --preset tvos-4k --no-template \
+  --iphone-source https://updates.cdn-apple.com/2026FallFCS/fbf3c544-b770-4756-9cca-abfb2d3cb65e/com_apple_MobileAsset_SoftwareUpdate/9bf3ad6ac49c25016599bbb77d8ea1c612cb745eb7ee9e502af1926c860b7e18.aea \
+  --cloudos-source https://updates.cdn-apple.com/private-cloud-compute/c0ecdb4b310cf5239ab2b248dd3098eec297dc5aa3bbe6ada27273262b0b8b64
+```
+
+`fw prepare` also writes `OTA-SystemVersion.plist` (the OTA's version and
+build) into the restore tree, and the pipeline takes the base version from it
+before `iPhone-BuildManifest.plist`: the guest patches meet the 27 userland, not
+the 26.6 one, so the plan has to resolve for 27. The `tvos-4k` preset turns on
+the iOS 27 shared-cache patches (`FirmwarePatchSetCatalog.tvOS27UserlandPatches`:
+`dyld-boot-iomfb_force_kern`, `dyld-boot-lockdown_mode`,
+`dyld-boot-lsd_embedded_reg`, `dyld-boot-maxslide`, `dyld-boot-xpc_lwcr`), which
+an arm64e TV guest admits; each is gated on 27, so a 26.6 4K never meets them.
+The iOS 27 kernel patches (`kernel-boot-iomfb_swapend` and the others gated on
+27) come with the plan's version. `system-tv-exp-ota_userland` was gated on 26
+and a 27 plan dropped it: the HD's plain-arm64 26.6 userland then booted on the
+J255 identity and panicked at first boot. It now applies from 26.0 on, and `cfw
+install` refuses a full install of a device without an IPSW whose plan lacks it.
+
+Result, 2026-10-16 (VM `tv27-4k`, cloudOS 26.4, 104 patches): first boot
+reached TVSetup's Language screen and vphoned answered. `device.info` reports
+AppleTV14,1 at version 27.0.0 with a 1920x1080-point screen at 2x;
+screenshots are 3840x2160. The host window shows the guest screen, so tvOS 27,
+like iOS 27, presents through `_virt_Swap*` and needs the force-kern patch on
+the 26.4 kernel. Six focus moves over `input.hid` moved the selection to
+Deutsch (the title became "Sprache"), and the VM's paravirtual GPU task gained
+0.31 s of GPU time meanwhile. locationd, backboardd and PineBoard kept their
+pids over a minute. The vphoned `services.print` RPC kills vphoned on this
+guest every time (launchd restarts it within seconds), as icli's launchd session
+lookup does on tvOS; other RPCs work. The locationd startup deadlock iOS 27
+userlands hit on the 26.4 kernel (`Research/Guest/locationd_startup_deadlock.md`)
+has not been measured over repeated boots here.

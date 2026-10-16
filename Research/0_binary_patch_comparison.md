@@ -46,6 +46,17 @@
 > off. See
 > [tvOS support](Firmware/tvos_support.md#apple-tv-4k-from-its-ota).
 
+> **tvOS 27 on the Apple TV 4K (2026-10-16).** No new patch. The 4K's tvOS 27.0
+> (24J361) OTA goes over the HD's 26.6 IPSW, and the plan resolves for the OTA's
+> version. `system-tv-exp-ota_userland` now applies from 26.0 on (it was gated on
+> 26, so a 27 plan dropped it and the HD userland booted and panicked). The
+> `tvos-4k` preset and arm64e TV admission add the iOS 27 shared-cache patches
+> `dyld-boot-iomfb_force_kern`, `dyld-boot-lockdown_mode`,
+> `dyld-boot-lsd_embedded_reg`, `dyld-boot-maxslide` and `dyld-boot-xpc_lwcr`,
+> all gated on 27. Validated on `tv27-4k`: TVSetup at 2160p in the host window,
+> input, GPU time, vphoned. See
+> [tvOS support](Firmware/tvos_support.md#tvos-27-on-the-apple-tv-4k).
+
 > **iOS 27 disabled services (2026-10-13):**
 > `system-jetsamproperties-cfw-disable_allowed` removes every
 > `DisableAllowed = false` from
