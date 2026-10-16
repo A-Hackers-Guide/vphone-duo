@@ -335,6 +335,10 @@ struct VPhoneLaunchpadNewMachineView: View {
     /// Whether the pairing's iOS or iPadOS IPSW is downloaded, under the name
     /// `fw prepare` gives it or its own.
     private func isDownloaded(_ pairing: VPhoneLaunchpadFirmwareCatalog.Pairing) -> Bool {
+        // An OTA pairing needs the OTA and the IPSW it is restored over.
+        if let files = pairing.ios.files {
+            return !files.isEmpty && files.allSatisfy(downloaded.contains)
+        }
         guard let url = URL(string: pairing.ios.url) else {
             return false
         }
@@ -345,7 +349,17 @@ struct VPhoneLaunchpadNewMachineView: View {
         guard let scan = try? await VPhoneLaunchpadIPSWCache.scan(libraryRoots: model.machines.roots, machineFolders: []) else {
             return
         }
-        downloaded = Set(scan.ipsws.filter { !$0.isDownloading }.map(\.name))
+        var names = Set(scan.ipsws.filter { !$0.isDownloading }.map(\.name))
+        // OTAs are in each cache's `ota` folder, under the names pairings list.
+        for directory in scan.cacheDirectories {
+            let ota = directory.appendingPathComponent("ota", isDirectory: true)
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: ota.path)) ?? []
+                where !name.hasPrefix(".") && name.lowercased().hasSuffix(".aea")
+            {
+                names.insert("ota/\(name)")
+            }
+        }
+        downloaded = names
     }
 
     private func placeholderPicker(_ title: LocalizedStringKey) -> some View {

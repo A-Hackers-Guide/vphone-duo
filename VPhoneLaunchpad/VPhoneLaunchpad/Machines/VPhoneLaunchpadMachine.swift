@@ -222,6 +222,11 @@ nonisolated struct VPhoneLaunchpadFirmwareCatalog: Decodable, Sendable {
     struct Image: Decodable, Hashable, Sendable {
         let name: String
         let url: String
+        /// The build, from a bundle that knows `url`'s name does not carry it.
+        var build: String?
+        /// The files the firmware needs in the IPSW cache, relative to it, from
+        /// a bundle that lists them: an OTA and the IPSW it is restored over.
+        var files: [String]?
     }
 
     struct Pairing: Decodable, Hashable, Identifiable, Sendable {
@@ -232,9 +237,13 @@ nonisolated struct VPhoneLaunchpadFirmwareCatalog: Decodable, Sendable {
             ios.url
         }
 
-        /// The build from an IPSW name such as `iPhone17,3_27.0_24A435_Restore.ipsw`
-        /// or `iPad_Pro_M4_27.0.1_24A446_Restore.ipsw`: the field before `Restore`.
+        /// The build the bundle gives, else the one from an IPSW name such as
+        /// `iPhone17,3_27.0_24A435_Restore.ipsw` or
+        /// `iPad_Pro_M4_27.0.1_24A446_Restore.ipsw`: the field before `Restore`.
         var build: String {
+            if let build = ios.build {
+                return build
+            }
             let fields = (ios.url as NSString).lastPathComponent.split(separator: "_")
             return fields.count >= 4 ? String(fields[fields.count - 2]) : ""
         }

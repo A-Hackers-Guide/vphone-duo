@@ -16,6 +16,18 @@ struct FirmwareCatalogReportTests {
         }
     }
 
+    @Test func `an OTA pairing names its build and the files it needs`() throws {
+        let tv4K = try #require(VPhoneFirmwareCatalog.report.devices.first { $0.productType == "AppleTV14,1" })
+        let ipsw = try #require(tv4K.pairings.first { $0.ios.name == "tvOS 26.6" })
+        let ota = try #require(tv4K.pairings.first { $0.ios.name == "tvOS 27.0" })
+        #expect(ipsw.ios.build == nil && ipsw.ios.files == nil)
+        #expect(ota.ios.build == "24J361")
+        #expect(ota.ios.files == ["ota/AppleTV14,1_27.0_24J361_OTA.aea", "AppleTV5,3_26.6_23L773_Restore.ipsw"])
+        // An IPSW's entry encodes as before, so an older Launchpad reads it unchanged.
+        let json = try #require(String(data: JSONEncoder().encode(ipsw), encoding: .utf8))
+        #expect(!json.contains("build") && !json.contains("files"))
+    }
+
     @Test func `lists every curated guest`() {
         let report = VPhoneFirmwareCatalog.report
         #expect(report.devices.map(\.productType) == VPhoneGuestDevice.known.map(\.productType))

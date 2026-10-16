@@ -518,7 +518,7 @@ public enum VPhoneOTAArchive {
         }
 
         let fm = FileManager.default
-        let directory = cacheDirectory.appendingPathComponent("ota", isDirectory: true)
+        let directory = cacheDirectory.appendingPathComponent(VPhoneOTARelease.cacheDirectoryName, isDirectory: true)
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         try VPhoneHostFilePermissions.makeDirectoryAccessible(at: directory)
         let cache = directory.appendingPathComponent(name)
