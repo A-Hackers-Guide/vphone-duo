@@ -387,6 +387,7 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
                     plan: plan,
                     iOSBase: pipeline.baseProductVersion,
                     cloudOS: pipeline.cloudOSProductVersion,
+                    notApplicablePatches: pipeline.notApplicablePatches,
                 ),
                 forVM: bundle.url,
             )

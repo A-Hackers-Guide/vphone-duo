@@ -139,6 +139,8 @@ public final class FirmwarePipeline {
     /// The cloudOS `ProductVersion` `patchAll()` read, if it found one.
     public private(set) var cloudOSProductVersion: VPhoneVersion?
 
+    public private(set) var notApplicablePatches: Set<String> = []
+
     // MARK: - Init
 
     public init(
@@ -192,7 +194,19 @@ public final class FirmwarePipeline {
         // The preset resolves here rather than in init: its version gates need the
         // two ProductVersions that were just read, and a conflict or a misnamed
         // patch must stop the run before a single byte is written.
-        let plan = try resolvePlan(iOSBase: baseVersion, cloudOS: cloudOSVersion)
+        notApplicablePatches = []
+        var plan = try resolvePlan(iOSBase: baseVersion, cloudOS: cloudOSVersion)
+        let sealPatch = RestoreRamDiskSealPatcher.patchIdentifier
+        let sealSelected = plan?.isEnabled(sealPatch)
+            ?? (baseVersion?.major == 27 && cloudOSVersion?.major == 26 && cloudOSVersion?.minor == 4)
+        if variant != .less, sealSelected {
+            let hashType = try RestoreRamDiskSealPatcher.systemVolumeHashType(in: restoreDir)
+            if hashType == RestoreRamDiskSealPatcher.sha256Type {
+                notApplicablePatches.insert(sealPatch)
+                plan = plan?.skippingFirmwareInapplicable(sealPatch)
+                log("[=] \(sealPatch): SystemVolume root hash uses SHA-256; restore tools stay pristine")
+            }
+        }
         resolvedPlan = plan
         let gate = plan.map { VPhonePatchGate(plan: $0) } ?? .unrestricted
 

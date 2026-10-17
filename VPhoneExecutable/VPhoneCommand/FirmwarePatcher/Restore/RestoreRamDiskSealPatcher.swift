@@ -19,6 +19,27 @@ final class RestoreRamDiskSealPatcher: BufferedPatcher {
     static let sha256Type: UInt32 = 1
     static let sha3_256_4KType: UInt32 = 0x106
 
+    /// isys payload: hash type at +8, digest length at +12.
+    static func systemVolumeHashType(in restoreDir: URL) throws -> UInt32 {
+        let path = try FirmwarePipeline.manifestComponentPath("SystemVolume", in: restoreDir)
+        let url = restoreDir.appending(path: path)
+        let (payload, im4p) = try IM4PHandler.load(contentsOf: url)
+        guard im4p?.fourcc == "isys", payload.count >= 48 else {
+            throw PatcherError.invalidFormat("SystemVolume root hash is not an isys IM4P with a 32-byte digest")
+        }
+        let hashType = payload.loadLE(UInt32.self, at: 8)
+        let digestLength = payload.loadLE(UInt32.self, at: 12)
+        guard digestLength == 32,
+              hashType == sha256Type || hashType == sha3_256_4KType
+        else {
+            throw PatcherError.invalidFormat(
+                "SystemVolume root hash has unsupported hash type 0x\(String(hashType, radix: 16)) "
+                    + "or digest length \(digestLength)",
+            )
+        }
+        return hashType
+    }
+
     let component = VPhoneFirmwareComponent.restoreRamDisk.rawValue
     let verbose: Bool
     var gate: VPhonePatchGate = .unrestricted

@@ -171,7 +171,7 @@ public enum FirmwareBootChainPatchSet {
             VPhonePatchDeclaration(
                 identifier: RestoreRamDiskSealPatcher.patchIdentifier,
                 title: "iOS 27 APFS seal hash",
-                summary: "Makes the cloudOS 26.4 restore ramdisk calculate the iOS 27 root hash with sha3_256_4k and admits the re-attested sealing tool through its restore trust cache.",
+                summary: "Uses sha3_256_4k for iOS 27 images that select it in SystemVolume metadata; leaves SHA-256 restore images unchanged.",
                 target: .firmware(.restoreRamDisk),
                 applicability: VPhonePatchApplicability(
                     iOSBase: .major(27),

@@ -539,6 +539,7 @@ public struct VPhoneVirtualMachineCreator {
                     plan: plan,
                     iOSBase: pipeline.baseProductVersion,
                     cloudOS: pipeline.cloudOSProductVersion,
+                    notApplicablePatches: pipeline.notApplicablePatches,
                 ),
                 forVM: bundleURL,
             )

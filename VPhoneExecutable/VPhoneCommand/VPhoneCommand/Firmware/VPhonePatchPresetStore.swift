@@ -71,16 +71,23 @@ public struct VPhoneVirtualMachinePatchPlan: Codable, Sendable, Hashable {
     public var presetIdentifier: String
     public var patchSets: [String]
     public var enabledPatches: [String]
+    public var notApplicablePatches: [String]
     public var iOSBaseVersion: String?
     public var cloudOSVersion: String?
     /// The preset's knobs, carried through so `cfw install` reads the same values
     /// the boot chain was built with rather than resolving the preset again.
     public var parameters: [String: String]
 
-    public init(plan: VPhonePatchPlan, iOSBase: VPhoneVersion?, cloudOS: VPhoneVersion?) {
+    public init(
+        plan: VPhonePatchPlan,
+        iOSBase: VPhoneVersion?,
+        cloudOS: VPhoneVersion?,
+        notApplicablePatches: Set<String> = [],
+    ) {
         presetIdentifier = plan.presetIdentifier
         patchSets = plan.patchSets.map(\.identifier)
         enabledPatches = plan.enabled.sorted()
+        self.notApplicablePatches = notApplicablePatches.sorted()
         iOSBaseVersion = iOSBase?.description
         cloudOSVersion = cloudOS?.description
         parameters = plan.parameters
@@ -95,6 +102,7 @@ public struct VPhoneVirtualMachinePatchPlan: Codable, Sendable, Hashable {
         case presetIdentifier = "Preset"
         case patchSets = "PatchSets"
         case enabledPatches = "EnabledPatches"
+        case notApplicablePatches = "NotApplicablePatches"
         case iOSBaseVersion = "IOSBaseVersion"
         case cloudOSVersion = "CloudOSVersion"
         case parameters = "Parameters"
@@ -106,6 +114,9 @@ public struct VPhoneVirtualMachinePatchPlan: Codable, Sendable, Hashable {
         patchSets = try container.decodeIfPresent([String].self, forKey: .patchSets) ?? []
         enabledPatches = try FirmwarePatchSetCatalog.currentIdentifiers(
             container.decodeIfPresent([String].self, forKey: .enabledPatches) ?? [],
+        )
+        notApplicablePatches = try FirmwarePatchSetCatalog.currentIdentifiers(
+            container.decodeIfPresent([String].self, forKey: .notApplicablePatches) ?? [],
         )
         iOSBaseVersion = try container.decodeIfPresent(String.self, forKey: .iOSBaseVersion)
         cloudOSVersion = try container.decodeIfPresent(String.self, forKey: .cloudOSVersion)

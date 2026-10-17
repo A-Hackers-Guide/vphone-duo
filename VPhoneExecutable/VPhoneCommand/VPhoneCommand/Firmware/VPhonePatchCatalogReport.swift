@@ -95,7 +95,7 @@ public struct VPhonePatchCatalogReport: Sendable {
                     declarations: declarations,
                     iOSBase: iOSBase,
                     cloudOS: cloudOS,
-                ),
+                ).subtracting(plan?.notApplicablePatches ?? []),
                 planned: plan.map { Set($0.enabledPatches) },
                 applied: receipt.map { $0.parts.mapValues { Set($0.patches) } },
                 notApplicable: Set(receipt?.parts.values.flatMap(\.notApplicable) ?? []),
