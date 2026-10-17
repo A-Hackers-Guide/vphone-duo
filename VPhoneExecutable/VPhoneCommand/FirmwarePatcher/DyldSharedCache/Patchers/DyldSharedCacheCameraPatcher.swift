@@ -195,8 +195,7 @@ public enum DyldSharedCacheCameraPatcher {
     ///     caller passes; the Python takes it separately only because `ipsw`
     ///     wants a file.
     ///   - dryRun: report the sites and write nothing.
-    ///   - force: accept an entry point whose prologue is neither `pacibsp` nor
-    ///     the replacement. The Python's `--force`.
+    ///   - force: accept an unknown prologue.
     @discardableResult
     public static func applyAll(
         chunksDirectory: URL,
@@ -261,33 +260,13 @@ public enum DyldSharedCacheCameraPatcher {
         let resolver = try DyldSharedCacheSymbolResolver(
             mainCacheURL: symbolCacheURL ?? chunks.mainCacheURL,
         )
-        // Every symbol here is an ObjC class method, and those live only in the
-        // stripped local-symbol table. Without it the six lookups would each
-        // report "not found", which reads as "this build renamed them".
+        // ObjC class methods require the stripped local-symbol table.
         try resolver.requireLocalSymbols()
 
         let disassembler = ARM64Disassembler()
         var sites: [Site] = []
 
-        // Plan every family before writing any of them. Nothing in this loop
-        // touches the cache.
-        //
-        // This used to write each site as it was classified, with one
-        // re-attestation pass after the last family. Anything that threw after
-        // the first write — a renamed AVF symbol, a prologue that is neither
-        // `pacibsp` nor `mov w0,#3; ret` — left the NeutrinoCore sites on disk
-        // with their code-signature slot hashes still describing the old bytes.
-        // On `codeSigningMonitor == 2` hardware TXM checks those hashes per
-        // page, so that cache SIGKILLs on the first demand-page-in of a
-        // modified page: a half-patched cache that also fails to load.
-        // Reproduced on two identical clones by nop-ing only the AVF entry
-        // point — both patchers throw, but the old Swift left four pages of
-        // `dyld_shared_cache_arm64e.15` stale where the Python left none.
-        //
-        // The Python avoids it by resolving both families up front and
-        // re-attesting after each one. Planning everything first is stronger:
-        // a failure here leaves the cache untouched rather than patched and
-        // re-signed up to the failure point.
+        // Resolve and validate every site before mutating the cache.
         for (index, family) in families.enumerated() {
             log?("")
             log?("  [\(index + 1)/\(families.count)] \(family.headline)")
@@ -388,18 +367,7 @@ public enum DyldSharedCacheCameraPatcher {
 
     // MARK: - The prologue
 
-    /// Decide whether an entry point may be rewritten, and whether it already was.
-    ///
-    /// Three shapes are acceptable, and the difference matters:
-    ///
-    ///   * `pacibsp` — a pristine signed-prologue method. The expected case, and
-    ///     the only one the Python accepts without `--force`.
-    ///   * the replacement itself — this patcher's own output, so the run is a
-    ///     re-install. Reported, rewritten inertly, and re-attested, rather than
-    ///     raising the way three sibling DSC patchers used to on their own work.
-    ///   * anything at all, under `force`.
-    ///
-    /// - Returns: true when the entry point already held the replacement.
+    /// Accepts B-key prologues, this patcher's replacement, or `force`.
     static func classifyPrologue(
         _ bytes: Data,
         at vma: UInt64,
@@ -411,7 +379,9 @@ public enum DyldSharedCacheCameraPatcher {
     ) throws -> Bool {
         let decoded = disassembler.disassemble(bytes, at: vma, count: 2)
 
-        if decoded.first?.mnemonic == "pacibsp" {
+        if let mnemonic = decoded.first?.mnemonic,
+           ["pacibsp", "pacibsppc", "pacnbibsppc"].contains(mnemonic)
+        {
             return false
         }
 
@@ -426,10 +396,11 @@ public enum DyldSharedCacheCameraPatcher {
                 ?? "<undecodable>"
             throw PatcherError.patchVerificationFailed(
                 "\(symbol) @ 0x\(String(vma, radix: 16, uppercase: true)): prologue is not "
-                    + "pacibsp (got \(head), bytes \(bytes.prefix(4).hex)); pass force to override",
+                    + "an authenticated B-key stack prologue (got \(head), bytes \(bytes.prefix(4).hex)); "
+                    + "pass force to override",
             )
         }
-        log?("    [!] prologue is not pacibsp — forced")
+        log?("    [!] prologue is not an authenticated B-key stack prologue — forced")
         return false
     }
 

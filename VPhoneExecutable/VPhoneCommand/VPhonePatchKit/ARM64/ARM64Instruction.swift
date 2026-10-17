@@ -59,6 +59,7 @@ public struct ARM64InstructionDetail: Sendable {
     public let updatesFlags: Bool
     public let postIndex: Bool
     public let operands: [ARM64Operand]
+    public internal(set) var writeback = false
 
     public init(conditionCode: ARM64Condition?, updatesFlags: Bool, postIndex: Bool, operands: [ARM64Operand]) {
         self.conditionCode = conditionCode
@@ -83,12 +84,35 @@ public struct ARM64Operand: Sendable {
     public let imm: Int64
     /// Meaningful when `type` is `.memory`.
     public let mem: ARM64MemoryOperand
+    public let shift: ARM64OperandShift
+    public internal(set) var writesRegister = false
 
+    // Keep the original initializer's symbol for already-built patch bundles.
     public init(type: ARM64OperandType, reg: ARM64Register, imm: Int64, mem: ARM64MemoryOperand) {
+        self.init(type: type, reg: reg, imm: imm, mem: mem, shift: .init(type: .none, amount: 0))
+    }
+
+    public init(type: ARM64OperandType, reg: ARM64Register, imm: Int64, mem: ARM64MemoryOperand, shift: ARM64OperandShift) {
         self.type = type
         self.reg = reg
         self.imm = imm
         self.mem = mem
+        self.shift = shift
+    }
+}
+
+public enum ARM64ShiftType: UInt32, Sendable {
+    case none = 0, lsl = 1, msl = 2, lsr = 3, asr = 4, ror = 5
+    case unsupported = 0xFFFF_FFFF
+}
+
+public struct ARM64OperandShift: Sendable {
+    public let type: ARM64ShiftType
+    public let amount: UInt32
+
+    public init(type: ARM64ShiftType, amount: UInt32) {
+        self.type = type
+        self.amount = amount
     }
 }
 

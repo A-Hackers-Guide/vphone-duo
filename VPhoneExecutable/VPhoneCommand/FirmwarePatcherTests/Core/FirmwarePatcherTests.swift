@@ -583,7 +583,7 @@ struct FirmwarePipelineTests {
     @Test func `public JB includes the former EXP device tree patchers, not the hv_vmm rename`() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
         let pipeline = FirmwarePipeline(vmDirectory: root, variant: .jb, verbose: false)
-        let components = pipeline.buildComponentList(
+        let components = try pipeline.buildComponentList(
             restoreDir: root,
             iOSBase: VPhoneVersion("27.0"),
         )
@@ -617,7 +617,7 @@ struct FirmwarePipelineTests {
                 preset: standard ? FirmwarePatchSetCatalog.standardPreset : nil,
             )
             let plan = try pipeline.resolvePlan(iOSBase: version, cloudOS: VPhoneVersion("26.4"))
-            let components = pipeline.buildComponentList(
+            let components = try pipeline.buildComponentList(
                 restoreDir: root,
                 iOSBase: version,
                 plan: plan,
@@ -650,7 +650,7 @@ struct FirmwarePipelineTests {
                 blockedPatches: blocked,
             )
             let plan = try pipeline.resolvePlan(iOSBase: version, cloudOS: VPhoneVersion("26.4"))
-            let components = pipeline.buildComponentList(
+            let components = try pipeline.buildComponentList(
                 restoreDir: root,
                 iOSBase: version,
                 plan: plan,

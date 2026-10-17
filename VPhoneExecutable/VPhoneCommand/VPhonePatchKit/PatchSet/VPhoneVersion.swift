@@ -38,7 +38,7 @@ public struct VPhoneVersion: Sendable, Hashable, Comparable, CustomStringConvert
 
     /// The PatchKit API this framework is. Raised when a public symbol is added, so
     /// a set that needs the new symbol refuses to load on an older bundle.
-    public static let currentPatchKit = VPhoneVersion(major: 1, minor: 0)
+    public static let currentPatchKit = VPhoneVersion(major: 1, minor: 1)
 
     public static func < (lhs: Self, rhs: Self) -> Bool {
         (lhs.major, lhs.minor, lhs.patch) < (rhs.major, rhs.minor, rhs.patch)

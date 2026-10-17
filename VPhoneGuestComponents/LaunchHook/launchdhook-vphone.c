@@ -1,6 +1,8 @@
 #include "../Shared/InjectionEnvironment.h"
 #include "../Shared/JetsamLimits.h"
 #include "../Shared/RootHideLoaderLinks.h"
+#include "../Shared/VPhoneX1Spawn.h"
+#include "VPhoneX1Exception.h"
 #include <fcntl.h>
 #include <stdint.h>
 #include <limits.h>
@@ -74,10 +76,7 @@ static int vpFindJBRoot(char root[PATH_MAX]) {
     return 0;
 }
 
-typedef int (*VPSpawnFunction)(pid_t *restrict, const char *restrict, const posix_spawn_file_actions_t *restrict,
-                               const posix_spawnattr_t *restrict, char *const[restrict], char *const[restrict]);
-
-static int vpSpawnWith(VPSpawnFunction spawn, pid_t *restrict pid, const char *restrict path,
+static int vpSpawnWith(VPX1SpawnFunction spawn, pid_t *restrict pid, const char *restrict path,
                        const posix_spawn_file_actions_t *restrict actions, const posix_spawnattr_t *restrict attributes,
                        char *const argv[restrict], char *const envp[restrict]) {
     if (!vpBootRoot[0] && vpFindJBRoot(vpBootRoot))
@@ -100,7 +99,15 @@ static int vpSpawnWith(VPSpawnFunction spawn, pid_t *restrict pid, const char *r
     const VPInsertedLibraries libraries = vpInsertedLibrariesFor(path);
     VPInjectionEnvironment injected = vpInsertHooksFor(envp, vpBootRoot, &libraries);
     VPJetsamLimits limits = vpRaiseJetsamLimits(vpBootRoot, path, attributes, envp);
-    int status = spawn(pid, path, actions, attributes, argv, injected.values ? injected.values : envp);
+    int status = vpSpawnWithInheritedX1Port(
+        spawn,
+        pid,
+        path,
+        actions,
+        attributes,
+        argv,
+        injected.values ? injected.values : envp
+    );
     vpRestoreJetsamLimits(&limits);
     if (bootstrapProgram || appProgram || libraries.count || strcmp(path, "/usr/libexec/xpcproxy") == 0) {
         char event[128];
@@ -214,6 +221,7 @@ static int vpSandboxCheckByAuditToken(vp_audit_token_t token, const char *operat
 }
 
 __attribute__((constructor)) static void vpLaunchHookInit(void) {
+    vp_x1_exception_install();
     if (getpid() != 1)
         return;
     // The firmware panic-guard patch does not remove a limit already on PID 1.
@@ -230,6 +238,7 @@ __attribute__((used, section("__DATA,__interpose"))) static const struct {
 } vpInterpose[] = {
     {(const void *)vpSpawn, (const void *)posix_spawn},
     {(const void *)vpSpawnP, (const void *)posix_spawnp},
+    {(const void *)vpSetSpawnExceptionPortsPreservingX1, (const void *)posix_spawnattr_setexceptionports_np},
     {(const void *)vpMemoryStatus, (const void *)memorystatus_control},
     {(const void *)vpSandboxCheckByAuditToken, (const void *)sandbox_check_by_audit_token},
 };

@@ -26,6 +26,14 @@ public enum ARM64 {
     /// PACIBSP — sign LR with B key using SP (hint #27)
     public static let pacibsp = encodeU32(0xD503_237F)
 
+    /// Keystone-verified pointer-authentication aliases.
+    public static let paciasp = encodeU32(0xD503_233F)
+    public static let autiasp = encodeU32(0xD503_23BF)
+    public static let autibsp = encodeU32(0xD503_23FF)
+
+    public static let autia1716 = encodeU32(0xD503_219F)
+    public static let autib1716 = encodeU32(0xD503_21DF)
+
     // MARK: MOV Variants
 
     /// MOV X0, #0  (MOVZ X0, #0)

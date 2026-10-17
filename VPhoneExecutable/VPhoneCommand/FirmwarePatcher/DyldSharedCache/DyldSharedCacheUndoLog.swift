@@ -207,10 +207,17 @@ public struct DyldSharedCacheUndoLog: Codable, Sendable, Hashable {
     ) throws -> [DyldSharedCacheWriteSpan] {
         try validate(in: directory, patchIDs: patchIDs)
         var spans: [DyldSharedCacheWriteSpan] = []
+        var openChunk: String?, openHandle: FileHandle?
+        defer { try? openHandle?.close() }
         for record in records(forPatchIDs: patchIDs).reversed() {
-            let url = directory.appendingPathComponent(record.chunk)
-            let handle = try FileHandle(forUpdating: url)
-            defer { try? handle.close() }
+            let handle: FileHandle
+            if openChunk == record.chunk, let existing = openHandle {
+                handle = existing
+            } else {
+                try? openHandle?.close()
+                handle = try FileHandle(forUpdating: directory.appendingPathComponent(record.chunk))
+                openChunk = record.chunk; openHandle = handle
+            }
             try handle.seek(toOffset: UInt64(record.fileOffset))
             try handle.write(contentsOf: record.original)
             spans.append(DyldSharedCacheWriteSpan(vma: record.vma, length: record.original.count))

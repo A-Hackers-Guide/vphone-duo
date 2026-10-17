@@ -491,7 +491,56 @@ struct ARM64EncoderKeystoneParityTests {
         ),
     ]
 
-    static let allCases: [ARM64EncodingCase] = asmCallSiteCases + operandCoverageCases
+    // Frozen from Keystone 0.9.2 ks_asm outside the repository.
+    static let x1ComparisonCases: [ARM64EncodingCase] = [
+        .init(source: "cmp w1, #12", keystone: 0x7100_303F, encoded: ARM64Encoder.encodeCmpWImmediate(rn: 1, imm12: 12), origin: "X1 grade"),
+        .init(source: "cmp w8, #12", keystone: 0x7100_311F, encoded: ARM64Encoder.encodeCmpWImmediate(rn: 8, imm12: 12), origin: "X1 exec"),
+        .init(source: "cmp w0, #0", keystone: 0x7100_001F, encoded: ARM64Encoder.encodeCmpWImmediate(rn: 0, imm12: 0), origin: "minimum immediate"),
+        .init(source: "cmp w30, #4095", keystone: 0x713F_FFDF, encoded: ARM64Encoder.encodeCmpWImmediate(rn: 30, imm12: 4095), origin: "maximum immediate"),
+        .init(source: "cmp wsp, #2", keystone: 0x7100_0BFF, encoded: ARM64Encoder.encodeCmpWImmediate(rn: 31, imm12: 2), origin: "WSP register"),
+        .init(source: "ccmp w1, #2, #6, ne", keystone: 0x7A42_1826, encoded: ARM64Encoder.encodeCcmpWImmediate(rn: 1, imm5: 2, nzcv: 6, condition: .ne), origin: "X1 grade"),
+        .init(source: "ccmp w8, #2, #6, ne", keystone: 0x7A42_1906, encoded: ARM64Encoder.encodeCcmpWImmediate(rn: 8, imm5: 2, nzcv: 6, condition: .ne), origin: "X1 exec"),
+        .init(source: "ccmp w0, #0, #0, eq", keystone: 0x7A40_0800, encoded: ARM64Encoder.encodeCcmpWImmediate(rn: 0, imm5: 0, nzcv: 0, condition: .eq), origin: "minimum fields"),
+        .init(source: "ccmp wzr, #31, #15, le", keystone: 0x7A5F_DBEF, encoded: ARM64Encoder.encodeCcmpWImmediate(rn: 31, imm5: 31, nzcv: 15, condition: .le), origin: "maximum fields"),
+    ]
+
+    static let x1LoweringCases: [ARM64EncodingCase] = [
+        .init(source: "madd x0, x1, x2, x3", keystone: 0x9B02_0C20, encoded: ARM64Encoder.encodeMaddSubX(subtract: false, rd: 0, rn: 1, rm: 2, ra: 3), origin: "lower MADDPT"),
+        .init(source: "msub x30, x29, x28, x27", keystone: 0x9B1C_EFBE, encoded: ARM64Encoder.encodeMaddSubX(subtract: true, rd: 30, rn: 29, rm: 28, ra: 27), origin: "lower MSUBPT"),
+        .init(source: "mul xzr, x0, xzr", keystone: 0x9B1F_7C1F, encoded: ARM64Encoder.encodeMaddSubX(subtract: false, rd: 31, rn: 0, rm: 31, ra: 31), origin: "Keystone madd xzr,x0,xzr,xzr; XZR alias"),
+        .init(source: "add x9, x8, x11, lsl #2", keystone: 0x8B0B_0909, encoded: ARM64Encoder.encodeAddSubXShifted(subtract: false, rd: 9, rn: 8, rm: 11, shift: 2), origin: "lower ADDPT"),
+        .init(source: "sub x3, x3, x4", keystone: 0xCB04_0063, encoded: ARM64Encoder.encodeAddSubXShifted(subtract: true, rd: 3, rn: 3, rm: 4), origin: "lower SUBPT"),
+        .init(source: "add x30, x29, xzr, lsl #7", keystone: 0x8B1F_1FBE, encoded: ARM64Encoder.encodeAddSubXShifted(subtract: false, rd: 30, rn: 29, rm: 31, shift: 7), origin: "XZR and shift"),
+        .init(source: "sub x0, x30, x1, lsl #63", keystone: 0xCB01_FFC0, encoded: ARM64Encoder.encodeAddSubXShifted(subtract: true, rd: 0, rn: 30, rm: 1, shift: 63), origin: "maximum shift"),
+        .init(source: "add sp, sp, x2, lsl #4", keystone: 0x8B22_73FF, encoded: ARM64Encoder.encodeAddSubXExtended(subtract: false, rd: 31, rn: 31, rm: 2, shift: 4), origin: "SP and maximum extension shift"),
+        .init(source: "sub sp, x1, x2", keystone: 0xCB22_603F, encoded: ARM64Encoder.encodeAddSubXExtended(subtract: true, rd: 31, rn: 1, rm: 2), origin: "SP destination"),
+        .init(source: "add x0, sp, xzr, lsl #3", keystone: 0x8B3F_6FE0, encoded: ARM64Encoder.encodeAddSubXExtended(subtract: false, rd: 0, rn: 31, rm: 31, shift: 3), origin: "SP and XZR differ"),
+        .init(source: "paciasp", keystone: 0xD503_233F, encoded: ARM64.paciasp, origin: "Keystone hint #25"),
+        .init(source: "autiasp", keystone: 0xD503_23BF, encoded: ARM64.autiasp, origin: "Keystone hint #29"),
+        .init(source: "autibsp", keystone: 0xD503_23FF, encoded: ARM64.autibsp, origin: "Keystone hint #31"),
+        .init(source: "autia1716", keystone: 0xD503_219F, encoded: ARM64.autia1716, origin: "Keystone hint #12"),
+        .init(source: "autib1716", keystone: 0xD503_21DF, encoded: ARM64.autib1716, origin: "Keystone hint #14"),
+    ]
+
+    static let allCases: [ARM64EncodingCase] = asmCallSiteCases + operandCoverageCases + x1ComparisonCases + x1LoweringCases
+
+    @Test func `new X1 encoders refuse unencodable operands`() {
+        #expect(ARM64Encoder.encodeMaddSubX(subtract: false, rd: 32, rn: 0, rm: 0, ra: 0) == nil)
+        #expect(ARM64Encoder.encodeMaddSubX(subtract: false, rd: 0, rn: 32, rm: 0, ra: 0) == nil)
+        #expect(ARM64Encoder.encodeMaddSubX(subtract: false, rd: 0, rn: 0, rm: 32, ra: 0) == nil)
+        #expect(ARM64Encoder.encodeMaddSubX(subtract: false, rd: 0, rn: 0, rm: 0, ra: 32) == nil)
+        #expect(ARM64Encoder.encodeAddSubXShifted(subtract: false, rd: 32, rn: 0, rm: 0) == nil)
+        #expect(ARM64Encoder.encodeAddSubXShifted(subtract: false, rd: 0, rn: 32, rm: 0) == nil)
+        #expect(ARM64Encoder.encodeAddSubXShifted(subtract: false, rd: 0, rn: 0, rm: 32) == nil)
+        #expect(ARM64Encoder.encodeAddSubXShifted(subtract: false, rd: 0, rn: 0, rm: 0, shift: 64) == nil)
+        #expect(ARM64Encoder.encodeAddSubXExtended(subtract: false, rd: 0, rn: 0, rm: 0, shift: 5) == nil)
+        #expect(ARM64Encoder.encodeAddSubXExtended(subtract: false, rd: 32, rn: 0, rm: 0) == nil)
+        #expect(ARM64Encoder.encodeCmpWImmediate(rn: 32, imm12: 2) == nil)
+        #expect(ARM64Encoder.encodeCmpWImmediate(rn: 0, imm12: 4096) == nil)
+        #expect(ARM64Encoder.encodeCcmpWImmediate(rn: 32, imm5: 2, nzcv: 6, condition: .ne) == nil)
+        #expect(ARM64Encoder.encodeCcmpWImmediate(rn: 0, imm5: 32, nzcv: 6, condition: .ne) == nil)
+        #expect(ARM64Encoder.encodeCcmpWImmediate(rn: 0, imm5: 2, nzcv: 16, condition: .ne) == nil)
+    }
 
     // MARK: Parity
 

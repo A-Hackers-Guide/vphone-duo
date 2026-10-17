@@ -59,7 +59,7 @@ public enum FirmwarePatchDrift {
     /// in boot order. AVPBooter is not among them: it never leaves the VM
     /// folder, and `fw patch` records it itself.
     public static let restoredComponents: [VPhoneFirmwareComponent] = [
-        .iBSS, .iBEC, .llb, .txm, .kernelcache, .deviceTree,
+        .iBSS, .iBEC, .llb, .txm, .restoreRamDisk, .kernelcache, .deviceTree,
     ]
 
     /// What a restore put into each component it wrote: the plan's enabled

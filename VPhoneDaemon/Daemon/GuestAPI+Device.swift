@@ -116,16 +116,12 @@ extension GuestAPI {
         }
     }
 
-    /// The interface orientation in `display.rotation`'s degrees, cheap
-    /// enough for the host to ask every second. SpringBoard is asked
-    /// directly; `rotationInfo()` captures the screen, and is only the
-    /// fallback when SpringBoard does not answer.
+    /// Reads SpringBoard directly; the UIScreen path can abort before display registration.
     private static func interfaceOrientation() -> [String: Any] {
-        if let degrees = interfaceRotationDegrees() {
-            return ["degrees": degrees, "source": "springboard"]
-        }
-        let degrees = (rotationInfo()["degrees"] as? NSNumber)?.intValue ?? 0
-        return ["degrees": degrees, "source": "screen"]
+        [
+            "degrees": interfaceRotationDegrees().map { $0 as Any } ?? NSNull(),
+            "source": "springboard",
+        ]
     }
 
     private static func brightnessState() -> [String: Any] {

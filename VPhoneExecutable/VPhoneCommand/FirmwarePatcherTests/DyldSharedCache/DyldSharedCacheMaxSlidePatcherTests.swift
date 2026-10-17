@@ -933,15 +933,47 @@ struct DyldSharedCacheRegionCheckTests {
     private func withCache(
         regionSize: UInt64,
         maxSlide: UInt64 = 0x2000_0000,
+        magic: String = "dyld_v1  arm64e",
         _ body: (URL) throws -> Void,
     ) throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("vphone-dsc-region-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
         try DyldSharedCacheMaxSlideGateTests.writeCache(
-            into: directory, regionSize: regionSize, maxSlide: maxSlide,
+            into: directory, regionSize: regionSize, maxSlide: maxSlide, magic: magic,
         )
         try body(directory)
+    }
+
+    @Test
+    func `An x1 cache uses its own header symbols and subcaches`() throws {
+        try withCache(regionSize: 0x1_7D50_8000, magic: "dyld_v1arm64ex1") { directory in
+            let main = directory.appendingPathComponent(MaxSlideFixture.mainChunkName)
+            let x1 = directory.appendingPathComponent("dyld_shared_cache_arm64e_x1")
+            try FileManager.default.moveItem(at: main, to: x1)
+            try Data().write(to: x1.appendingPathExtension("symbols"))
+            try Data().write(to: x1.appendingPathExtension("01"))
+            let chunks = try DyldSharedCacheChunkSet(directory: directory)
+            #expect(chunks.mainCacheURL == x1)
+            #expect(chunks.localSymbolsURL == x1.appendingPathExtension("symbols"))
+            #expect(chunks.chunkURLs.map(\.lastPathComponent) == [x1.lastPathComponent, x1.lastPathComponent + ".01"])
+            #expect(try DyldSharedCacheMaxSlidePatcher.requireFitsAtSlideZero(chunksDirectory: directory) == 0x1_7D50_8000)
+            let result = try DyldSharedCacheMaxSlidePatcher.patch(chunksDirectory: directory, dryRun: true, verbose: false)
+            #expect(result.sharedRegionSize == 0x1_7D50_8000)
+            #expect(DyldSharedCacheChunkSet.mainCacheURL(in: directory, architecture: "arm64e") == main)
+        }
+    }
+
+    @Test
+    func `A regular cache never includes x1 chunks from the same directory`() throws {
+        try withCache(regionSize: 0x1_7D50_8000) { directory in
+            let x1 = directory.appendingPathComponent("dyld_shared_cache_arm64e_x1")
+            try Data().write(to: x1)
+            try Data().write(to: x1.appendingPathExtension("01"))
+            let chunks = try DyldSharedCacheChunkSet(directory: directory)
+            #expect(chunks.chunkURLs.map(\.lastPathComponent) == [MaxSlideFixture.mainChunkName])
+            #expect(chunks.mainCacheURL.lastPathComponent == MaxSlideFixture.mainChunkName)
+        }
     }
 
     @Test

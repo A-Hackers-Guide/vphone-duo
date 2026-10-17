@@ -125,12 +125,13 @@ public final class DyldSharedCacheChunkSet {
     ///
     /// - Parameters:
     ///   - directory: the directory holding `dyld_shared_cache_<arch>*`.
-    ///   - architecture: cache architecture suffix; `arm64e` for every device
-    ///     this project targets.
+    ///   - architecture: explicit suffix, or nil to discover the cache.
     ///   - captureUndo: start capturing the original bytes of every write into
     ///     an undo log, retrievable with ``takeUndoLog()``. Off by default.
-    public init(directory: URL, architecture: String = "arm64e", captureUndo: Bool = false) throws {
+    public init(directory: URL, architecture: String? = nil, captureUndo: Bool = false) throws {
         self.directory = directory
+        let architecture = String(Self.mainCacheURL(in: directory, architecture: architecture).lastPathComponent
+            .dropFirst("dyld_shared_cache_".count))
         self.architecture = architecture
         undoCaptureLog = captureUndo ? DyldSharedCacheUndoLog() : nil
         chunkURLs = try Self.enumerateChunks(in: directory, architecture: architecture)
@@ -160,6 +161,17 @@ public final class DyldSharedCacheChunkSet {
     /// The `.symbols` side file holding the stripped local symbol table.
     public var localSymbolsURL: URL {
         directory.appendingPathComponent("dyld_shared_cache_\(architecture).symbols")
+    }
+
+    /// Prefers arm64e when both cache variants exist.
+    public static func mainCacheURL(in directory: URL, architecture: String? = nil) -> URL {
+        if let architecture {
+            return directory.appendingPathComponent("dyld_shared_cache_\(architecture)")
+        }
+        let standard = directory.appendingPathComponent("dyld_shared_cache_arm64e")
+        let x1 = directory.appendingPathComponent("dyld_shared_cache_arm64e_x1")
+        return !FileManager.default.fileExists(atPath: standard.path)
+            && FileManager.default.fileExists(atPath: x1.path) ? x1 : standard
     }
 
     /// Lowest and highest address the cache covers.
@@ -517,7 +529,7 @@ public final class DyldSharedCacheChunkSet {
         let prefix = "dyld_shared_cache_\(architecture)"
         let names = try FileManager.default
             .contentsOfDirectory(atPath: directory.path)
-            .filter { $0.hasPrefix(prefix) }
+            .filter { $0 == prefix || $0.hasPrefix(prefix + ".") }
             .filter { !$0.hasSuffix(".symbols") && !$0.hasSuffix(".map") }
 
         // Base file first, then numerically by sub-cache index. Files whose

@@ -459,7 +459,7 @@ struct PatchSetPlanIntegrationTests {
         #expect(plan.includesPatchSet(ExamplePatchSet.identifier))
         #expect(!pipeline.loadedPatchSets.isEmpty)
 
-        let components = pipeline.buildComponentList(
+        let components = try pipeline.buildComponentList(
             restoreDir: directory,
             iOSBase: VPhoneVersion("27.0"),
             plan: plan,

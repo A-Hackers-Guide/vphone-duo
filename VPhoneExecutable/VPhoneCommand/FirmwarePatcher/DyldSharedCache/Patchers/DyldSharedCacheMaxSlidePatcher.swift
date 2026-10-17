@@ -191,14 +191,14 @@ public enum DyldSharedCacheMaxSlidePatcher {
     @discardableResult
     public static func requireFitsAtSlideZero(
         chunksDirectory: URL,
-        architecture: String = "arm64e",
+        architecture: String? = nil,
         kernelRegionSize: UInt64 = kernelSharedRegionSize,
     ) throws -> UInt64 {
         let chunks = try DyldSharedCacheChunkSet(directory: chunksDirectory, architecture: architecture)
         let header = try readHeader(
             from: chunks,
             at: headerVMA(of: chunks),
-            chunkName: "dyld_shared_cache_\(architecture)",
+            chunkName: chunks.mainCacheURL.lastPathComponent,
         )
         guard header.sharedRegionSize <= kernelRegionSize else {
             throw RegionOverflow(sharedRegionSize: header.sharedRegionSize, region: kernelRegionSize)
@@ -219,8 +219,7 @@ public enum DyldSharedCacheMaxSlidePatcher {
     ///
     /// - Parameters:
     ///   - chunksDirectory: the directory of `dyld_shared_cache_<arch>*` chunks.
-    ///   - architecture: cache architecture suffix; `arm64e` on every device
-    ///     this project targets.
+    ///   - architecture: explicit cache suffix, or nil to discover the cache.
     ///   - kernelRegionSize: the guest kernel's `SHARED_REGION_SIZE_ARM64`.
     ///   - dryRun: decide and report, but write nothing.
     ///   - force: clamp even when the cache already fits — the verb's `--force`,
@@ -229,7 +228,7 @@ public enum DyldSharedCacheMaxSlidePatcher {
     @discardableResult
     public static func patch(
         chunksDirectory: URL,
-        architecture: String = "arm64e",
+        architecture: String? = nil,
         kernelRegionSize: UInt64 = kernelSharedRegionSize,
         dryRun: Bool = false,
         force: Bool = false,
@@ -237,8 +236,8 @@ public enum DyldSharedCacheMaxSlidePatcher {
         onUndo: ((DyldSharedCacheUndoLog) -> Void)? = nil,
         verbose: Bool = true,
     ) throws -> Result {
-        let mainChunkName = "dyld_shared_cache_\(architecture)"
-        let mainChunk = chunksDirectory.appendingPathComponent(mainChunkName)
+        let mainChunk = DyldSharedCacheChunkSet.mainCacheURL(in: chunksDirectory, architecture: architecture)
+        let mainChunkName = mainChunk.lastPathComponent
         // Checked before the chunk set is built so the error names the file the
         // Python's FileNotFoundError names, rather than the directory.
         guard FileManager.default.fileExists(atPath: mainChunk.path) else {

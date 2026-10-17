@@ -1,5 +1,71 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **iPhone19,2 / ARM64E_X1 compatibility (validated 2026-10-17):** the tested
+> pairing is iPhone 18 Pro 27.0.1 (24A446), V63AP, with cloudOS 26.4
+> (23E5207q). Cache discovery selects `dyld_shared_cache_arm64e_x1` and its
+> matching subcaches; ordinary arm64e caches remain on their existing path.
+> MachOKit 0.54.1 supplies the X1 cache format support. The `standard` preset
+> selects the following boot-essential patches when their iOS 27 applicability
+> matches; non-X1 Mach-O inputs are unchanged.
+>
+> | Patch | Target | Final role |
+> | --- | --- | --- |
+> | `kernel-boot-arm64e_x1` | vphone600 kernel | Admit subtype 12 at grading, exec-PAC and authenticated shared-region gates |
+> | `system-dyld-boot-arm64e_x1_bootstrap` | `/usr/lib/dyld` | Reach PID 1 before runtime handling exists |
+> | `system-launchd-boot-arm64e_x1_bootstrap` | `/sbin/launchd` | Reach exception-service installation |
+> | `system-fsck-boot-arm64e_x1_bootstrap` | `/sbin/fsck` | Keep the forked checker off runtime-modified signed pages |
+> | `system-mount-boot-arm64e_x1_bootstrap` | `/sbin/mount` | Keep forked mount helpers off runtime-modified signed pages |
+> | `dyld-boot-arm64e_x1_bootstrap` | 38 shared-cache images | Lower the measured pre-handler and pre-fork closure; re-attest pages and refresh corecrypto's FIPS HMAC |
+> | `restoreramdisk-boot-apfs_sha3_hash` | RestoreRamDisk and RestoreTrustCache | Select the iOS 27 root-hash algorithm and admit the re-attested sealing tool |
+>
+> **Kernel reveal.** The analyzed image is `kernelcache.research.vphone600`,
+> XNU `12377.100.591.502.1`, UUID
+> `784F88D3-2AF5-3D4A-AB00-365607646E44`. Its symbol JSON is absent from this
+> checkout, so the `ml_grade_binary` and `exec_mach_imgact` names are XNU and
+> control-flow correlations rather than recovered symbols. The measured subtype
+> comparisons are `0xfffffe000933ceb4`, `0xfffffe00091bad94` and
+> `0xfffffe00091bb088`. Runtime patching does not embed those addresses: it
+> finds the unique subtype-2 grading tail, follows real BL callers to the
+> IMGPF_NOJOP/EBADARCH gate, then finds the shared-region gate and its subtype-2
+> success assignment. All three must resolve uniquely. Each site branches to an
+> allocated cave containing `cmp Wn,#12; ccmp Wn,#2,#6,ne; b resume`, preserving
+> subtype 2 and making subtype 12 take the same authenticated paths.
+>
+> **Instruction path.** `VPhoneArm64eX1Lowering` converts the supported
+> PAuth_LR return/authentication forms to their SP-only forms and scalar
+> ADDPT/SUBPT/MADDPT/MSUBPT to existing arithmetic encodings. This removes PC
+> binding and CPA overflow poisoning; it provides instruction compatibility,
+> not hardware-equivalent X1 security. Before installing the exception service,
+> launchd forks an isolated child that executes `PACIBSPPC` and `ADDPT`. Native
+> success leaves compatibility disabled. A trap or probe failure installs the
+> service and propagates its port through spawn before child execution.
+> Supported faults suspend the target, validate the faulting word, create a
+> private writable copy of that process's page, write one lowered instruction,
+> restore RX, flush the instruction cache and retry the same PC. PID 1 uses the
+> per-thread fallback because it hosts the service; other tasks use
+> `task_suspend` to close the thread-creation race. Unknown or unsupported
+> instructions are forwarded to the captured kernel exception destination.
+>
+> **Restore seal.** For iOS 27 with cloudOS 26.4, the restore patch resolves the
+> manifest-selected ramdisk, locates `apfs_sealvolume`'s options template from
+> its unique getopt xref and decoded copy sequence, changes hash type `1`
+> (`sha256`) to `0x106` (`sha3_256_4k`), and re-attests the modified
+> CodeDirectory page. The ordered trust-cache pass replaces exactly that
+> executable's cdhash, preserves the two metadata bytes and restores v1 sort
+> order. Discovery, signature coverage or uniqueness failures abort the patch.
+>
+> **Validation and limits.** On an M5 Max guest, the unsupported-feature path
+> completed a clean offline restore, logged `Sealing System Volume`, and the
+> first disk boot logged successful on-disk root-hash authentication. Settings,
+> Safari and Calculator launched; the instruction probe completed 20,000 calls
+> without a repeat fault or file change, the unknown-opcode case retained
+> SIGILL, and the task-suspension fix passed 240 concurrent vphoned snapshot
+> requests across ten restarts. Focused Swift/C tests, strict arm64e compilation
+> and analysis, the signer suite, the complete Debug bundle build and bundle
+> admission pass. The native fast path still requires validation on a host whose
+> virtual CPU exposes both probed X1 features. The tvOS presets block all seven
+> iPhone-specific X1 and restore patches, including for a tvOS 27 userland.
+>
 > **tvOS 26.4 support (2026-10-15).** AppleTV5,3 / J42d uses a
 > monolithic arm64 TVOS userland with the cloudOS 26.4 vphone600ap kernel.
 > `devicetree-cfw-tv_app_architecture` copies the donor's concrete app architecture.
@@ -532,6 +598,18 @@
 >   on a nil descriptor when ANE detection comes back NO on the VM.
 
 ## Boot Chain Patches
+
+### Restore environment (iOS 27 + cloudOS 26.4)
+
+| # | Patch | Component | Purpose | Regular | Dev | JB |
+| --- | --- | --- | --- | :---: | :---: | :---: |
+| 1 | `restoreramdisk-boot-apfs_sha3_hash.hash_type` | `RestoreRamDisk` / `apfs_sealvolume` | Select APFS hash type `0x106` (`sha3_256_4k`) and re-attest the modified Mach-O page | Y | Y | Y |
+| 2 | `restoreramdisk-boot-apfs_sha3_hash.trustcache` | `RestoreTrustCache` | Replace the old sealing-tool cdhash with the re-attested cdhash and restore v1 entry order | Y | Y | Y |
+
+The patch is gated to an iOS 27 base paired with cloudOS 26.4. Both paths are
+resolved from `BuildManifest.plist`; discovery requires one semantic match and
+the trust-cache update requires exactly one old cdhash, so an unknown restore
+environment fails before publishing a partially patched tree.
 
 ### AVPBooter
 
@@ -1468,7 +1546,8 @@ cache rebuild.
 | DeviceTree base properties         |       4 |   4 |   4 |   4 |
 | DeviceTree EXP identity properties |       - |   - |   - |   8 |
 | DeviceTree EXP node additions      |       - |   - |   - |   1 (`/product/camera`) |
-| Boot chain total                   |      46 |  58 | 117 | 132 |
+| Restore environment                |       2 |   2 |   2 |   2 |
+| Boot chain total                   |      48 |  60 | 119 | 134 |
 | CFW binary patches (base)          |       4 |   5 |   6 |   6 |
 | CFW EXP-only steps                 |       - |   - |   - |   5 (hv_vmm DSC, camera DSC ×12, watchdogd EXP-JB-3.5, post-restore DT EXP-JB-6, build-version EXP-JB-7 opt-in) |
 | CFW installed components           |       6 |   7 |   9 |   9 |

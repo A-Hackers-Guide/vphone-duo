@@ -34,7 +34,7 @@ extension FirmwarePipeline {
         iOSBase: VPhoneVersion?,
         plan: VPhonePatchPlan? = nil,
         gate: VPhonePatchGate = .unrestricted,
-    ) -> [ComponentDescriptor] {
+    ) throws -> [ComponentDescriptor] {
         var components: [ComponentDescriptor] = []
 
         // Whether the plan kept a bundled set. True when there is no plan, so a
@@ -71,6 +71,7 @@ extension FirmwarePipeline {
 
         let baseIs18 = iOSBase?.major == 18
         let baseIs27 = iOSBase?.major == 27
+        let cloudIs264 = cloudOSProductVersion?.major == 26 && cloudOSProductVersion?.minor == 4
 
         // The Mach port guard disable. Pinned to iOS 18, whose runningboardd and
         // SpringBoard trip GUARD_TYPE_MACH_PORT flavor 10 and crash-loop the UI —
@@ -211,7 +212,52 @@ extension FirmwarePipeline {
             }(),
         ))
 
-        // 6. Kernel — the public CFW firmware includes the former EXP
+        // 6. Restore ramdisk and trust cache
+        let sealPatch = RestoreRamDiskSealPatcher.patchIdentifier
+        let includeSealPatch = variant != .less
+            && includeBootChain
+            && isEnabled(sealPatch, fallback: baseIs27 && cloudIs264)
+        // Empty factories restore both originals when the patch is disabled.
+        let includeSealComponents = includeSealPatch || (baseIs27 && cloudIs264)
+        if includeSealComponents {
+            // Catalogue-only tests have no restore tree.
+            let manifestURL = restoreDir.appendingPathComponent("BuildManifest.plist")
+            if FileManager.default.fileExists(atPath: manifestURL.path) {
+                let ramdiskPath = try Self.manifestComponentPath("RestoreRamDisk", in: restoreDir)
+                let trustCachePath = try Self.manifestComponentPath("RestoreTrustCache", in: restoreDir)
+                let sealContext = RestoreRamDiskSealPatchContext()
+                components.append(ComponentDescriptor(
+                    name: VPhoneFirmwareComponent.restoreRamDisk.rawValue,
+                    inRestoreDir: true,
+                    searchPatterns: [ramdiskPath],
+                    patcherFactories: includeSealPatch ? [{ data, verbose in
+                        let patcher = RestoreRamDiskSealPatcher(
+                            data: data,
+                            context: sealContext,
+                            verbose: verbose,
+                        )
+                        patcher.gate = gate
+                        return patcher
+                    }] : [],
+                ))
+                components.append(ComponentDescriptor(
+                    name: VPhoneFirmwareComponent.restoreTrustCache.rawValue,
+                    inRestoreDir: true,
+                    searchPatterns: [trustCachePath],
+                    patcherFactories: includeSealPatch ? [{ data, verbose in
+                        let patcher = RestoreTrustCacheSealPatcher(
+                            data: data,
+                            context: sealContext,
+                            verbose: verbose,
+                        )
+                        patcher.gate = gate
+                        return patcher
+                    }] : [],
+                ))
+            }
+        }
+
+        // 7. Kernel — the public CFW firmware includes the former EXP
         //    hv_vmm rename after the base and custom-firmware patches.
         components.append(ComponentDescriptor(
             name: "kernelcache",
@@ -255,7 +301,7 @@ extension FirmwarePipeline {
             }(),
         ))
 
-        // 7. DeviceTree — JB includes the former EXP identity and camera
+        // 8. DeviceTree — JB includes the former EXP identity and camera
         //    properties so the guest presents a consistent iPhone17,3 identity.
         //    A guest that presents its board restores with this tree and boots
         //    its own copy (7b).
@@ -277,7 +323,7 @@ extension FirmwarePipeline {
             }] : [],
         ))
 
-        // 7b. The board's installed DeviceTree, which `fw prepare` split off so
+        // 8b. The board's installed DeviceTree, which `fw prepare` split off so
         //     it can carry the board identity through restore.
         if hasGuestTree {
             components.append(ComponentDescriptor(
@@ -302,7 +348,7 @@ extension FirmwarePipeline {
             ))
         }
 
-        // 8. Filesystem
+        // 9. Filesystem
         //    Not restorable: it reads BuildManifest.plist but writes cryptex images
         //    all over the restore tree, so putting the manifest back on its own
         //    would describe a tree that no longer exists. See ComponentDescriptor.
@@ -328,7 +374,7 @@ extension FirmwarePipeline {
             restorable: false,
         ))
 
-        // 9. Firmware Manifest - Only required when excluding the img4 signature patches.
+        // 10. Firmware Manifest - Only required when excluding the img4 signature patches.
         //    Not restorable, for the same reason as Filesystem: the hashes it writes
         //    describe files other steps produced, not the manifest's own bytes.
         components.append(ComponentDescriptor(

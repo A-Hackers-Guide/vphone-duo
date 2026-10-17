@@ -2,6 +2,7 @@
 #include "../Shared/AttitudeProcess.h"
 #include "../Shared/JetsamLimits.h"
 #include "../Shared/RootHideLoaderLinks.h"
+#include "../Shared/VPhoneX1Spawn.h"
 #include <crt_externs.h>
 #include <dlfcn.h>
 #include <errno.h>
@@ -124,7 +125,10 @@ static int vpSpawnP(pid_t *restrict pid, const char *restrict path, const posix_
                     char *const envp[restrict]) {
     VPInjectionEnvironment injected = vpPrepareChild(path, envp, "");
     VPJetsamLimits limits = vpRaiseJetsamLimits(getenv("VPHONE_JB_ROOT"), path, attributes, envp);
-    int status = posix_spawnp(pid, path, actions, attributes, argv, injected.values ? injected.values : envp);
+    int status = vpSpawnWithInheritedX1Port(
+        posix_spawnp, pid, path, actions, attributes, argv,
+        injected.values ? injected.values : envp
+    );
     vpRestoreJetsamLimits(&limits);
     vpFreeEnvironment(&injected);
     return status;
@@ -135,7 +139,10 @@ static int vpSpawn(pid_t *restrict pid, const char *restrict path, const posix_s
                    char *const envp[restrict]) {
     VPInjectionEnvironment injected = vpPrepareChild(path, envp, "");
     VPJetsamLimits limits = vpRaiseJetsamLimits(getenv("VPHONE_JB_ROOT"), path, attributes, envp);
-    int status = posix_spawn(pid, path, actions, attributes, argv, injected.values ? injected.values : envp);
+    int status = vpSpawnWithInheritedX1Port(
+        posix_spawn, pid, path, actions, attributes, argv,
+        injected.values ? injected.values : envp
+    );
     vpRestoreJetsamLimits(&limits);
     vpFreeEnvironment(&injected);
     return status;
@@ -283,5 +290,6 @@ __attribute__((used, section("__DATA,__interpose"))) static const struct {
 } vpInterpose[] = {
     {(const void *)vpSpawnP, (const void *)posix_spawnp},
     {(const void *)vpSpawn, (const void *)posix_spawn},
+    {(const void *)vpSetSpawnExceptionPortsPreservingX1, (const void *)posix_spawnattr_setexceptionports_np},
     {(const void *)vpExecve, (const void *)execve},
 };

@@ -241,6 +241,15 @@ public enum FirmwareKernelCustomFirmwarePatchSet {
             // MARK: iOS 27 Userland
 
             VPhonePatchDeclaration(
+                identifier: "kernel-boot-arm64e_x1",
+                title: "ARM64E_X1 admission",
+                summary: "Admits subtype-12 binaries, enables exec PAC and selects the ARM64E authenticated shared region required by the iOS 27 userland.",
+                target: .firmware(.kernelcache),
+                applicability: ios27,
+                bootEssential: true,
+            ),
+
+            VPhonePatchDeclaration(
                 identifier: "kernel-boot-di2",
                 title: "DiskImages2 client ABI",
                 summary: "Matches the DiskImages2 client ABI a 27 userland calls with.",

@@ -28,13 +28,19 @@ public struct MachOSectionInfo: Sendable {
     public let address: UInt64
     public let size: UInt64
     public let fileOffset: UInt32
+    public let flags: UInt32
 
     public init(segmentName: String, sectionName: String, address: UInt64, size: UInt64, fileOffset: UInt32) {
+        self.init(segmentName: segmentName, sectionName: sectionName, address: address, size: size, fileOffset: fileOffset, flags: 0)
+    }
+
+    public init(segmentName: String, sectionName: String, address: UInt64, size: UInt64, fileOffset: UInt32, flags: UInt32) {
         self.segmentName = segmentName
         self.sectionName = sectionName
         self.address = address
         self.size = size
         self.fileOffset = fileOffset
+        self.flags = flags
     }
 }
 
@@ -142,6 +148,7 @@ public enum MachOParser {
                     address: addr,
                     size: size,
                     fileOffset: fileOff,
+                    flags: data.loadLE(UInt32.self, at: sectOff + 64),
                 )
                 sectOff += section64Size
             }

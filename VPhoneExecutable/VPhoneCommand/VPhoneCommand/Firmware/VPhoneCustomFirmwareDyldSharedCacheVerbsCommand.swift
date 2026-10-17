@@ -51,7 +51,7 @@ struct DyldSharedCacheUndoOptions: ParsableArguments {
     /// chunk, not 0777: it lives inside the guest System volume, whose modes
     /// stay unchanged (AGENTS.md).
     func persist(_ captured: DyldSharedCacheUndoLog, dryRun: Bool) throws {
-        guard let undoLog, captures, !dryRun else { return }
+        guard let undoLog, captures, !dryRun, !captured.records.isEmpty else { return }
         let url = URL(fileURLWithPath: undoLog)
         let existing = (try? Data(contentsOf: url)).flatMap { try? DyldSharedCacheUndoLog.decode($0) }
         guard let merged = DyldSharedCacheUndoLog.updated(
@@ -61,7 +61,7 @@ struct DyldSharedCacheUndoOptions: ParsableArguments {
         // Match the cache chunk's owner and mode rather than widening it: the
         // directory name is the cache directory, so its main chunk is the
         // reference for what a file here should be owned and permissioned as.
-        let mainChunk = url.deletingLastPathComponent().appendingPathComponent("dyld_shared_cache_arm64e")
+        let mainChunk = DyldSharedCacheChunkSet.mainCacheURL(in: url.deletingLastPathComponent())
         var metadata = stat()
         if lstat(mainChunk.path, &metadata) == 0 {
             chmod(url.path, metadata.st_mode & 0o7777)
@@ -75,6 +75,7 @@ enum VPhoneCustomFirmwareDyldSharedCacheVerbs {
     static var all: [ParsableCommand.Type] {
         [
             VPhoneCustomFirmwarePatchSettingsSoftwareUpdateCommand.self,
+            VPhoneCustomFirmwarePatchArm64eX1BootstrapCacheCommand.self,
             VPhoneCustomFirmwareDyldSharedCacheRevertCommand.self,
             VPhoneCustomFirmwarePatchHypervisorVirtualMachineDyldSharedCacheCommand.self,
             VPhoneCustomFirmwarePatchIOMFBSwapEndCommand.self,
@@ -114,6 +115,29 @@ enum VPhoneCustomFirmwareDyldSharedCacheVerbs {
             throw ValidationError("'\(value)' is not a valid number. Enter a decimal or hexadecimal value.")
         }
         return parsed
+    }
+}
+
+struct VPhoneCustomFirmwarePatchArm64eX1BootstrapCacheCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-arm64e-x1-bootstrap-cache",
+        abstract: "Lower the cache code needed before launchd installs on-demand X1 handling",
+    )
+
+    @Argument(transform: URL.init(fileURLWithPath:)) var directory: URL
+    @Flag(name: .customLong("dry-run")) var dryRun = false
+    @OptionGroup var undo: DyldSharedCacheUndoOptions
+
+    func run() throws {
+        var captured = DyldSharedCacheUndoLog()
+        try DyldSharedCacheArm64eX1BootstrapPatcher.patch(
+            directory: directory,
+            dryRun: dryRun,
+            captureUndo: undo.captures,
+            onUndo: { captured.merge($0) },
+            log: VPhoneCustomFirmwareDyldSharedCacheVerbs.stdout,
+        )
+        try undo.persist(captured, dryRun: dryRun)
     }
 }
 
@@ -548,14 +572,13 @@ struct VPhoneCustomFirmwarePatchCameraDyldSharedCacheCommand: ParsableCommand {
         return, which is what makes the app launch-survivable.
 
         <dsc_header> is the unsuffixed `dyld_shared_cache_arm64e` file — the one
-        the symbols resolve against, not a chunk. The Python takes it as a
-        separate argument because `ipsw dyld symaddr` wants a file; it is passed
-        through for the same reason.
+        whose local-symbol table resolves the entry points, not a subcache.
 
         --force accepts an entry point whose prologue is neither the expected
-        `pacibsp` nor the replacement already in place, which is otherwise
-        refused rather than overwritten blind. Modified pages are re-attested;
-        an already-patched cache is a no-op.
+        authenticated B-key stack form nor the replacement already in place,
+        which is otherwise refused rather than overwritten blind. Both legacy
+        `pacibsp` and the X1 PC-bound form are expected. Modified pages are
+        re-attested; an already-patched cache is a no-op.
         """,
     )
 
