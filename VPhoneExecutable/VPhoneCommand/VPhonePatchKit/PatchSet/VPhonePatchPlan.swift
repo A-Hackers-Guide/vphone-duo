@@ -31,18 +31,6 @@ public struct VPhonePatchPlan: Sendable, Hashable {
         enabled.contains(identifier)
     }
 
-    public func skippingFirmwareInapplicable(_ identifier: String) -> VPhonePatchPlan {
-        VPhonePatchPlan(
-            presetIdentifier: presetIdentifier,
-            patchSets: patchSets,
-            selection: selection,
-            enabled: enabled.subtracting([identifier]),
-            skippedByVersion: skippedByVersion,
-            droppedBootEssentials: droppedBootEssentials,
-            parameters: parameters,
-        )
-    }
-
     /// Whether the patch that emits `recordIdentifier` runs.
     ///
     /// Record identifiers are sometimes built at runtime (`kernel-boot-sandbox_ext.3`,

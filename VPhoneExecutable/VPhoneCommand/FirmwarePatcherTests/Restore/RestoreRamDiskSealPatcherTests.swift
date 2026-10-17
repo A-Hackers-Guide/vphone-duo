@@ -31,24 +31,8 @@ struct RestoreRamDiskSealPatcherTests {
         }
     }
 
-    @Test
-    func `SHA-256 skips the seal patch without changing the user's selection`() throws {
-        let identifier = RestoreRamDiskSealPatcher.patchIdentifier
-        let plan = try VPhonePatchPlan.resolve(
-            preset: FirmwarePatchSetCatalog.standardPreset,
-            patchSets: FirmwarePatchSetCatalog.bundled,
-            iOSBase: VPhoneVersion("27.0.1"),
-            cloudOS: VPhoneVersion("26.4"),
-        )
-        #expect(plan.isEnabled(identifier))
-        let skipped = plan.skippingFirmwareInapplicable(identifier)
-        #expect(!skipped.isEnabled(identifier))
-        #expect(skipped.selection == plan.selection)
-        #expect(skipped.enabled == plan.enabled.subtracting([identifier]))
-    }
-
     @Test(arguments: [UInt32(1), UInt32(0x106)])
-    func `restore tool factories follow the SystemVolume hash type`(_ hashType: UInt32) throws {
+    func `root hash metadata changes applicability without rewriting the plan`(_ hashType: UInt32) throws {
         let root = try rootHashFixture(hashType: hashType)
         defer { try? FileManager.default.removeItem(at: root) }
         let pipeline = FirmwarePipeline(
@@ -61,6 +45,15 @@ struct RestoreRamDiskSealPatcherTests {
             iOSBase: VPhoneVersion("27.0.1"),
             cloudOS: VPhoneVersion("26.4"),
         ))
+        try pipeline.resolveFirmwareApplicability(
+            restoreDir: root,
+            iOSBase: VPhoneVersion("27.0.1"),
+            cloudOS: VPhoneVersion("26.4"),
+            plan: plan,
+        )
+        let identifier = RestoreRamDiskSealPatcher.patchIdentifier
+        #expect(plan.isEnabled(identifier))
+        #expect(pipeline.notApplicablePatches == (hashType == 1 ? Set([identifier]) : []))
         let components = try pipeline.buildComponentList(
             restoreDir: root,
             iOSBase: VPhoneVersion("27.0.1"),

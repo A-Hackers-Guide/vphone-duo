@@ -56,8 +56,10 @@
 > executable's cdhash, preserves the two metadata bytes and restores v1 sort
 > order. The 27.0.1 (24A446) IPSWs for iPhone17,1–5 and iPhone18,1–5 all
 > have root-hash type `1` in both SystemVolume entries; iPhone19,2 has `0x106`.
-> SHA-256 images leave both cloudOS restore files pristine and omit the
-> image-specific patch from the resolved plan and restore receipt. Unknown
+> SHA-256 images leave both cloudOS restore files pristine. The logical plan
+> and template key keep the user's selection stable; `PatchPlan.plist` records
+> the patch as not applicable and omits it from the effective plan and restore
+> receipt. Unknown
 > hash types or malformed metadata abort before patching; discovery,
 > signature coverage or uniqueness failures also abort the SHA3 patch.
 >

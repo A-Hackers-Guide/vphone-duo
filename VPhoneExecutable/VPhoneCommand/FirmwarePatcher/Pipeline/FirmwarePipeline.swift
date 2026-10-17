@@ -194,19 +194,13 @@ public final class FirmwarePipeline {
         // The preset resolves here rather than in init: its version gates need the
         // two ProductVersions that were just read, and a conflict or a misnamed
         // patch must stop the run before a single byte is written.
-        notApplicablePatches = []
-        var plan = try resolvePlan(iOSBase: baseVersion, cloudOS: cloudOSVersion)
-        let sealPatch = RestoreRamDiskSealPatcher.patchIdentifier
-        let sealSelected = plan?.isEnabled(sealPatch)
-            ?? (baseVersion?.major == 27 && cloudOSVersion?.major == 26 && cloudOSVersion?.minor == 4)
-        if variant != .less, sealSelected {
-            let hashType = try RestoreRamDiskSealPatcher.systemVolumeHashType(in: restoreDir)
-            if hashType == RestoreRamDiskSealPatcher.sha256Type {
-                notApplicablePatches.insert(sealPatch)
-                plan = plan?.skippingFirmwareInapplicable(sealPatch)
-                log("[=] \(sealPatch): SystemVolume root hash uses SHA-256; restore tools stay pristine")
-            }
-        }
+        let plan = try resolvePlan(iOSBase: baseVersion, cloudOS: cloudOSVersion)
+        try resolveFirmwareApplicability(
+            restoreDir: restoreDir,
+            iOSBase: baseVersion,
+            cloudOS: cloudOSVersion,
+            plan: plan,
+        )
         resolvedPlan = plan
         let gate = plan.map { VPhonePatchGate(plan: $0) } ?? .unrestricted
 
@@ -225,6 +219,24 @@ public final class FirmwarePipeline {
         log(String(repeating: "=", count: 60))
 
         return allRecords
+    }
+
+    func resolveFirmwareApplicability(
+        restoreDir: URL,
+        iOSBase: VPhoneVersion?,
+        cloudOS: VPhoneVersion?,
+        plan: VPhonePatchPlan?,
+    ) throws {
+        notApplicablePatches = []
+        let sealPatch = RestoreRamDiskSealPatcher.patchIdentifier
+        let sealSelected = plan?.isEnabled(sealPatch)
+            ?? (iOSBase?.major == 27 && cloudOS?.major == 26 && cloudOS?.minor == 4)
+        guard variant != .less, sealSelected else { return }
+        let hashType = try RestoreRamDiskSealPatcher.systemVolumeHashType(in: restoreDir)
+        if hashType == RestoreRamDiskSealPatcher.sha256Type {
+            notApplicablePatches.insert(sealPatch)
+            log("[=] \(sealPatch): SystemVolume root hash uses SHA-256; restore tools stay pristine")
+        }
     }
 
     /// Patch a kernelcache file in place with this VM's selection, without a

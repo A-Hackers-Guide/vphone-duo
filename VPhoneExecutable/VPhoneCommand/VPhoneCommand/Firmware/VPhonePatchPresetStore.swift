@@ -86,8 +86,9 @@ public struct VPhoneVirtualMachinePatchPlan: Codable, Sendable, Hashable {
     ) {
         presetIdentifier = plan.presetIdentifier
         patchSets = plan.patchSets.map(\.identifier)
-        enabledPatches = plan.enabled.sorted()
-        self.notApplicablePatches = notApplicablePatches.sorted()
+        let notApplicable = notApplicablePatches.intersection(plan.enabled)
+        enabledPatches = plan.enabled.subtracting(notApplicable).sorted()
+        self.notApplicablePatches = notApplicable.sorted()
         iOSBaseVersion = iOSBase?.description
         cloudOSVersion = cloudOS?.description
         parameters = plan.parameters
@@ -96,6 +97,10 @@ public struct VPhoneVirtualMachinePatchPlan: Codable, Sendable, Hashable {
     /// Whether the patch declaring `identifier` was turned on for this VM.
     public func isEnabled(_ identifier: String) -> Bool {
         enabledPatches.contains(identifier)
+    }
+
+    public var selectedPatches: Set<String> {
+        Set(enabledPatches).union(notApplicablePatches)
     }
 
     private enum CodingKeys: String, CodingKey {

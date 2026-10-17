@@ -214,14 +214,11 @@ extension FirmwarePipeline {
 
         // 6. Restore ramdisk and trust cache
         let sealPatch = RestoreRamDiskSealPatcher.patchIdentifier
-        var includeSealPatch = variant != .less
+        let includeSealPatch = variant != .less
             && includeBootChain
             && isEnabled(sealPatch, fallback: baseIs27 && cloudIs264)
+            && !notApplicablePatches.contains(sealPatch)
         let manifestURL = restoreDir.appendingPathComponent("BuildManifest.plist")
-        if includeSealPatch, FileManager.default.fileExists(atPath: manifestURL.path) {
-            let hashType = try RestoreRamDiskSealPatcher.systemVolumeHashType(in: restoreDir)
-            includeSealPatch = hashType == RestoreRamDiskSealPatcher.sha3_256_4KType
-        }
         // Empty factories restore both originals when the patch is disabled.
         let includeSealComponents = includeSealPatch || (baseIs27 && cloudIs264)
         if includeSealComponents {
