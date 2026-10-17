@@ -23,6 +23,11 @@ public enum FirmwareGuestSystemPatchSet {
     public static let installCoordinationPersonaMarker = "/usr/lib/vphone-installcoordination-persona-lookup"
     public static let gyroscope = "system-backboardd-cfw-gyroscope"
     public static let attitude = "system-apps-cfw-attitude"
+    public static let arm64eX1DyldBootstrap = "system-dyld-boot-arm64e_x1_bootstrap"
+    public static let arm64eX1CacheBootstrap = "dyld-boot-arm64e_x1_bootstrap"
+    public static let arm64eX1LaunchdBootstrap = "system-launchd-boot-arm64e_x1_bootstrap"
+    public static let arm64eX1FsckBootstrap = "system-fsck-boot-arm64e_x1_bootstrap"
+    public static let arm64eX1MountBootstrap = "system-mount-boot-arm64e_x1_bootstrap"
 
     public static let paravirtGPUIndexOffset = "system-paravirt_gpu-cfw-heap_index_offset"
     public static let paravirtGPUDriverPath =
@@ -158,6 +163,47 @@ public enum FirmwareGuestSystemPatchSet {
             ),
 
             // MARK: System Daemons
+
+            VPhonePatchDeclaration(
+                identifier: arm64eX1DyldBootstrap,
+                title: "ARM64E_X1 dyld bootstrap",
+                summary: "Lowers X1 instructions in dyld so launchd can install the host exception handler that translates later faults on demand.",
+                target: .guestExecutable(path: "/usr/lib/dyld"),
+                applicability: ios27,
+                bootEssential: true,
+            ),
+            VPhonePatchDeclaration(
+                identifier: arm64eX1CacheBootstrap,
+                title: "ARM64E_X1 cache bootstrap",
+                summary: "Lowers only libSystem's pre-constructor X1 code so launchd can install the global on-demand instruction handler.",
+                target: .dyldSharedCache,
+                applicability: ios27,
+                bootEssential: true,
+            ),
+            VPhonePatchDeclaration(
+                identifier: arm64eX1LaunchdBootstrap,
+                title: "ARM64E_X1 launchd bootstrap",
+                summary: "Lowers PID 1 itself so its injected on-demand instruction handler can become active for the rest of userland.",
+                target: .guestExecutable(path: "/sbin/launchd"),
+                applicability: ios27,
+                bootEssential: true,
+            ),
+            VPhonePatchDeclaration(
+                identifier: arm64eX1FsckBootstrap,
+                title: "ARM64E_X1 fsck bootstrap",
+                summary: "Lowers the boot fsck wrapper so its forked checker does not inherit runtime-modified signed pages.",
+                target: .guestExecutable(path: "/sbin/fsck"),
+                applicability: ios27,
+                bootEssential: true,
+            ),
+            VPhonePatchDeclaration(
+                identifier: arm64eX1MountBootstrap,
+                title: "ARM64E_X1 mount bootstrap",
+                summary: "Lowers the boot mount wrapper so its forked mount helpers do not inherit runtime-modified signed pages.",
+                target: .guestExecutable(path: "/sbin/mount"),
+                applicability: ios27,
+                bootEssential: true,
+            ),
 
             VPhonePatchDeclaration(
                 identifier: "system-seputil-boot-gigalocker_uuid",

@@ -606,6 +606,9 @@ struct DyldSharedCacheCameraPatcherBehaviourTests {
         let pristinePrologue = try classify(ARM64.pacibsp + ARM64.nop)
         #expect(pristinePrologue == false)
 
+        let x1Prologue = ARM64.encodeU32(CustomFirmwareArm64eX1Tests.pac) + ARM64.nop
+        #expect(try classify(x1Prologue) == false)
+
         // The replacement itself — already patched.
         let ownOutput = try classify(replacement)
         #expect(ownOutput == true)

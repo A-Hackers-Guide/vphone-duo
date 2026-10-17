@@ -671,9 +671,12 @@ struct VPhoneCustomFirmwareInstaller {
             try work.directory.setMode("Disk.img", disk.mode & 0o777)
             try work.directory.rename("Disk.img", to: "Disk.img", in: bundleDirectory)
         }
-        if changed {
-            recordKernelcacheReceipt(enabled: enabledKernelPatches, in: bundleDirectory, owner: invokingUser.map { ($0.uid, $0.gid) })
-        }
+        // Record the selected identifiers even when the bytes were already present.
+        recordKernelcacheReceipt(
+            enabled: enabledKernelPatches,
+            in: bundleDirectory,
+            owner: invokingUser.map { ($0.uid, $0.gid) },
+        )
         print("[+] Guest kernel updated; start the VM to boot the re-patched kernelcache")
     }
 
@@ -1171,6 +1174,19 @@ struct VPhoneCustomFirmwareInstaller {
         }
         let version = try productVersion(system: system)
 
+        if version.hasPrefix("27.") || priorGuest.contains(FirmwareGuestSystemPatchSet.arm64eX1DyldBootstrap) {
+            machO(FirmwareGuestSystemPatchSet.arm64eX1DyldBootstrap, path: "usr/lib/dyld",
+                  verbs: ["patch-arm64e-x1"], preserveEntitlements: true)
+        }
+        if version.hasPrefix("27.") || priorGuest.contains(FirmwareGuestSystemPatchSet.arm64eX1FsckBootstrap) {
+            machO(FirmwareGuestSystemPatchSet.arm64eX1FsckBootstrap, path: "sbin/fsck",
+                  verbs: ["patch-arm64e-x1"], preserveEntitlements: true)
+        }
+        if version.hasPrefix("27.") || priorGuest.contains(FirmwareGuestSystemPatchSet.arm64eX1MountBootstrap) {
+            machO(FirmwareGuestSystemPatchSet.arm64eX1MountBootstrap, path: "sbin/mount",
+                  verbs: ["patch-arm64e-x1"], preserveEntitlements: true)
+        }
+
         // 0. A cache whose span alone overruns the guest kernel's shared region
         //    maps at no slide, and the guest panics on first boot. Refuse before
         //    the redeploy and the cache patches. A header this check cannot read
@@ -1258,6 +1274,7 @@ struct VPhoneCustomFirmwareInstaller {
         var dyld: [(id: String, verb: String, args: [String])] = []
         if version.hasPrefix("27.") {
             dyld += [
+                (FirmwareGuestSystemPatchSet.arm64eX1CacheBootstrap, "patch-arm64e-x1-bootstrap-cache", [dsc]),
                 ("dyld-boot-iomfb_force_kern", "patch-iomfb-force-kern", [dsc]),
                 ("dyld-boot-maxslide", "patch-dsc-maxslide", [dsc]),
                 ("dyld-boot-lsd_embedded_reg", "patch-lsd-embedded-reg", [dsc]),
@@ -1271,7 +1288,7 @@ struct VPhoneCustomFirmwareInstaller {
             (FirmwareGuestSystemPatchSet.settingsSoftwareUpdate, "patch-settings-software-update", [dsc]),
             (FirmwarePatchSetCatalog.misTrustAuthPatch, "patch-mis-trust-auth", [dsc]),
             ("dyld-exp-hv_vmm", "patch-hv-vmm-dsc", [dsc]),
-            ("dyld-cfw-camera", "patch-camera-dsc", [dsc, (dsc as NSString).appendingPathComponent("dyld_shared_cache_arm64e")]),
+            ("dyld-cfw-camera", "patch-camera-dsc", [dsc, DyldSharedCacheChunkSet.mainCacheURL(in: URL(fileURLWithPath: dsc)).path]),
         ]
         applyDyldPatches(
             dyld, dsc: dsc, cacheRelative: cacheRelative, system: system, plan: plan, priorGuest: priorGuest,
@@ -1528,7 +1545,32 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
 
-        machO("system-launchd-boot-jetsam_panic_guard_bypass", path: "sbin/launchd", verbs: ["patch-launchd-jetsam"], preserveEntitlements: true, injectedDylibPath: "/vh")
+        let launchdJetsam = "system-launchd-boot-jetsam_panic_guard_bypass"
+        let launchdX1 = FirmwareGuestSystemPatchSet.arm64eX1LaunchdBootstrap
+        isolate([launchdJetsam, launchdX1]) {
+            let enabled = [launchdJetsam, launchdX1].filter(on)
+            if !enabled.isEmpty {
+                var verbs: [String] = []
+                if enabled.contains(launchdJetsam) { verbs.append("patch-launchd-jetsam") }
+                if enabled.contains(launchdX1) { verbs.append("patch-arm64e-x1") }
+                try patchMachO(
+                    system: system,
+                    work: work,
+                    path: "sbin/launchd",
+                    verbs: verbs,
+                    preserveEntitlements: true,
+                    injectedDylibPath: "/vh",
+                )
+                live.formUnion(enabled)
+            } else if try revertMachO(system: system, work: work, path: "sbin/launchd") {
+                print("  [+] launchd patches: restored sbin/launchd from backup")
+            } else {
+                for identifier in [launchdJetsam, launchdX1] where priorGuest.contains(identifier) {
+                    print("  [!] \(identifier): off now but no backup to revert; leaving launchd patched (not revertible)")
+                    live.insert(identifier)
+                }
+            }
+        }
 
         isolate([]) { try restoreMISFixTargets(system: system) }
 
@@ -1584,11 +1626,11 @@ struct VPhoneCustomFirmwareInstaller {
         return live
     }
 
-    /// Live dyld patches whose verb runs again on every install. Each is cheap
-    /// and idempotent, and its earlier implementation left records identical to
-    /// the current one's, so `hasOutdatedImplementation` cannot single it out:
-    /// `dyld-boot-maxslide` once left page 0's slot stale, and a re-run repairs it.
-    private static let dyldPatchesRerunWhenLive: Set<String> = ["dyld-boot-maxslide"]
+    /// Idempotent dyld patches whose receipts cannot identify stale implementations.
+    private static let dyldPatchesRerunWhenLive: Set<String> = [
+        "dyld-boot-maxslide",
+        FirmwareGuestSystemPatchSet.arm64eX1CacheBootstrap,
+    ]
 
     /// Apply the enabled dyld cache patches whose state differs from what was
     /// live before, and revert the disabled ones from the undo log the earlier
@@ -2687,6 +2729,13 @@ struct VPhoneCustomFirmwareInstaller {
         let staged = work.file(name)
         try work.directory.removeItem(name)
         try system.copyFile(from: backup, to: name, in: work.directory)
+        // Preserve the original CodeDirectory identifier unless explicitly overridden.
+        let signingIdentifier: String?
+        if let identifier {
+            signingIdentifier = identifier
+        } else {
+            signingIdentifier = try VPhoneSigner.identifier(ofFileAt: staged)
+        }
         let entitlements =
             preserveEntitlements
                 ? try VPhoneSigner.entitlements(ofFileAt: staged).first(where: { !$0.isEmpty })
@@ -2705,7 +2754,12 @@ struct VPhoneCustomFirmwareInstaller {
         // bundle-shipped guest dylibs all carry the flag; match them.
         try VPhoneSigner.sign(
             fileAt: staged,
-            options: .init(identifier: identifier, entitlements: entitlements, mergesExisting: true, style: .appleAdHoc),
+            options: .init(
+                identifier: signingIdentifier,
+                entitlements: entitlements,
+                mergesExisting: true,
+                style: .appleAdHoc,
+            ),
         )
         try system.replaceFile(path, fromFileAt: staged, mode: 0o755, owner: Self.guestOwner)
     }

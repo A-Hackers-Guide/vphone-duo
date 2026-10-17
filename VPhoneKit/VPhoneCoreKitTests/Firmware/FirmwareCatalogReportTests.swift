@@ -109,7 +109,12 @@ struct FirmwareCatalogReportTests {
     @Test func `other i phones have pairings of their own`() {
         for guest in VPhoneGuestDevice.known where guest.family == .iPhone && guest.presentsBoard {
             let pairings = VPhoneFirmwareCatalog.pairings(for: guest.productType)
-            #expect(pairings.map(\.iosName).first == (guest.productType == "iPhone18,5" ? "iOS 26.3.1" : "iOS 26.0"))
+            let firstRelease = switch guest.productType {
+            case "iPhone18,5": "iOS 26.3.1"
+            case "iPhone19,2": "iOS 27.0.1"
+            default: "iOS 26.0"
+            }
+            #expect(pairings.map(\.iosName).first == firstRelease)
             #expect(pairings.map(\.iosName).last == "iOS 27.0.1")
             for p in pairings {
                 #expect(p.device == guest.productType)

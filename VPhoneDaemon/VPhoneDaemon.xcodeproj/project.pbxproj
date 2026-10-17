@@ -177,7 +177,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "set -euo pipefail\nroot=\"$(cd \"$SRCROOT/..\" && pwd)\"\n/usr/bin/env -i HOME=\"$HOME\" TMPDIR=\"${TMPDIR:-/tmp}\" PATH=\"/usr/bin:/bin:/usr/sbin:/sbin\" /usr/bin/xcodebuild -project \"$root/VPhoneExecutable/VPhoneCommand/VPhoneCommand.xcodeproj\" -scheme VPhoneSign -configuration \"$CONFIGURATION\" -destination 'generic/platform=iOS' -derivedDataPath \"$root/.build/XcodeSignGuest-$CONFIGURATION\" CODE_SIGNING_ALLOWED=NO build\n";
+			shellScript = "set -euo pipefail\nroot=\"$(cd \"$SRCROOT/..\" && pwd)\"\n# Use the device SDK and product suffix without requiring a simulator runtime.\n/usr/bin/env -i HOME=\"$HOME\" TMPDIR=\"${TMPDIR:-/tmp}\" PATH=\"/usr/bin:/bin:/usr/sbin:/sbin\" /usr/bin/xcodebuild -project \"$root/VPhoneExecutable/VPhoneCommand/VPhoneCommand.xcodeproj\" -scheme VPhoneSign -configuration \"$CONFIGURATION\" -sdk iphoneos -derivedDataPath \"$root/.build/XcodeSignGuest-$CONFIGURATION\" CODE_SIGNING_ALLOWED=NO SUPPORTS_MACCATALYST=NO EFFECTIVE_PLATFORM_NAME=-iphoneos build\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

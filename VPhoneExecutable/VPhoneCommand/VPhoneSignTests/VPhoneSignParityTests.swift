@@ -228,6 +228,34 @@ struct VPhoneSignParityTests {
         }
     }
 
+    @Test
+    func `an existing identifier survives staging and re-signing`() throws {
+        let directory = try VPhoneSignFixtures.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = try VPhoneSignFixtures.copy(
+            VPhoneSignFixtures.url("hello-arm64"),
+            into: directory,
+            as: "fsck",
+        )
+        try VPhoneSigner.sign(
+            fileAt: file,
+            options: .init(identifier: "com.apple.fsck", style: .appleAdHoc),
+        )
+
+        let existingIdentifier = try VPhoneSigner.identifier(ofFileAt: file)
+        let identifier = try #require(existingIdentifier)
+        #expect(identifier == "com.apple.fsck")
+        try VPhoneSigner.sign(
+            fileAt: file,
+            options: .init(identifier: identifier, mergesExisting: true, style: .appleAdHoc),
+        )
+
+        for (index, slice) in try VPhoneSignBlobs(fileAt: file).slices.enumerated() {
+            let blob = try #require(slice[0], "slice \(index) has no CodeDirectory")
+            #expect(VPhoneSignBlobs.identifier(ofCodeDirectory: blob) == "com.apple.fsck", "slice \(index)")
+        }
+    }
+
     /// Signing twice must land on the same bytes, or a rebuild of the CFW
     /// would produce a different image every time.
     @Test

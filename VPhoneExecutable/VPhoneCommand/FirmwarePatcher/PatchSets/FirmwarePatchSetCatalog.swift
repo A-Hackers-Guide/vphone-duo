@@ -54,7 +54,6 @@ public enum FirmwarePatchSetCatalog {
     ///
     /// `dyld-exp-mis_trust_auth` is off because a userspace hook now does its
     /// job: see ``misTrustAuthPatch``.
-    ///
     /// `kernel-cfw-paravirt_user_clients` and `kernel-cfw-display_promotion`
     /// are not in this list: `standard` turns them on. See
     /// ``paravirtUserClientsPatch`` and ``proMotionPatch``.
@@ -215,8 +214,10 @@ public enum FirmwarePatchSetCatalog {
 
     /// The iOS payloads, hooks and shared-cache patches an Apple TV guest has no
     /// validated port of: display, camera, audio, sensors, the GPU driver (a
-    /// plain-arm64 HD cannot load it), debugserver and the environment hooks.
+    /// plain-arm64 HD cannot load it), debugserver, the environment hooks, and
+    /// the iPhone 19 ARM64E_X1 boot path.
     public static let tvOSBlockedPatches: Set<String> = [
+        FirmwareGuestSystemPatchSet.arm64eX1CacheBootstrap,
         "dyld-boot-iomfb_force_kern",
         "dyld-boot-iomfb_swapend",
         "dyld-boot-lockdown_mode",
@@ -224,22 +225,28 @@ public enum FirmwarePatchSetCatalog {
         "dyld-boot-maxslide",
         "dyld-boot-xpc_lwcr",
         "dyld-cfw-camera",
+        "kernel-boot-arm64e_x1",
         "preboot-cfw-devicetree_board_audio",
         "preboot-cfw-devicetree_haptics",
         "preboot-cfw-devicetree_iphone_product",
         "preboot-cfw-devicetree_microphone_array",
+        RestoreRamDiskSealPatcher.patchIdentifier,
         "system-apps-cfw-attitude",
         "system-backboardd-cfw-gyroscope",
         "system-campo-cfw-entitlements",
         "system-debugserver-cfw-install",
+        FirmwareGuestSystemPatchSet.arm64eX1DyldBootstrap,
         "system-diskimagesiod-cfw-is_mount_complete",
         "system-extensions-boot-gpu_bundle",
+        FirmwareGuestSystemPatchSet.arm64eX1FsckBootstrap,
         "system-installcoordination_proxy-cfw-persona_lookup",
         "system-jetsamproperties-cfw-disable_allowed",
+        FirmwareGuestSystemPatchSet.arm64eX1LaunchdBootstrap,
         "system-launchd-boot-jetsam_panic_guard_bypass",
         "system-launchdaemons-boot-environment",
         "system-locationd-cfw-disable_auto_cohort",
         "system-mobileactivationd-boot-should_hactivate",
+        FirmwareGuestSystemPatchSet.arm64eX1MountBootstrap,
         "system-paravirt_gpu-cfw-heap_index_offset",
         "system-systemversion-cfw-build_version",
         "system-virtiosound-cfw-hal_plugin",

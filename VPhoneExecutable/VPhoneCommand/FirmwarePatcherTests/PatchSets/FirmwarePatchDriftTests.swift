@@ -35,6 +35,7 @@ struct FirmwarePatchDriftTests {
             patch("kernel-a", .firmware(.kernelcache)),
             patch("kernel-b", .firmware(.kernelcache)),
             patch("txm", .firmware(.txm)),
+            patch("ramdisk", .firmware(.restoreRamDisk)),
             patch("dyld", .dyldSharedCache),
             patch("dt", .prebootDeviceTree),
             patch("tree-node", .firmware(.deviceTree)),
@@ -49,12 +50,13 @@ struct FirmwarePatchDriftTests {
             enabledPatches: ["avp", "ibss", "kernel-b", "kernel-a", "dyld"],
             declarations: declarations,
         )
-        #expect(Set(parts.keys) == [.iBSS, .iBEC, .llb, .txm, .kernelcache, .deviceTree])
+        #expect(Set(parts.keys) == [.iBSS, .iBEC, .llb, .txm, .restoreRamDisk, .kernelcache, .deviceTree])
         #expect(parts[.iBSS] == ["ibss"])
         #expect(parts[.kernelcache] == ["kernel-a", "kernel-b"])
         // Off in the plan, or declaring nothing: recorded empty, not unknown.
         #expect(parts[.llb] == [])
         #expect(parts[.iBEC] == [])
+        #expect(parts[.restoreRamDisk] == [])
         #expect(parts[.deviceTree] == [])
         // AVPBooter never leaves the VM folder, and guest patches are written
         // by cfw install, not by a restore.

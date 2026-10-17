@@ -286,6 +286,15 @@ struct VPhoneMachOImage {
         return VPhoneCodeSignature.entitlementsXML(in: blob)
     }
 
+    func embeddedIdentifier() throws -> String? {
+        guard let signature else { return nil }
+        let blob = image.subdata(in: signature.dataOffset ..< signature.dataOffset + signature.dataSize)
+        guard let identifier = try VPhoneCodeSignature.identifier(in: blob) else {
+            throw VPhoneSignError.malformed("the embedded signature has no primary CodeDirectory")
+        }
+        return identifier
+    }
+
     /// How far ldid lets the code reach: the end of the string table, or the
     /// start of the signature it is replacing.
     func codeEnd() throws -> Int {

@@ -196,7 +196,7 @@ public final class FirmwarePipeline {
         resolvedPlan = plan
         let gate = plan.map { VPhonePatchGate(plan: $0) } ?? .unrestricted
 
-        let components = buildComponentList(
+        let components = try buildComponentList(
             restoreDir: restoreDir,
             iOSBase: baseVersion,
             plan: plan,
@@ -232,7 +232,7 @@ public final class FirmwarePipeline {
         // restoreDir is unused when building the kernelcache component's
         // patchers (they take the gate and versions, not files), so the VM
         // directory stands in for the parameter.
-        let components = buildComponentList(restoreDir: vmDirectory, iOSBase: iOSBase, plan: plan, gate: gate)
+        let components = try buildComponentList(restoreDir: vmDirectory, iOSBase: iOSBase, plan: plan, gate: gate)
         guard let kernel = components.first(where: { $0.name == "kernelcache" }) else {
             throw PatcherError.invalidFormat("this build has no kernelcache component to patch")
         }

@@ -1,13 +1,3 @@
-// FirmwareBootChainPatchSet.swift — Manifest for the signed boot chain.
-//
-// AVPBooter, iBSS, iBEC, LLB and TXM. Almost everything here is boot-essential:
-// the chain either accepts the resealed images or the VM never reaches the
-// kernel. The two that are not — the serial labels and the boot-args string —
-// only change what the guest logs and how it is told to start.
-//
-// Identifiers are the record identifiers the patchers already emit, so a record
-// in a log and a checkbox in the UI name the same thing.
-
 import Foundation
 import VPhonePatchKit
 
@@ -17,7 +7,7 @@ public enum FirmwareBootChainPatchSet {
     public static let manifest = VPhonePatchSetManifest(
         identifier: identifier,
         name: "Boot Chain",
-        summary: "AVPBooter, iBSS, iBEC, LLB and TXM image-4 and boot-policy patches",
+        summary: "Boot images, restore-environment compatibility, and boot-policy patches",
         patches: [
             // MARK: AVPBooter
 
@@ -173,6 +163,20 @@ public enum FirmwareBootChainPatchSet {
                 title: "TXM selector 42/29 shellcode",
                 summary: "Installs the selector-42/29 stub that admits guest signatures.",
                 target: .firmware(.txm),
+                bootEssential: true,
+            ),
+
+            // MARK: Restore environment
+
+            VPhonePatchDeclaration(
+                identifier: RestoreRamDiskSealPatcher.patchIdentifier,
+                title: "iOS 27 APFS seal hash",
+                summary: "Makes the cloudOS 26.4 restore ramdisk calculate the iOS 27 root hash with sha3_256_4k and admits the re-attested sealing tool through its restore trust cache.",
+                target: .firmware(.restoreRamDisk),
+                applicability: VPhonePatchApplicability(
+                    iOSBase: .major(27),
+                    cloudOS: .release(major: 26, minor: 4),
+                ),
                 bootEssential: true,
             ),
         ],

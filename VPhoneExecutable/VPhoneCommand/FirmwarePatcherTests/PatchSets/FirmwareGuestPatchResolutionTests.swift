@@ -99,6 +99,16 @@ struct FirmwareGuestPatchResolutionTests {
         #expect(tv4K27.enabled.isSuperset(of: FirmwarePatchSetCatalog.tvOS27UserlandPatches))
         #expect(tv4K27.isEnabled("kernel-boot-iomfb_swapend"))
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: tv4K27.enabled, arm64eUserland: true).isEmpty)
+        let x1Patches: Set<String> = [
+            FirmwareGuestSystemPatchSet.arm64eX1CacheBootstrap,
+            FirmwareGuestSystemPatchSet.arm64eX1DyldBootstrap,
+            FirmwareGuestSystemPatchSet.arm64eX1FsckBootstrap,
+            FirmwareGuestSystemPatchSet.arm64eX1LaunchdBootstrap,
+            FirmwareGuestSystemPatchSet.arm64eX1MountBootstrap,
+            "kernel-boot-arm64e_x1",
+            "restoreramdisk-boot-apfs_sha3_hash",
+        ]
+        #expect(tv4K27.enabled.isDisjoint(with: x1Patches))
 
         // The HD's preset is the mirror image.
         let tvHD = try plan(FirmwarePatchSetCatalog.tvOSPreset)

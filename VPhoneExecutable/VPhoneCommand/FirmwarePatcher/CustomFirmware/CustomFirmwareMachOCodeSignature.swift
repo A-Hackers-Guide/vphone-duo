@@ -222,7 +222,7 @@ public enum CustomFirmwareMachOCodeSignature {
         guard pageSizeLog2 > 0, pageSizeLog2 < 24 else { return nil }
         let pageSize = 1 << Int(pageSizeLog2)
 
-        guard data.fits(offset, length) else { return nil }
+        guard length >= codeDirectoryHeaderSize, data.fits(offset, length) else { return nil }
         guard data.fits(offset + hashOffset, codeSlotCount * hashSize) else { return nil }
 
         return CustomFirmwareCodeDirectory(

@@ -23,17 +23,20 @@ present that model.
 | `iPhone18,1` | iPhone 17 Pro | V53AP | 1206x2622 @ 460 ppi | 402x874 |
 | `iPhone18,2` | iPhone 17 Pro Max | V54AP | 1320x2868 @ 460 ppi | 440x956 |
 | `iPhone18,5` | iPhone 17e | V159AP | 1170x2532 @ 460 ppi | 390x844 |
+| `iPhone19,2` | iPhone 18 Pro | V63AP | 1206x2622 @ 460 ppi | 402x874 |
 
 The iPhone17,3 keeps the display and the fixed D47 identity it has always had;
 every other model gets its own panel and the identity from its own device tree.
 Each model has an IPSW of its own, so `--device` is not needed. `fw catalog`
-lists every model's releases from 26.0 to 27.0.1 (the iPhone 17e from 26.3.1),
+lists the iPhone 16/17 models' releases from 26.0 to 27.0.1 (the iPhone 17e
+from 26.3.1), and the iPhone 18 Pro's 27.0.1,
 each with the cloudOS an iPhone17,3 of that release uses, and `fw catalog
 --device iPhone18,1` lists one model's.
 
-Only the iPhone 17 Pro has been booted so far; see
-[Compatibility](compatibility.md). The rest use the same path and are listed so
-they can be tried.
+The iPhone 17 Pro, 17 Pro Max and 18 Pro have recorded boot validation; see
+[Compatibility](compatibility.md). iPhone19,2 uses ARM64E_X1. On hosts without
+native X1 support, the standard preset lowers unsupported instructions; this
+weakens PC-bound pointer authentication.
 
 ## Create one
 

@@ -96,7 +96,7 @@ extension ARM64Instruction {
             groups = withUnsafeBytes(of: rawDetail.groups) { buffer in
                 Array(buffer.prefix(Int(rawDetail.groups_count)))
             }
-            detail = ARM64InstructionDetail(rawDetail.aarch64)
+            detail = ARM64InstructionDetail(rawDetail.aarch64, writeback: rawDetail.writeback)
         }
 
         self.init(
@@ -115,7 +115,7 @@ extension ARM64Instruction {
 }
 
 extension ARM64InstructionDetail {
-    init(_ raw: cs_aarch64) {
+    init(_ raw: cs_aarch64, writeback: Bool) {
         let operands = withUnsafeBytes(of: raw.operands) { buffer in
             let pointer = buffer.baseAddress!.assumingMemoryBound(to: cs_aarch64_op.self)
             let capacity = buffer.count / MemoryLayout<cs_aarch64_op>.stride
@@ -127,6 +127,7 @@ extension ARM64InstructionDetail {
             postIndex: raw.post_index,
             operands: operands,
         )
+        self.writeback = writeback
     }
 }
 
@@ -147,7 +148,9 @@ extension ARM64Operand {
                 index: ARM64Register(rawValue: raw.mem.index.rawValue),
                 disp: raw.mem.disp,
             ),
+            shift: ARM64OperandShift(type: ARM64ShiftType(rawValue: raw.shift.type.rawValue) ?? .unsupported, amount: raw.shift.value),
         )
+        self.writesRegister = raw.access.rawValue & CS_AC_WRITE.rawValue != 0
     }
 }
 

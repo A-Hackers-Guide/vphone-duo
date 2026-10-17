@@ -5,6 +5,9 @@ OUT := $(abspath ../.build/siblings)
 STAGE := $(OUT)/stage
 ARCHIVE := $(OUT)/siblings.tar
 CLANG := xcrun --sdk iphoneos clang
+MACOS_SDK := $(shell xcrun --sdk macosx --show-sdk-path)
+MACH_EXC_DEFS := $(MACOS_SDK)/usr/include/mach/mach_exc.defs
+LAUNCHHOOK_GENERATED := $(OUT)/generated/launchhook
 GUEST_C_FLAGS := -arch arm64e -miphoneos-version-min=26.0 -Os
 COMMON_FLAGS := $(GUEST_C_FLAGS) -fobjc-arc
 
@@ -35,10 +38,10 @@ VCAMCAPTURED_INPUTS := $(call find_headers,$(VCAM_HEADER_DIRS)) \
 	$(call find_folders,$(VCAM_HEADER_DIRS))
 VCAMCAPTURED_INCLUDE_FLAGS := $(addprefix -I,$(call find_folders,VCamCaptured) $(VCAM_SHARED_DIRS))
 LAUNCHHOOK := $(STAGE)/launchhook/launchdhook-vphone.dylib
-LAUNCHHOOK_SOURCES := $(wildcard LaunchHook/*.c) Shared/RootHideLoaderLinks.c
+LAUNCHHOOK_SOURCES := $(wildcard LaunchHook/*.c) Shared/RootHideLoaderLinks.c Shared/VPhoneX1Spawn.c
 LAUNCHHOOK_INCLUDES := $(wildcard LaunchHook/*.h LaunchHook/*.inc Shared/*.h)
 SYSTEMHOOK := $(STAGE)/systemhook/SystemHook-vphone.dylib
-SYSTEMHOOK_SOURCES := $(wildcard SystemHook/*.c) $(wildcard FlutterRemapFix/*.c) Shared/RootHideLoaderLinks.c
+SYSTEMHOOK_SOURCES := $(wildcard SystemHook/*.c) $(wildcard FlutterRemapFix/*.c) Shared/RootHideLoaderLinks.c Shared/VPhoneX1Spawn.c
 SYSTEMHOOK_INCLUDES := $(wildcard SystemHook/*.h SystemHook/*.inc FlutterRemapFix/*.h Shared/*.h)
 # libmis is not a framework and has no header; the iPhoneOS SDK does ship
 # libmis.tbd, so the interposed symbols bind two-level like any other import
@@ -129,7 +132,7 @@ GPU_PROVENANCE := $(STAGE)/gpu/README.md
 
 # Directory timestamps also catch files removed from the wildcard inputs.
 
-.PHONY: all gpu package test-loader-links test-injection-environment test-devicename test-vcam-dataplane test-virtiosound clean
+.PHONY: all gpu package test-loader-links test-injection-environment test-devicename test-vcam-dataplane test-virtiosound test-x1-lowering clean
 
 all: $(ARTIFACTS) $(PLISTS) $(GPU_PROVENANCE)
 
@@ -152,6 +155,12 @@ test-injection-environment:
 		-DVP_TEST_LIBRARY_DIR='"$(OUT)/injection-libraries"' \
 		-o $(OUT)/InjectionEnvironmentTests Tests/InjectionEnvironmentTests.c
 	@$(OUT)/InjectionEnvironmentTests
+
+test-x1-lowering:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -Wall -Wextra -Werror -ILaunchHook \
+		-o $(OUT)/X1LoweringTests Tests/X1LoweringTests.c LaunchHook/VPhoneX1Lowering.c
+	@$(OUT)/X1LoweringTests
 
 # Host proof harness for libdevicename's name decoding, configd publication
 # rewrite and lockdownd rename decision.
@@ -217,10 +226,22 @@ $(VCAMCAPTURED): $(VCAMCAPTURED_SOURCES) $(VCAMCAPTURED_INPUTS) | $(STAGE)/vcamc
 		-framework CoreGraphics
 	@codesign --force --sign - $@
 
-$(LAUNCHHOOK): $(LAUNCHHOOK_SOURCES) $(LAUNCHHOOK_INCLUDES) LaunchHook Shared | $(STAGE)/launchhook
+$(LAUNCHHOOK): $(LAUNCHHOOK_SOURCES) $(LAUNCHHOOK_INCLUDES) LaunchHook Shared $(MACH_EXC_DEFS) | $(STAGE)/launchhook
+	@mkdir -p $(LAUNCHHOOK_GENERATED)
+	xcrun --sdk macosx mig -arch arm64 -isysroot $(MACOS_SDK) \
+		-server $(LAUNCHHOOK_GENERATED)/mach_excServer.c \
+		-sheader $(LAUNCHHOOK_GENERATED)/mach_excServer.h \
+		-user $(LAUNCHHOOK_GENERATED)/mach_excUser.c \
+		-header $(LAUNCHHOOK_GENERATED)/mach_exc.h $(MACH_EXC_DEFS)
+	/usr/bin/sed -i '' 's/msg_result = mach_msg(/msg_result = vp_mach_msg_kobject(/g' \
+		$(LAUNCHHOOK_GENERATED)/mach_excUser.c
+	@/usr/bin/grep -q 'msg_result = vp_mach_msg_kobject(' $(LAUNCHHOOK_GENERATED)/mach_excUser.c
+	@! /usr/bin/grep -q 'msg_result = mach_msg(' $(LAUNCHHOOK_GENERATED)/mach_excUser.c
 	$(CLANG) $(GUEST_C_FLAGS) -dynamiclib \
+		-I$(LAUNCHHOOK_GENERATED) -ILaunchHook -include VPhoneMachMessage.h \
 		-install_name /usr/lib/launchdhook-vphone.dylib \
-		-o $@ $(LAUNCHHOOK_SOURCES) -Wl,-not_for_dyld_shared_cache
+		-o $@ $(LAUNCHHOOK_SOURCES) $(LAUNCHHOOK_GENERATED)/mach_excServer.c \
+		$(LAUNCHHOOK_GENERATED)/mach_excUser.c -Wl,-not_for_dyld_shared_cache
 	@codesign --force --sign - $@
 
 $(SYSTEMHOOK): $(SYSTEMHOOK_SOURCES) $(SYSTEMHOOK_INCLUDES) SystemHook Shared | $(STAGE)/systemhook

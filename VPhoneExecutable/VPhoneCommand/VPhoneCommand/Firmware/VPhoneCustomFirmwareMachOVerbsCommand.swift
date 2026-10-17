@@ -42,6 +42,32 @@ import VPhonePatchKit
 /// Where these verbs send patcher progress: stdout, like the Python.
 private let machOVerbLog: @Sendable (String) -> Void = { print($0) }
 
+struct VPhoneCustomFirmwarePatchArm64eX1Command: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-arm64e-x1",
+        abstract: "Lower X1 instructions in a boot-critical executable",
+        discussion: "Supports dyld, launchd, fsck and mount. Later userland instructions are handled on demand. Re-attests modified code pages.",
+    )
+    @Argument(transform: URL.init(fileURLWithPath:)) var binary: URL
+    func run() throws {
+        try requireUntruncatedMachO(at: binary)
+        let identifier: String
+        switch binary.lastPathComponent {
+        case "dyld": identifier = FirmwareGuestSystemPatchSet.arm64eX1DyldBootstrap
+        case "launchd": identifier = FirmwareGuestSystemPatchSet.arm64eX1LaunchdBootstrap
+        case "fsck": identifier = FirmwareGuestSystemPatchSet.arm64eX1FsckBootstrap
+        case "mount": identifier = FirmwareGuestSystemPatchSet.arm64eX1MountBootstrap
+        default:
+            throw ValidationError("X1 static lowering is limited to the measured boot roots: dyld, launchd, fsck and mount")
+        }
+        try CustomFirmwareArm64eX1.patch(
+            fileAt: binary,
+            identifier: identifier,
+            log: machOVerbLog,
+        )
+    }
+}
+
 // MARK: - Truncation guard
 
 /// Refuse a file whose Mach-O header promises more than the file holds.
@@ -553,6 +579,7 @@ enum VPhoneCustomFirmwareMachOVerbs {
             VPhoneCustomFirmwarePatchLaunchdCacheLoaderCommand.self,
             VPhoneCustomFirmwarePatchMobileactivationdCommand.self,
             VPhoneCustomFirmwarePatchLaunchdJetsamCommand.self,
+            VPhoneCustomFirmwarePatchArm64eX1Command.self,
             VPhoneCustomFirmwarePatchWatchdogdCommand.self,
             VPhoneCustomFirmwarePatchDiskimagesiodCommand.self,
             VPhoneCustomFirmwarePatchVirtualAudioCommand.self,

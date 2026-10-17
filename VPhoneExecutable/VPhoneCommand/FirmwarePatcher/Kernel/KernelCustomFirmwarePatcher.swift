@@ -82,6 +82,7 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
             patchIoucFailedSandbox()
             patchDiskImages2ClientAbi()
             patchSharedRegionSize()
+            patchArm64eX1Admission()
         } else if applyParavirtUserClients {
             patchParavirtUserClientsNarrow()
         }

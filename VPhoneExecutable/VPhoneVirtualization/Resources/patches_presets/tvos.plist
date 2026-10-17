@@ -84,6 +84,7 @@
 			<string>dyld-exp-mis_trust_auth</string>
 			<string>system-preferences-exp-root_rows</string>
 			<string>dyld-exp-settings_software_update_row</string>
+			<string>dyld-boot-arm64e_x1_bootstrap</string>
 			<string>dyld-boot-iomfb_force_kern</string>
 			<string>dyld-boot-iomfb_swapend</string>
 			<string>dyld-boot-lockdown_mode</string>
@@ -91,22 +92,28 @@
 			<string>dyld-boot-maxslide</string>
 			<string>dyld-boot-xpc_lwcr</string>
 			<string>dyld-cfw-camera</string>
+			<string>kernel-boot-arm64e_x1</string>
 			<string>preboot-cfw-devicetree_board_audio</string>
 			<string>preboot-cfw-devicetree_haptics</string>
 			<string>preboot-cfw-devicetree_iphone_product</string>
 			<string>preboot-cfw-devicetree_microphone_array</string>
+			<string>restoreramdisk-boot-apfs_sha3_hash</string>
 			<string>system-apps-cfw-attitude</string>
 			<string>system-backboardd-cfw-gyroscope</string>
 			<string>system-campo-cfw-entitlements</string>
 			<string>system-debugserver-cfw-install</string>
+			<string>system-dyld-boot-arm64e_x1_bootstrap</string>
 			<string>system-diskimagesiod-cfw-is_mount_complete</string>
 			<string>system-extensions-boot-gpu_bundle</string>
+			<string>system-fsck-boot-arm64e_x1_bootstrap</string>
 			<string>system-installcoordination_proxy-cfw-persona_lookup</string>
 			<string>system-jetsamproperties-cfw-disable_allowed</string>
+			<string>system-launchd-boot-arm64e_x1_bootstrap</string>
 			<string>system-launchd-boot-jetsam_panic_guard_bypass</string>
 			<string>system-launchdaemons-boot-environment</string>
 			<string>system-locationd-cfw-disable_auto_cohort</string>
 			<string>system-mobileactivationd-boot-should_hactivate</string>
+			<string>system-mount-boot-arm64e_x1_bootstrap</string>
 			<string>system-paravirt_gpu-cfw-heap_index_offset</string>
 			<string>system-systemversion-cfw-build_version</string>
 			<string>system-virtiosound-cfw-hal_plugin</string>

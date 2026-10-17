@@ -81,6 +81,32 @@ extension FirmwarePipeline {
         readProductVersion(restoreDir, manifest: "BuildManifest.plist")
     }
 
+    static func manifestComponentPath(_ component: String, in restoreDir: URL) throws -> String {
+        let url = restoreDir.appendingPathComponent("BuildManifest.plist")
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        guard let root = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let identities = root["BuildIdentities"] as? [[String: Any]]
+        else {
+            throw PatcherError.invalidFormat("BuildManifest.plist has no BuildIdentities")
+        }
+        let paths = Set(identities.compactMap { identity -> String? in
+            guard let manifest = identity["Manifest"] as? [String: Any],
+                  let entry = manifest[component] as? [String: Any],
+                  let info = entry["Info"] as? [String: Any]
+            else { return nil }
+            return info["Path"] as? String
+        })
+        guard paths.count == 1, let path = paths.first else {
+            throw PatcherError.invalidFormat(
+                "BuildManifest.plist names \(paths.count) distinct \(component) paths, expected one",
+            )
+        }
+        guard CustomFirmwareDaemons.isPlainRelativePath(path) else {
+            throw PatcherError.invalidFormat("BuildManifest.plist has unsafe \(component) path: \(path)")
+        }
+        return path
+    }
+
     /// Dotted `ProductVersion` >= major.minor, compared numerically. nil is false.
     static func productVersionAtLeast(_ version: String?, _ major: Int, _ minor: Int) -> Bool {
         guard let parts = version?.split(separator: ".").compactMap({ Int($0) }),

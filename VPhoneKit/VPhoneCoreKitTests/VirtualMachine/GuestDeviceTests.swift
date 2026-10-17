@@ -137,4 +137,20 @@ struct GuestDeviceTests {
         #expect(VPhoneGuestDevice.iPhone18_1.deviceClass == "v53ap")
         #expect(VPhoneGuestDevice.iPhone18_1.screen == .init(width: 1206, height: 2622, pixelsPerInch: 460, scale: 3.0))
     }
+
+    @Test
+    func `iPhone 18 Pro preserves its V63 identity and display in the VM`() throws {
+        let device = try #require(VPhoneGuestDevice.detect(buildManifest: ["SupportedProductTypes": ["iPhone19,2"]]))
+        #expect(device == .iPhone19_2)
+        #expect(device.deviceClass == "v63ap")
+        #expect(device.boardDeviceTreePath == "Firmware/all_flash/DeviceTree.v63ap.im4p")
+        let manifest = VPhoneVirtualMachineManifest.newVM().updating(guestDevice: device)
+        let decoded = try PropertyListDecoder().decode(
+            VPhoneVirtualMachineManifest.self,
+            from: PropertyListEncoder().encode(manifest),
+        )
+        #expect(decoded.guestProductType == "iPhone19,2")
+        #expect(decoded.guestDevice == device)
+        #expect(decoded.screenConfig == .init(width: 1206, height: 2622, pixelsPerInch: 460, scale: 3.0))
+    }
 }

@@ -48,6 +48,7 @@ See [Other iPhone models](iphone-models.md).
 | --- | --- | --- | --- |
 | Mac17,9 (M5 Pro) 27.0.1 | `18,1_26.6.2_23G90` (iPhone 17 Pro) | `26.4-23E5207q` | Launchpad `vm create` (2.5.1 local bundle): prepare, patch, restore, CFW, boot to the home screen at 402x874 pt @3x, `model` iPhone18,1, vphoned ping |
 | Mac17,9 (M5 Pro) 27.0.1 | `18,2_27.0.1_24A446` (iPhone 17 Pro Max) | `26.4-23E5207q` | **boots** with the `kernel-boot-shared_region_size` patch (2026-10-06, bundle 2.6.0-local.0d5e6f90): `dyld cache mapped system-wide`, 0 panics, vphoned answers as 27.0.1, home screen at 440x956 pt @3x |
+| Mac17,7 (M5 Max) 26.4 | `19,2_27.0.1_24A446` (iPhone 18 Pro) | `26.4-23E5207q` | **boots** with integrated ARM64E_X1 compatibility (2026-10-17): clean offline restore, validated root seal, vphoned ping, and Settings, Safari and Calculator launch |
 
 **iPhone18,1 and iPhone18,2 on iOS 27 need the shared-region patch**
 ([issue #596](https://github.com/Lakr233/vphone-cli/issues/596), 27.0 and

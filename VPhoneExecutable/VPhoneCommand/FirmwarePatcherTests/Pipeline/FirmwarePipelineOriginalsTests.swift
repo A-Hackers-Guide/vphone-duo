@@ -222,10 +222,10 @@ struct FirmwarePipelineOriginalsTests {
         #expect(pipeline.originalURL(for: vm.stashURL) == nil)
     }
 
-    @Test func `only the two whole-tree components opt out of keeping an original`() {
+    @Test func `only the two whole-tree components opt out of keeping an original`() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
         let pipeline = FirmwarePipeline(vmDirectory: root, variant: .less, verbose: false)
-        let components = pipeline.buildComponentList(restoreDir: root, iOSBase: VPhoneVersion("26.6.2"))
+        let components = try pipeline.buildComponentList(restoreDir: root, iOSBase: VPhoneVersion("26.6.2"))
 
         let notRestorable = components.filter { !$0.restorable }.map(\.name).sorted()
         #expect(notRestorable == ["Filesystem", "Manifest"])

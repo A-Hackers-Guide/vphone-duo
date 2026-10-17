@@ -269,6 +269,64 @@ struct VPhoneCodeSignature {
 
     // MARK: Reading one back
 
+    static func identifier(in blob: Data) throws -> String? {
+        guard blob.count >= 12 else {
+            throw VPhoneSignError.malformed("the embedded signature is shorter than its header")
+        }
+        let magic: UInt32 = blob.bigEndianValue(at: 0)
+        guard magic == 0xFADE_0CC0 else {
+            throw VPhoneSignError.malformed(
+                "the embedded signature has magic 0x\(String(magic, radix: 16))",
+            )
+        }
+        let length = Int(blob.bigEndianValue(at: 4) as UInt32)
+        guard length >= 12, length <= blob.count else {
+            throw VPhoneSignError.malformed("the embedded signature length \(length) is out of bounds")
+        }
+        let count = Int(blob.bigEndianValue(at: 8) as UInt32)
+        guard count <= (length - 12) / 8 else {
+            throw VPhoneSignError.malformed("the embedded signature index does not fit")
+        }
+
+        var primaryOffset: Int?
+        for index in 0 ..< count {
+            let entry = 12 + index * 8
+            guard blob.bigEndianValue(at: entry) as UInt32 == 0 else { continue }
+            guard primaryOffset == nil else {
+                throw VPhoneSignError.malformed("the embedded signature has more than one primary CodeDirectory")
+            }
+            primaryOffset = Int(blob.bigEndianValue(at: entry + 4) as UInt32)
+        }
+        guard let primaryOffset else { return nil }
+        guard primaryOffset >= 12 + count * 8, primaryOffset <= length - 8 else {
+            throw VPhoneSignError.malformed("the primary CodeDirectory offset is out of bounds")
+        }
+        let directoryMagic: UInt32 = blob.bigEndianValue(at: primaryOffset)
+        guard directoryMagic == 0xFADE_0C02 else {
+            throw VPhoneSignError.malformed(
+                "the primary CodeDirectory has magic 0x\(String(directoryMagic, radix: 16))",
+            )
+        }
+        let directoryLength = Int(blob.bigEndianValue(at: primaryOffset + 4) as UInt32)
+        guard directoryLength >= 24, directoryLength <= length - primaryOffset else {
+            throw VPhoneSignError.malformed("the primary CodeDirectory length is out of bounds")
+        }
+        let identifierOffset = Int(blob.bigEndianValue(at: primaryOffset + 20) as UInt32)
+        guard identifierOffset >= 24, identifierOffset < directoryLength else {
+            throw VPhoneSignError.malformed("the primary CodeDirectory identifier offset is out of bounds")
+        }
+        let identifierStart = primaryOffset + identifierOffset
+        let identifierLimit = primaryOffset + directoryLength
+        guard let identifierEnd = blob[identifierStart ..< identifierLimit].firstIndex(of: 0) else {
+            throw VPhoneSignError.malformed("the primary CodeDirectory identifier is not terminated")
+        }
+        let bytes = blob.subdata(in: identifierStart ..< identifierEnd)
+        guard !bytes.isEmpty, let identifier = String(data: bytes, encoding: .utf8) else {
+            throw VPhoneSignError.malformed("the primary CodeDirectory identifier is not valid UTF-8")
+        }
+        return identifier
+    }
+
     /// The entitlements XML a signature carries, as ldid reads it: the last
     /// blob in slot 5, and nothing where there is none.
     static func entitlementsXML(in blob: Data) -> Data? {

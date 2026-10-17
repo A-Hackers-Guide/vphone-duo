@@ -195,7 +195,20 @@ public enum VPhoneSigner {
         return signature
     }
 
-    // MARK: Reading entitlements back
+    // MARK: Reading signatures back
+
+    public static func identifier(ofFileAt url: URL) throws -> String? {
+        try identifier(in: Data(contentsOf: url, options: .mappedIfSafe))
+    }
+
+    public static func identifier(in data: Data) throws -> String? {
+        let identifiers = try VPhoneMachOFile(data: data).slices.compactMap { try $0.embeddedIdentifier() }
+        guard let identifier = identifiers.first else { return nil }
+        guard identifiers.allSatisfy({ $0 == identifier }) else {
+            throw VPhoneSignError.malformed("the slices have different CodeDirectory identifiers")
+        }
+        return identifier
+    }
 
     /// What `ldid -e` prints: the entitlements of each slice that carries
     /// any, in slice order, exactly as the signature stores them. A slice

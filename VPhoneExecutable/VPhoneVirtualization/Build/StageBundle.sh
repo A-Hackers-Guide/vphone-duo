@@ -32,10 +32,13 @@ build_project -project "$root/VPhoneExecutable/VPhoneCommand/VPhoneCommand.xcode
     -destination 'platform=macOS,arch=arm64' \
     -derivedDataPath "$root/.build/XcodeCommand" CODE_SIGNING_ALLOWED=NO build
 
+# Select the device SDK and product suffix explicitly so SwiftPM paths stay iOS
+# even when Xcode only offers host destinations without a simulator runtime.
 build_project -project "$root/VPhoneDaemon/VPhoneDaemon.xcodeproj" \
     -scheme vphoned -configuration "$configuration" \
-    -destination 'generic/platform=iOS' \
-    -derivedDataPath "$root/.build/XcodeDaemon" CODE_SIGNING_ALLOWED=NO build
+    -sdk iphoneos \
+    -derivedDataPath "$root/.build/XcodeDaemon" CODE_SIGNING_ALLOWED=NO \
+    SUPPORTS_MACCATALYST=NO EFFECTIVE_PLATFORM_NAME=-iphoneos build
 
 build_project -project "$root/VPhoneExecutable/VPhoneEscalator/VPhoneEscalator.xcodeproj" \
     -scheme VPhoneEscalator -configuration "$configuration" \
