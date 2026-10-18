@@ -104,6 +104,24 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/v1/health
 
 시작할 때마다 새 token이 생성됩니다. 고정된 token을 사용하려면 환경 변수 `VPHONE_API_TOKEN`을 설정하세요. token이 없는 요청과 웹 페이지에서 온 요청은 모두 거부됩니다. 인터페이스 설명은 [API 문서](../Research/vphoned_http_api.md)를 참고하세요.
 
+## 부트 ROM
+
+새로 만든 가상 머신은 Virtualization.framework에 포함된 비공개 ROM 대신 두 가지 오픈 소스 ROM으로 부팅합니다.
+
+- [OpenAVB](https://github.com/owngoal-dev/OpenAVB)는 부트 ROM인 AVPBooter를 대신합니다. 패치가 필요 없으므로 `fw patch`가 건드리지 않습니다.
+- [OpenSEP](https://github.com/owngoal-dev/OpenSEP)는 SEP 부트 ROM인 AVPSEPBooter를 대신합니다.
+
+둘을 함께 쓰면 iBoot와 SEPOS 이전에 실행되는 코드 중 Apple이 작성한 것은 없습니다. 두 ROM 모두 미리 빌드된 상태로 `VPhone.bundle`에 포함되며, 고정된 업스트림 커밋에서 빌드됩니다. 각각의 설명([OpenAVB](../VPhoneExecutable/VPhoneVirtualization/Resources/OpenAVB/README.md), [OpenSEP](../VPhoneExecutable/VPhoneVirtualization/Resources/OpenSEP/README.md))에 소스에서 다시 빌드하고 바이트 단위로 대조하는 방법이 있습니다.
+
+이전 버전에서 만든 가상 머신은 Apple의 ROM을 그대로 사용합니다. 시스템을 다시 복원하지 않고 어느 쪽으로든 전환할 수 있으며, 다음 시작부터 적용됩니다.
+
+```sh
+vphone-cli vm config myphone --rom openavb --seprom opensep   # 오픈 소스 ROM
+vphone-cli vm config myphone --rom apple --seprom apple       # Apple의 ROM
+```
+
+`vphone-cli vm info myphone`으로 가상 머신이 사용하는 ROM을 확인할 수 있습니다. OpenAVB로 부팅하는 가상 머신을 복원하려면 `VPhone.bundle` 2.10.1 이상이 필요합니다. 자세한 내용은 연구 기록의 [OpenAVB](../Research/Firmware/openavb_boot_rom.md)와 [OpenSEP](../Research/Firmware/opensep_sep_rom.md)를 참고하세요.
+
 ## 문제가 생기면
 
 먼저 [문제 해결](Guides/troubleshooting.md)을 확인하세요. 시스템이 가상 머신 프로그램을 거부하는 경우, 복원 실패, “Press home to continue”에서 멈추는 경우 등을 다룹니다. 그래도 해결되지 않으면 [이슈를 등록](https://github.com/Lakr233/vphone-cli/issues)해 주세요.
@@ -141,3 +159,4 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/v1/health
 ## 감사의 말
 
 - [wh1te4ever/super-tart-vphone-writeup](https://github.com/wh1te4ever/super-tart-vphone-writeup)
+- [owngoal-dev/OpenAVB](https://github.com/owngoal-dev/OpenAVB)와 [owngoal-dev/OpenSEP](https://github.com/owngoal-dev/OpenSEP): 새 가상 머신이 부팅에 쓰는 부트 ROM
