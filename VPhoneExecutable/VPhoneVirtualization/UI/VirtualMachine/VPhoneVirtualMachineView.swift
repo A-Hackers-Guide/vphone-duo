@@ -12,12 +12,16 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     var escapeIsBackGesture = true
     var isTVGuest = false
     var hardwareKeyboardEnabled = true
+    /// Guest pixels per interface point, to turn trackpad travel into the
+    /// guest's points for a native scroll.
+    var screenScale: CGFloat = 3
 
     /// Whether trackpad scroll/pinch gestures are replayed as guest touches.
     var trackpadGesturesEnabled = VPhoneTrackpadGestures.isEnabled {
         didSet {
             guard !trackpadGesturesEnabled else { return }
             finishScrollTouch()
+            endNativeScroll()
             endPinch()
         }
     }
@@ -42,6 +46,25 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     /// Center and half-gap of the two synthetic fingers used for pinch gestures.
     private var pinchTouchCenter: NSPoint?
     private var pinchTouchRadius: CGFloat = 0
+
+    /// A native scroll (`input.scroll`) is under way: `began` has gone out and
+    /// `ended` not yet.
+    private var nativeScrollActive = false
+    /// `ended` waiting to see whether AppKit's momentum follows the lift.
+    private var nativeScrollEndWork: DispatchWorkItem?
+    /// A click ended the scroll; the rest of its momentum is dropped until the
+    /// fingers start a new one.
+    private var nativeScrollMomentumDropped = false
+    private var pointerTrackingArea: NSTrackingArea?
+
+    /// How long after the fingers lift a scroll waits for AppKit's momentum
+    /// before it ends. Momentum starts on the next frame when it starts at all.
+    private static let nativeScrollMomentumWait: TimeInterval = 0.05
+    /// How long a scroll from a wheel without gesture phases stays open after
+    /// its last event, as the web console does.
+    private static let nativeScrollIdleEnd: TimeInterval = 0.12
+    /// Points per line of a wheel that scrolls in lines (no precise deltas).
+    private static let nativeScrollLine: CGFloat = 16
 
     /// Guest points travelled per point of trackpad delta. Above 1 because a
     /// single trackpad swipe produces far less travel than a finger covers on a
@@ -123,11 +146,34 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         registerForDraggedTypes([.fileURL])
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let area = pointerTrackingArea {
+            removeTrackingArea(area)
+        }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        pointerTrackingArea = area
+    }
+
+    /// On a guest that scrolls natively the guest has a pointer of its own;
+    /// it follows the mouse, so the guest sees hover as an iPad with a
+    /// trackpad does.
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        guard trackpadGesturesEnabled, let control, control.supportsPointerScroll else { return }
+        control.movePointer(to: interfacePoint(convert(event.locationInWindow, from: nil)))
+    }
+
     override func mouseDown(with event: NSEvent) {
         // Clicking the VM display should always restore keyboard focus.
         window?.makeFirstResponder(self)
         // A synthetic trackpad finger would fight this touch for the same slot.
         finishScrollTouch()
+        if nativeScrollActive {
+            endNativeScroll()
+            nativeScrollMomentumDropped = true
+        }
         releaseSecondaryPress()
         let localPoint = convert(event.locationInWindow, from: nil)
         currentTouchSwipeAim = hitTestEdge(at: localPoint)
@@ -219,6 +265,10 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     /// Replay a trackpad scroll as a guest finger that presses under the pointer
     /// and follows the physical direction of the gesture.
     override func scrollWheel(with event: NSEvent) {
+        if trackpadGesturesEnabled, let control, control.supportsPointerScroll {
+            scrollNatively(event, control: control)
+            return
+        }
         guard trackpadGesturesEnabled, event.hasPreciseScrollingDeltas else {
             super.scrollWheel(with: event)
             return
@@ -266,6 +316,85 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         }
     }
 
+    /// Scroll the guest the way an iPad with a trackpad scrolls: the view under
+    /// its pointer moves by the gesture's travel, and AppKit's momentum is sent
+    /// as more travel, since the guest does not decelerate after `ended`. So a
+    /// swipe runs on as far as it would in a Mac app.
+    private func scrollNatively(_ event: NSEvent, control: VPhoneGuestControl) {
+        nativeScrollEndWork?.cancel()
+        nativeScrollEndWork = nil
+        let momentum = !event.momentumPhase.isEmpty
+        if momentum, nativeScrollMomentumDropped {
+            return
+        }
+        if event.phase == .began {
+            // A new gesture: whatever was still running on is over.
+            nativeScrollMomentumDropped = false
+            endNativeScroll()
+        }
+        let delta = nativeScrollDelta(of: event)
+        if !nativeScrollActive, delta != .zero {
+            nativeScrollActive = true
+            control.sendScroll(phase: "began", pointer: interfacePoint(convert(event.locationInWindow, from: nil)))
+        }
+        if nativeScrollActive, delta != .zero {
+            control.sendScroll(phase: "changed", delta: delta)
+        }
+        if momentum {
+            if event.momentumPhase.contains(.ended) || event.momentumPhase.contains(.cancelled) {
+                endNativeScroll()
+            }
+        } else if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+            scheduleNativeScrollEnd(after: Self.nativeScrollMomentumWait)
+        } else if event.phase.isEmpty {
+            // A wheel without gesture phases never says when it stops.
+            scheduleNativeScrollEnd(after: Self.nativeScrollIdleEnd)
+        }
+    }
+
+    private func scheduleNativeScrollEnd(after delay: TimeInterval) {
+        guard nativeScrollActive else { return }
+        let work = DispatchWorkItem { [weak self] in
+            self?.endNativeScroll()
+        }
+        nativeScrollEndWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func endNativeScroll() {
+        nativeScrollEndWork?.cancel()
+        nativeScrollEndWork = nil
+        guard nativeScrollActive else { return }
+        nativeScrollActive = false
+        control?.sendScroll(phase: "ended")
+    }
+
+    /// The event's travel in guest interface points, with a browser wheel
+    /// event's signs (positive y toward the end of the content), which is the
+    /// opposite of AppKit's. Natural scrolling is already in both. The travel
+    /// is the window's, and the window shows the interface upright, so it
+    /// needs no turning; one window point is as many guest points as the drawn
+    /// display is smaller than the guest's.
+    private func nativeScrollDelta(of event: NSEvent) -> CGVector {
+        let unit = event.hasPreciseScrollingDeltas ? 1 : Self.nativeScrollLine
+        let geometry = displayGeometry
+        let pixels = recordingGraphicsDisplay?.sizeInPixels ?? .zero
+        var scale: CGFloat = 1
+        if pixels.width > 0, geometry.displayRect.width > 0, screenScale > 0 {
+            scale = pixels.width / screenScale / geometry.displayRect.width
+        }
+        return CGVector(dx: -event.scrollingDeltaX * unit * scale, dy: -event.scrollingDeltaY * unit * scale)
+    }
+
+    /// A view point as `input.pointer` takes it: 0...1 of the interface as the
+    /// window shows it, from the top-left corner.
+    private func interfacePoint(_ localPoint: NSPoint) -> CGPoint {
+        let panel = normalizeCoordinate(localPoint)
+        let unit = CGSize(width: 1, height: 1)
+        let screen = screenOrientation.screenPoint(fromPanel: CGPoint(x: panel.x, y: 1 - panel.y), panel: unit)
+        return CGPoint(x: min(max(screen.x, 0), 1), y: min(max(1 - screen.y, 0), 1))
+    }
+
     /// Replay a trackpad pinch as two guest fingers spreading or closing around
     /// the pointer position.
     override func magnify(with event: NSEvent) {
@@ -273,6 +402,8 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
             super.magnify(with: event)
             return
         }
+        // A native scroll and a pinch never overlap, like a synthetic drag and one.
+        endNativeScroll()
         // A synthetic drag owns the touch surface; ignoring the pinch keeps the
         // guest from seeing one- and two-finger touches interleaved.
         guard scrollTouchPoint == nil else { return }

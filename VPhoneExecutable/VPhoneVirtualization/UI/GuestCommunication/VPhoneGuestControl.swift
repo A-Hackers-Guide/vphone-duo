@@ -189,6 +189,8 @@ final class VPhoneGuestControl {
         monitor = nil
         orderedInput?.cancel()
         orderedInput = nil
+        openScroll = nil
+        pendingPointer = nil
         orderedLocation?.cancel()
         orderedLocation = nil
         device = nil
@@ -338,6 +340,80 @@ final class VPhoneGuestControl {
         enqueueInput("input.touch2", params: [
             "phase": name, "x1": x1, "y1": y1, "x2": x2, "y2": y2, "normalized": true,
         ])
+    }
+
+    /// Whether the guest scrolls under a virtual pointer (`input.pointer`,
+    /// `input.scroll`), as an iPad with a trackpad does.
+    var supportsPointerScroll: Bool {
+        isConnected && guestCapabilities.contains("pointer_scroll")
+    }
+
+    @ObservationIgnored private var pointerInFlight = false
+    @ObservationIgnored private var pendingPointer: CGPoint?
+
+    /// Puts the guest's pointer at `point`, 0...1 of the interface as shown.
+    /// Not in the ordered input queue: where the pointer sits does not depend
+    /// on the order of touches, and a mouse that keeps moving would hold every
+    /// click behind it. One request at a time; a newer position replaces the
+    /// one waiting.
+    func movePointer(to point: CGPoint) {
+        guard !pointerInFlight else {
+            pendingPointer = point
+            return
+        }
+        pointerInFlight = true
+        Task {
+            _ = try? await call("input.pointer", params: ["x": Double(point.x), "y": Double(point.y)])
+            pointerInFlight = false
+            if let next = pendingPointer {
+                pendingPointer = nil
+                movePointer(to: next)
+            }
+        }
+    }
+
+    /// The `changed` deltas waiting in the input queue, added up until that
+    /// request goes out.
+    private final class PendingScroll {
+        var delta = CGVector.zero
+    }
+
+    @ObservationIgnored private var openScroll: PendingScroll?
+
+    /// One native scroll event, in order with the other input. `delta` is in
+    /// interface points with a browser wheel event's signs. `changed` deltas
+    /// that arrive while one waits in the queue are added to it, so a guest
+    /// slower than the trackpad gets fewer, larger deltas and loses none.
+    func sendScroll(phase: String, delta: CGVector = .zero, pointer: CGPoint? = nil) {
+        if phase == "changed" {
+            if let open = openScroll {
+                open.delta.dx += delta.dx
+                open.delta.dy += delta.dy
+                return
+            }
+            let open = PendingScroll()
+            open.delta = delta
+            openScroll = open
+            let previous = orderedInput
+            orderedInput = Task {
+                await previous?.value
+                if openScroll === open {
+                    openScroll = nil
+                }
+                guard !Task.isCancelled else { return }
+                let params: [String: Any] = ["phase": "changed", "dx": Double(open.delta.dx), "dy": Double(open.delta.dy)]
+                do { _ = try await call("input.scroll", params: params) } catch { print("[control] input.scroll: \(error)") }
+            }
+            return
+        }
+        // A delta after this event belongs to the next scroll, not to one queued before it.
+        openScroll = nil
+        var params: [String: Any] = ["phase": phase]
+        if let pointer {
+            params["x"] = Double(pointer.x)
+            params["y"] = Double(pointer.y)
+        }
+        enqueueInput("input.scroll", params: params)
     }
 
     private func enqueueInput(_ method: String, params: [String: Any]) {
