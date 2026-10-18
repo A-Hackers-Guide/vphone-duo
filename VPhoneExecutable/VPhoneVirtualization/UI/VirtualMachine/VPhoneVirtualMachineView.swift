@@ -151,8 +151,10 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         if let area = pointerTrackingArea {
             removeTrackingArea(area)
         }
+        // Always, not only in the key window: a VM window opened behind
+        // another app, or not yet clicked, should still show hover.
         let area = NSTrackingArea(
-            rect: .zero, options: [.mouseMoved, .cursorUpdate, .activeInKeyWindow, .inVisibleRect], owner: self,
+            rect: .zero, options: [.mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect], owner: self,
         )
         addTrackingArea(area)
         pointerTrackingArea = area
@@ -164,14 +166,16 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         guard guestPointerFollowsMouse, let control else { return }
-        Self.hiddenCursor.set()
+        if hidesHostCursor {
+            Self.hiddenCursor.set()
+        }
         control.movePointer(to: interfacePoint(convert(event.locationInWindow, from: nil)))
     }
 
     /// The guest's pointer stands in for the Mac's over the display, so the
     /// Mac's is hidden there, as Universal Control hides it on the iPad.
     override func cursorUpdate(with event: NSEvent) {
-        if guestPointerFollowsMouse {
+        if hidesHostCursor {
             Self.hiddenCursor.set()
         } else {
             super.cursorUpdate(with: event)
@@ -180,6 +184,12 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
 
     private var guestPointerFollowsMouse: Bool {
         trackpadGesturesEnabled && control?.supportsPointerScroll == true
+    }
+
+    /// Only in the key window: over a window in the background the Mac's
+    /// cursor is the one the user is steering with.
+    private var hidesHostCursor: Bool {
+        guestPointerFollowsMouse && window?.isKeyWindow == true
     }
 
     /// A cursor with nothing to draw. `NSCursor.hide()` is counted and
@@ -225,7 +235,9 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         currentTouchSwipeAim = 0
         // Bring the guest's pointer back where the finger lifted.
         if guestPointerFollowsMouse, let control {
-            Self.hiddenCursor.set()
+            if hidesHostCursor {
+                Self.hiddenCursor.set()
+            }
             control.movePointer(to: interfacePoint(localPoint))
         }
     }
