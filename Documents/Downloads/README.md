@@ -12,6 +12,7 @@ Each [release](https://github.com/Lakr233/vphone-cli/releases) has up to three f
 
 | Series | Notarized | Not Notarized |
 | --- | --- | --- |
+| 2.10 | 2.10.1 | — |
 | 2.9 | 2.9.0, 2.9.1, 2.9.2 | — |
 | 2.8 | 2.8.0 | — |
 | 2.7 | 2.7.0 | — |
@@ -23,7 +24,7 @@ Each [release](https://github.com/Lakr233/vphone-cli/releases) has up to three f
 | 2.1 | 2.1.0, 2.1.1, 2.1.2 | 2.1.3, 2.1.4, 2.1.5, 2.1.6, 2.1.7 |
 | 2.0 | 2.0.4, 2.0.5, 2.0.6, 2.0.8, 2.0.9 | — |
 
-There is no 2.0.7 release.
+There is no 2.0.7 or 2.10.0 release.
 
 To open a version that is not notarized, open it once, then go to **System Settings > Privacy & Security** and click **Open Anyway**.
 
