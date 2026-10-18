@@ -41,8 +41,10 @@ enum {
 };
 
 /// Put the virtual pointer at x, y: 0...1 from the top-left corner of the
-/// interface as it is shown. Creates the pointing device on first use.
-int vp_pointer_move(double x, double y);
+/// interface as it is shown. Creates the pointing device on first use. A
+/// nonzero `sequence` not above the last one applied is a move that arrived
+/// late: it is dropped and the call still succeeds. 0 always moves.
+int vp_pointer_move(double x, double y, uint64_t sequence);
 
 /// One scroll event at the pointer. `phase` is an IOHIDEventPhaseBits value;
 /// dx and dy are interface points, with a browser wheel event's signs.

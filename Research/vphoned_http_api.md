@@ -324,7 +324,7 @@ request carries `"force": true`.
 | --- | --- |
 | Device | `device.snapshot`, `device.info` (snapshot plus network, screen, rotation, brightness, volume, low power, Developer Mode, agent, `device_name` `{name, own_name}`: the pinned name and the guest's own ComputerName), `device.screen`, `device.network`, `device.ioreg {plane}`, `device.environment`, `device.basebin {archive?}` |
 | Display, audio | `display.brightness {value?}`, `display.rotation {orientation?}`, `display.orientation` (`{degrees, source}`: SpringBoard's interface orientation without a screen capture, for polling; `degrees` is null while SpringBoard has no answer; capability `display_orientation`), `display.rotation_lock {locked}`, `display.auto_lock` (`{auto_lock_seconds, never, lock_screen_minimum_seconds}`: Auto-Lock and the Lock Screen timeout vphoned keeps in step with it, see below; capability `display_auto_lock`), `screen.unlock {passcode?, timeout?}` (`{locked, screen_off, was_locked, was_screen_off}`: the display on and the Lock Screen passed, see below; capability `screen_unlock`), `audio.volume {value?, category?}`, `audio.state` |
-| Input | `input.touch`, `input.hid`, `input.button {name}`, `input.key {name}`, `input.type {text, delay_ms?}`, `input.paste {text}`, `input.tap`, `input.double_tap`, `input.long_press`, `input.swipe`, `input.drag {points}`, `input.touch_sequence {events}` — gesture coordinates are screen points; `input.pointer {x, y}`, `input.scroll {phase, dx?, dy?, x?, y?}` (capability `pointer_scroll`, see below) |
+| Input | `input.touch`, `input.hid`, `input.button {name}`, `input.key {name}`, `input.type {text, delay_ms?}`, `input.paste {text}`, `input.tap`, `input.double_tap`, `input.long_press`, `input.swipe`, `input.drag {points}`, `input.touch_sequence {events}` — gesture coordinates are screen points; `input.pointer {x, y, seq?}`, `input.scroll {phase, dx?, dy?, x?, y?}` (capability `pointer_scroll`, see below) |
 | UI | `ui.tree` (alias `accessibility.tree`), `ui.element_at`, `ui.tap_element`, `ui.wait`, `ui.wait_gone`, `ui.ocr {languages?, min_confidence?}`, `ui.describe`, `screen.screenshot` |
 | Processes | `processes.list {filter?}`, `processes.kill {pid, signal?}` **force**, `memory.jetsam`, `memory.pressure` (only the three kernel memory sysctls, for polling) |
 | launchd | `services.list`, `status`, `print`, `dump`, `disabled`, `start`, `enable`, `load`, `profile` (see below); `services.stop`, `disable`, `remove`, `signal`, `unload`, `profile.apply {profile, groups?, allow?}` **force**; `launchd.getenv`, `setenv`, `unsetenv`. On tvOS, which never enables user sessions, they read the system domain alone; before icli 0.8.6 the foreground-user lookup trapped there and killed vphoned |
@@ -423,8 +423,12 @@ vphoned creates a virtual pointing device (a HID user device with an absolute
 position, `VPhoneDaemon/Native/vphoned_pointer.m`); iPadOS then shows a pointer,
 which hides itself after a few seconds without movement.
 
-- `input.pointer {x, y}` puts the pointer at x, y: 0...1 from the top-left
-  corner of the interface as it is shown, in any orientation.
+- `input.pointer {x, y, seq?}` puts the pointer at x, y: 0...1 from the
+  top-left corner of the interface as it is shown, in any orientation.
+  Requests run concurrently, so a client that sends moves without waiting
+  for each answer numbers them with an increasing `seq` (a whole number up
+  to 2^53); a move that lands after a higher one is dropped, and still
+  answers. Without `seq` every move is applied.
 - `input.scroll {phase, dx?, dy?, x?, y?}` sends one scroll event to the view
   under the pointer, after moving the pointer to x, y when they are given.
   `phase` is `began`, `changed`, `ended` or `cancelled`: `began` first, a

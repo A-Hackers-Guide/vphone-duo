@@ -73,7 +73,7 @@ invalid-request error, read the source named there instead of guessing keys.
 | `input.key` | `name` (`return`, `cmd+v`, …) |
 | `input.type` | `text`, `delay_ms?` (30) |
 | `input.paste` | `text` |
-| `input.pointer` | `x`, `y` (0...1 of the interface as shown; iPad, capability `pointer_scroll`) |
+| `input.pointer` | `x`, `y` (0...1 of the interface as shown; iPad, capability `pointer_scroll`), `seq?` (increasing; a late move is dropped) |
 | `input.scroll` | `phase` (`began`/`changed`/`ended`/`cancelled`), `dx?`, `dy?` (points, wheel signs), `x?`, `y?` |
 
 ## UI inspection

@@ -336,12 +336,14 @@ enum GuestAPI {
             return ["phase": phase.rawValue, "fingers": 2]
         case "input.pointer":
             let point: GuestPointerScroll.Point
+            let sequence: UInt64
             do {
                 point = try GuestPointerScroll.point(params)
+                sequence = try GuestPointerScroll.sequence(params)
             } catch {
                 throw GuestAPIError.invalidRequest(error.message)
             }
-            try pointerResult(vp_pointer_move(point.x, point.y))
+            try pointerResult(vp_pointer_move(point.x, point.y, sequence))
             return ["x": point.x, "y": point.y]
         case "input.scroll":
             let scroll: GuestPointerScroll.Scroll
@@ -351,7 +353,7 @@ enum GuestAPI {
                 throw GuestAPIError.invalidRequest(error.message)
             }
             if let point = scroll.pointer {
-                try pointerResult(vp_pointer_move(point.x, point.y))
+                try pointerResult(vp_pointer_move(point.x, point.y, 0))
             }
             try pointerResult(vp_pointer_scroll(scroll.phase.bits, scroll.dx, scroll.dy))
             return ["phase": scroll.phase.rawValue]

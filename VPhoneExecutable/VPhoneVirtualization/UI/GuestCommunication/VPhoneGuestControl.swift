@@ -348,23 +348,34 @@ final class VPhoneGuestControl {
         isConnected && guestCapabilities.contains("pointer_scroll")
     }
 
-    @ObservationIgnored private var pointerInFlight = false
+    @ObservationIgnored private var pointersInFlight = 0
     @ObservationIgnored private var pendingPointer: CGPoint?
+    @ObservationIgnored private var lastPointerSequence: UInt64 = 0
+
+    /// Moves in flight at once. Each request is its own connection; waiting
+    /// for one answer before the next put a round trip behind every move.
+    private static let maximumPointersInFlight = 4
 
     /// Puts the guest's pointer at `point`, 0...1 of the interface as shown.
     /// Not in the ordered input queue: where the pointer sits does not depend
     /// on the order of touches, and a mouse that keeps moving would hold every
-    /// click behind it. One request at a time; a newer position replaces the
-    /// one waiting.
+    /// click behind it. Moves go out at once, numbered so that vphoned drops
+    /// one that lands after a later one; past `maximumPointersInFlight` the
+    /// newest position waits for the next free slot.
     func movePointer(to point: CGPoint) {
-        guard !pointerInFlight else {
+        guard pointersInFlight < Self.maximumPointersInFlight else {
             pendingPointer = point
             return
         }
-        pointerInFlight = true
+        // Microseconds of uptime: increasing across reconnects and restarts of
+        // this process, which a guest that keeps running may still remember.
+        let now = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000)
+        lastPointerSequence = max(now, lastPointerSequence + 1)
+        let params: [String: Any] = ["x": Double(point.x), "y": Double(point.y), "seq": lastPointerSequence]
+        pointersInFlight += 1
         Task {
-            _ = try? await call("input.pointer", params: ["x": Double(point.x), "y": Double(point.y)])
-            pointerInFlight = false
+            _ = try? await call("input.pointer", params: params)
+            pointersInFlight -= 1
             if let next = pendingPointer {
                 pendingPointer = nil
                 movePointer(to: next)

@@ -384,5 +384,11 @@ enum LogicTests {
         expectEqual(scrollProblem(["phase": "began", "x": -0.1, "y": 0.5]), point)
         expectEqual(try? GuestPointerScroll.point(["x": 0.25, "y": 0.75]), GuestPointerScroll.Point(x: 0.25, y: 0.75))
         expect((try? GuestPointerScroll.point(["x": false, "y": 0])) == nil, "a boolean is not a coordinate")
+        expectEqual(try? GuestPointerScroll.sequence([:]), 0, "no seq always moves")
+        expectEqual(try? GuestPointerScroll.sequence(["seq": 42]), 42)
+        expectEqual(try? GuestPointerScroll.sequence(["seq": 9_007_199_254_740_992.0]), 1 << 53)
+        for bad: Any in [-1, 1.5, true, "7", 9_007_199_254_740_994.0] {
+            expect((try? GuestPointerScroll.sequence(["seq": bad])) == nil, "seq \(bad) is refused")
+        }
     }
 }

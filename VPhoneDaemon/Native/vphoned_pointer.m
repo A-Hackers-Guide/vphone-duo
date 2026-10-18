@@ -52,6 +52,7 @@ static bool gPointerLoaded;
 static IOHIDEventSystemClientRef gPointerClient;
 static IOHIDUserDeviceRef gPointerDevice;
 static uint64_t gPointerSender;
+static uint64_t gPointerLastSequence;
 
 static NSString *const kPointerProduct = @"vphone pointer";
 
@@ -155,11 +156,17 @@ static dispatch_queue_t pointer_queue(void) {
     return gPointerQueue;
 }
 
-int vp_pointer_move(double x, double y) {
+int vp_pointer_move(double x, double y, uint64_t sequence) {
     __block int result;
     dispatch_sync(pointer_queue(), ^{
         result = ensure_device();
         if (result != VP_POINTER_OK) return;
+        // Requests run concurrently, so a move sent earlier can land later;
+        // putting the pointer back where it was would make it jump.
+        if (sequence) {
+            if (sequence <= gPointerLastSequence) return;
+            gPointerLastSequence = sequence;
+        }
         uint16_t px = (uint16_t)lround(fmin(fmax(x, 0), 1) * kPointerMaximum);
         uint16_t py = (uint16_t)lround(fmin(fmax(y, 0), 1) * kPointerMaximum);
         const uint8_t report[7] = {0, px & 0xFF, px >> 8, py & 0xFF, py >> 8, 0, 0};

@@ -151,7 +151,9 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         if let area = pointerTrackingArea {
             removeTrackingArea(area)
         }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self)
+        let area = NSTrackingArea(
+            rect: .zero, options: [.mouseMoved, .cursorUpdate, .activeInKeyWindow, .inVisibleRect], owner: self,
+        )
         addTrackingArea(area)
         pointerTrackingArea = area
     }
@@ -161,9 +163,28 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     /// trackpad does.
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
-        guard trackpadGesturesEnabled, let control, control.supportsPointerScroll else { return }
+        guard guestPointerFollowsMouse, let control else { return }
+        Self.hiddenCursor.set()
         control.movePointer(to: interfacePoint(convert(event.locationInWindow, from: nil)))
     }
+
+    /// The guest's pointer stands in for the Mac's over the display, so the
+    /// Mac's is hidden there, as Universal Control hides it on the iPad.
+    override func cursorUpdate(with event: NSEvent) {
+        if guestPointerFollowsMouse {
+            Self.hiddenCursor.set()
+        } else {
+            super.cursorUpdate(with: event)
+        }
+    }
+
+    private var guestPointerFollowsMouse: Bool {
+        trackpadGesturesEnabled && control?.supportsPointerScroll == true
+    }
+
+    /// A cursor with nothing to draw. `NSCursor.hide()` is counted and
+    /// app-wide, so it would have to be balanced on every way out of the view.
+    private static let hiddenCursor = NSCursor(image: NSImage(size: NSSize(width: 1, height: 1)), hotSpot: .zero)
 
     override func mouseDown(with event: NSEvent) {
         // Clicking the VM display should always restore keyboard focus.
@@ -173,6 +194,11 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         if nativeScrollActive {
             endNativeScroll()
             nativeScrollMomentumDropped = true
+        }
+        // A click is a touch, and iPadOS hides its pointer under a finger: the
+        // Mac's shows where the drag is until the mouse moves freely again.
+        if guestPointerFollowsMouse {
+            NSCursor.arrow.set()
         }
         releaseSecondaryPress()
         let localPoint = convert(event.locationInWindow, from: nil)
@@ -197,6 +223,11 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
             super.mouseUp(with: event)
         }
         currentTouchSwipeAim = 0
+        // Bring the guest's pointer back where the finger lifted.
+        if guestPointerFollowsMouse, let control {
+            Self.hiddenCursor.set()
+            control.movePointer(to: interfacePoint(localPoint))
+        }
     }
 
     // MARK: - Secondary Click

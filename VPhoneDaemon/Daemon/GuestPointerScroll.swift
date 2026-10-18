@@ -63,6 +63,22 @@ enum GuestPointerScroll {
         return Point(x: x, y: y)
     }
 
+    /// The largest `seq`: what a JSON number holds exactly.
+    static let maximumSequence: UInt64 = 1 << 53
+
+    /// `input.pointer`'s optional `seq`, 0 when there is none. A client that
+    /// sends moves without waiting for each answer numbers them in increasing
+    /// order; one that arrives after a higher number is dropped.
+    static func sequence(_ params: [String: Any]) throws(Problem) -> UInt64 {
+        guard let value = params["seq"] else { return 0 }
+        guard let sequence = number(value), sequence >= 0, sequence <= Double(maximumSequence),
+              sequence.rounded() == sequence
+        else {
+            throw Problem(message: "seq must be a whole number within 0...\(maximumSequence)")
+        }
+        return UInt64(sequence)
+    }
+
     static func scroll(_ params: [String: Any]) throws(Problem) -> Scroll {
         guard let name = params["phase"] as? String, let phase = Phase(rawValue: name) else {
             throw Problem(message: "phase must be began, changed, ended or cancelled")
