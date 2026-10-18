@@ -69,6 +69,24 @@ VMs are stored in `~/.vphone/`. Run `vphone-cli <group> --help` to see all comma
 
 To turn on the automation API, add `--api-listen 127.0.0.1:8765` at launch and use the token it prints. See the [API documentation](Research/vphoned_http_api.md).
 
+## Boot ROMs
+
+New VMs start from two open-source ROMs instead of the closed ones in Virtualization.framework:
+
+- [OpenAVB](https://github.com/owngoal-dev/OpenAVB) replaces AVPBooter, the boot ROM. It needs no patch, so `fw patch` leaves it alone.
+- [OpenSEP](https://github.com/owngoal-dev/OpenSEP) replaces AVPSEPBooter, the SEP boot ROM.
+
+With both, nothing Apple wrote runs before iBoot and SEPOS. Both ship in `VPhone.bundle`, prebuilt from pinned upstream commits. Each one's README ([OpenAVB](VPhoneExecutable/VPhoneVirtualization/Resources/OpenAVB/README.md), [OpenSEP](VPhoneExecutable/VPhoneVirtualization/Resources/OpenSEP/README.md)) says how to rebuild it and check it byte for byte.
+
+VMs created by earlier versions keep Apple's ROMs. A VM switches either way without a restore, from its next start:
+
+```sh
+vphone-cli vm config myphone --rom openavb --seprom opensep   # open-source ROMs
+vphone-cli vm config myphone --rom apple --seprom apple       # Apple's ROMs
+```
+
+`vphone-cli vm info myphone` shows which ROMs a VM uses. Restoring a VM that boots OpenAVB needs `VPhone.bundle` 2.10.1 or newer. For the details, see [OpenAVB](Research/Firmware/openavb_boot_rom.md) and [OpenSEP](Research/Firmware/opensep_sep_rom.md) in the research notes.
+
 ## Documentation
 
 | Document | Contents |
@@ -90,3 +108,4 @@ If these do not solve your problem, [open an issue](https://github.com/Lakr233/v
 ## Acknowledgements
 
 - [wh1te4ever/super-tart-vphone-writeup](https://github.com/wh1te4ever/super-tart-vphone-writeup)
+- [owngoal-dev/OpenAVB](https://github.com/owngoal-dev/OpenAVB) and [owngoal-dev/OpenSEP](https://github.com/owngoal-dev/OpenSEP), the boot ROMs new VMs start from

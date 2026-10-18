@@ -103,6 +103,24 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/v1/health
 
 每次启动都会生成新的 token。要使用固定的 token，请设置环境变量 `VPHONE_API_TOKEN`。不带 token 的请求和来自网页的请求都会被拒绝。接口说明见 [API 文档](../Research/vphoned_http_api.md)。
 
+## 启动 ROM
+
+新建的虚拟机不再使用 Virtualization.framework 自带的闭源 ROM，而是从两个开源 ROM 启动：
+
+- [OpenAVB](https://github.com/owngoal-dev/OpenAVB) 替代启动 ROM AVPBooter。它不需要打补丁，`fw patch` 不会改动它。
+- [OpenSEP](https://github.com/owngoal-dev/OpenSEP) 替代 SEP 启动 ROM AVPSEPBooter。
+
+两个一起用时，iBoot 和 SEPOS 之前运行的代码都不再出自 Apple。两个 ROM 都以预编译形式随 `VPhone.bundle` 发布，构建自固定的上游 commit。各自的说明（[OpenAVB](../VPhoneExecutable/VPhoneVirtualization/Resources/OpenAVB/README.md)、[OpenSEP](../VPhoneExecutable/VPhoneVirtualization/Resources/OpenSEP/README.md)）写了如何从源码重新构建并逐字节核对。
+
+旧版本创建的虚拟机仍使用 Apple 的 ROM。两种 ROM 可以随时切换，不需要重新恢复系统，下次启动时生效：
+
+```sh
+vphone-cli vm config myphone --rom openavb --seprom opensep   # 开源 ROM
+vphone-cli vm config myphone --rom apple --seprom apple       # Apple 的 ROM
+```
+
+`vphone-cli vm info myphone` 会显示虚拟机使用的 ROM。恢复使用 OpenAVB 启动的虚拟机，需要 `VPhone.bundle` 2.10.1 或更新版本。详细内容见研究记录中的 [OpenAVB](../Research/Firmware/openavb_boot_rom.md) 和 [OpenSEP](../Research/Firmware/opensep_sep_rom.md)。
+
 ## 遇到问题
 
 请先查看[故障排查](Guides/troubleshooting.md)，其中包括虚拟机程序被系统拒绝、恢复失败、停在 “Press home to continue” 等情况。如果仍未解决，请[提交 issue](https://github.com/Lakr233/vphone-cli/issues)。
@@ -140,3 +158,4 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/v1/health
 ## 致谢
 
 - [wh1te4ever/super-tart-vphone-writeup](https://github.com/wh1te4ever/super-tart-vphone-writeup)
+- [owngoal-dev/OpenAVB](https://github.com/owngoal-dev/OpenAVB) 和 [owngoal-dev/OpenSEP](https://github.com/owngoal-dev/OpenSEP)：新虚拟机使用的启动 ROM
