@@ -711,7 +711,7 @@ struct FirmwarePipelineTests {
                 romImages: .init(avpBooter: rom, avpSEPBooter: "AVPSEPBooter.vresearch1.bin"),
             ).write(to: vm.appendingPathComponent("config.plist"))
             let pipeline = FirmwarePipeline(vmDirectory: vm, variant: .jb, verbose: false)
-            return pipeline.buildComponentList(restoreDir: vm, iOSBase: VPhoneVersion("26.6.2")).map(\.name)
+            return try pipeline.buildComponentList(restoreDir: vm, iOSBase: VPhoneVersion("26.6.2")).map(\.name)
         }
 
         #expect(try !components(booting: "OpenAVB.bin").contains("AVPBooter"))
