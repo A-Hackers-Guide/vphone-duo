@@ -4,7 +4,8 @@ import Foundation
 
 /// Checks the guest-independent parts of vphoned on the Mac: the service
 /// profile lists and bookkeeping, the first-boot settle verdict (data
-/// migration included) and the device name rule. `run-logic-tests.sh` builds
+/// migration included), the device name rule and the pointer scroll
+/// parameters. `run-logic-tests.sh` builds
 /// this file with those sources.
 nonisolated(unsafe) var failures = 0
 nonisolated(unsafe) var checks = 0
@@ -34,6 +35,7 @@ enum LogicTests {
         settleVerdicts()
         dataMigrationRecord()
         deviceNameRule()
+        pointerScroll()
         print("\(checks) checks, \(failures) failures")
         exit(failures == 0 ? 0 : 1)
     }
@@ -342,5 +344,45 @@ enum LogicTests {
         // 85 three-byte characters are 255 bytes; one more is 258.
         expect(GuestDeviceNameRule.problem(String(repeating: "测", count: 85)) == nil, "255 bytes of CJK")
         expect(GuestDeviceNameRule.problem(String(repeating: "测", count: 86)) != nil, "258 bytes of CJK")
+    }
+
+    // MARK: - Pointer Scroll
+
+    static func scrollProblem(_ params: [String: Any]) -> String? {
+        do {
+            _ = try GuestPointerScroll.scroll(params)
+            return nil
+        } catch {
+            return error.message
+        }
+    }
+
+    static func pointerScroll() {
+        typealias Scroll = GuestPointerScroll.Scroll
+        expectEqual(try? GuestPointerScroll.scroll(["phase": "changed", "dx": 1.5, "dy": -20]),
+                    Scroll(phase: .changed, dx: 1.5, dy: -20, pointer: nil))
+        expectEqual(try? GuestPointerScroll.scroll(["phase": "began"]),
+                    Scroll(phase: .began, dx: 0, dy: 0, pointer: nil), "deltas default to 0")
+        expectEqual(try? GuestPointerScroll.scroll(["phase": "began", "x": 0, "y": 1]),
+                    Scroll(phase: .began, dx: 0, dy: 0, pointer: .init(x: 0, y: 1)), "a pointer position comes with it")
+        expectEqual(GuestPointerScroll.Phase.began.bits, 1)
+        expectEqual(GuestPointerScroll.Phase.changed.bits, 2)
+        expectEqual(GuestPointerScroll.Phase.ended.bits, 4)
+        expectEqual(GuestPointerScroll.Phase.cancelled.bits, 8)
+        let phase = "phase must be began, changed, ended or cancelled"
+        expectEqual(scrollProblem([:]), phase)
+        expectEqual(scrollProblem(["phase": "move"]), phase)
+        expectEqual(scrollProblem(["phase": 2]), phase)
+        let delta = "must be a number within ±10000"
+        expectEqual(scrollProblem(["phase": "changed", "dy": "20"]), "dy \(delta)")
+        expectEqual(scrollProblem(["phase": "changed", "dx": true]), "dx \(delta)", "a boolean is not a number")
+        expectEqual(scrollProblem(["phase": "changed", "dy": 10001]), "dy \(delta)")
+        expectEqual(scrollProblem(["phase": "changed", "dy": Double.infinity]), "dy \(delta)")
+        let point = "x and y must be numbers within 0...1"
+        expectEqual(scrollProblem(["phase": "began", "x": 0.5]), point, "x without y")
+        expectEqual(scrollProblem(["phase": "began", "x": 0.5, "y": 1.01]), point)
+        expectEqual(scrollProblem(["phase": "began", "x": -0.1, "y": 0.5]), point)
+        expectEqual(try? GuestPointerScroll.point(["x": 0.25, "y": 0.75]), GuestPointerScroll.Point(x: 0.25, y: 0.75))
+        expect((try? GuestPointerScroll.point(["x": false, "y": 0])) == nil, "a boolean is not a coordinate")
     }
 }

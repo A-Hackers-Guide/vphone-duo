@@ -27,6 +27,27 @@ bool vp_hid_load(void);
 /// `touchSequence` can carry two fingers at once, which is why this exists.
 void vp_hid_touch2(int phase, double x1, double y1, double x2, double y2);
 
+/// What vp_pointer_move and vp_pointer_scroll return.
+enum {
+    VP_POINTER_OK = 0,
+    /// The base does not have the private IOKit symbols.
+    VP_POINTER_UNAVAILABLE = 1,
+    /// IOHIDUserDeviceCreate refused to make the device.
+    VP_POINTER_REFUSED = 2,
+    /// The device exists but iOS has not put an event service over it yet.
+    VP_POINTER_NOT_READY = 3,
+    /// The report or the event could not be made or delivered.
+    VP_POINTER_FAILED = 4,
+};
+
+/// Put the virtual pointer at x, y: 0...1 from the top-left corner of the
+/// interface as it is shown. Creates the pointing device on first use.
+int vp_pointer_move(double x, double y);
+
+/// One scroll event at the pointer. `phase` is an IOHIDEventPhaseBits value;
+/// dx and dy are interface points, with a browser wheel event's signs.
+int vp_pointer_scroll(int phase, double dx, double dy);
+
 /// Turn the display on without pressing a button. False when
 /// SpringBoardServices has no SBSUndimScreen.
 bool vp_screen_undim(void);
