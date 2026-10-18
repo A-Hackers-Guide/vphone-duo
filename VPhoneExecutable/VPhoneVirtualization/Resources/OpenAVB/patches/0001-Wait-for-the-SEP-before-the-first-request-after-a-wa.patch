@@ -1,0 +1,88 @@
+From 20ae8738b77e53cf49a3e1cba195cab449368274 Mon Sep 17 00:00:00 2001
+From: Jacky <caovanvui37@gmail.com>
+Date: Sun, 18 Oct 2026 19:23:41 +0800
+Subject: [PATCH] Wait for the SEP before the first request after a warm reset
+
+On a guest reboot (PSCI SYSTEM_RESET) Virtualization.framework restarts
+the SEP together with the AP. OpenAVB got to the mailbox first, took it,
+and sent the bootstrap request at once. The mailbox dropped it
+("coprocessor.mailbox: Failed to send a message"), the SEP's own setup
+then cleared the AP's ownership, and each side waited for the other:
+the console filled with "SEP RX timeout" and the guest never came back.
+
+After a cold start the SEP is up long before the ROM gets there and its
+first message is already waiting. So after taking the slot, wait for
+that message, taking the slot back if the SEP's restart drops it, and
+send only then. Each ownership request also sets the enable bit at
++0x10 first, as Apple's ROM and the SEP ROM do.
+---
+ src/protocol/sep/sep.c | 35 ++++++++++++++++++++++++++++++++++-
+ 1 file changed, 34 insertions(+), 1 deletion(-)
+
+diff --git a/src/protocol/sep/sep.c b/src/protocol/sep/sep.c
+index 77c9cbc..6dba128 100644
+--- a/src/protocol/sep/sep.c
++++ b/src/protocol/sep/sep.c
+@@ -15,6 +15,7 @@ enum {
+     SEP_TIMEOUT_RECOVERY_LIMIT = 5,
+     SEP_TIMEOUT_POLL_INTERVAL_US = 100,
+     SEP_FINALIZE_ROUNDS = 8,
++    SEP_READY_TIMEOUT_US = 5000000,
+ };
+ 
+ static void early_console_write(const char *message) {
+@@ -29,11 +30,20 @@ static uint32_t timeout_recovery_count;
+ static bool preflight_wait_complete;
+ static uint8_t last_protocol_opcode;
+ 
+-void sep_initialize(void) {
++/*
++ * Request the slot until it reads as owned, setting the enable bit at +0x10
++ * before each request as Apple's ROM does, and as the SEP ROM does on its
++ * side.
++ */
++static void sep_acquire(void) {
+     uint32_t active_control = mmio_read32(SEP_MAILBOX_BASE + 0x14);
+     while ((active_control & SEP_MAILBOX_OWNED) == 0) {
+         /* The ownership register acknowledges writes, so an owned slot is
+          * observed and preserved without issuing another ownership request. */
++        mmio_write32(
++            SEP_MAILBOX_BASE + 0x10,
++            mmio_read32(SEP_MAILBOX_BASE + 0x10) | 1
++        );
+         mmio_write32(
+             SEP_MAILBOX_BASE + 0x14,
+             active_control | SEP_MAILBOX_OWNED
+@@ -47,6 +57,29 @@ void sep_initialize(void) {
+     avp_memory_barrier();
+ }
+ 
++void sep_initialize(void) {
++    sep_acquire();
++    /*
++     * Do not send before the SEP has announced itself. After a cold start it
++     * is up long before this ROM gets here, and its first message is already
++     * waiting. After a warm reset (a guest reboot) it restarts together with
++     * this ROM and is slower: a request sent now is dropped by the mailbox,
++     * and the SEP's own setup then clears the ownership taken above, so both
++     * sides wait for each other. Wait for its message instead, taking the
++     * slot back when its restart drops it.
++     */
++    const uint64_t start = avp_time_counter();
++    const uint64_t limit = avp_time_microseconds_to_ticks(SEP_READY_TIMEOUT_US);
++    while ((mmio_read32(SEP_MAILBOX_BASE + 0x1c) & 0x00020000) != 0) {
++        if ((mmio_read32(SEP_MAILBOX_BASE + 0x14) & SEP_MAILBOX_OWNED) == 0) {
++            sep_acquire();
++        }
++        if (avp_time_has_elapsed(start, limit)) {
++            break;
++        }
++    }
++}
++
+ static int32_t sep_receive(
+     uint32_t timeout_microseconds,
+     SEPMailboxMessage *message
+-- 
+2.56.0
+

@@ -470,6 +470,7 @@
 					"$(inherited)",
 					"-lz",
 					"-lcurl",
+					"-lcompression",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.vphone.restore.tests;
 				PRODUCT_NAME = VPhoneRestoreTests;
@@ -493,6 +494,7 @@
 					"$(inherited)",
 					"-lz",
 					"-lcurl",
+					"-lcompression",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.vphone.restore.tests;
 				PRODUCT_NAME = VPhoneRestoreTests;

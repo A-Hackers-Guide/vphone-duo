@@ -440,6 +440,10 @@ public struct VPhoneVirtualMachineCreator {
         let clone = try VPhoneMachineTemplates.cloneMachine(from: template, to: options.name, in: library)
         outputs.add(clone.url)
         do {
+            // The ROM is not part of a template's key: it changes without a
+            // restore. A template built before OpenAVB still starts Apple's,
+            // so the machine gets this bundle's ROM, as a `vm new` would.
+            try VPhoneBundleOperations.installBootROM(from: VPhoneBundleOperations.defaultROMSource(), in: clone)
             try applySettings(options)
         } catch {
             try? FileManager.default.removeItem(at: clone.url)

@@ -18,6 +18,7 @@
 
 import Darwin
 import Foundation
+import VPhoneCoreKit
 import VPhonePatchKit
 
 /// Orchestrates firmware patching for all boot-chain components.
@@ -190,6 +191,9 @@ public final class FirmwarePipeline {
         let cloudOSVersion = VPhoneVersion(Self.readCloudOSProductVersion(restoreDir))
         cloudOSProductVersion = cloudOSVersion
         log("[*] cloudOS kernel:    \(cloudOSVersion?.description ?? "unknown")")
+        if VPhoneBootROM.kind(ofMachineAt: vmDirectory) == .openAVB {
+            log("[*] Boot ROM:          OpenAVB, which needs no ROM patch")
+        }
 
         // The preset resolves here rather than in init: its version gates need the
         // two ProductVersions that were just read, and a conflict or a misnamed

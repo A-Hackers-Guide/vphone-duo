@@ -2,7 +2,9 @@
 
 @testable import FirmwarePatcher
 import Foundation
+import Img4tool
 import Testing
+import VPhoneCoreKit
 import VPhonePatchKit
 
 struct ARM64ConstantTests {
@@ -547,7 +549,30 @@ struct IM4PPayloadParityTests {
 
         let (roundTripPayload, _) = try IM4PHandler.load(contentsOf: tempURL)
         #expect(roundTripPayload == payload)
-        #expect(try (Data(contentsOf: tempURL)).count > originalFile.count)
+        // Written back LZFSE-compressed, as Apple ships it: OpenAVB decodes
+        // nothing else.
+        #expect(originalFile.range(of: Data("bvx2".utf8)) != nil)
+        #expect(try Data(contentsOf: tempURL).range(of: Data("bvx2".utf8)) != nil)
+    }
+
+    @Test func `iBSS is saved LZFSE-compressed and other images as they were`() throws {
+        let payload = Data((0 ..< 200_000).map { UInt8(truncatingIfNeeded: $0 >> 5) })
+        let marker = Data("bvx2".utf8)
+        for fourcc in ["ibss", "ibec", "illb"] {
+            let original = try IM4P(fourcc: fourcc, description: "iBoot-13822", payload: payload)
+            let url = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension("im4p")
+            defer { try? FileManager.default.removeItem(at: url) }
+
+            try IM4PHandler.save(patchedData: payload, originalIM4P: original, to: url)
+
+            let saved = try Data(contentsOf: url)
+            #expect((saved.range(of: marker) != nil) == (fourcc == "ibss"), "\(fourcc)")
+            let (roundTrip, container) = try IM4PHandler.load(contentsOf: url)
+            #expect(roundTrip == payload, "\(fourcc)")
+            #expect(container?.fourcc == fourcc)
+        }
     }
 
     @Test func `saving TXMIM 4 P preserves PAYP trailer`() throws {
@@ -668,6 +693,30 @@ struct FirmwarePipelineTests {
             }
             #expect(try !flag(base, standard: true, blocked: [FirmwarePatchSetCatalog.proMotionPatch]))
         }
+    }
+
+    @Test func `a machine booting OpenAVB has no AVPBooter component to patch`() throws {
+        let fm = FileManager.default
+        let vm = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try fm.createDirectory(at: vm, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: vm) }
+        // An Apple ROM stays in the folder after a switch; it is not the one that boots.
+        try Data([0xAA]).write(to: vm.appendingPathComponent("AVPBooter.vresearch1.bin"))
+        try Data("OpenBootROM: SEP bootstrap complete\n".utf8).write(to: vm.appendingPathComponent("OpenAVB.bin"))
+
+        func components(booting rom: String) throws -> [String] {
+            try VPhoneVirtualMachineManifest(
+                cpuCount: 2,
+                memorySize: 2 << 30,
+                romImages: .init(avpBooter: rom, avpSEPBooter: "AVPSEPBooter.vresearch1.bin"),
+            ).write(to: vm.appendingPathComponent("config.plist"))
+            let pipeline = FirmwarePipeline(vmDirectory: vm, variant: .jb, verbose: false)
+            return pipeline.buildComponentList(restoreDir: vm, iOSBase: VPhoneVersion("26.6.2")).map(\.name)
+        }
+
+        #expect(try !components(booting: "OpenAVB.bin").contains("AVPBooter"))
+        #expect(try components(booting: "OpenAVB.bin").first == "iBSS")
+        #expect(try components(booting: "AVPBooter.vresearch1.bin").first == "AVPBooter")
     }
 
     @Test func `find file supports glob patterns`() throws {

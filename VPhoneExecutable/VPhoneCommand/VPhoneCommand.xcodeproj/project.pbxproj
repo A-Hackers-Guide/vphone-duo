@@ -568,6 +568,7 @@
 					"-lVPhoneCoreKit",
 					"-lVPhoneArchiveKit",
 					"-lcurl",
+					"-lcompression",
 				);
 				PRODUCT_MODULE_NAME = VPhoneCommand;
 				PRODUCT_NAME = "vphone-cli";
@@ -609,6 +610,7 @@
 					"-lVPhoneCoreKit",
 					"-lVPhoneArchiveKit",
 					"-lcurl",
+					"-lcompression",
 				);
 				PRODUCT_MODULE_NAME = VPhoneCommand;
 				PRODUCT_NAME = "vphone-cli";

@@ -6,6 +6,8 @@ import Img4tool
 /// Handles loading, extracting, and re-packaging IM4P firmware containers.
 public enum IM4PHandler {
     private static let paypPreservingFourCCs: Set<String> = ["trxm", "krnl"]
+    /// Written back LZFSE-compressed: the image the boot ROM decodes itself.
+    static let lzfseFourCCs: Set<String> = ["ibss"]
 
     /// Load a firmware file as IM4P or raw data.
     ///
@@ -49,10 +51,15 @@ public enum IM4PHandler {
             // a new compression mode here; the Python pipeline currently writes
             // these patched payloads back uncompressed and preserves any PAYP
             // metadata tail from the original container.
+            //
+            // iBSS is the exception: the boot ROM unpacks it, and OpenAVB
+            // decodes only LZFSE (Apple's AVPBooter takes either), so it goes
+            // back compressed the way Apple ships it.
             let newIM4P = try IM4P(
                 fourcc: original.fourcc,
                 description: original.description,
                 payload: patchedData,
+                compression: lzfseFourCCs.contains(original.fourcc) ? "lzfse" : nil,
             )
             let output: Data = if paypPreservingFourCCs.contains(original.fourcc) {
                 try appendPAYPIfPresent(from: original.data, to: newIM4P.data)

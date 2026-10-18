@@ -49,7 +49,7 @@ Counts are declarations in `FirmwarePatcher/PatchSets/*.swift`.
 
 | Part | Patches | Lives in | Reaches the guest by | After creation |
 | --- | --- | --- | --- | --- |
-| AVPBooter | 1 | VM root, `romImages.avpBooter`, read every boot | `fw patch` itself | works, but `fw patch` refuses without a restore tree |
+| AVPBooter | 1 | VM root, `romImages.avpBooter`, read every boot | `fw patch` itself | works, but `fw patch` refuses without a restore tree. A machine booting OpenAVB has no AVPBooter to patch (`openavb_boot_rom.md`) |
 | iBSS, iBEC | 7 | restore tree only | DFU during a restore | irrelevant to an installed guest; only the next restore uses them |
 | LLB | 6 | NOR (personalized by idevicerestore, `LlbImageData`) | restore | needs a restore, which erases the guest: an in-place one cannot keep its data (`native_restore_architecture.md`, 2026-10-05) |
 | kernelcache | 54 | Preboot (personalized) | `cfw update-kernel` | Host-mounts Preboot and swaps the kernelcache IM4P under the original IM4M (the image4 bypass), data-preserving, no restore |

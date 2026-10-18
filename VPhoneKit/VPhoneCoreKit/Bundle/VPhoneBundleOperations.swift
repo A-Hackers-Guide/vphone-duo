@@ -29,8 +29,9 @@ public enum VPhoneBundleOperations {
     private static let frameworkResources = URL(fileURLWithPath:
         "/System/Library/Frameworks/Virtualization.framework/Versions/A/Resources")
 
+    /// The boot ROM new machines get: this bundle's OpenAVB.
     public static func defaultROMSource() -> URL {
-        frameworkResources.appendingPathComponent("AVPBooter.vresearch1.bin")
+        VPhoneBootROM.openAVBSource()
     }
 
     public static func defaultSEPROMSource() -> URL {
@@ -78,8 +79,10 @@ public enum VPhoneBundleOperations {
             // SEP storage: 512 KB of initialized zero bytes.
             try Data(count: 512 * 1024).write(to: dir.appendingPathComponent("SEPStorage"))
 
-            // ROMs.
-            try fm.copyItem(at: spec.romSource, to: dir.appendingPathComponent("AVPBooter.vresearch1.bin"))
+            // ROMs. The boot ROM keeps the name of its kind, so `fw patch`
+            // finds an Apple ROM to patch and leaves OpenAVB alone.
+            let romName = try bootROMKind(of: spec.romSource).fileName
+            try fm.copyItem(at: spec.romSource, to: dir.appendingPathComponent(romName))
             try fm.copyItem(at: spec.sepromSource, to: dir.appendingPathComponent("AVPSEPBooter.vresearch1.bin"))
 
             // Manifest.
@@ -87,7 +90,7 @@ public enum VPhoneBundleOperations {
                 cpuCount: spec.cpuCount,
                 memorySize: spec.memoryMB * 1024 * 1024,
                 networkConfig: spec.networkConfig,
-                romImages: .init(avpBooter: "AVPBooter.vresearch1.bin",
+                romImages: .init(avpBooter: romName,
                                  avpSEPBooter: "AVPSEPBooter.vresearch1.bin"),
             )
             try manifest.write(to: dir.appendingPathComponent("config.plist"))
@@ -100,6 +103,61 @@ public enum VPhoneBundleOperations {
             try? fm.removeItem(at: dir)
             throw error
         }
+    }
+
+    // MARK: - Boot ROM
+
+    /// The kind of the ROM at `url`, refusing a file that cannot be read.
+    static func bootROMKind(of url: URL) throws -> VPhoneBootROM {
+        guard let kind = VPhoneBootROM.kind(at: url) else {
+            throw CocoaError(.fileReadNoSuchFile, userInfo: [NSFilePathErrorKey: url.path])
+        }
+        return kind
+    }
+
+    /// Makes `source` the machine's boot ROM: copies it into the folder under
+    /// the name of its kind, unless it is already that file, and points
+    /// `romImages.avpBooter` at it. vphone-vm reads the ROM when the machine
+    /// starts, so a running machine takes it from its next start.
+    ///
+    /// The ROM it replaces stays in the folder. An Apple ROM there carries the
+    /// digest patch `fw patch` applied, which a fresh copy from the framework
+    /// would not, so going back to it needs only this call again.
+    ///
+    /// Only normal boot reads the ROM after a restore, and both ROMs load the
+    /// same patched LLB, so a restored machine can change ROM without another
+    /// restore. A restore through OpenAVB needs a bundle that uploads the iBSS
+    /// identity, which bundles from before OpenAVB do not.
+    @discardableResult
+    public static func installBootROM(from source: URL, in bundle: VPhoneBundle) throws -> VPhoneBundle {
+        let kind = try bootROMKind(of: source)
+        let fm = FileManager.default
+        let destination = bundle.url.appendingPathComponent(kind.fileName)
+        if source.standardizedFileURL.path != destination.standardizedFileURL.path {
+            let staged = bundle.url.appendingPathComponent(".\(kind.fileName).\(UUID().uuidString)")
+            try fm.copyItem(at: source, to: staged)
+            do {
+                if fm.fileExists(atPath: destination.path) {
+                    _ = try fm.replaceItemAt(destination, withItemAt: staged)
+                } else {
+                    try fm.moveItem(at: staged, to: destination)
+                }
+            } catch {
+                try? fm.removeItem(at: staged)
+                throw error
+            }
+        }
+        try VPhoneHostFilePermissions.makeAccessible(at: destination)
+
+        let images = VPhoneVirtualMachineManifest.ROMImages(
+            avpBooter: kind.fileName,
+            avpSEPBooter: bundle.manifest.romImages?.avpSEPBooter
+                ?? VPhoneVirtualMachineManifest.ROMImages.default.avpSEPBooter,
+        )
+        let updated = bundle.manifest.updating(romImages: images)
+        try updated.write(to: bundle.configURL)
+        try VPhoneHostFilePermissions.makeAccessible(at: bundle.configURL)
+        return VPhoneBundle(url: bundle.url, manifest: updated)
     }
 
     // MARK: - Config editing

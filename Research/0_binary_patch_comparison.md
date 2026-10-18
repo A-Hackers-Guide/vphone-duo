@@ -626,6 +626,11 @@ environment fails before publishing a partially patched tree.
 | --- | ------------ | -------------------------------- | :-----: | :-: | :-: |
 | 1   | `mov x0, #0` | DGST signature validation bypass |    Y    |  Y  |  Y  |
 
+New machines boot OpenAVB instead of AVPBooter, and OpenAVB checks no image
+digest: `fw patch` skips this component on them (the patch stays selected and
+planned, which is what the machine behaves as). Machines created before keep
+Apple's ROM and this patch. See `Firmware/openavb_boot_rom.md`.
+
 ### iBSS
 
 | #   | Patch                               | Purpose                                                                                                            | Regular | Dev | JB  |
@@ -3176,3 +3181,30 @@ steps run there too, without the restore tree, over the driver already in place.
 `-[PGSerializerBlitCommandEncoder copyFromTexture:…toBuffer:…]` store
 `parentResourceOffset` in 16 bits too. They were not measured and are left as
 they are.
+
+## OpenAVB replaces AVPBooter on new machines (2026-10-18)
+
+New machines boot OpenAVB (`Resources/OpenAVB/OpenAVB.bin`, built from
+`owngoal-dev/OpenAVB` at `115169e`, which includes vphone's five
+Virtualization.framework fixes, plus one carried patch that lets a guest
+reboot: the ROM waits for a SEP restarted by the reset) instead of
+Virtualization.framework's `AVPBooter.vresearch1.bin`. OpenAVB checks no image
+digest, so `avpbooter-boot-dgst_bypass` has nothing to patch on such a machine:
+`fw patch` drops the AVPBooter component when `romImages.avpBooter` names an
+OpenAVB image and logs `Boot ROM: OpenAVB, which needs no ROM patch`. The patch
+stays in presets and plans, so `fw patches` reports no drift. Machines created
+before keep Apple's ROM and the patch; `vm config --rom openavb|apple` switches
+one without a restore.
+
+Two boot-chain files change form, not content:
+
+| Component | Before | Now | Why |
+| --- | --- | --- | --- |
+| iBSS IM4P | patched payload written back uncompressed | written back LZFSE-compressed, as Apple ships it | OpenAVB decodes only LZFSE; Apple's ROM takes either |
+| iBSS over DFU | sent as is | preceded by a 112-byte stage-0 identity (payload and image sizes and SHA-256, load base `0x7006c000`, EL2) when the ROM answers OpenAVB's patch-store report | OpenAVB refuses an iBSS nobody described |
+
+No patch site moved and no patch was added or removed. The OpenAVB-side
+changes (read-only ROM aperture, chip ID 0, DFU suffix CRC, remote-boot bit,
+USB device left running) were carried as patches at first and are now
+upstream (owngoal-dev/OpenAVB#1). `Firmware/openavb_boot_rom.md` describes
+each one and how it was found.

@@ -35,12 +35,14 @@ enum VPhonePCCGPURecovery {
         // The restore runs over the virtual USB device, so the machine needs no
         // NIC. With the default nat one, the Mac's shared vmnet network and its
         // DHCP service came up between the end of the restore and the stop.
+        // Apple's ROM: this restores Apple-signed PCC firmware, which OpenAVB has
+        // not been tried with.
         let vm = try VPhoneBundleOperations.create(.init(
             name: name,
             cpuCount: 8,
             memoryMB: 8192,
             diskSizeGB: 64,
-            romSource: VPhoneBundleOperations.defaultROMSource(),
+            romSource: VPhoneBootROM.appleSource,
             sepromSource: VPhoneBundleOperations.defaultSEPROMSource(),
             networkConfig: .init(mode: .off, macAddress: ""),
         ), in: library)

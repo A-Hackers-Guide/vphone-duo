@@ -108,6 +108,14 @@ else
     /usr/bin/plutil -remove VPhoneBuildHash "$info_plist" 2>/dev/null || true
 fi
 
+# The boot ROM new machines copy (vm new), with the licences it is
+# distributed under. Checked in prebuilt; see Resources/OpenAVB/README.md.
+/bin/mkdir -p "$resources/OpenAVB"
+/bin/cp "$root/VPhoneExecutable/VPhoneVirtualization/Resources/OpenAVB/OpenAVB.bin" \
+    "$root/VPhoneExecutable/VPhoneVirtualization/Resources/OpenAVB/LICENSE" \
+    "$root/VPhoneExecutable/VPhoneVirtualization/Resources/OpenAVB/APSL-2.0.txt" \
+    "$resources/OpenAVB/"
+
 # Patch presets. Prewritten plists, read by vphone-cli at patch time to decide
 # which declared patches apply. Nothing generates or edits these.
 /bin/mkdir -p "$resources/patches_presets"
