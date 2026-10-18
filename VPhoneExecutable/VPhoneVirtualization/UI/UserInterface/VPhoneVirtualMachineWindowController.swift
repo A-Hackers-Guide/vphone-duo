@@ -48,6 +48,7 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         view.capturesSystemKeys = hardwareKeyboardEnabled
         view.keySender = keySender
         view.control = control
+        view.screenScale = CGFloat(screenScale)
         view.clipboardSync = VPhoneClipboardSync(control: control)
         virtualMachineView = view
         let container = VPhoneDisplayContainerView(displayView: view)

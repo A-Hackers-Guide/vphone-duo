@@ -189,6 +189,8 @@ final class VPhoneGuestControl {
         monitor = nil
         orderedInput?.cancel()
         orderedInput = nil
+        openScroll = nil
+        pendingPointer = nil
         orderedLocation?.cancel()
         orderedLocation = nil
         device = nil
@@ -338,6 +340,91 @@ final class VPhoneGuestControl {
         enqueueInput("input.touch2", params: [
             "phase": name, "x1": x1, "y1": y1, "x2": x2, "y2": y2, "normalized": true,
         ])
+    }
+
+    /// Whether the guest scrolls under a virtual pointer (`input.pointer`,
+    /// `input.scroll`), as an iPad with a trackpad does.
+    var supportsPointerScroll: Bool {
+        isConnected && guestCapabilities.contains("pointer_scroll")
+    }
+
+    @ObservationIgnored private var pointersInFlight = 0
+    @ObservationIgnored private var pendingPointer: CGPoint?
+    @ObservationIgnored private var lastPointerSequence: UInt64 = 0
+
+    /// Moves in flight at once. Each request is its own connection; waiting
+    /// for one answer before the next put a round trip behind every move.
+    private static let maximumPointersInFlight = 4
+
+    /// Puts the guest's pointer at `point`, 0...1 of the interface as shown.
+    /// Not in the ordered input queue: where the pointer sits does not depend
+    /// on the order of touches, and a mouse that keeps moving would hold every
+    /// click behind it. Moves go out at once, numbered so that vphoned drops
+    /// one that lands after a later one; past `maximumPointersInFlight` the
+    /// newest position waits for the next free slot.
+    func movePointer(to point: CGPoint) {
+        guard pointersInFlight < Self.maximumPointersInFlight else {
+            pendingPointer = point
+            return
+        }
+        // Microseconds of uptime: increasing across reconnects and restarts of
+        // this process, which a guest that keeps running may still remember.
+        let now = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000)
+        lastPointerSequence = max(now, lastPointerSequence + 1)
+        let params: [String: Any] = ["x": Double(point.x), "y": Double(point.y), "seq": lastPointerSequence]
+        pointersInFlight += 1
+        Task {
+            _ = try? await call("input.pointer", params: params)
+            pointersInFlight -= 1
+            if let next = pendingPointer {
+                pendingPointer = nil
+                movePointer(to: next)
+            }
+        }
+    }
+
+    /// The `changed` deltas waiting in the input queue, added up until that
+    /// request goes out.
+    private final class PendingScroll {
+        var delta = CGVector.zero
+    }
+
+    @ObservationIgnored private var openScroll: PendingScroll?
+
+    /// One native scroll event, in order with the other input. `delta` is in
+    /// interface points with a browser wheel event's signs. `changed` deltas
+    /// that arrive while one waits in the queue are added to it, so a guest
+    /// slower than the trackpad gets fewer, larger deltas and loses none.
+    func sendScroll(phase: String, delta: CGVector = .zero, pointer: CGPoint? = nil) {
+        if phase == "changed" {
+            if let open = openScroll {
+                open.delta.dx += delta.dx
+                open.delta.dy += delta.dy
+                return
+            }
+            let open = PendingScroll()
+            open.delta = delta
+            openScroll = open
+            let previous = orderedInput
+            orderedInput = Task {
+                await previous?.value
+                if openScroll === open {
+                    openScroll = nil
+                }
+                guard !Task.isCancelled else { return }
+                let params: [String: Any] = ["phase": "changed", "dx": Double(open.delta.dx), "dy": Double(open.delta.dy)]
+                do { _ = try await call("input.scroll", params: params) } catch { print("[control] input.scroll: \(error)") }
+            }
+            return
+        }
+        // A delta after this event belongs to the next scroll, not to one queued before it.
+        openScroll = nil
+        var params: [String: Any] = ["phase": phase]
+        if let pointer {
+            params["x"] = Double(pointer.x)
+            params["y"] = Double(pointer.y)
+        }
+        enqueueInput("input.scroll", params: params)
     }
 
     private func enqueueInput(_ method: String, params: [String: Any]) {

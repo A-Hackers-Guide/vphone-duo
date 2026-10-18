@@ -148,8 +148,14 @@ enum GuestAPI {
                 "motion_gyroscope",
                 "motion_gyroscope_toggle",
                 "motion_attitude",
-            ],
+            ] + pointerCapabilities(),
         ]
+    }
+
+    /// iPadOS takes a pointing device as it is; iOS on an iPhone only through
+    /// AssistiveTouch, so `input.pointer` and `input.scroll` are an iPad's.
+    private static func pointerCapabilities() -> [String] {
+        GuestVirtualAudioProduct.machine().hasPrefix("iPad") ? ["pointer_scroll"] : []
     }
 
     static func execute(method: String, params: [String: Any]) throws -> [String: Any] {
@@ -328,6 +334,29 @@ enum GuestAPI {
                 number(params, "x2"), number(params, "y2"),
             )
             return ["phase": phase.rawValue, "fingers": 2]
+        case "input.pointer":
+            let point: GuestPointerScroll.Point
+            let sequence: UInt64
+            do {
+                point = try GuestPointerScroll.point(params)
+                sequence = try GuestPointerScroll.sequence(params)
+            } catch {
+                throw GuestAPIError.invalidRequest(error.message)
+            }
+            try pointerResult(vp_pointer_move(point.x, point.y, sequence))
+            return ["x": point.x, "y": point.y]
+        case "input.scroll":
+            let scroll: GuestPointerScroll.Scroll
+            do {
+                scroll = try GuestPointerScroll.scroll(params)
+            } catch {
+                throw GuestAPIError.invalidRequest(error.message)
+            }
+            if let point = scroll.pointer {
+                try pointerResult(vp_pointer_move(point.x, point.y, 0))
+            }
+            try pointerResult(vp_pointer_scroll(scroll.phase.bits, scroll.dx, scroll.dy))
+            return ["phase": scroll.phase.rawValue]
         case "input.hid":
             let page = try integer(params, "page")
             let usage = try integer(params, "usage")
@@ -591,6 +620,17 @@ enum GuestAPI {
     /// Digitizer phase codes for vphoned's own multi-finger injection path.
     /// icli keeps its equivalent mapping module-internal, and these are the
     /// values the private digitizer entry points take: 0 down, 1 move, 3 up.
+    /// A pointer call's result as an error, nothing when it worked.
+    static func pointerResult(_ code: Int32) throws {
+        switch Int(code) {
+        case Int(VP_POINTER_OK): return
+        case Int(VP_POINTER_UNAVAILABLE): throw GuestAPIError.operationFailed("this base has no virtual pointing device")
+        case Int(VP_POINTER_REFUSED): throw GuestAPIError.operationFailed("the guest refused to create the virtual pointing device")
+        case Int(VP_POINTER_NOT_READY): throw GuestAPIError.operationFailed("the virtual pointing device is not ready yet")
+        default: throw GuestAPIError.operationFailed("the pointer event could not be delivered")
+        }
+    }
+
     static func touchPhaseCode(_ phase: TouchPhase) -> Int32 {
         switch phase {
         case .down: 0

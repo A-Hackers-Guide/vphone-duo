@@ -62,7 +62,7 @@ enum GuestVirtualAudioProduct {
         return (value as? NSNumber)?.intValue
     }
 
-    private static func machine() -> String {
+    static func machine() -> String {
         var size = 0
         guard sysctlbyname("hw.machine", nil, &size, nil, 0) == 0, size > 0 else { return "" }
         var bytes = [CChar](repeating: 0, count: size + 1)
