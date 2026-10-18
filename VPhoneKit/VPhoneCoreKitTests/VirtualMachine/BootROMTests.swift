@@ -94,7 +94,7 @@ struct BootROMTests {
 
         let switched = try VPhoneBundleOperations.installBootROM(from: rom(.openAVB, in: root), in: apple)
         #expect(switched.manifest.romImages?.avpBooter == "OpenAVB.bin")
-        #expect(switched.manifest.romImages?.avpSEPBooter == "AVPSEPBooter.vresearch1.bin")
+        #expect(switched.manifest.romImages?.avpSEPBooter == apple.manifest.romImages?.avpSEPBooter)
         #expect(try VPhoneVirtualMachineManifest.load(from: switched.configURL).romImages?.avpBooter == "OpenAVB.bin")
         #expect(VPhoneBootROM.kind(ofMachineAt: switched.url) == .openAVB)
         // The Apple ROM, with whatever fw patch did to it, is still there.

@@ -30,6 +30,9 @@ public struct VPhoneBundleReport: Codable, Equatable, Sendable {
     /// manifest names none (the framework's built-in ROM) or it cannot be
     /// read. Added with OpenAVB.
     public let bootROM: String?
+    /// The SEP ROM the machine starts its SEP from: `opensep` or `apple`, nil
+    /// as for `bootROM`. Added with OpenSEP.
+    public let sepROM: String?
 
     public init(bundle: VPhoneBundle) {
         name = bundle.name
@@ -48,5 +51,6 @@ public struct VPhoneBundleReport: Codable, Equatable, Sendable {
         templateMatch = source.map { VPhoneMachineTemplates.match(of: $0, in: library) }
         syncsHostLocation = bundle.manifest.sharesHostLocation
         bootROM = VPhoneBootROM.kind(ofMachineAt: bundle.url)?.rawValue
+        sepROM = VPhoneSEPROM.kind(ofMachineAt: bundle.url)?.rawValue
     }
 }

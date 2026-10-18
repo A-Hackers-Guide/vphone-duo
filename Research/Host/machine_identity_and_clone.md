@@ -77,7 +77,9 @@ The boot chain already ignores the ECID in its tickets
   TXM and SPTM from Preboot through the same callback.
 - The SEP firmware is checked by the unpatched AVPSEPBooter, which still logs
   `AppleSEPBooter: SEP accepted IMG4` under a new ECID: the virtual SEP ROM
-  does not enforce it.
+  does not enforce it. OpenSEP, which new machines start the SEP from, logs its
+  chain evaluation and does not enforce it either
+  ([OpenSEP SEP ROM](../Firmware/opensep_sep_rom.md)).
 
 A new-identity clone's serial log shows the new ECID in `USB_SERIAL_NUMBER`.
 Its error and failure lines, normalized, are identical to those of a clone that

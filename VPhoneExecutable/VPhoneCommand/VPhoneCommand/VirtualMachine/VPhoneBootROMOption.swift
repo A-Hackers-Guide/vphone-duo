@@ -53,3 +53,36 @@ enum VPhoneBootROMOption {
         return "\(kind?.displayName ?? "unreadable") (\(name))"
     }
 }
+
+// MARK: - --seprom
+
+/// `--seprom` of `vm new` and `vm config`: `opensep`, `apple`, or a ROM file.
+enum VPhoneSEPROMOption {
+    static var help: ArgumentHelp {
+        "SEP ROM: opensep (the bundle's OpenSEP, the default for new machines), apple (Virtualization.framework's AVPSEPBooter), or a ROM file"
+    }
+
+    /// What `vm new` copies into the new machine.
+    static func source(for argument: String?) -> URL {
+        switch argument?.lowercased() {
+        case nil, VPhoneSEPROM.openSEP.rawValue: VPhoneSEPROM.openSEPSource()
+        case VPhoneSEPROM.apple.rawValue: VPhoneSEPROM.appleSource
+        default: URL(fileURLWithPath: argument ?? "")
+        }
+    }
+
+    /// Makes `argument` the SEP ROM of an existing machine. Neither ROM is
+    /// patched, so `apple` is a fresh copy from the framework either way.
+    static func install(_ argument: String, in bundle: VPhoneBundle) throws -> VPhoneBundle {
+        try VPhoneBundleOperations.installSEPROM(from: source(for: argument), in: bundle)
+    }
+
+    /// `OpenSEP (OpenSEP.bin)`, for listings.
+    static func describe(_ bundle: VPhoneBundle) -> String {
+        guard let name = bundle.manifest.romImages?.avpSEPBooter else {
+            return "Virtualization.framework built-in"
+        }
+        let kind = VPhoneSEPROM.kind(ofMachineAt: bundle.url)
+        return "\(kind?.displayName ?? "unreadable") (\(name))"
+    }
+}

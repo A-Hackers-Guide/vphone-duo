@@ -3209,3 +3209,16 @@ USB device left running, SEP not ready after a warm reset) were carried as
 patches at first and are now upstream (owngoal-dev/OpenAVB#1 and #2).
 `Firmware/openavb_boot_rom.md` describes
 each one and how it was found.
+
+## OpenSEP replaces AVPSEPBooter on new machines (2026-10-18)
+
+New machines start the SEP from OpenSEP (`Resources/OpenSEP/OpenSEP.bin`,
+built from `owngoal-dev/OpenSEP` at `39ff3d7` for its `vresearch1` platform,
+with no carried patches) instead of Virtualization.framework's
+`AVPSEPBooter.vresearch1.bin`. Apple's SEP ROM was never patched and OpenSEP is
+not either, so no patch, preset or plan changes: there is no SEP ROM component
+in `fw patch`. The SEP firmware (`sep-firmware.vphone600.RELEASE.im4p`, sent as
+`RestoreSEP` and loaded by iBoot) is unchanged and unpatched. Machines created
+before keep Apple's SEP ROM; `vm config --seprom opensep|apple` switches one
+without a restore. `Firmware/opensep_sep_rom.md` has the contract and the
+validation.

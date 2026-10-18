@@ -164,6 +164,7 @@ struct VPhoneVirtualMachineInfoCommand: ParsableCommand {
             print("unlock: \(report.unlocksAtStartup ? "on" : "off")")
             print("location: \(report.syncsHostLocation ? "on" : "off")")
             print("rom:   \(VPhoneBootROMOption.describe(bundle))")
+            print("seprom: \(VPhoneSEPROMOption.describe(bundle))")
             if let snapshots = try? VPhoneMachineSnapshots.list(of: bundle), !snapshots.isEmpty {
                 print("snapshots: \(snapshots.count)")
             }
@@ -198,7 +199,7 @@ struct VPhoneVirtualMachineNewCommand: ParsableCommand {
     @Option(name: .shortAndLong, help: "Memory (MB)") var memory: UInt64 = 8192
     @Option(name: .shortAndLong, help: "Disk size (GB)") var diskSize: UInt64 = 64
     @Option(name: .shortAndLong, help: VPhoneBootROMOption.help) var rom: String?
-    @Option(name: .shortAndLong, help: "AVPSEPBooter ROM (default: framework built-in)") var seprom: String?
+    @Option(name: .shortAndLong, help: VPhoneSEPROMOption.help) var seprom: String?
 
     func run() throws {
         let spec = VPhoneBundleOperations.NewBundleConfiguration(
@@ -207,7 +208,7 @@ struct VPhoneVirtualMachineNewCommand: ParsableCommand {
             memoryMB: memory,
             diskSizeGB: diskSize,
             romSource: VPhoneBootROMOption.source(for: rom),
-            sepromSource: seprom.map { URL(fileURLWithPath: $0) } ?? VPhoneBundleOperations.defaultSEPROMSource(),
+            sepromSource: VPhoneSEPROMOption.source(for: seprom),
         )
         let bundle = try VPhoneBundleOperations.create(spec, in: lib.library)
         print("created \(bundle.url.path)")
@@ -219,7 +220,7 @@ struct VPhoneVirtualMachineNewCommand: ParsableCommand {
 struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "config",
-        abstract: "Edit VM manifest fields (cpu/memory/network/startup/rom)",
+        abstract: "Edit VM manifest fields (cpu/memory/network/startup/rom/seprom)",
         discussion: """
         Network settings are read when the VM starts, so a change applies from the next launch.
 
@@ -254,6 +255,10 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
         AVPBooter (the machine's own patched copy when it has one), --rom <file> any other ROM. \
         Applies from the next start, without a restore: both ROMs load the same patched LLB. \
         Restoring a machine that boots OpenAVB needs a bundle with OpenAVB support.
+
+        --seprom opensep makes the bundle's OpenSEP the SEP ROM, --seprom apple Virtualization.framework's \
+        AVPSEPBooter, --seprom <file> any other SEP ROM. Applies from the next start, without a \
+        restore: both load the SEP firmware the restore installed.
         """,
     )
 
@@ -288,6 +293,8 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
     var syncHostLocation: String?
     @Option(name: .long, help: VPhoneBootROMOption.help)
     var rom: String?
+    @Option(name: .long, help: VPhoneSEPROMOption.help)
+    var seprom: String?
 
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
@@ -303,9 +310,14 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
             unlocksAtStartup: unlocks,
             syncsHostLocation: syncsLocation,
         )
+        var current = updated
         if let rom {
-            let installed = try VPhoneBootROMOption.install(rom, in: updated)
-            print("boot ROM: \(VPhoneBootROMOption.describe(installed)), from the next start")
+            current = try VPhoneBootROMOption.install(rom, in: current)
+            print("boot ROM: \(VPhoneBootROMOption.describe(current)), from the next start")
+        }
+        if let seprom {
+            current = try VPhoneSEPROMOption.install(seprom, in: current)
+            print("SEP ROM: \(VPhoneSEPROMOption.describe(current)), from the next start")
         }
         let m = updated.manifest
         print(

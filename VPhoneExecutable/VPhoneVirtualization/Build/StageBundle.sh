@@ -116,6 +116,13 @@ fi
     "$root/VPhoneExecutable/VPhoneVirtualization/Resources/OpenAVB/APSL-2.0.txt" \
     "$resources/OpenAVB/"
 
+# The SEP ROM new machines copy, with its licence. Checked in prebuilt; see
+# Resources/OpenSEP/README.md.
+/bin/mkdir -p "$resources/OpenSEP"
+/bin/cp "$root/VPhoneExecutable/VPhoneVirtualization/Resources/OpenSEP/OpenSEP.bin" \
+    "$root/VPhoneExecutable/VPhoneVirtualization/Resources/OpenSEP/LICENSE" \
+    "$resources/OpenSEP/"
+
 # Patch presets. Prewritten plists, read by vphone-cli at patch time to decide
 # which declared patches apply. Nothing generates or edits these.
 /bin/mkdir -p "$resources/patches_presets"
