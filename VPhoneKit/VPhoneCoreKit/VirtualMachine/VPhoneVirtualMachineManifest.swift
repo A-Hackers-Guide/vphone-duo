@@ -567,6 +567,27 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         )
     }
 
+    /// This manifest with other ROM file names.
+    public func updating(romImages: ROMImages) -> VPhoneVirtualMachineManifest {
+        VPhoneVirtualMachineManifest(
+            platformType: platformType,
+            platformFusing: platformFusing,
+            machineIdentifier: machineIdentifier,
+            cpuCount: cpuCount,
+            memorySize: memorySize,
+            screenConfig: screenConfig,
+            networkConfig: networkConfig,
+            diskImage: diskImage,
+            nvramStorage: nvramStorage,
+            romImages: romImages,
+            sepStorage: sepStorage,
+            guestProductType: guestProductType,
+            hardwareKeyboardEnabled: hardwareKeyboardEnabled,
+            unlocksAtStartup: unlocksAtStartup,
+            syncsHostLocation: syncsHostLocation,
+        )
+    }
+
     /// This manifest for a guest running `device`'s OS: its product type and
     /// its display. An iPhone17,3 guest records no product type, so its
     /// configuration stays readable by bundles that predate iPad guests.

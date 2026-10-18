@@ -1,0 +1,79 @@
+MIT License
+
+Copyright (c) 2026 owngoal-dev
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------------
+
+Third-party components
+
+The MIT License above covers the code written for OpenAVB. It does not
+replace the licences of third-party code included in this repository, which
+remain in force for those parts:
+
+Vendored directories (each keeps the upstream licence notice -- a LICENSE or
+COPYRIGHT file, or the notice inside the source -- and records its upstream
+pin in PROVENANCE.md):
+
+- vendor/lzfse        BSD-3-Clause   Copyright (c) 2015-2016 Apple Inc.
+                                     (four files modified; see PROVENANCE.md)
+- vendor/tinyusb      MIT            Copyright (c) 2012-2026 Ha Thach (tinyusb.org)
+- vendor/mbedtls      Apache-2.0     Copyright The Mbed TLS Contributors
+                                     (include/tf-psa-crypto/build_info.h is
+                                     an OpenAVB-written replacement)
+- vendor/libzbitmap   MIT            Copyright (c) 2022 Corellium LLC
+- vendor/musl-string  MIT            Copyright (c) 2005-2020 Rich Felker, et al.
+- vendor/nanoprintf   0BSD OR Unlicense (Charles Nicholson)
+- vendor/zlib-puff    zlib           Copyright (C) 2002-2013 Mark Adler
+- vendor/freestanding MIT            written for OpenAVB
+
+Individual files adapted from third-party sources. Each carries the upstream
+copyright and licence notice and an owngoal-dev modification notice:
+
+Apple Public Source License 2.0 (full text: LICENSES/APSL-2.0.txt):
+- include/avp/image/der/apple_libder.h        Apple libDER (Security-57740.60.18)
+- src/image/der/apple_libder_decode.c         Apple libDER (Security-57740.60.18)
+- src/image/der/apple_libder_sequence.c       Apple libDER (Security-57740.60.18)
+- src/image/compression/apple_lz4.c           XNU osfmk/vm/lz4.c
+- src/image/compression/apple_lzss.c          XNU libkern/mkext.c (also
+                                              carries Haruhiko Okumura's
+                                              LZSS.C notice)
+
+BSD-3-Clause:
+- src/image/compression/apple_compression_v1.c  lzfse lzfse_decode_base.c,
+                                                Copyright (c) 2015-2016 Apple Inc.
+- src/runtime/support/runtime_qsort.c           FreeBSD lib/libc/stdlib/qsort.c,
+                                                Copyright (c) 1992, 1993 The
+                                                Regents of the University of
+                                                California
+
+MIT:
+- src/image/img4/img4_decode_compat.c         PongoOS src/lib/img4/img4.c,
+                                              Copyright (C) 2021 checkra1n team
+- src/runtime/support/runtime_string_compat.c musl string routines (see
+                                              vendor/musl-string/COPYRIGHT)
+
+Data:
+- src/image/img4/img4_trust_rsa4k_anchor.inc  the public Apple DDI Secure Boot
+                                              Root CA - G1 certificate, used
+                                              as trust-anchor data; not
+                                              covered by the MIT License above.
+
+OpenAVB is not affiliated with or endorsed by Apple Inc.

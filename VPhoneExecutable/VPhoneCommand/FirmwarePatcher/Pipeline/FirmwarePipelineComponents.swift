@@ -106,25 +106,30 @@ extension FirmwarePipeline {
         // mDNSResponder → no DNS). Empty on 26.x bases (stock boot-args).
         let extraBootArgs = baseIs18 ? "if_attach_nx=0x3" : ""
 
-        // 1. AVPBooter — always present, lives in VM root.
-        //    Patched for every non-less variant (regular/dev/jb/exp).
-        components.append(ComponentDescriptor(
-            name: "AVPBooter",
-            inRestoreDir: false,
-            searchPatterns: ["AVPBooter*.bin"],
-            patcherFactories: {
-                if variant != .less, includeBootChain {
-                    return [
-                        { data, verbose in
-                            let p = AVPBooterPatcher(data: data, verbose: verbose)
-                            p.gate = gate
-                            return p
-                        },
-                    ]
-                }
-                return []
-            }(),
-        ))
+        // 1. AVPBooter — Apple's ROM, in the VM root. Patched for every non-less
+        //    variant (regular/dev/jb/exp). A machine booting OpenAVB has nothing
+        //    here to patch: OpenAVB checks no image digest, so the digest
+        //    bypass the plan selects already holds, and an Apple ROM kept in
+        //    the folder beside it is not the one that boots.
+        if VPhoneBootROM.kind(ofMachineAt: vmDirectory) != .openAVB {
+            components.append(ComponentDescriptor(
+                name: "AVPBooter",
+                inRestoreDir: false,
+                searchPatterns: ["AVPBooter*.bin"],
+                patcherFactories: {
+                    if variant != .less, includeBootChain {
+                        return [
+                            { data, verbose in
+                                let p = AVPBooterPatcher(data: data, verbose: verbose)
+                                p.gate = gate
+                                return p
+                            },
+                        ]
+                    }
+                    return []
+                }(),
+            ))
+        }
 
         // 2. iBSS — JB and EXP variants run the base iBSS patcher, then the nonce-skip extension.
         components.append(ComponentDescriptor(

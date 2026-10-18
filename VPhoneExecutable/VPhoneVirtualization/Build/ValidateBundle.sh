@@ -92,6 +92,33 @@ done
 for preset in "$resources/patches_presets/"*.plist; do
     /usr/bin/plutil -lint -s "$preset" || { print -u2 "Malformed patch preset: ${preset:t}"; exit 1; }
 done
+# New machines copy this ROM. Without it vm new would fail, and OpenAVB is
+# distributed only with its licences. The ROM window is 512 KiB.
+for name in OpenAVB.bin LICENSE APSL-2.0.txt; do
+    [[ -s "$resources/OpenAVB/$name" ]] || { print -u2 "Missing Contents/Resources/OpenAVB/$name"; exit 1; }
+done
+(( $(/usr/bin/stat -f %z "$resources/OpenAVB/OpenAVB.bin") <= 0x80000 )) || {
+    print -u2 "OpenAVB.bin is larger than the 512 KiB ROM window"
+    exit 1
+}
+/usr/bin/grep -q 'OpenBootROM:' "$resources/OpenAVB/OpenAVB.bin" || {
+    print -u2 "Contents/Resources/OpenAVB/OpenAVB.bin is not an OpenAVB image"
+    exit 1
+}
+# The SEP ROM new machines copy, and its licence. The SEP ROM window is
+# 0x29000 bytes. Apple's AVPSEPBooter carries its version string and OpenSEP
+# none, which is how a machine's SEP ROM is told apart (VPhoneSEPROM).
+for name in OpenSEP.bin LICENSE; do
+    [[ -s "$resources/OpenSEP/$name" ]] || { print -u2 "Missing Contents/Resources/OpenSEP/$name"; exit 1; }
+done
+(( $(/usr/bin/stat -f %z "$resources/OpenSEP/OpenSEP.bin") <= 0x29000 )) || {
+    print -u2 "OpenSEP.bin is larger than the 0x29000-byte SEP ROM window"
+    exit 1
+}
+if /usr/bin/grep -q 'AVPSEPBooter-' "$resources/OpenSEP/OpenSEP.bin"; then
+    print -u2 "Contents/Resources/OpenSEP/OpenSEP.bin is Apple's AVPSEPBooter, not OpenSEP"
+    exit 1
+fi
 
 for name in vphoned vphoned-tvos launchdhook-vphone.dylib SystemHook-vphone.dylib libcamfix.dylib \
     libvcamcaptured.dylib libmisfix.dylib libhapticsfix.dylib libbatteryhealthfix.dylib libdevicehubfix.dylib libdevicename.dylib \

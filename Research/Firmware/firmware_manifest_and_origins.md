@@ -73,7 +73,8 @@ Key distinctions:
 
 | Component     | Source Identity               | File                                                          | Patches Applied                                                          |
 | ------------- | ----------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| **AVPBooter** | PCC vresearch1                | `AVPBooter*.bin` (vm dir)                                     | DGST validation bypass (`mov x0, #0`)                                    |
+| **AVPBooter** | PCC vresearch1                | `AVPBooter*.bin` (vm dir)                                     | DGST validation bypass (`mov x0, #0`); none on machines booting OpenAVB  |
+| **SEP ROM**   | vresearch1                    | `AVPSEPBooter*.bin`, or `OpenSEP.bin` on new machines (vm dir) | Not patched (`opensep_sep_rom.md`)                                       |
 | **iBSS**      | PROD (vresearch101ap release) | `Firmware/dfu/iBSS.vresearch101.RELEASE.im4p`                 | Serial labels + image4 callback bypass                                   |
 | **iBEC**      | PROD (vresearch101ap release) | `Firmware/dfu/iBEC.vresearch101.RELEASE.im4p`                 | Serial labels + image4 callback + boot-args                              |
 | **LLB**       | PROD (vresearch101ap release) | `Firmware/all_flash/LLB.vresearch101.RELEASE.im4p`            | Serial labels + image4 callback + boot-args + rootfs + panic (6 patches) |
@@ -430,7 +431,7 @@ fires **only during installation**. After restore completes, the boot
 path is
 
 ```
-AVPBooter (patched)
+AVPBooter (patched), or OpenAVB on new machines
    → iBSS / iBEC (image4_validate_property_callback bypass patches)
    → LLB (image4 bypass + rootfs bypass patches)
    → iBoot (research) → DT loaded from disk

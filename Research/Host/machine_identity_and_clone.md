@@ -69,14 +69,17 @@ The boot chain already ignores the ECID in its tickets
 ([iBoot patches](../Firmware/iboot_patches.md),
 [firmware manifest and origins](../Firmware/firmware_manifest_and_origins.md)):
 
-- AVPBooter's DGST bypass loads LLB from `nvram.bin`.
+- AVPBooter's DGST bypass loads LLB from `nvram.bin`; OpenAVB, which new
+  machines boot, checks no digest at all ([OpenAVB boot ROM](../Firmware/openavb_boot_rom.md)).
 - iBSS, iBEC and LLB force `image4_validate_property_callback` to return 0.
   That callback checks `ECID`, `BNCH`, `BORD`, `CHIP` and the rest, so a
   mismatched ECID passes with them. LLB and iBoot load the kernel, device tree,
   TXM and SPTM from Preboot through the same callback.
 - The SEP firmware is checked by the unpatched AVPSEPBooter, which still logs
   `AppleSEPBooter: SEP accepted IMG4` under a new ECID: the virtual SEP ROM
-  does not enforce it.
+  does not enforce it. OpenSEP, which new machines start the SEP from, logs its
+  chain evaluation and does not enforce it either
+  ([OpenSEP SEP ROM](../Firmware/opensep_sep_rom.md)).
 
 A new-identity clone's serial log shows the new ECID in `USB_SERIAL_NUMBER`.
 Its error and failure lines, normalized, are identical to those of a clone that

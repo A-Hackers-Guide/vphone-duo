@@ -21,6 +21,7 @@
 #define VPHONE_RESTORE_BRIDGE_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -158,6 +159,25 @@ struct vphone_restore_options {
  * negative idevicerestore result.
  */
 int vphone_restore_run(const struct vphone_restore_options *options);
+
+/* --- OpenAVB ----------------------------------------------------------- */
+
+/* The size of OpenAVB's patch-store stage header (AVPPatchStageHeader). */
+#define VPHONE_OPENAVB_IDENTITY_SIZE 112
+
+/*
+ * The stage header a restore uploads to OpenAVB before iBSS goes over DFU:
+ * the sizes and SHA-256 digests of the iBSS IM4P payload and of the image it
+ * decodes to, iBoot's link address, entry exception level 2, the identity
+ * flag and no patch rows. `image` is an IMG4 or a bare IM4P whose payload is
+ * LZFSE. The restore does this itself when the ROM is OpenAVB; it is public
+ * so the layout can be tested without a device.
+ *
+ * Returns 0 and fills `header`, or -1 and points `reason` (when non-NULL) at
+ * a static sentence saying what is wrong with the image.
+ */
+int vphone_restore_openavb_ibss_identity(const void *image, size_t size,
+    uint8_t header[VPHONE_OPENAVB_IDENTITY_SIZE], const char **reason);
 
 #ifdef __cplusplus
 }

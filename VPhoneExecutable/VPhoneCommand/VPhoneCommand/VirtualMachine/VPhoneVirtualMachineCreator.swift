@@ -440,6 +440,12 @@ public struct VPhoneVirtualMachineCreator {
         let clone = try VPhoneMachineTemplates.cloneMachine(from: template, to: options.name, in: library)
         outputs.add(clone.url)
         do {
+            // The ROMs are not part of a template's key: they change without a
+            // restore. A template built before OpenAVB or OpenSEP still starts
+            // Apple's, so the machine gets this bundle's ROMs, as a `vm new`
+            // would.
+            let booted = try VPhoneBundleOperations.installBootROM(from: VPhoneBundleOperations.defaultROMSource(), in: clone)
+            try VPhoneBundleOperations.installSEPROM(from: VPhoneBundleOperations.defaultSEPROMSource(), in: booted)
             try applySettings(options)
         } catch {
             try? FileManager.default.removeItem(at: clone.url)
