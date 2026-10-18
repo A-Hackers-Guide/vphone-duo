@@ -47,12 +47,21 @@
 > instructions are forwarded to the captured kernel exception destination.
 >
 > **Restore seal.** For iOS 27 with cloudOS 26.4, the restore patch resolves the
-> manifest-selected ramdisk, locates `apfs_sealvolume`'s options template from
-> its unique getopt xref and decoded copy sequence, changes hash type `1`
-> (`sha256`) to `0x106` (`sha3_256_4k`), and re-attests the modified
+> manifest-selected `SystemVolume` `isys` root-hash payload first. Only hash type
+> `0x106` (`sha3_256_4k`) needs a changed restore tool. For that image, the
+> patch resolves the manifest-selected ramdisk, locates `apfs_sealvolume`'s
+> options template from its unique getopt xref and decoded copy sequence,
+> changes hash type `1` (`sha256`) to `0x106`, and re-attests the modified
 > CodeDirectory page. The ordered trust-cache pass replaces exactly that
 > executable's cdhash, preserves the two metadata bytes and restores v1 sort
-> order. Discovery, signature coverage or uniqueness failures abort the patch.
+> order. The 27.0.1 (24A446) IPSWs for iPhone17,1–5 and iPhone18,1–5 all
+> have root-hash type `1` in both SystemVolume entries; iPhone19,2 has `0x106`.
+> SHA-256 images leave both cloudOS restore files pristine. The logical plan
+> and template key keep the user's selection stable; `PatchPlan.plist` records
+> the patch as not applicable and omits it from the effective plan and restore
+> receipt. Unknown
+> hash types or malformed metadata abort before patching; discovery,
+> signature coverage or uniqueness failures also abort the SHA3 patch.
 >
 > **Validation and limits.** On an M5 Max guest, the unsupported-feature path
 > completed a clean offline restore, logged `Sealing System Volume`, and the
@@ -603,7 +612,7 @@
 
 | # | Patch | Component | Purpose | Regular | Dev | JB |
 | --- | --- | --- | --- | :---: | :---: | :---: |
-| 1 | `restoreramdisk-boot-apfs_sha3_hash.hash_type` | `RestoreRamDisk` / `apfs_sealvolume` | Select APFS hash type `0x106` (`sha3_256_4k`) and re-attest the modified Mach-O page | Y | Y | Y |
+| 1 | `restoreramdisk-boot-apfs_sha3_hash.hash_type` | `RestoreRamDisk` / `apfs_sealvolume` | When the manifest-selected SystemVolume root hash names `0x106`, select `sha3_256_4k` and re-attest the modified Mach-O page; SHA-256 images remain unchanged | Y | Y | Y |
 | 2 | `restoreramdisk-boot-apfs_sha3_hash.trustcache` | `RestoreTrustCache` | Replace the old sealing-tool cdhash with the re-attested cdhash and restore v1 entry order | Y | Y | Y |
 
 The patch is gated to an iOS 27 base paired with cloudOS 26.4. Both paths are

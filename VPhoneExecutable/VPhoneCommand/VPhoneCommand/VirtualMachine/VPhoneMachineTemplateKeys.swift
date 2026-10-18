@@ -193,7 +193,7 @@ enum VPhoneMachineTemplateKeys {
             cloudOSBuild: info.cloudOS.build,
             patchPreset: plan.presetIdentifier,
             bootChainPlanDigest: VPhoneMachineTemplateKey.planDigest(
-                bootChainPatches: bootChainPatches(plan.enabledPatches),
+                bootChainPatches: bootChainPatches(plan.selectedPatches),
                 parameters: plan.parameters,
             ),
             bundleSeries: series,
@@ -288,8 +288,14 @@ enum VPhoneMachineTemplateKeys {
                allowed: selection.allowedPatches,
            )
         {
-            let planned = VPhonePatchPresetStore.plan(forVM: template.url).map { Set($0.enabledPatches) }
-            drifted = drift(of: bundle, wanted: wanted.enabled, planned: planned)
+            let recordedPlan = VPhonePatchPresetStore.plan(forVM: template.url)
+            let notApplicable = Set(recordedPlan?.notApplicablePatches ?? [])
+            let planned = recordedPlan.map { Set($0.enabledPatches) }
+            drifted = drift(
+                of: bundle,
+                wanted: wanted.enabled.subtracting(notApplicable),
+                planned: planned,
+            )
         }
         return template.staleReasons(currentSeries: currentSeries, freshKey: fresh, driftedPatches: drifted)
     }

@@ -217,11 +217,12 @@ extension FirmwarePipeline {
         let includeSealPatch = variant != .less
             && includeBootChain
             && isEnabled(sealPatch, fallback: baseIs27 && cloudIs264)
+            && !notApplicablePatches.contains(sealPatch)
+        let manifestURL = restoreDir.appendingPathComponent("BuildManifest.plist")
         // Empty factories restore both originals when the patch is disabled.
         let includeSealComponents = includeSealPatch || (baseIs27 && cloudIs264)
         if includeSealComponents {
             // Catalogue-only tests have no restore tree.
-            let manifestURL = restoreDir.appendingPathComponent("BuildManifest.plist")
             if FileManager.default.fileExists(atPath: manifestURL.path) {
                 let ramdiskPath = try Self.manifestComponentPath("RestoreRamDisk", in: restoreDir)
                 let trustCachePath = try Self.manifestComponentPath("RestoreTrustCache", in: restoreDir)

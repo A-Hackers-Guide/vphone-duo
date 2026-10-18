@@ -1,9 +1,71 @@
 @testable import FirmwarePatcher
 import Foundation
+import Img4tool
 import Testing
+import VPhonePatchKit
 
 @Suite("Restore ramdisk APFS seal compatibility")
 struct RestoreRamDiskSealPatcherTests {
+    @Test(arguments: [UInt32(1), UInt32(0x106)])
+    func `hash type comes from the manifest-selected SystemVolume IM4P`(_ hashType: UInt32) throws {
+        let root = try rootHashFixture(hashType: hashType)
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(try RestoreRamDiskSealPatcher.systemVolumeHashType(in: root) == hashType)
+    }
+
+    @Test
+    func `unknown SystemVolume hash type fails closed`() throws {
+        let root = try rootHashFixture(hashType: 0x107)
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(throws: PatcherError.self) {
+            _ = try RestoreRamDiskSealPatcher.systemVolumeHashType(in: root)
+        }
+    }
+
+    @Test
+    func `root hash digest length must match the known format`() throws {
+        let root = try rootHashFixture(hashType: 1, digestLength: 16)
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(throws: PatcherError.self) {
+            _ = try RestoreRamDiskSealPatcher.systemVolumeHashType(in: root)
+        }
+    }
+
+    @Test(arguments: [UInt32(1), UInt32(0x106)])
+    func `root hash metadata changes applicability without rewriting the plan`(_ hashType: UInt32) throws {
+        let root = try rootHashFixture(hashType: hashType)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pipeline = FirmwarePipeline(
+            vmDirectory: root,
+            variant: .jb,
+            verbose: false,
+            preset: FirmwarePatchSetCatalog.standardPreset,
+        )
+        let plan = try #require(try pipeline.resolvePlan(
+            iOSBase: VPhoneVersion("27.0.1"),
+            cloudOS: VPhoneVersion("26.4"),
+        ))
+        try pipeline.resolveFirmwareApplicability(
+            restoreDir: root,
+            iOSBase: VPhoneVersion("27.0.1"),
+            cloudOS: VPhoneVersion("26.4"),
+            plan: plan,
+        )
+        let identifier = RestoreRamDiskSealPatcher.patchIdentifier
+        #expect(plan.isEnabled(identifier))
+        #expect(pipeline.notApplicablePatches == (hashType == 1 ? Set([identifier]) : []))
+        let components = try pipeline.buildComponentList(
+            restoreDir: root,
+            iOSBase: VPhoneVersion("27.0.1"),
+            plan: plan,
+            gate: VPhonePatchGate(plan: plan),
+        )
+        let count = components
+            .filter { $0.name == "RestoreRamDisk" || $0.name == "RestoreTrustCache" }
+            .reduce(0) { $0 + $1.patcherFactories.count }
+        #expect(count == (hashType == 0x106 ? 2 : 0))
+    }
+
     @Test
     func `v1 trust cache replacement stays sorted and preserves metadata`() throws {
         let oldHash = Data(repeating: 0x20, count: 20)
@@ -61,5 +123,34 @@ struct RestoreRamDiskSealPatcherTests {
 
     private func append(_ value: UInt32, to data: inout Data) {
         withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) }
+    }
+
+    private func rootHashFixture(hashType: UInt32, digestLength: UInt32 = 32) throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vphone-root-hash-test-\(UUID().uuidString)", isDirectory: true)
+        let path = "Firmware/selected.root_hash"
+        let file = root.appending(path: path)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var payload = Data(repeating: 0, count: 208)
+        payload.replaceSubrange(8 ..< 12, with: withUnsafeBytes(of: hashType.littleEndian) { Data($0) })
+        payload.replaceSubrange(12 ..< 16, with: withUnsafeBytes(of: digestLength.littleEndian) { Data($0) })
+        try IM4P(fourcc: "isys", description: "0", payload: payload).data.write(to: file)
+        var decoy = payload
+        let other: UInt32 = hashType == 1 ? 0x106 : 1
+        decoy.replaceSubrange(8 ..< 12, with: withUnsafeBytes(of: other.littleEndian) { Data($0) })
+        try IM4P(fourcc: "isys", description: "0", payload: decoy).data
+            .write(to: root.appending(path: "Firmware/decoy.root_hash"))
+        let manifest: [String: Any] = [
+            "BuildIdentities": [[
+                "Manifest": [
+                    "SystemVolume": ["Info": ["Path": path]],
+                    "RestoreRamDisk": ["Info": ["Path": "Firmware/ramdisk.dmg"]],
+                    "RestoreTrustCache": ["Info": ["Path": "Firmware/trustcache.im4p"]],
+                ],
+            ]],
+        ]
+        let data = try PropertyListSerialization.data(fromPropertyList: manifest, format: .xml, options: 0)
+        try data.write(to: root.appending(path: "BuildManifest.plist"))
+        return root
     }
 }
