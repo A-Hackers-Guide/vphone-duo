@@ -10,8 +10,8 @@ the image into each new machine folder.
 | | |
 | --- | --- |
 | Source | `https://github.com/owngoal-dev/OpenAVB` |
-| Commit | `115169e61a206a967bb2299e5c3145888741bba3` |
-| Patches | `patches/*.patch`, applied in order (one) |
+| Commit | `3c7e7f602d2d35af67f50454a8216337f35b11bb` |
+| Patches | none (`patches/*.patch`, applied in order, when there are any) |
 | Target | `make build/OpenAVB.bin` |
 | Toolchain | Homebrew LLVM 23.1.3 (`clang`, `llvm-objcopy`), Homebrew LLD 23.1.3 |
 | SHA-256 | `d63ea62226d4383288a5a36c440aa2d1df8cccabe0118cac0ab2e0c23ba4c3d2` |
@@ -26,19 +26,18 @@ header). It clones and builds outside the repository and needs
 
 ## Patches
 
-One, not upstream yet:
-`0001-Wait-for-the-SEP-before-the-first-request-after-a-wa.patch`. After a
-guest reboot the SEP restarts together with the ROM, and a request sent
-before it is up was dropped, so every guest reboot hung. The ROM now waits
-for the SEP's first message before sending.
-
-OpenAVB's first commit, `54b67bf`, did not run under
+None. OpenAVB's first commit, `54b67bf`, did not run under
 Virtualization.framework. Five changes found on live machines made it boot and
 restore, and upstream took them in
-[owngoal-dev/OpenAVB#1](https://github.com/owngoal-dev/OpenAVB/pull/1). Upstream `main`
-(`115169e`) carries them and, without the patch above, builds the same image the patched
-`54b67bf` did. `Research/Firmware/openavb_boot_rom.md` has the evidence for
-each change.
+[owngoal-dev/OpenAVB#1](https://github.com/owngoal-dev/OpenAVB/pull/1), now
+part of `115169e`. A sixth let a guest reboot: after a reboot the SEP restarts
+together with the ROM, a request sent before it was up was dropped, and every
+reboot hung, so the ROM now waits for the SEP's first message before sending.
+Upstream took it in
+[owngoal-dev/OpenAVB#2](https://github.com/owngoal-dev/OpenAVB/pull/2). The pin
+is that PR's commit, `3c7e7f6`, which `main` reaches through the merge
+`63c1ead` (same tree), rather than the merge itself.
+`Research/Firmware/openavb_boot_rom.md` has the evidence for each change.
 
 If vphone needs a change upstream has not taken yet, put it in `patches/` as a
 `git format-patch` file. `UpdateOpenAVB.sh` applies patches in order and

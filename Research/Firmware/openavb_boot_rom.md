@@ -78,8 +78,10 @@ Virtualization.framework it did not start. Five changes made it boot and
 restore. vphone carried them as patches until upstream took them in
 [owngoal-dev/OpenAVB#1](https://github.com/owngoal-dev/OpenAVB/pull/1),
 merged as `02ca2e5`. Upstream then rewrote `main` into one commit, `115169e`,
-which keeps those changes, is the pin, and builds the same image the patched
-`54b67bf` did, and OpenAVB's `make verify` passes on it. Each change
+which keeps those changes and builds the same image the patched `54b67bf`
+did. A sixth change, found later, went upstream in
+[owngoal-dev/OpenAVB#2](https://github.com/owngoal-dev/OpenAVB/pull/2) as
+`3c7e7f6`, which is the pin; OpenAVB's `make verify` passes on it. Each change
 was found on a live machine by the first thing that stopped, in this order:
 
 1. **ROM aperture is read-only.** `_start` stores `avp_el2_present` at
@@ -109,9 +111,8 @@ was found on a live machine by the first thing that stopped, in this order:
    (`4d682d940d6c950:514`: an event record whose type byte is not 1, 2 or 3).
    The handoff now writes the device's two enable registers (`+0x404`,
    `+0x400`) back to 0, and iBSS initializes it itself.
-6. **SEP not ready after a warm reset** (carried as
-   `patches/0001-Wait-for-the-SEP-before-the-first-request-after-a-wa.patch`,
-   not upstream yet). A guest reboot is a PSCI `SYSTEM_RESET`, which restarts
+6. **SEP not ready after a warm reset** (owngoal-dev/OpenAVB#2, carried as a
+   patch until it was merged). A guest reboot is a PSCI `SYSTEM_RESET`, which restarts
    the SEP together with the AP. Cold boots and restores worked, but every
    guest reboot hung: the console filled with `SEP RX timeout`, and
    Launchpad's setup boot failed at "the guest did not come back from the
@@ -155,7 +156,7 @@ reach the VM's serial log.
   accepted`, iBSS and iBEC print `Remote boot`, and the restore ends `Restore
   Finished` with 86 boot-chain patches in the receipt.
   With CFW installed it boots to iOS on OpenAVB and vphoned answers.
-- Guest reboot (2026-10-18, with patch 0001): `system.reboot` on that machine
+- Guest reboot (2026-10-18, with change 6): `system.reboot` on that machine
   comes back in 10 s, three times out of three, with no `SEP RX timeout`.
   `vm template setup` (Launchpad's setup boot, which failed at its reboot
   step without the patch) passes, the reboot taking 9 s. A second full DFU
@@ -173,8 +174,14 @@ log show `OpenBootROM:` for OpenAVB.
 
 ## Upstream
 
-Changes 1 to 5 are upstream (owngoal-dev/OpenAVB#1; `main` at `115169e`
-carries them). Change 6 is carried in `Resources/OpenAVB/patches/` as a
-`git format-patch` file until upstream takes it; delete it when the pin moves
-past it.
+All six changes are upstream: 1 to 5 in owngoal-dev/OpenAVB#1 (folded into
+`115169e`), 6 in owngoal-dev/OpenAVB#2. vphone carries no patch. The pin is
+#2's own commit, `3c7e7f6`, not its merge `63c1ead`: both have the same tree
+and `main` reaches both, but upstream has rewritten `main` once, and GitHub
+keeps a PR's head commit reachable (`refs/pull/2/head`) after a rewrite. If
+upstream rewrites `main` again, `UpdateOpenAVB.sh` fails at checkout; move the
+pin to the rewritten commit that builds the same image.
+
+A change upstream has not taken yet goes in `Resources/OpenAVB/patches/` as a
+`git format-patch` file; delete it when the pin moves past it.
 `UpdateOpenAVB.sh` refuses a patch that no longer applies.

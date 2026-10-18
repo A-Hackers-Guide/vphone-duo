@@ -3185,9 +3185,9 @@ they are.
 ## OpenAVB replaces AVPBooter on new machines (2026-10-18)
 
 New machines boot OpenAVB (`Resources/OpenAVB/OpenAVB.bin`, built from
-`owngoal-dev/OpenAVB` at `115169e`, which includes vphone's five
-Virtualization.framework fixes, plus one carried patch that lets a guest
-reboot: the ROM waits for a SEP restarted by the reset) instead of
+`owngoal-dev/OpenAVB` at `3c7e7f6`, with no carried patches; upstream
+includes vphone's six Virtualization.framework fixes, the last of which lets a
+guest reboot: the ROM waits for a SEP restarted by the reset) instead of
 Virtualization.framework's `AVPBooter.vresearch1.bin`. OpenAVB checks no image
 digest, so `avpbooter-boot-dgst_bypass` has nothing to patch on such a machine:
 `fw patch` drops the AVPBooter component when `romImages.avpBooter` names an
@@ -3205,6 +3205,7 @@ Two boot-chain files change form, not content:
 
 No patch site moved and no patch was added or removed. The OpenAVB-side
 changes (read-only ROM aperture, chip ID 0, DFU suffix CRC, remote-boot bit,
-USB device left running) were carried as patches at first and are now
-upstream (owngoal-dev/OpenAVB#1). `Firmware/openavb_boot_rom.md` describes
+USB device left running, SEP not ready after a warm reset) were carried as
+patches at first and are now upstream (owngoal-dev/OpenAVB#1 and #2).
+`Firmware/openavb_boot_rom.md` describes
 each one and how it was found.

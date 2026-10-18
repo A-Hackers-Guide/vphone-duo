@@ -20,7 +20,7 @@
 set -euo pipefail
 
 repository="https://github.com/owngoal-dev/OpenAVB.git"
-pinned="115169e61a206a967bb2299e5c3145888741bba3"
+pinned="3c7e7f602d2d35af67f50454a8216337f35b11bb"
 
 root="$(cd "${0:a:h}/../../.." && pwd)"
 destination="$root/VPhoneExecutable/VPhoneVirtualization/Resources/OpenAVB"
