@@ -3351,3 +3351,47 @@ ldid's signature (no ad-hoc flag, empty CMS blob), and launchd panicked at its
 first boot task ("launchd_cache_loader - posix_spawn: 85: Bad executable").
 vphoned, its launch daemon plist and the rewritten `launchd.plist` belong to
 root:wheel, as the system's own; they kept the host user's owner and group.
+
+## The research board stands in for vphone600 (2026-10-19)
+
+Only the 26.1–26.4 beta cloudOS releases (up to 23E5207q) carry a vphone600ap
+build identity. The 26.4 release and every one up to 26.7, and the 18.x
+releases, have the research board alone (vresearch101ap). `FirmwareManifest`
+now takes the research identities for the vphone600 components when there is
+no vphone600ap, and leaves `RecoveryMode` out when the identity has none.
+The new set `com.vphone.patchset.research.board` turns those components into
+vphone600's. Every shipped preset names it. Its patches write only where they
+find the research board, so a cloudOS with vphone600 components records
+nothing and stays byte-identical.
+
+**`devicetree-boot-vresearch101_conversion`**
+(`DeviceTreeResearchBoardConversion.swift`) rewrites the research tree before
+any other device tree patch runs, whatever the selection, because those are
+written against vphone600 paths and values. It finds the research tree by its
+root `target-type` (`VRESEARCH101`) and then:
+
+- sets the root identity (`VPHONE600AP`, `iPhone99,11`);
+- adds the seven nodes the research board lacks: `/buttons`,
+  `/arm-io/multi-touch`, `/arm-io/bluetooth`,
+  `/product/vphone600-gestalt-variants` with its `d47vm2025vre-variant`,
+  `/product/maps` and `/product/haptics`. Each goes where vphone600 has it and
+  gets an unused `AAPL,phandle`;
+- sets the phone's `/product`, `/defaults`, `/filesystems` and gestalt
+  variant properties, most of them `syscfg/` placeholders (flag 0x8000);
+- removes `/defaults/pmap-max-asids` and `/product/kernel-core-dump-location`.
+
+Existing phandles are kept, so `interrupt-parent`, `device-interrupt-parent`
+and `serial-device` keep naming the nodes they named. The earlier port
+renumbered every node and repaired those three references by hand, which
+would have broken any other reference.
+
+Checked against Apple: converting the vresearch101 tree of cloudOS 26.1
+(`399b664d`) and of the 26.4 beta (`c0ecdb4b`) gives their vphone600 tree
+property for property. The only differences are the build `time-stamp`, the
+order properties are stored in, and the phandle numbers, which are compared
+through the node each reference names. `DeviceTreeResearchBoardTests` runs
+that comparison whenever an IPSW in `ipsws/` carries both trees.
+
+`fw prepare` still refuses a cloudOS without vphone600ap
+(`VPhoneIPSWCache.checkPair`): the guest also needs a kernel with the
+iPhone's kexts, which the research board's kernelcache does not have.

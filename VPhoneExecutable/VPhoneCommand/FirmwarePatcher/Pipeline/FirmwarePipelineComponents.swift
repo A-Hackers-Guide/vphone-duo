@@ -314,11 +314,19 @@ extension FirmwarePipeline {
         //    properties so the guest presents a consistent iPhone17,3 identity.
         //    A guest that presents its board restores with this tree and boots
         //    its own copy (7b).
+        //    The tree is vphone600's, or the research board's on a cloudOS
+        //    without vphone600 components, which the patcher converts first
+        //    (FirmwareResearchBoardPatchSet). `RestoreDeviceTree` names it either
+        //    way; `DeviceTree` names the board's copy (7b). A tree whose manifest
+        //    names none (catalogue tests) keeps vphone600's.
         let dtIncludeIdentity = variant == .jb || variant == .exp
+        let convertsResearchBoard = includesSet(FirmwareResearchBoardPatchSet.identifier)
+        let deviceTreePath = (try? Self.manifestComponentPath("RestoreDeviceTree", in: restoreDir))
+            ?? "Firmware/all_flash/DeviceTree.vphone600ap.im4p"
         components.append(ComponentDescriptor(
             name: "DeviceTree",
             inRestoreDir: true,
-            searchPatterns: ["Firmware/all_flash/DeviceTree.vphone600ap.im4p"],
+            searchPatterns: [deviceTreePath],
             patcherFactories: includeDeviceTree ? [{ data, verbose in
                 let p = DeviceTreePatcher(
                     data: data,
@@ -328,6 +336,7 @@ extension FirmwarePipeline {
                     role: hasGuestTree ? .restore : .shared,
                 )
                 p.gate = gate
+                p.convertsResearchBoard = convertsResearchBoard
                 return p
             }] : [],
         ))
@@ -352,6 +361,7 @@ extension FirmwarePipeline {
                         sourceTree: self.loader.load(from: self.pristineInput(for: boardTreeURL).url),
                     )
                     p.gate = gate
+                    p.convertsResearchBoard = convertsResearchBoard
                     return p
                 }] : [],
             ))

@@ -76,12 +76,20 @@ public enum FirmwareManifest {
         // per board it covers, so the userland one is picked by board.
         let device = chosen ?? VPhoneGuestDevice.detect(buildManifest: iPhoneBM) ?? .default
         let (prod, res) = try findCloudOS(cloudIdentities, deviceClass: "vresearch101ap")
-        let (vp, vpr) = try findCloudOS(cloudIdentities, deviceClass: "vphone600ap")
+        // Only the 26.1–26.4 beta cloudOS releases carry vphone600ap. Every other
+        // one boots the research board's own device tree and SEP, which
+        // `fw patch` converts (FirmwareResearchBoardPatchSet).
+        let vphone = try? findCloudOS(cloudIdentities, deviceClass: "vphone600ap")
+        let (vp, vpr) = vphone ?? (prod, res)
         let iErase = try findIPhoneErase(iPhoneIdentities, deviceClass: device.deviceClass)
 
         if verbose {
             print("  cloudOS vresearch101ap: release=#\(prod), research=#\(res)")
-            print("  cloudOS vphone600ap:    release=#\(vp), research=#\(vpr)")
+            if vphone == nil {
+                print("  cloudOS vphone600ap:    none, the research board stands in")
+            } else {
+                print("  cloudOS vphone600ap:    release=#\(vp), research=#\(vpr)")
+            }
             print("  \(device.productType) erase: #\(iErase)")
         }
 
@@ -381,8 +389,10 @@ public enum FirmwareManifest {
         m["KernelCache"] = try entry(C, vpr, "KernelCache") // research
         m["RestoreKernelCache"] = try entry(C, vp, "RestoreKernelCache") // release
 
-        // Recovery mode (vphone600ap carries this entry).
-        m["RecoveryMode"] = try entry(C, vp, "RecoveryMode")
+        // Recovery mode, which vphone600ap carries and the research board may not.
+        if let recoveryMode = try? entry(C, vp, "RecoveryMode") {
+            m["RecoveryMode"] = recoveryMode
+        }
 
         // CloudOS erase ramdisk.
         m["RestoreRamDisk"] = try entry(C, prod, "RestoreRamDisk")

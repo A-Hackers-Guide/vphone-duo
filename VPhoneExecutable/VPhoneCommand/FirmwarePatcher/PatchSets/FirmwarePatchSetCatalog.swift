@@ -16,6 +16,7 @@ public enum FirmwarePatchSetCatalog {
         FirmwareKernelCustomFirmwarePatchSet.manifest,
         FirmwareKernelHypervisorPatchSet.manifest,
         FirmwareKernelFridaPatchSet.manifest,
+        FirmwareResearchBoardPatchSet.manifest,
         FirmwareDeviceTreePatchSet.manifest,
         FirmwareGuestSystemPatchSet.manifest,
         FirmwareGuestDisplayPatchSet.manifest,
@@ -350,12 +351,14 @@ public enum FirmwarePatchSetCatalog {
         summary: "No kernel or TXM patches and only iBEC and LLB in the boot chain: the restore installs a resealed system with vphoned, the GPU driver and activation, and nothing writes it afterwards.",
         patchSets: [
             .bundled(FirmwareBootChainPatchSet.identifier),
+            .bundled(FirmwareResearchBoardPatchSet.identifier),
             .bundled(FirmwareDeviceTreePatchSet.identifier),
             .bundled(FirmwareRestoreImagePatchSet.identifier),
         ],
         selection: .allow(
             minimalBootChainPatches
                 .union(minimalDeviceTreePatches)
+                .union(FirmwareResearchBoardPatchSet.manifest.patches.map(\.identifier))
                 .union(FirmwareRestoreImagePatchSet.manifest.patches.map(\.identifier)),
         ),
     )

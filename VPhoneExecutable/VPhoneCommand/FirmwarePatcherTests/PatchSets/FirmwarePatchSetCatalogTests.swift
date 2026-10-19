@@ -172,7 +172,7 @@ struct FirmwarePatchSetCatalogTests {
     }
 
     @Test
-    func `Only minimal names the restore image, and patches only iBEC, LLB and the device tree besides`() throws {
+    func `Only minimal names the restore image, and patches only iBEC, LLB, the device tree and the research board besides`() throws {
         for preset in FirmwarePatchSetCatalog.builtInPresets {
             let namesRestoreImage = preset.patchSets.map(\.identifier).contains(FirmwareRestoreImagePatchSet.identifier)
             #expect(namesRestoreImage == (preset.identifier == VPhonePatchPreset.minimalIdentifier), "\(preset.identifier)")
@@ -185,7 +185,8 @@ struct FirmwarePatchSetCatalogTests {
         )
         let restoreImage = Set(FirmwareRestoreImagePatchSet.manifest.patches.map(\.identifier))
         let bootChain = FirmwarePatchSetCatalog.minimalBootChainPatches
-        #expect(plan.enabled == restoreImage.union(FirmwarePatchSetCatalog.minimalDeviceTreePatches).union(bootChain))
+        let researchBoard = Set(FirmwareResearchBoardPatchSet.manifest.patches.map(\.identifier))
+        #expect(plan.enabled == restoreImage.union(FirmwarePatchSetCatalog.minimalDeviceTreePatches).union(bootChain).union(researchBoard))
         #expect(plan.droppedBootEssentials.allSatisfy { !$0.hasPrefix("ibec-") && !$0.hasPrefix("llb-") })
     }
 

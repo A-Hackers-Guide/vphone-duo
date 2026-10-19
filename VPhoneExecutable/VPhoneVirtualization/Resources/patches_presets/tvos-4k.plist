@@ -38,6 +38,12 @@
 		</dict>
 		<dict>
 			<key>Identifier</key>
+			<string>com.vphone.patchset.research.board</string>
+			<key>Kind</key>
+			<string>Bundled</string>
+		</dict>
+		<dict>
+			<key>Identifier</key>
 			<string>com.vphone.patchset.devicetree</string>
 			<key>Kind</key>
 			<string>Bundled</string>

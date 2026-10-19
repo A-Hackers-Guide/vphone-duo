@@ -60,6 +60,12 @@
 			<key>Kind</key>
 			<string>Bundled</string>
 			<key>Identifier</key>
+			<string>com.vphone.patchset.research.board</string>
+		</dict>
+		<dict>
+			<key>Kind</key>
+			<string>Bundled</string>
+			<key>Identifier</key>
 			<string>com.vphone.patchset.devicetree</string>
 		</dict>
 		<dict>
