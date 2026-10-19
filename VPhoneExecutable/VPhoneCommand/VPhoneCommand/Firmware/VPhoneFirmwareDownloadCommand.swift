@@ -73,6 +73,13 @@ struct VPhoneFirmwareSealToolCommand: ParsableCommand {
     var output: URL
 
     func run() throws {
+        try Self.stage(version: version, into: output)
+    }
+
+    /// Write `apfs_sealvolume_<version>` into `output` unless it is already
+    /// there. `fw prepare` stages it into the restore tree for the restore
+    /// image patches, which seal the merged system with it.
+    static func stage(version: String, into output: URL) throws {
         let destination = output.appendingPathComponent("apfs_sealvolume_\(version)")
         if FileManager.default.fileExists(atPath: destination.path) {
             print("apfs_sealvolume_\(version) already present")

@@ -163,9 +163,12 @@ enum VPhoneFirmwarePreparer {
             try PropertyListSerialization.data(fromPropertyList: version, format: .xml, options: 0)
                 .write(to: phoneTree.appendingPathComponent(FirmwarePipeline.otaVersionFileName))
         }
-        // A plain-arm64 Apple TV cannot load the arm64e paravirtual GPU driver,
-        // and a creation may record its patch selection only after preparing.
-        if !device.hasPlainArm64Userland, plan.isEnabled("system-extensions-boot-gpu_bundle") {
+        // A plain-arm64 Apple TV cannot load the arm64e paravirtual GPU driver.
+        // `cfw install` installs the driver after the restore, the restore image
+        // (the `minimal` preset) before it; both take it from here.
+        if !device.hasPlainArm64Userland,
+           plan.isEnabled("system-extensions-boot-gpu_bundle") || plan.isEnabled(FirmwareRestoreImagePatchSet.gpuDriver)
+        {
             let cachedDriver = cachedGPUDriver(for: cloud)
             if let gpuDriverBundle {
                 print("[*] Staging GPU driver from local bundle...")
@@ -207,6 +210,16 @@ enum VPhoneFirmwarePreparer {
             try fm.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: destinationPlugin.path)
         } else {
             print("[*] GPU bundle is off for this guest; skipping driver recovery and compiler plugin staging")
+        }
+
+        // The restore image patches reseal the merged system with the macOS
+        // tool of the same version, which `fw patch` finds in the tree.
+        if plan.isEnabled(FirmwareRestoreImagePatchSet.cryptexMerge) {
+            print("[*] Staging apfs_sealvolume for \(phone.version)...")
+            try VPhoneFirmwareSealToolCommand.stage(
+                version: phone.version,
+                into: phoneTree.appendingPathComponent(".tools"),
+            )
         }
 
         // The destination did not exist at entry and the staging directory is

@@ -198,8 +198,19 @@ struct VPhoneLaunchpadNewMachineView: View {
         // Off when there is no template to clone; it can still be turned on
         // to build one.
         .onChange(of: templateAvailable, initial: true) {
-            if let templateAvailable, !isAppleTVGuest {
+            if let templateAvailable, !isAppleTVGuest, !patches.customisesRestoredSystem {
                 usesTemplate = templateAvailable
+            }
+        }
+        // The Minimal preset is restored on its own and not slimmed.
+        .onChange(of: patches.customisesRestoredSystem) { _, restored in
+            guard !isAppleTVGuest else { return }
+            if restored {
+                usesTemplate = false
+                slimming.slim = false
+            } else {
+                usesTemplate = templateAvailable ?? true
+                slimming = VPhoneLaunchpadSlimming()
             }
         }
         .onAppear {
@@ -240,9 +251,9 @@ struct VPhoneLaunchpadNewMachineView: View {
                         hardwarePage
                         advancedSections(.hardware)
                     case .template:
-                        VPhoneLaunchpadSlimmingSections(part: .template, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, forAppleTV: isAppleTVGuest)
+                        VPhoneLaunchpadSlimmingSections(part: .template, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, forAppleTV: isAppleTVGuest, forRestoredSystem: patches.customisesRestoredSystem)
                     case .slimming:
-                        VPhoneLaunchpadSlimmingSections(part: .slimming, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, forAppleTV: isAppleTVGuest)
+                        VPhoneLaunchpadSlimmingSections(part: .slimming, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, forAppleTV: isAppleTVGuest, forRestoredSystem: patches.customisesRestoredSystem)
                     case .firmware:
                         bundleSection
                         firmwareSourceSection

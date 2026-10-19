@@ -1,4 +1,5 @@
 import ArgumentParser
+import FirmwarePatcher
 import Foundation
 import VPhoneCoreKit
 import VPhonePatchKit
@@ -90,6 +91,14 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         VPhoneGuestDevice.named(device)?.family == .appleTV
     }
 
+    /// A preset that customises the system before the restore (`minimal`): the
+    /// offline trim and the setup boot of a template write the System volume,
+    /// which would break that system's seal.
+    private var customisesRestoredSystem: Bool {
+        VPhonePatchPresetStore.preset(named: preset ?? defaultPreset)?.patchSets
+            .contains { $0.identifier == FirmwareRestoreImagePatchSet.identifier } ?? false
+    }
+
     /// An Apple TV takes the TV preset; one whose userland comes from an OTA
     /// takes the arm64e one, with the GPU driver and the userland swap.
     private var defaultPreset: String {
@@ -118,6 +127,14 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
                 throw ValidationError("An Apple TV guest is built without a template; the slimming switches do not apply.")
             }
         }
+        if customisesRestoredSystem {
+            if template != nil {
+                throw ValidationError("The \(preset ?? defaultPreset) preset builds a VM without a template; --template cannot be used.")
+            }
+            if try !slimming.request.isEmpty {
+                throw ValidationError("The \(preset ?? defaultPreset) preset builds a VM without a template; the slimming switches do not apply.")
+            }
+        }
         _ = try slimming.resolve()
         if template != nil {
             let firmware = [
@@ -142,7 +159,7 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         let unlocks = try unlockAtStartup.map { try VPhoneVirtualMachineConfigCommand.parseSwitch($0, option: "--unlock-at-startup") }
         let templateUse: VPhoneVirtualMachineCreator.TemplateUse = if let template {
             .identifier(template)
-        } else if noTemplate || isAppleTV {
+        } else if noTemplate || isAppleTV || customisesRestoredSystem {
             .none
         } else {
             .automatic

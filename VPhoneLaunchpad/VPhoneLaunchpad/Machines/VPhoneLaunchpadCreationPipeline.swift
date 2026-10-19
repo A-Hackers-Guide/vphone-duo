@@ -7,7 +7,8 @@ import Observation
 /// `vphone-cli vm create` runs the same stages in one process and asks for
 /// sudo partway through, which a GUI cannot answer. Running the stages here
 /// keeps every step visible and retryable, and keeps root to the one step
-/// that needs it: `cfw install`, run by the helper. The waits mirror
+/// that needs it: `cfw install`, run by the helper (or, for the Minimal preset,
+/// which customises the system before the restore, `fw patch`). The waits mirror
 /// VPhoneVirtualMachineCreator: the device identity file, 90 recovery probes,
 /// up to 30 seconds for the post-restore panic, 5 seconds before CFW, and up
 /// to 300 seconds for vphoned to answer on first boot.
@@ -403,6 +404,11 @@ final class VPhoneLaunchpadCreationPipeline {
             // step has moved on, so only the firmware step takes it. A finished
             // download clears it: extraction follows with no progress of its own.
             defer { downloadFraction = nil }
+            // `fw prepare` stages what the selection needs (the GPU driver, the
+            // seal tool), so the preset is on record before it runs.
+            if !options.patches.presetArguments.isEmpty {
+                try await run(["fw", "set-patches", name] + options.patches.presetArguments + library)
+            }
             try await run(["fw", "prepare", name, "--iphone-source", options.iphoneSource,
                            "--cloudos-source", options.cloudOSSource] + deviceArguments + library,
                           onProgress: { [weak self] fraction in
@@ -434,7 +440,22 @@ final class VPhoneLaunchpadCreationPipeline {
                     onLine: tee,
                 )
             }
-            try await run(patchArguments(name) + library, onLine: tee)
+            guard options.patches.customisesRestoredSystem else {
+                try await run(patchArguments(name) + library, onLine: tee)
+                return
+            }
+            // The Minimal preset merges and reseals the system image, which
+            // needs root: the helper runs `fw patch` with the selection
+            // recorded before `fw prepare` and above, as it runs `cfw install`.
+            let status = try await helper.patchRestoreImage(
+                bundleVersion: version,
+                machineName: name,
+                libraryRoot: Self.canonicalPath(URL(fileURLWithPath: options.libraryRoot, isDirectory: true)),
+                onLine: tee,
+            )
+            guard status == 0 else {
+                throw VPhoneLaunchpadError(String(localized: "Unable to patch the firmware. Check the log for details."), detail: log.tail)
+            }
 
         case .bootDFU:
             let arguments = ["vm", "launch", name, "--dfu"] + library

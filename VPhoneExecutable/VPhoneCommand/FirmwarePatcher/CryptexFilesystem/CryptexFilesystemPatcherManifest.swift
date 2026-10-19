@@ -97,10 +97,14 @@ extension CryptexFilesystemPatcher {
         return remaining.joined(separator: "/")
     }
 
+    /// The iOS version of the system being merged, which picks the seal tool.
+    /// The hybrid `BuildManifest.plist` carries the cloudOS version; the
+    /// iPhone's own manifest, which `fw prepare` keeps beside it, the iOS one.
     func getProductVersion() throws -> String {
-        let root = try parsePlist(data: buildManiest)
+        let data = try Data(contentsOf: restoreDir.appending(path: "iPhone-BuildManifest.plist"))
+        let root = try parsePlist(data: data)
         guard let productVersion = root["ProductVersion"] as? String else {
-            throw FirmwareManifest.ManifestError.missingKey("ProductVersion in BuildManifest")
+            throw FirmwareManifest.ManifestError.missingKey("ProductVersion in iPhone-BuildManifest")
         }
         return productVersion
     }

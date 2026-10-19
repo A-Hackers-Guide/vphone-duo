@@ -1970,9 +1970,10 @@ the restore left it.
 `BuildManifest.plist`, but neither is a patcher over that one file — the first
 rewrites cryptex images across the restore tree, the second rewrites hashes that
 describe files other steps produced. Restoring the manifest alone would describe
-a tree that no longer exists. Both are `.less`-only, and `.less` is excluded from
-the mechanism outright so a `.less` run over a CFW-patched VM cannot read "this
-variant builds no boot-chain patchers" as "put the boot chain back".
+a tree that no longer exists. Both run only for the `minimal` preset (see "The `minimal`
+preset" below), which names no boot chain, kernel or TXM set: a `minimal` run over
+a CFW-patched VM puts that boot chain back, which is what the restore image
+expects.
 
 **Existing VMs.** A machine patched by an earlier build has no stash, so the
 first run under the new code would adopt its already-patched bytes as the
@@ -3261,3 +3262,59 @@ in `fw patch`. The SEP firmware (`sep-firmware.vphone600.RELEASE.im4p`, sent as
 before keep Apple's SEP ROM; `vm config --seprom opensep|apple` switches one
 without a restore. `Firmware/opensep_sep_rom.md` has the contract and the
 validation.
+
+## The `minimal` preset: a restore image instead of patches (2026-10-19)
+
+The patchless variant (`FirmwarePipeline.Variant.less`) was unreachable: every
+caller passed `.jb`. It is a preset now, `minimal`, and the variant is
+gone. The preset names three sets:
+
+- `com.vphone.patchset.bootchain`, allowing only iBEC's and LLB's patches,
+  which the old `.less` variant applied too ("for the serial logs"). AVPBooter,
+  iBSS, TXM and the restore ramdisk stay stock, and the pipeline builds no
+  patcher for a boot chain component none of whose patches is on. A stock LLB
+  does not get the restored guest to its kernel: on 26.6 with cloudOS
+  23E5207q it restarts right after its banner, with Apple's ROMs as with
+  OpenAVB and OpenSEP (2026-10-19). Which of LLB's patches it needs is open.
+- `com.vphone.patchset.devicetree`, allowing only the board presentation
+  (`devicetree-cfw-serial_number`, `-home_button_type`,
+  `-artwork_device_subtype`, `-island_notch_location`) and the haptics and
+  microphone-array removals. They change no code.
+- `com.vphone.patchset.restore.image` (`FirmwareRestoreImagePatchSet`), new,
+  named by no other preset:
+
+| Identifier | What `fw patch` does |
+| --- | --- |
+| `filesystem-boot-cryptex_merge` | Merges the AppOS and SystemOS cryptexes into the OS image, adds the dyld symlinks, then rebuilds the static trust cache, the mtree and the digest database and root hash (`apfs_sealvolume`) |
+| `filesystem-boot-gpu_driver` | Installs the PCC paravirtual GPU driver `fw prepare` staged |
+| `filesystem-boot-mobileactivationd_should_hactivate` | The `should_hactivate` patch, in the image |
+| `filesystem-boot-vphoned` | vphoned and its launch daemon, in the image |
+| `filesystem-boot-launchd_cache_loader_unsecure_cache_gate` | Lets launchd read the launch daemons from the volume |
+| `manifest-boot-digest_rehash` | Rewrites every BuildManifest digest to the files the restore now sends |
+
+The kernel and TXM stay stock, and the restore installs a system whose seal
+the stock kernel verifies. `CryptexFilesystemPatcher` and `ManifestHashPatcher` used
+to emit `filesystem.cryptex.merge` and `manifest.hash`, which no set declared;
+they emit the identifiers above, and the pipeline builds each patcher only when
+its patch is enabled.
+
+Nothing may write the System volume after the restore, because that breaks the
+seal. So for a VM whose plan enables `filesystem-boot-cryptex_merge`:
+
+- `cfw install` touches no disk: it records an empty `Guest` receipt part and
+  the install, so the boot gate (`restore-info.json`) passes as for any VM.
+  `cfw update-environment` and `cfw update-kernel` refuse.
+- `vm create` builds without a template (the offline trim and setup boot write
+  the system) and refuses `--template` and the slimming switches, as for an
+  Apple TV.
+- `fw patch` needs root for the merge (owner-preserving copies on a mounted
+  image) and says so. Launchpad runs it through its helper's new
+  `patchRestoreImage` verb, which runs `fw patch <vm> --restore-image-only`
+  from the receipt-checked store bundle; that flag refuses any selection that
+  does not merge the restore image.
+- `fw prepare` stages `apfs_sealvolume_<iOS version>` into `<restore>/.tools`
+  (the `fw seal-tool` fetch) and the GPU driver for
+  `filesystem-boot-gpu_driver` as for `system-extensions-boot-gpu_bundle`.
+  `vm create` and Launchpad now record the preset before `fw prepare`, which
+  read `standard` before: the GPU staging followed the wrong selection for any
+  other preset as well.

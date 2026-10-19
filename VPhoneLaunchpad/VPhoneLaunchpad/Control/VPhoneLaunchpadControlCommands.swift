@@ -596,11 +596,16 @@ struct VPhoneLaunchpadControlCommands {
             defaultPreset: VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: device),
             emit: emit,
         )
-        let usesTemplate = !request.flag("no-template") && !isAppleTV
+        // The Minimal preset seals the system it restores, which a template's
+        // trim and setup boot would write.
+        let restoredSystem = patches.customisesRestoredSystem
+        let usesTemplate = !request.flag("no-template") && !isAppleTV && !restoredSystem
         let slimming: VPhoneLaunchpadSlimming
-        if isAppleTV {
+        if isAppleTV || restoredSystem {
             if !Self.slimmingSwitches(request).isEmpty {
-                throw VPhoneLaunchpadError("An Apple TV is created without a template; the slimming switches do not apply.")
+                throw VPhoneLaunchpadError(isAppleTV
+                    ? "An Apple TV is created without a template; the slimming switches do not apply."
+                    : "The \(patches.preset) preset creates a machine without a template; the slimming switches do not apply.")
             }
             var off = VPhoneLaunchpadSlimming()
             off.slim = false

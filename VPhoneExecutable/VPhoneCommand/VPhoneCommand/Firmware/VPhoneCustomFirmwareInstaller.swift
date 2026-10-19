@@ -165,6 +165,17 @@ struct VPhoneCustomFirmwareInstaller {
         // both ways. Read through the pinned descriptor so root never follows a
         // link out of the bundle.
         let rawPlan = readPatchPlan(in: bundleDirectory)
+        if Self.restoredCustomisedSystem(rawPlan) {
+            // The restore installed the finished system (the restore image
+            // patches): there is nothing to add, and writing the System volume
+            // would break the seal its stock boot chain checks.
+            guard mode == .full else {
+                throw Self.restoreImageRefusal(mode)
+            }
+            print("[cfw] The restore installed this VM's customised system; nothing to install.")
+            recordGuestReceipt(live: [], notApplicable: [], in: bundleDirectory, owner: invokingUser.map { ($0.uid, $0.gid) })
+            return
+        }
         let plan = resolveGuestSelection(rawPlan, in: bundleDirectory)
         // What was live in the guest before this run, so a now-off patch this run
         // cannot revert (no backup, no undo record) stays honestly recorded.
@@ -539,6 +550,9 @@ struct VPhoneCustomFirmwareInstaller {
         let callerUID = invokingUser?.uid
         let bundleDirectory = try pinBundle(owner: callerUID)
         let bundlePath = try bundleDirectory.path
+        if Self.restoredCustomisedSystem(readPatchPlan(in: bundleDirectory)) {
+            throw Self.restoreImageRefusal(mode)
+        }
 
         let disk = try openDiskImage(in: bundleDirectory, path: bundlePath, owner: callerUID)
         let diskPath = (bundlePath as NSString).appendingPathComponent("Disk.img")
@@ -793,6 +807,19 @@ struct VPhoneCustomFirmwareInstaller {
         } catch {
             fputs("warning: could not record the kernelcache receipt: \(error)\n", stderr)
         }
+    }
+
+    /// Whether the VM's restore installed a system customised by `fw patch`
+    /// (``FirmwareRestoreImagePatchSet``), which nothing may write afterwards.
+    static func restoredCustomisedSystem(_ plan: VPhoneVirtualMachinePatchPlan?) -> Bool {
+        plan?.enabledPatches.contains(FirmwareRestoreImagePatchSet.cryptexMerge) == true
+    }
+
+    static func restoreImageRefusal(_ mode: Mode) -> ValidationError {
+        ValidationError(
+            "This VM's system was customised before its restore (the \(VPhonePatchPreset.minimalIdentifier) preset), "
+                + "and a \(mode.summary) would break its seal. Patch and restore the VM again instead.",
+        )
     }
 
     /// The verb to credit a receipt write to.

@@ -1,8 +1,8 @@
 import Darwin
 import Foundation
 
-/// A validated `vphone-cli cfw install` or `cfw update-environment`
-/// invocation. Built only from a store bundle whose cdhash still matches its
+/// A validated `vphone-cli cfw install`, `cfw update-environment`, `cfw
+/// update-kernel` or `fw patch` invocation. Built only from a store bundle whose cdhash still matches its
 /// receipt, and only for a VM directory the calling user owns.
 struct VPhoneLaunchpadHelperFirmwareRequest {
     enum Operation {
@@ -13,6 +13,10 @@ struct VPhoneLaunchpadHelperFirmwareRequest {
         case updateEnvironment
         /// Swaps the Preboot kernelcache for the re-patched one, keeping data.
         case updateKernel
+        /// `fw patch` with the machine's recorded selection, for a preset that
+        /// merges and reseals the system image before the restore. `fw patch`
+        /// refuses to run as root for any other selection.
+        case patchRestoreImage
     }
 
     typealias MachineKey = VPhoneLaunchpadHelperFirmwareAdmission.MachineKey
@@ -83,6 +87,8 @@ struct VPhoneLaunchpadHelperFirmwareRequest {
         case .updateKernel:
             arguments = ["cfw", "update-kernel", machineName, "--library-root", libraryRoot,
                          "--work-parent", workParent]
+        case .patchRestoreImage:
+            arguments = ["fw", "patch", machineName, "--library-root", libraryRoot, "--restore-image-only"]
         }
 
         self.executable = executable

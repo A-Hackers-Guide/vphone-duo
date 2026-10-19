@@ -348,6 +348,11 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
     )
     var preset: String?
     @Flag(name: .shortAndLong, help: "Suppress per-component progress") var quiet = false
+    @Flag(help: ArgumentHelp(
+        "Refuse unless the selection merges the restore image (the Launchpad helper's root run)",
+        visibility: .hidden,
+    ))
+    var restoreImageOnly = false
 
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
@@ -367,6 +372,17 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
             throw ValidationError(
                 "Unknown patch preset '\(selection.presetIdentifier)'. Available: \(available.joined(separator: ", "))",
             )
+        }
+
+        // The restore image patches merge and reseal the system image, which
+        // needs root; nothing else here does.
+        let mergesRestoreImage = resolved.patchSets.contains { $0.identifier == FirmwareRestoreImagePatchSet.identifier }
+            && !selection.blockedPatches.contains(FirmwareRestoreImagePatchSet.cryptexMerge)
+        if restoreImageOnly, !mergesRestoreImage {
+            throw ValidationError("\(name) is not set to a preset that customises its system before the restore.")
+        }
+        if mergesRestoreImage, geteuid() != 0 {
+            throw ValidationError("The \(selection.presetIdentifier) preset rebuilds the system image, which needs root. Run this command with sudo.")
         }
 
         let pipeline = FirmwarePipeline(

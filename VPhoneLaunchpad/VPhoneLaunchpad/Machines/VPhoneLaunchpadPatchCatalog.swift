@@ -283,6 +283,10 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
     /// `VPhonePatchPreset.tvOS4KIdentifier`: its arm64e userland comes from
     /// the OTA, with the paravirtual GPU driver.
     static let tvOS4KPreset = "tvos-4k"
+    /// The preset that customises the system before the restore and patches
+    /// no boot chain: `fw patch` runs as root, and nothing writes the system
+    /// afterwards, so there is no template and no slimming.
+    static let minimalPreset = "minimal"
 
     /// The preset a new machine of `productType` starts from.
     static func defaultPreset(forDevice productType: String?) -> String {
@@ -316,6 +320,10 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
     }
 
     /// The `--preset` flag `fw patch` and `fw patches` carry, if any.
+    var customisesRestoredSystem: Bool {
+        preset == Self.minimalPreset
+    }
+
     var presetArguments: [String] {
         preset == Self.defaultPreset ? [] : ["--preset", preset]
     }

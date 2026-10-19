@@ -18,6 +18,9 @@ struct VPhoneLaunchpadSlimmingSections: View {
     /// An Apple TV is restored on its own and not slimmed: templates and
     /// slimming drive iOS Setup Assistant and its apps.
     var forAppleTV = false
+    /// The `minimal` preset seals the system it restores, which the trim and
+    /// setup boot of a template would write.
+    var forRestoredSystem = false
     @State private var choosesApps = false
 
     var body: some View {
@@ -27,10 +30,13 @@ struct VPhoneLaunchpadSlimmingSections: View {
         case .slimming:
             Section {
                 Toggle("Slim System", isOn: $slimming.slim)
-                    .disabled(forAppleTV)
+                    .disabled(forAppleTV || forRestoredSystem)
             } footer: {
                 if forAppleTV {
                     Text("An Apple TV keeps every file, service and app.")
+                        .foregroundStyle(.secondary)
+                } else if forRestoredSystem {
+                    Text("The Minimal preset keeps the restored system exactly as sealed.")
                         .foregroundStyle(.secondary)
                 } else if !usesTemplate, slimming.slim {
                     Text("Without a template the machine is slimmed on its own, with a setup boot of its own. Setup Assistant is skipped.")
@@ -45,13 +51,15 @@ struct VPhoneLaunchpadSlimmingSections: View {
     private var templateSection: some View {
         Section {
             Toggle("Use Template", isOn: $usesTemplate)
-                .disabled(forAppleTV)
+                .disabled(forAppleTV || forRestoredSystem)
         } header: {
             Text("Template")
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
                 if forAppleTV {
                     Text("An Apple TV is restored on its own, with keys of its own. Templates are made for iPhone and iPad.")
+                } else if forRestoredSystem {
+                    Text("The Minimal preset restores the machine on its own, with keys of its own: building a template writes the system it seals.")
                 } else {
                     if templateAvailable == false {
                         Text("No template is available for this firmware. Turning this on saves a sample of the machine in the template library.")
