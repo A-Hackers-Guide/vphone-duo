@@ -35,7 +35,7 @@ public final class ManifestHashPatcher: BufferedPatcher {
         rebuiltData = try serializePayload(newRoot)
 
         patches = [PatchRecord(
-            patchID: "manifest.hash",
+            patchID: FirmwareRestoreImagePatchSet.digestRehash,
             component: "",
             fileOffset: 0,
             originalBytes: Data(),

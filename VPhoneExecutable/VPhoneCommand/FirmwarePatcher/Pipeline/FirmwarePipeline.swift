@@ -33,7 +33,6 @@ public final class FirmwarePipeline {
     // MARK: - Variant
 
     public enum Variant: String, Sendable {
-        case less
         case regular
         case dev
         case jb
@@ -85,7 +84,7 @@ public final class FirmwarePipeline {
         /// Whether the pipeline keeps this component's untouched bytes aside and
         /// re-patches those on every run — see FirmwarePipelineOriginals.swift.
         ///
-        /// False for the two `.less` components, and only for them. `Filesystem`
+        /// False for the two restore image components, and only for them. `Filesystem`
         /// and `Manifest` both name `BuildManifest.plist`, but neither is a patcher
         /// over that one file: `CryptexFilesystemPatcher` rewrites cryptex images
         /// across the restore tree, and `ManifestHashPatcher` rewrites hashes to
@@ -235,7 +234,7 @@ public final class FirmwarePipeline {
         let sealPatch = RestoreRamDiskSealPatcher.patchIdentifier
         let sealSelected = plan?.isEnabled(sealPatch)
             ?? (iOSBase?.major == 27 && cloudOS?.major == 26 && cloudOS?.minor == 4)
-        guard variant != .less, sealSelected else { return }
+        guard sealSelected else { return }
         let hashType = try RestoreRamDiskSealPatcher.systemVolumeHashType(in: restoreDir)
         if hashType == RestoreRamDiskSealPatcher.sha256Type {
             notApplicablePatches.insert(sealPatch)
@@ -303,12 +302,11 @@ public final class FirmwarePipeline {
 
         for component in components {
             let baseDir = component.inRestoreDir ? restoreDir : vmDirectory
-            // `.less` never touches the boot chain: it runs the two whole-tree
-            // patchers and leaves every other component with no factories at all.
-            // Keeping it out of this entirely is what stops a `.less` run over an
-            // already patched VM reading "no patches here" as "put the unpatched
-            // boot chain back".
-            let keepsOriginal = variant != .less && component.restorable
+            // A plan without the boot chain, kernel and TXM sets (the `minimal`
+            // preset) leaves those components with no factories, and the pass
+            // below puts back what an earlier preset patched: a stock boot chain
+            // is what the restore image patches expect.
+            let keepsOriginal = component.restorable
 
             guard !component.patcherFactories.isEmpty else {
                 log("  [=] \(component.name): no patches for \(variant.rawValue)")

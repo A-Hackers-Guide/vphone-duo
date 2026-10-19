@@ -28,6 +28,7 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
     public let verbose: Bool
     public let noBinpack: Bool
     let resources = VPhoneResources.resolve()
+    public var gate: VPhonePatchGate = .unrestricted
 
     var buildManiest: Data
     var rebuiltData: Data?
@@ -63,16 +64,28 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
 
     // MARK: - Patcher
 
+    /// One record per step the gate lets through. The merge itself is the
+    /// patcher: the pipeline builds it only when the merge is on.
     public func findAll() throws -> [PatchRecord] {
-        [PatchRecord(
-            patchID: "filesystem.cryptex.merge",
-            component: "",
-            fileOffset: 0,
-            originalBytes: Data(),
-            patchedBytes: Data(),
-            description: "Merge the cryptex filesystems inside the OS filesystem",
-        )]
+        Self.steps.filter { gate.isEnabled($0.identifier) }.map { step in
+            PatchRecord(
+                patchID: step.identifier,
+                component: "",
+                fileOffset: 0,
+                originalBytes: Data(),
+                patchedBytes: Data(),
+                description: step.description,
+            )
+        }
     }
+
+    static let steps: [(identifier: String, description: String)] = [
+        (FirmwareRestoreImagePatchSet.cryptexMerge, "Merge the cryptex filesystems inside the OS filesystem"),
+        (FirmwareRestoreImagePatchSet.gpuDriver, "Install the paravirtual GPU driver"),
+        (FirmwareRestoreImagePatchSet.mobileActivation, "Patch mobileactivationd"),
+        (FirmwareRestoreImagePatchSet.vphoned, "Install vphoned and its launch daemon"),
+        (FirmwareRestoreImagePatchSet.launchdCacheLoader, "Patch launchd_cache_loader"),
+    ]
 
     @discardableResult
     public func apply() throws -> Int {
@@ -145,16 +158,24 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
             print("- Fixing dyld cache…")
             try addDyldSymlinks(targetMount: targetMount)
 
-            print("- Fixing GPU driver…")
-            try addGpuDriver(targetMount: targetMount)
+            if gate.isEnabled(FirmwareRestoreImagePatchSet.gpuDriver) {
+                print("- Fixing GPU driver…")
+                try addGpuDriver(targetMount: targetMount)
+            }
 
-            print("- Patching mobile activation…")
-            try patchMobileActivation(targetMount: targetMount)
+            if gate.isEnabled(FirmwareRestoreImagePatchSet.mobileActivation) {
+                print("- Patching mobile activation…")
+                try patchMobileActivation(targetMount: targetMount)
+            }
 
-            print("- Adding vphoned…")
-            try addVphoned(targetMount: targetMount)
-            try injectLaunchDaemons(targetMount: targetMount)
-            try patchLaunchdCacheLoader(targetMount: targetMount)
+            if gate.isEnabled(FirmwareRestoreImagePatchSet.vphoned) {
+                print("- Adding vphoned…")
+                try addVphoned(targetMount: targetMount)
+                try injectLaunchDaemons(targetMount: targetMount)
+            }
+            if gate.isEnabled(FirmwareRestoreImagePatchSet.launchdCacheLoader) {
+                try patchLaunchdCacheLoader(targetMount: targetMount)
+            }
         }
 
         guard attachedDevices.isEmpty else {

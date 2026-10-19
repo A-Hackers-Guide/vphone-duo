@@ -20,15 +20,21 @@ public enum FirmwarePatchSetCatalog {
         FirmwareGuestSystemPatchSet.manifest,
         FirmwareGuestDisplayPatchSet.manifest,
         FirmwareGuestIdentityPatchSet.manifest,
+        FirmwareRestoreImagePatchSet.manifest,
     ]
 
-    /// Every bundled set, as a preset references them.
+    /// Every bundled set but the restore image, as a preset references them.
     ///
-    /// Both shipped presets name all of them. A preset picks patches with its
-    /// selection, not by leaving a set out, so the editor always sees the whole
+    /// Every custom-firmware preset names all of them. A preset picks patches with
+    /// its selection, not by leaving a set out, so the editor always sees the whole
     /// catalogue and can turn any patch on or off.
+    ///
+    /// The restore image is the exception, in both directions: it customises the
+    /// system before the restore, which the custom-firmware sets do after it, and
+    /// only ``minimalPreset`` names it. See ``FirmwareRestoreImagePatchSet``.
     public static let bundledReferences: [VPhonePatchSetReference] =
-        bundled.map { .bundled($0.identifier) }
+        bundled.filter { $0.identifier != FirmwareRestoreImagePatchSet.identifier }
+            .map { .bundled($0.identifier) }
 
     public static func manifest(identifier: String) -> VPhonePatchSetManifest? {
         bundled.first { $0.identifier == identifier }
@@ -303,6 +309,57 @@ public enum FirmwarePatchSetCatalog {
         ),
     )
 
+    /// The device tree patches ``minimalPreset`` keeps: the board presentation the
+    /// guest UI lays out against, and the haptics and microphone array no VM
+    /// has. They change no code, so they are no system modification.
+    public static let minimalDeviceTreePatches: Set<String> = [
+        "devicetree-cfw-serial_number",
+        "devicetree-cfw-home_button_type",
+        "devicetree-cfw-artwork_device_subtype",
+        "devicetree-cfw-island_notch_location",
+        "devicetree-cfw-product_haptics_node",
+        "devicetree-cfw-product_audio_microphone_array",
+    ]
+
+    /// The boot chain patches ``minimalPreset`` keeps: iBEC's and LLB's, which the
+    /// old `.less` variant applied too. A stock LLB does not get the restored
+    /// guest to its kernel (it restarts after its banner, with Apple's ROMs as
+    /// with OpenAVB and OpenSEP). AVPBooter, iBSS, TXM and the restore ramdisk
+    /// stay stock.
+    public static let minimalBootChainPatches: Set<String> = [
+        "ibec-cfw-serial_label",
+        "ibec-boot-image4_callback",
+        "ibec-boot-boot_args",
+        "ibec-boot-bootx_precondition",
+        "llb-cfw-serial_label",
+        "llb-boot-image4_callback",
+        "llb-boot-boot_args",
+        "llb-boot-rootfs",
+        "llb-boot-panic_bypass",
+        "llb-cfw-display_scale",
+    ]
+
+    /// A guest on a stock kernel and TXM, with only iBEC and LLB patched: the
+    /// system is customised before the restore instead
+    /// (``FirmwareRestoreImagePatchSet``), and nothing after it. Names only the
+    /// sets it draws on, so no kernel or guest patcher is built.
+    /// The shipped `minimal.plist` must match this.
+    public static let minimalPreset = VPhonePatchPreset(
+        identifier: VPhonePatchPreset.minimalIdentifier,
+        title: "Minimal",
+        summary: "No kernel or TXM patches and only iBEC and LLB in the boot chain: the restore installs a resealed system with vphoned, the GPU driver and activation, and nothing writes it afterwards.",
+        patchSets: [
+            .bundled(FirmwareBootChainPatchSet.identifier),
+            .bundled(FirmwareDeviceTreePatchSet.identifier),
+            .bundled(FirmwareRestoreImagePatchSet.identifier),
+        ],
+        selection: .allow(
+            minimalBootChainPatches
+                .union(minimalDeviceTreePatches)
+                .union(FirmwareRestoreImagePatchSet.manifest.patches.map(\.identifier)),
+        ),
+    )
+
     /// The presets the bundle ships.
-    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, experimentalPreset, tvOSPreset, tvOS4KPreset]
+    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, experimentalPreset, tvOSPreset, tvOS4KPreset, minimalPreset]
 }

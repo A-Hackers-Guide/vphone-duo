@@ -168,7 +168,9 @@ Then:
    records nothing declares, and undeclared records apply. Leaving the set out
    has to mean leaving the patcher out.
 3. Add the set to both shipped preset plists (both name every set; presets differ
-   by their selection, not by which sets they draw on).
+   by their selection, not by which sets they draw on). The one exception is
+   `minimal`, which names only the device tree and the restore image set: it
+   customises the system before the restore, the other sets after it.
 4. Run the catalogue tests.
 
 ### Capabilities, Requires, Conflicts, After

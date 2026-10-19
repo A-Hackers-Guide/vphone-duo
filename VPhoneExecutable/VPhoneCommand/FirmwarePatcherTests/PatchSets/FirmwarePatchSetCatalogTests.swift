@@ -136,9 +136,18 @@ struct FirmwarePatchSetCatalogTests {
                     // patch: these are the combinations we claim boot. The tvOS
                     // presets drop exactly the iOS ones an Apple TV has no port of.
                     let tvPresets = [VPhonePatchPreset.tvOSIdentifier, VPhonePatchPreset.tvOS4KIdentifier]
-                    let expected = tvPresets.contains(preset.identifier)
-                        ? Set(plan.droppedBootEssentials).isSubset(of: FirmwarePatchSetCatalog.tvOSBlockedPatches)
-                        : plan.droppedBootEssentials.isEmpty
+                    // `minimal` drops every boot chain patch but iBEC's and LLB's:
+                    // its system is customised before the restore instead.
+                    let expected = if tvPresets.contains(preset.identifier) {
+                        Set(plan.droppedBootEssentials).isSubset(of: FirmwarePatchSetCatalog.tvOSBlockedPatches)
+                    } else if preset.identifier == VPhonePatchPreset.minimalIdentifier {
+                        Set(plan.droppedBootEssentials).isDisjoint(with: FirmwarePatchSetCatalog.minimalBootChainPatches)
+                            && plan.droppedBootEssentials.allSatisfy {
+                                FirmwareBootChainPatchSet.manifest.patches.map(\.identifier).contains($0)
+                            }
+                    } else {
+                        plan.droppedBootEssentials.isEmpty
+                    }
                     #expect(
                         expected,
                         "\(preset.identifier) on \(base)/\(cloud) drops \(plan.droppedBootEssentials)",
@@ -160,6 +169,24 @@ struct FirmwarePatchSetCatalogTests {
         )
         #expect(!plan.enabled.isEmpty)
         #expect(!plan.skippedByVersion.isEmpty)
+    }
+
+    @Test
+    func `Only minimal names the restore image, and patches only iBEC, LLB and the device tree besides`() throws {
+        for preset in FirmwarePatchSetCatalog.builtInPresets {
+            let namesRestoreImage = preset.patchSets.map(\.identifier).contains(FirmwareRestoreImagePatchSet.identifier)
+            #expect(namesRestoreImage == (preset.identifier == VPhonePatchPreset.minimalIdentifier), "\(preset.identifier)")
+        }
+        let plan = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.minimalPreset,
+            patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("26.4"),
+            cloudOS: VPhoneVersion("26.4"),
+        )
+        let restoreImage = Set(FirmwareRestoreImagePatchSet.manifest.patches.map(\.identifier))
+        let bootChain = FirmwarePatchSetCatalog.minimalBootChainPatches
+        #expect(plan.enabled == restoreImage.union(FirmwarePatchSetCatalog.minimalDeviceTreePatches).union(bootChain))
+        #expect(plan.droppedBootEssentials.allSatisfy { !$0.hasPrefix("ibec-") && !$0.hasPrefix("llb-") })
     }
 
     @Test
