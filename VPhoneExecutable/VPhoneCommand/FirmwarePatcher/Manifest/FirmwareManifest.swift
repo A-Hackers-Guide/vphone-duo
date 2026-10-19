@@ -76,16 +76,12 @@ public enum FirmwareManifest {
         // per board it covers, so the userland one is picked by board.
         let device = chosen ?? VPhoneGuestDevice.detect(buildManifest: iPhoneBM) ?? .default
         let (prod, res) = try findCloudOS(cloudIdentities, deviceClass: "vresearch101ap")
-        // Only the 26.1–26.4 beta cloudOS releases carry vphone600ap. Every other
-        // one boots the research board's own device tree and SEP, which
-        // `fw patch` converts (FirmwareResearchBoardPatchSet).
-        let vphone = try? findCloudOS(cloudIdentities, deviceClass: "vphone600ap")
-        let (vp, vpr) = vphone ?? (prod, res)
+        let (vp, vpr) = findRuntime(cloudIdentities, researchBoard: (prod, res))
         let iErase = try findIPhoneErase(iPhoneIdentities, deviceClass: device.deviceClass)
 
         if verbose {
             print("  cloudOS vresearch101ap: release=#\(prod), research=#\(res)")
-            if vphone == nil {
+            if (vp, vpr) == (prod, res) {
                 print("  cloudOS vphone600ap:    none, the research board stands in")
             } else {
                 print("  cloudOS vphone600ap:    release=#\(vp), research=#\(vpr)")
@@ -186,6 +182,17 @@ public enum FirmwareManifest {
             throw ManifestError.identityNotFound("research identity for \(deviceClass) in the cloudOS BuildManifest")
         }
         return (rel, res)
+    }
+
+    /// The identities the guest's device tree, SEP and kernel come from:
+    /// vphone600ap's, which only the 26.1–26.4 beta cloudOS releases carry, or
+    /// else the research board's, which `fw patch` converts
+    /// (FirmwareResearchBoardPatchSet).
+    static func findRuntime(
+        _ identities: [PlistDict],
+        researchBoard: (release: Int, research: Int),
+    ) -> (release: Int, research: Int) {
+        (try? findCloudOS(identities, deviceClass: "vphone600ap")) ?? researchBoard
     }
 
     /// Return the index of the first iPhone erase identity.
