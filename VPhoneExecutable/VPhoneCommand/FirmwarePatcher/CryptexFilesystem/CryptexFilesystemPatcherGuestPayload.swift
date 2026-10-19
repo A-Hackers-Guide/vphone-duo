@@ -19,10 +19,15 @@ extension CryptexFilesystemPatcher {
         identifier: String? = nil,
         entitlements: URL? = nil,
     ) throws -> VPhoneSignOptions {
+        // Apple's ad-hoc shape, as the stock binaries around them: the guest's
+        // TXM is not patched here, and it takes an ad-hoc binary from the
+        // static trust cache but rejects ldid's signature, which has no
+        // ad-hoc flag and an empty CMS blob ("Bad executable").
         try VPhoneSignOptions(
             identifier: identifier,
             entitlements: entitlements.map { try Data(contentsOf: $0, options: .mappedIfSafe) },
             mergesExisting: true,
+            style: .appleAdHoc,
         )
     }
 
@@ -55,10 +60,14 @@ extension CryptexFilesystemPatcher {
             at: vphonedLaunchdPlist,
             to: target.appending(path: "System/Library/LaunchDaemons/vphoned.plist"),
         )
+        try chownRecursively(uid: 0, gid: 0, at: target.appending(path: "System/Library/LaunchDaemons/vphoned.plist"))
         try CustomFirmwareDaemons.injectDaemon(into: launchdPath, name: "vphoned", from: vphonedLaunchdPlist)
         print("  [+] Injected vphoned")
         try FileManager.default.moveItem(at: launchdPath, to: launchdOgPath)
         try setMode(0o644, at: launchdOgPath)
+        // Back as the system has it: the move went through a temporary
+        // directory on the host, which left the host's group on it.
+        try chownRecursively(uid: 0, gid: 0, at: launchdOgPath)
     }
 
     func addVphoned(targetMount: String) throws {
@@ -74,6 +83,8 @@ extension CryptexFilesystemPatcher {
         let targetBin = target.appending(path: "/usr/bin/vphoned")
         try FileManager.default.copyItem(at: vphonedBin, to: targetBin)
         try setMode(0o755, at: targetBin)
+        // The bundle's copy belongs to whoever built it.
+        try chownRecursively(uid: 0, gid: 0, at: targetBin)
     }
 
     /// Copy in the prebuilt guest daemon.

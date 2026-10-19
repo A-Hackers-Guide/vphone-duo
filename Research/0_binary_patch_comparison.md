@@ -3342,3 +3342,12 @@ it was not ("Invalid root hash", `apfs_sealvolume` exit 65 in
 - `createDigestAndHash` mounted the image writable only to unmount it again
   for `apfs_sealvolume`, which needs the device; the mount changed the volume
   after the mtree described it. It attaches the image with `-noMount` now.
+
+The binaries the merge patches (`launchd_cache_loader`, `mobileactivationd`)
+are re-signed in Apple's ad-hoc shape (`VPhoneSignOptions.Style.appleAdHoc`),
+like the stock binaries around them. The guest's TXM is stock here: it takes
+an ad-hoc binary from the static trust cache the merge rebuilds, but rejected
+ldid's signature (no ad-hoc flag, empty CMS blob), and launchd panicked at its
+first boot task ("launchd_cache_loader - posix_spawn: 85: Bad executable").
+vphoned, its launch daemon plist and the rewritten `launchd.plist` belong to
+root:wheel, as the system's own; they kept the host user's owner and group.
