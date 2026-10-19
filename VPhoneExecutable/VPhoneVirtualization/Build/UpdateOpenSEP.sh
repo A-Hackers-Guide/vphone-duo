@@ -23,7 +23,7 @@
 set -euo pipefail
 
 repository="https://github.com/owngoal-dev/OpenSEP.git"
-pinned="39ff3d7572059668077388dd907b63308ddf645e"
+pinned="8b1633f7e6606f0bc9e1422c93e8d2e056154d2f"
 
 root="$(cd "${0:a:h}/../../.." && pwd)"
 destination="$root/VPhoneExecutable/VPhoneVirtualization/Resources/OpenSEP"

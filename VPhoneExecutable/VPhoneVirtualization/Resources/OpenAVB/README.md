@@ -10,11 +10,11 @@ the image into each new machine folder.
 | | |
 | --- | --- |
 | Source | `https://github.com/owngoal-dev/OpenAVB` |
-| Commit | `3c7e7f602d2d35af67f50454a8216337f35b11bb` |
+| Commit | `65a776e9ae00b2e1de22b18cbbad1359945d7277` |
 | Patches | none (`patches/*.patch`, applied in order, when there are any) |
 | Target | `make build/OpenAVB.bin` |
 | Toolchain | Homebrew LLVM 23.1.3 (`clang`, `llvm-objcopy`), Homebrew LLD 23.1.3 |
-| SHA-256 | `d63ea62226d4383288a5a36c440aa2d1df8cccabe0118cac0ab2e0c23ba4c3d2` |
+| SHA-256 | `bbcabe73fd39fb92b96fbb4c661c1a15b0f9e5d9411468f7954c4f433911cb9c` |
 | Size | 460057 bytes |
 
 The image is checked in rather than built by the `VPhone` scheme, so building
@@ -34,9 +34,14 @@ part of `115169e`. A sixth let a guest reboot: after a reboot the SEP restarts
 together with the ROM, a request sent before it was up was dropped, and every
 reboot hung, so the ROM now waits for the SEP's first message before sending.
 Upstream took it in
-[owngoal-dev/OpenAVB#2](https://github.com/owngoal-dev/OpenAVB/pull/2). The pin
-is that PR's commit, `3c7e7f6`, which `main` reaches through the merge
-`63c1ead` (same tree), rather than the merge itself.
+[owngoal-dev/OpenAVB#2](https://github.com/owngoal-dev/OpenAVB/pull/2). A
+seventh lets a guest with less than about 7.5 GiB of memory boot: the ROM
+published the LLB manifest digest into the t8110 SIDP block at `0x2_3D2E_0044`,
+which Virtualization.framework does not back there, and now skips it when the
+chip ID register reads 0. Upstream took it in
+[owngoal-dev/OpenAVB#3](https://github.com/owngoal-dev/OpenAVB/pull/3). The pin
+is that PR's head, `65a776e`, which `main` reaches through the merge `234a080`
+(same tree), rather than the merge itself.
 `Research/Firmware/openavb_boot_rom.md` has the evidence for each change.
 
 If vphone needs a change upstream has not taken yet, put it in `patches/` as a
