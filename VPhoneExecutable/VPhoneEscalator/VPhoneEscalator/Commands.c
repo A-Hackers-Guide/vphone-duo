@@ -55,26 +55,58 @@ void report(const char *self_path) {
         (unsigned long)restricted,
         restricted ? "" : "  (nothing would be allowed)"
     );
+
+    CFStringRef preference = copy_preference_requirement();
+    if (preference) {
+        CFDataRef wanted = copy_requirement_data(preference);
+        CFDataRef held = restricted ? copy_amfid_requirement_data(restricted) : NULL;
+        printf(
+            "  requirement in force       %s\n",
+            !held ? "unreadable"
+            : wanted && CFEqual(held, wanted) ? "the preference's Entitlements"
+                                              : "not the preference's Entitlements"
+        );
+        if (held) CFRelease(held);
+        if (wanted) CFRelease(wanted);
+        CFRelease(preference);
+    }
 }
 
 // --------------------------------------------------------------------------
 
+// Whether the SecRequirementRef at `req` in amfid is the requirement `wanted`.
+static bool holds_requirement(uintptr_t req, CFDataRef wanted) {
+    if (!req || !wanted) return false;
+    CFDataRef held = copy_amfid_requirement_data((mach_vm_address_t)req);
+    bool same = held && CFEqual(held, wanted);
+    if (held) CFRelease(held);
+    return same;
+}
+
 int cmd_allow(const char *self_path, int count, char **paths, int hold_seconds) {
-    if (update_allow_preferences(count, paths)) return 1;
-    if (!attach_amfid(self_path)) return 1;
+    CFStringRef requirement = NULL;
+    if (update_allow_preferences(count, paths, &requirement)) return 1;
+    CFDataRef wanted = copy_requirement_data(requirement);
+    CFRelease(requirement);
+    int status = 1;
+    if (!attach_amfid(self_path)) goto done;
     mach_vm_address_t mgr = amfid_manager(self_path);
-    if (!mgr) return 1;
+    if (!mgr) goto done;
 
     // amfid is already holding the stock requirement, so "non-NULL" proves
-    // nothing. Adoption is the pointer changing: the preference path releases
-    // the old SecRequirementRef and stores a freshly built one.
+    // nothing. The preference path releases the old SecRequirementRef and
+    // stores a freshly built one, so the pointer usually changes. It does not
+    // always: on one Mac amfid logged the reload and the new cdhash launched,
+    // while the pointer stayed where it was (the new object can land in the
+    // block the old one just freed). So the requirement it points at being the
+    // one the preference asks for counts too.
     ptrdiff_t req_off = ivar_offset("_restrictedRequirement");
     uintptr_t before = 0;
-    if (!read_amfid(mgr + req_off, &before, sizeof(before))) return 1;
+    if (!read_amfid(mgr + req_off, &before, sizeof(before))) goto done;
     printf("amfid pid %d: _restrictedRequirement was %#lx\n", g_amfid, (unsigned long)before);
 
     ptrdiff_t off = ivar_offset("_isRunningInternalBuild");
-    if (!write_amfid_byte(mgr + off, 1)) return 1;
+    if (!write_amfid_byte(mgr + off, 1)) goto done;
     printf("amfid pid %d: %s+%#lx = 1\n", g_amfid, MANAGER_CLASS, (long)off);
 
     trigger_reload();
@@ -90,16 +122,26 @@ int cmd_allow(const char *self_path, int count, char **paths, int hold_seconds) 
             );
             goto live;
         }
+        if (holds_requirement(restricted, wanted)) {
+            printf(
+                "amfid holds the requirement (_restrictedRequirement %#lx is the one the "
+                "preference asks for)\n",
+                (unsigned long)restricted
+            );
+            goto live;
+        }
         usleep(100 * 1000);
     }
     fprintf(stderr,
             "error: amfid did not adopt the requirement within 3s "
-            "(_restrictedRequirement never moved off %#lx)\n",
-            (unsigned long)before);
-    return 1;
+            "(_restrictedRequirement never moved off %#lx%s)\n",
+            (unsigned long)before,
+            wanted ? "" : ", and the requirement could not be compiled to compare");
+    goto done;
 
 live:
-    if (hold_seconds <= 0) return 0;
+    status = 0;
+    if (hold_seconds <= 0) goto done;
 
     // amfid has EnablePressuredExit, so it can be replaced under us; a new one
     // starts with the byte back at zero. Re-apply for as long as asked.
@@ -110,12 +152,21 @@ live:
         printf("amfid restarted; re-applying\n");
         mach_port_deallocate(mach_task_self(), g_task);
         g_task = MACH_PORT_NULL;
-        if (!attach_amfid(self_path)) return 1;
+        if (!attach_amfid(self_path)) {
+            status = 1;
+            goto done;
+        }
         mgr = amfid_manager(self_path);
-        if (!mgr || !write_amfid_byte(mgr + off, 1)) return 1;
+        if (!mgr || !write_amfid_byte(mgr + off, 1)) {
+            status = 1;
+            goto done;
+        }
         trigger_reload();
     }
-    return 0;
+
+done:
+    if (wanted) CFRelease(wanted);
+    return status;
 }
 
 int cmd_off(const char *self_path) {

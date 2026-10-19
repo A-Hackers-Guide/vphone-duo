@@ -122,3 +122,15 @@ bool valid_hashes(CFArrayRef hashes) {
     }
     return true;
 }
+
+// The blob of a requirement string: what amfid builds when the preference's
+// Entitlements string replaces its _restrictedRequirement.
+CFDataRef copy_requirement_data(CFStringRef requirement) {
+    SecRequirementRef parsed = NULL;
+    CFDataRef data = NULL;
+    if (SecRequirementCreateWithString(requirement, kSecCSDefaultFlags, &parsed) != errSecSuccess)
+        return NULL;
+    if (SecRequirementCopyData(parsed, kSecCSDefaultFlags, &data) != errSecSuccess) data = NULL;
+    CFRelease(parsed);
+    return data;
+}

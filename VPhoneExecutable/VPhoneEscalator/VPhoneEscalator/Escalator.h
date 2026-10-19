@@ -38,6 +38,7 @@ int attach_amfid(const char *self_path);
 int read_amfid(mach_vm_address_t addr, void *buf, size_t len);
 int write_amfid_byte(mach_vm_address_t addr, uint8_t value);
 mach_vm_address_t amfid_manager(const char *self_path);
+CFDataRef copy_amfid_requirement_data(mach_vm_address_t req);
 
 // MARK: - Requirements.c
 
@@ -45,12 +46,14 @@ CFStringRef stock_requirement(void);
 CFMutableArrayRef cdhashes_for(int count, char **paths);
 CFStringRef requirement_with_hashes(CFStringRef base, CFArrayRef hashes);
 bool valid_hashes(CFArrayRef hashes);
+CFDataRef copy_requirement_data(CFStringRef requirement);
 
 // MARK: - Preferences.c
 
 void trigger_reload(void);
-int update_allow_preferences(int count, char **paths);
+int update_allow_preferences(int count, char **paths, CFStringRef *requirement);
 int remove_allow_preferences(bool *changed);
+CFStringRef copy_preference_requirement(void);
 
 // MARK: - Commands.c
 
