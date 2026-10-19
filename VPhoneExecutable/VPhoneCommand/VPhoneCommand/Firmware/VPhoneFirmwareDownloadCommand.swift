@@ -54,7 +54,9 @@ struct VPhoneFirmwareSealToolCommand: ParsableCommand {
         `apfs_sealvolume` is what turns a rebuilt system volume into a sealed
         one, and it is not in an iPhone restore image — only in a macOS one. The
         two have shared a marketing version since 2025, so "the tool for iOS
-        26.1" means "the one in macOS 26.1".
+        26.1" means "the one in macOS 26.1"; iOS 18.x.y goes with macOS 15.x.y.
+        Without an exact match, the newest macOS of that major below it is
+        taken.
 
         The macOS IPSW is about 18 GB and two files in it are wanted, so nothing
         is downloaded whole: the archive is read over HTTP range requests, the
@@ -120,7 +122,7 @@ struct VPhoneFirmwareSealToolCommand: ParsableCommand {
     /// Resolve the macOS release, then take BuildManifest.plist and the restore
     /// ramdisk out of its IPSW without downloading the IPSW.
     private static func fetchRamdisk(version: String, in output: URL) async throws -> URL {
-        let release = try await VPhoneFirmwareIndex.macOSRelease(version: version)
+        let release = try await VPhoneFirmwareIndex.sealToolRelease(forOSVersion: version)
         print("  macOS \(release.version) (\(release.build))")
 
         let zip = try await VPhoneRemoteZip.open(release.url)

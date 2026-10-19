@@ -3313,7 +3313,8 @@ seal. So for a VM whose plan enables `filesystem-boot-cryptex_merge`:
   from the receipt-checked store bundle; that flag refuses any selection that
   does not merge the restore image.
 - `fw prepare` stages `apfs_sealvolume_<iOS version>` into `<restore>/.tools`
-  (the `fw seal-tool` fetch) and the GPU driver for
+  (the `fw seal-tool` fetch; iOS 18.x.y takes macOS 15.x.y, or without a twin
+  the newest macOS 15 below it) and the GPU driver for
   `filesystem-boot-gpu_driver` as for `system-extensions-boot-gpu_bundle`.
   `vm create` and Launchpad now record the preset before `fw prepare`, which
   read `standard` before: the GPU staging followed the wrong selection for any
