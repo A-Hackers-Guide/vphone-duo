@@ -28,6 +28,16 @@ public struct VPhoneFirmwarePairing: Sendable, Equatable {
     }
 }
 
+public extension VPhoneFirmwarePairing {
+    /// The release's own cloudOS, where the research board stands in for
+    /// vphone600, or nil when there is none. iPhone only: no other guest has run
+    /// on the research board.
+    var matchingCloudOS: VPhoneCloudOSOption? {
+        guard device == VPhoneFirmwareCatalog.device, let version = iosName.split(separator: " ").last else { return nil }
+        return VPhoneFirmwareCatalog.researchBoardCloudOS(forVersion: String(version))
+    }
+}
+
 // MARK: - VPhoneCloudOSOption
 
 public struct VPhoneCloudOSOption: Sendable, Equatable {
@@ -93,6 +103,24 @@ public enum VPhoneFirmwareCatalog {
     static let cloud262 = "https://updates.cdn-apple.com/private-cloud-compute/0cb00f22e0f7a8b33995b49b2bdca77f781ed6093a09c570ac21b0f012bab908"
     static let cloud263 = "https://updates.cdn-apple.com/private-cloud-compute/edc92b58ab7e2f207a6407fd0a0e1a60f7d43bf9d93325bf6d3db3e154ee5525"
     static let cloud264 = "https://updates.cdn-apple.com/private-cloud-compute/c0ecdb4b310cf5239ab2b248dd3098eec297dc5aa3bbe6ada27273262b0b8b64"
+
+    /// cloudOS releases with only the research board (vresearch101ap). A VM on one
+    /// of them runs its own release's kernel, rebuilt with the vphone600 kexts
+    /// (FirmwareResearchBoardPatchSet, kernelcache_recipes), which needs root and an
+    /// ipsw with `kernel extract --kdk`. They are offered beside the 26.4 beta, which
+    /// stays the recommendation: it needs neither.
+    public static let researchBoardCloudOS: [(version: String, option: VPhoneCloudOSOption)] = [
+        ("26.4", .init(name: "cloudOS 26.4 (23E244)", url: "https://updates.cdn-apple.com/private-cloud-compute/6acb7959507f25a76753f5a08ee39f09671486eb7619367e42dc1869bd779035")),
+        ("26.5", .init(name: "cloudOS 26.5 (23F75)", url: "https://updates.cdn-apple.com/private-cloud-compute/602f1132456a1323ac145ea13828c3ca72845259b50f99af1cef8329d5e25748")),
+        ("26.6", .init(name: "cloudOS 26.6 (23G71)", url: "https://updates.cdn-apple.com/private-cloud-compute/bdad1f912196b6c5fe9342e0bdee8768c7f5bb366cb0dde007f5c28c5d148042")),
+        ("26.7", .init(name: "cloudOS 26.7 (23H20)", url: "https://updates.cdn-apple.com/private-cloud-compute/46960a4703ec9b2a81df524d639ea9fe55b30e04f6cf7e21518c2049659509a7")),
+    ]
+
+    /// The research board cloudOS of an iOS release's own major and minor version.
+    public static func researchBoardCloudOS(forVersion version: String) -> VPhoneCloudOSOption? {
+        let release = version.split(separator: ".").prefix(2).joined(separator: ".")
+        return researchBoardCloudOS.first { $0.version == release }?.option
+    }
 
     /// The iPhone17,3 pairings, oldest first. Launchpad offers the last one by
     /// default, so the newest release stays last.
@@ -524,6 +552,7 @@ public enum VPhoneFirmwareCatalog {
         for p in pairings where seen.insert(p.cloudosName).inserted {
             out.append(VPhoneCloudOSOption(name: p.cloudosName, url: p.cloudosURL))
         }
+        out += researchBoardCloudOS.map(\.option)
         return out
     }
 
@@ -542,6 +571,7 @@ public enum VPhoneFirmwareCatalog {
                         files: ota.map { ["\(VPhoneOTARelease.cacheDirectoryName)/\($0.fileName)"] + (base.map { [$0] } ?? []) },
                     ),
                     recommendedCloudOS: .init(name: $0.cloudosName, url: $0.cloudosURL),
+                    matchingCloudOS: $0.matchingCloudOS.map { .init(name: $0.name, url: $0.url) },
                 )
             }
         }
@@ -586,9 +616,13 @@ public struct VPhoneFirmwareCatalogReport: Codable, Equatable, Sendable {
     public struct Entry: Codable, Equatable, Sendable {
         public let ios: Firmware
         public let recommendedCloudOS: Firmware
-        public init(ios: Firmware, recommendedCloudOS: Firmware) {
+        /// The release's own cloudOS, on the research board, when one exists
+        /// (`VPhoneFirmwarePairing.matchingCloudOS`).
+        public let matchingCloudOS: Firmware?
+        public init(ios: Firmware, recommendedCloudOS: Firmware, matchingCloudOS: Firmware? = nil) {
             self.ios = ios
             self.recommendedCloudOS = recommendedCloudOS
+            self.matchingCloudOS = matchingCloudOS
         }
     }
 

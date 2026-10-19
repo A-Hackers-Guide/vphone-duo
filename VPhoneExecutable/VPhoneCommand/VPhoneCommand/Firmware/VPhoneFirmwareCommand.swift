@@ -197,10 +197,18 @@ struct VPhoneFirmwareCatalogCommand: ParsableCommand {
             print("Firmware catalog (\(entry.productType), \(entry.name))")
             let os = VPhoneGuestDevice.Family(rawValue: entry.family)?.osName ?? "iOS"
             let width = max(os.count, entry.pairings.map(\.ios.name.count).max() ?? 0)
-            print("\(os.padding(toLength: width, withPad: " ", startingAt: 0))  recommended cloudOS")
+            let recommendedWidth = max(19, entry.pairings.map(\.recommendedCloudOS.name.count).max() ?? 0)
+            let ownColumn = entry.pairings.contains { $0.matchingCloudOS != nil }
+            print("\(os.padding(toLength: width, withPad: " ", startingAt: 0))  "
+                + "recommended cloudOS".padding(toLength: recommendedWidth, withPad: " ", startingAt: 0)
+                + (ownColumn ? "  own cloudOS (research board: root, VPHONE_IPSW)" : ""))
             for e in entry.pairings {
                 let ios = e.ios.name.padding(toLength: width, withPad: " ", startingAt: 0)
-                print("\(ios)  \(e.recommendedCloudOS.name)")
+                if let own = e.matchingCloudOS {
+                    print("\(ios)  \(e.recommendedCloudOS.name.padding(toLength: recommendedWidth, withPad: " ", startingAt: 0))  \(own.name)")
+                } else {
+                    print("\(ios)  \(e.recommendedCloudOS.name)")
+                }
             }
         }
     }
