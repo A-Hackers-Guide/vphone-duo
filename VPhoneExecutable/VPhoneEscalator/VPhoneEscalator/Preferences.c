@@ -100,7 +100,7 @@ void trigger_reload(void) { utimes(PREFS_PATH, NULL); }
 
 // --------------------------------------------------------------------------
 
-int update_allow_preferences(int count, char **paths) {
+int update_allow_preferences(int count, char **paths, CFStringRef *requirement) {
     bool existed = false;
     CFMutableDictionaryRef prefs = read_prefs(&existed);
     if (!prefs) return 1;
@@ -192,7 +192,7 @@ int update_allow_preferences(int count, char **paths) {
     } else {
         printf("cdhash already allowed; left %s unchanged\n", PREFS_PATH);
     }
-    CFRelease(req);
+    *requirement = req;
     CFRelease(hashes);
     if (!managed) CFRelease(base);
     CFRelease(prefs);
@@ -246,4 +246,15 @@ int remove_allow_preferences(bool *changed) {
     CFRelease(prefs);
     *changed = true;
     return 1;
+}
+
+// The Entitlements string amfid reads out of the preference, or NULL.
+CFStringRef copy_preference_requirement(void) {
+    bool existed = false;
+    CFMutableDictionaryRef prefs = read_prefs(&existed);
+    if (!prefs) return NULL;
+    CFTypeRef value = CFDictionaryGetValue(prefs, CFSTR("Entitlements"));
+    CFStringRef text = value && CFGetTypeID(value) == CFStringGetTypeID() ? CFRetain(value) : NULL;
+    CFRelease(prefs);
+    return text;
 }

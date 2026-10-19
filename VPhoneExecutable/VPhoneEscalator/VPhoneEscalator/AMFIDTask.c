@@ -2,10 +2,12 @@
 // amfid, reading and writing its memory, and locating its singleton.
 #include "Escalator.h"
 
+#include <arpa/inet.h>
 #include <dlfcn.h>
 #include <libproc.h>
 #include <objc/message.h>
 #include <ptrauth.h>
+#include <Security/Security.h>
 #include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -187,6 +189,13 @@ int attach_amfid(const char *self_path) {
     return 1;
 }
 
+static int peek_amfid(mach_vm_address_t addr, void *buf, size_t len) {
+    mach_vm_size_t got = 0;
+    return mach_vm_read_overwrite(g_task, addr, len, (mach_vm_address_t)buf, &got) ==
+               KERN_SUCCESS &&
+           got == len;
+}
+
 int read_amfid(mach_vm_address_t addr, void *buf, size_t len) {
     mach_vm_size_t got = 0;
     kern_return_t kr = mach_vm_read_overwrite(g_task, addr, len, (mach_vm_address_t)buf, &got);
@@ -278,4 +287,68 @@ mach_vm_address_t amfid_manager(const char *self_path) {
         return 0;
     }
     return (mach_vm_address_t)remote;
+}
+
+// --------------------------------------------------------------------------
+// the requirement amfid holds
+// --------------------------------------------------------------------------
+
+// Where a SecRequirementRef keeps the pointer to its blob. Found in a
+// requirement this process builds, by contents, the way singleton_slot finds
+// its slot: the word whose target is that requirement's own blob. amfid links
+// the same Security framework, so its requirements keep the pointer there too.
+static ptrdiff_t requirement_blob_offset(void) {
+    static ptrdiff_t offset = -1;
+    static bool looked = false;
+    if (looked) return offset;
+    looked = true;
+
+    SecRequirementRef req = NULL;
+    CFDataRef data = NULL;
+    if (SecRequirementCreateWithString(CFSTR("anchor apple"), kSecCSDefaultFlags, &req) !=
+            errSecSuccess ||
+        SecRequirementCopyData(req, kSecCSDefaultFlags, &data) != errSecSuccess) {
+        if (req) CFRelease(req);
+        return -1;
+    }
+    const UInt8 *want = CFDataGetBytePtr(data);
+    size_t len = (size_t)CFDataGetLength(data);
+    uint8_t got[256];
+    if (len > 0 && len <= sizeof(got)) {
+        for (ptrdiff_t at = 0; at < 256; at += sizeof(uintptr_t)) {
+            uintptr_t word = 0;
+            if (!peek_self((uintptr_t)req + at, &word, sizeof(word))) break;
+            word = (uintptr_t)strip_pac((void *)word);
+            if (!word || word == (uintptr_t)req) continue;
+            if (peek_self(word, got, len) && memcmp(got, want, len) == 0) {
+                offset = at;
+                break;
+            }
+        }
+    }
+    CFRelease(data);
+    CFRelease(req);
+    return offset;
+}
+
+// The blob of the SecRequirementRef at `req` in amfid, or NULL when it cannot
+// be read as one.
+CFDataRef copy_amfid_requirement_data(mach_vm_address_t req) {
+    ptrdiff_t off = requirement_blob_offset();
+    req = (mach_vm_address_t)strip_pac((void *)req);
+    if (off < 0 || !req) return NULL;
+    uintptr_t blob = 0;
+    if (!peek_amfid(req + (mach_vm_address_t)off, &blob, sizeof(blob))) return NULL;
+    blob = (uintptr_t)strip_pac((void *)blob);
+    uint32_t header[2] = {0, 0}; // magic and length, both big-endian
+    if (!blob || !peek_amfid(blob, header, sizeof(header))) return NULL;
+    uint32_t length = ntohl(header[1]);
+    if (ntohl(header[0]) != 0xfade0c00 || length < sizeof(header) || length > 64 * 1024)
+        return NULL;
+    UInt8 *bytes = malloc(length);
+    if (!bytes) return NULL;
+    CFDataRef data = NULL;
+    if (peek_amfid(blob, bytes, length)) data = CFDataCreate(NULL, bytes, (CFIndex)length);
+    free(bytes);
+    return data;
 }
