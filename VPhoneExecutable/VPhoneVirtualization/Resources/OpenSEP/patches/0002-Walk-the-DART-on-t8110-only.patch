@@ -1,0 +1,145 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jacky <me@jackyu.cn>
+Date: Mon, 19 Oct 2026 09:14:21 +0800
+Subject: [PATCH 2/2] Walk the DART on t8110 only
+
+Addresses that arrive over the mailbox are translated through dart-sep's
+stream zero, whose registers are read at 0x2_5D2C_0000, the t8110 DART.
+Virtualization.framework (vresearch1) maps nothing there for a guest with
+less than about 7.5 GiB of memory. With only the warm-boot fix, a 6144 MB
+guest entered restore mode and lost restored right after NORData ("Could not
+read data (-256)") with no crash report from the framework; with this change
+the same restore finishes, and the guest then boots with its SEP on this ROM
+and comes back from a reboot. With more memory the read is guest RAM, which
+only works while that RAM still reads zero.
+
+The platform row gains walks_dart; vresearch1 uses the address as it is,
+which is what those reads amounted to on the 8 GiB guests the platform was
+validated on. t8110 is unchanged.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ docs/external-contract.md                       |  3 ++-
+ docs/platforms.md                               |  5 +++++
+ .../runtime/boot/boot_platform.h                |  6 ++++++
+ src/image/shared/shared_region.c                | 17 +++++++++++------
+ src/runtime/boot/boot_platform.c                |  7 +++++++
+ 5 files changed, 31 insertions(+), 7 deletions(-)
+
+diff --git a/docs/external-contract.md b/docs/external-contract.md
+index c187118..153148b 100644
+--- a/docs/external-contract.md
++++ b/docs/external-contract.md
+@@ -28,7 +28,8 @@ per-platform differences in the handoff are in [platforms.md](platforms.md).
+   it), the ROM clears it and jumps straight back into the runtime at
+   `0x3_4000_0000`. On a cold boot it must read as anything other than `1`.
+   The `vresearch1` build does not read it.
+-- **DART**: addresses that arrive over the mailbox are dart-sep IOVAs. The ROM
++- **DART** (`t8110` only): addresses that arrive over the mailbox are dart-sep
++  IOVAs. The `vresearch1` build uses them as they are. The `t8110` ROM
+   walks the DART itself (stream 0 at IPA `0x2_5D2C_0000`: TCR at `+0x1000`,
+   TTBR at `+0x1400`, two levels of 11 index bits over 16 KiB pages). A
+   bypassed or unprogrammed stream means the address is used as is.
+diff --git a/docs/platforms.md b/docs/platforms.md
+index 96cd1d8..cafe97f 100644
+--- a/docs/platforms.md
++++ b/docs/platforms.md
+@@ -89,6 +89,11 @@ them for this yet (see the end of this page).
+   backs nothing at that IPA for a guest with less than about 7.5 GiB of
+   memory, where the load aborts before the vector table is set and the
+   framework stops the SEP core, and for a larger guest it is guest RAM.
++- **DART.** Only the `t8110` build translates mailbox addresses through
++  dart-sep's stream zero at `0x2_5D2C_0000`. The `vresearch1` build uses them
++  as they are: under Virtualization.framework that IPA is unbacked for a
++  guest with less than about 7.5 GiB of memory, where the read aborts and the
++  image copy panics mid-restore, and guest RAM for a larger one.
+ - **Selection at run time.** The row is fixed when the ROM is built. Two ways
+   to choose it at run time instead:
+   - read the manifest's CHIP/BORD, which the ROM already evaluates;
+diff --git a/include/open_secure_rom/runtime/boot/boot_platform.h b/include/open_secure_rom/runtime/boot/boot_platform.h
+index 51e82d1..48e048d 100644
+--- a/include/open_secure_rom/runtime/boot/boot_platform.h
++++ b/include/open_secure_rom/runtime/boot/boot_platform.h
+@@ -48,6 +48,12 @@ typedef struct {
+      * with; otherwise the runtime builds its own.
+      */
+     sep_bool rom_builds_translation_tables;
++    /*
++     * Addresses that arrive over the mailbox are translated through
++     * dart-sep's stream zero, read at SEP_DART_BASE (shared_region.c);
++     * otherwise they are used as they are.
++     */
++    sep_bool walks_dart;
+ } sep_boot_platform_t;
+ 
+ enum {
+diff --git a/src/image/shared/shared_region.c b/src/image/shared/shared_region.c
+index e6816f1..af1842c 100644
+--- a/src/image/shared/shared_region.c
++++ b/src/image/shared/shared_region.c
+@@ -1,5 +1,7 @@
+ #include "open_secure_rom/system_closure.h"
+ 
++#include "open_secure_rom/boot_platform.h"
++
+ #include "open_secure_rom/der.h"
+ #include "open_secure_rom/event_log.h"
+ #include "open_secure_rom/panic.h"
+@@ -89,16 +91,19 @@ static sep_u64 sep_peek64(sep_u64 physical_address, sep_u32 attribute) {
+ }
+ 
+ sep_u64 sep_shared_region_translate(sep_u64 iova) {
+-    const sep_u32 tcr =
+-        sep_peek32(SEP_DART_BASE + SEP_DART_TCR + SEP_DART_STREAM * 4,
+-                   SEP_ATTR_DEVICE);
+-    const sep_u32 ttbr =
+-        sep_peek32(SEP_DART_BASE + SEP_DART_TTBR + SEP_DART_STREAM * 4,
+-                   SEP_ATTR_DEVICE);
++    sep_u32 tcr;
++    sep_u32 ttbr;
+     sep_u64 table;
+     sep_u64 entry = 0;
+     int level;
+ 
++    if (!sep_boot_platform()->walks_dart) {
++        return iova;
++    }
++    tcr = sep_peek32(SEP_DART_BASE + SEP_DART_TCR + SEP_DART_STREAM * 4,
++                     SEP_ATTR_DEVICE);
++    ttbr = sep_peek32(SEP_DART_BASE + SEP_DART_TTBR + SEP_DART_STREAM * 4,
++                      SEP_ATTR_DEVICE);
+     if ((tcr & SEP_DART_TCR_BYPASS) != 0) {
+         return iova;
+     }
+diff --git a/src/runtime/boot/boot_platform.c b/src/runtime/boot/boot_platform.c
+index 5d3f9e3..4fe45cf 100644
+--- a/src/runtime/boot/boot_platform.c
++++ b/src/runtime/boot/boot_platform.c
+@@ -20,6 +20,11 @@ static const sep_boot_platform_t boot_platforms[] = {
+      * 0x18000 (0x2001D00); and builds no translation tables.  The
+      * vphone600 SEPOS keeps x0, branches on it being zero, and reads the
+      * magic through it (0x4008, 0x404C, 0x6328 in 23E5207q).
++     *
++     * It walks no DART.  Virtualization.framework backs nothing at the
++     * t8110 DART's address unless the guest has about 7.5 GiB of memory or
++     * more; below that the read aborts and the copy panics mid-restore, and
++     * above it the read is guest RAM.
+      */
+     [SEP_BOOT_PLATFORM_VRESEARCH1] = {
+         .runtime_entry = 0,
+@@ -28,6 +33,7 @@ static const sep_boot_platform_t boot_platforms[] = {
+         .handoff_in_power_down_register = 0,
+         .cold_input_offset = 0,
+         .rom_builds_translation_tables = 0,
++        .walks_dart = 0,
+     },
+     /*
+      * What the d16 SEPOS needs from the t8110 SEPROM, measured on the
+@@ -66,6 +72,7 @@ static const sep_boot_platform_t boot_platforms[] = {
+         .handoff_in_power_down_register = 1,
+         .cold_input_offset = 0x680000ULL,
+         .rom_builds_translation_tables = 1,
++        .walks_dart = 1,
+     },
+ };
+ 

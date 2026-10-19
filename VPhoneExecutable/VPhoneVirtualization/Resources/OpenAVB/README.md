@@ -11,10 +11,10 @@ the image into each new machine folder.
 | --- | --- |
 | Source | `https://github.com/owngoal-dev/OpenAVB` |
 | Commit | `3c7e7f602d2d35af67f50454a8216337f35b11bb` |
-| Patches | none (`patches/*.patch`, applied in order, when there are any) |
+| Patches | `patches/*.patch`, applied in order (one, see below) |
 | Target | `make build/OpenAVB.bin` |
 | Toolchain | Homebrew LLVM 23.1.3 (`clang`, `llvm-objcopy`), Homebrew LLD 23.1.3 |
-| SHA-256 | `d63ea62226d4383288a5a36c440aa2d1df8cccabe0118cac0ab2e0c23ba4c3d2` |
+| SHA-256 | `bbcabe73fd39fb92b96fbb4c661c1a15b0f9e5d9411468f7954c4f433911cb9c` |
 | Size | 460057 bytes |
 
 The image is checked in rather than built by the `VPhone` scheme, so building
@@ -26,7 +26,17 @@ header). It clones and builds outside the repository and needs
 
 ## Patches
 
-None. OpenAVB's first commit, `54b67bf`, did not run under
+- `0001-Publish-the-iLLB-manifest-digest-on-t8110-only.patch`. Before LLB runs,
+  OpenAVB publishes the LLB manifest's SHA-384 into the t8110 SIDP block at
+  IPA `0x2_3D2E_0044`…`0x84`. Virtualization.framework maps nothing there for
+  a guest with less than about 7.5 GiB of memory: the first read aborts right
+  after `iLLB container accepted` and the ROM parks in `pvpanic_trigger`, so a
+  6144 MB machine never boots. The patch skips the publish when the chip ID
+  register reads 0, which is how Virtualization.framework presents it.
+  Proposed upstream in
+  [owngoal-dev/OpenAVB#3](https://github.com/owngoal-dev/OpenAVB/pull/3).
+
+Earlier changes are all upstream. OpenAVB's first commit, `54b67bf`, did not run under
 Virtualization.framework. Five changes found on live machines made it boot and
 restore, and upstream took them in
 [owngoal-dev/OpenAVB#1](https://github.com/owngoal-dev/OpenAVB/pull/1), now

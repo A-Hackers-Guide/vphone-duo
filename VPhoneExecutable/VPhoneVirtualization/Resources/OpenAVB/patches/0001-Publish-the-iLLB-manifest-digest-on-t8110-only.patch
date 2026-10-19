@@ -1,0 +1,98 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jacky <me@jackyu.cn>
+Date: Mon, 19 Oct 2026 11:06:52 +0800
+Subject: [PATCH] Publish the iLLB manifest digest on t8110 only
+
+source_image_publish_boot_manifest reads and writes the t8110 SIDP block at
+0x2_3D2E_0044..0x84. Virtualization.framework maps nothing there for a guest
+with less than about 7.5 GiB of memory: on a 6144 MB iPhone17,3 iOS 27.0.1
+guest the read of +0x84 aborts right after "iLLB container accepted" and the
+ROM parks in pvpanic_trigger before LLB runs (x19 = 0x2_3D2E_0084). With more
+memory the block is guest RAM. The vresearch101 iBoot boots on Apple's ROM,
+which publishes nothing there.
+
+The chip ID register, which Virtualization.framework leaves at 0 and
+platform_read_identity already falls back from, now names the machine: the
+publish runs only when it reads non-zero.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ include/avp/platform/platform.h |  5 +++++
+ src/image/boot/source_image.c   | 10 ++++++++++
+ src/platform/platform.c         |  5 +----
+ 3 files changed, 16 insertions(+), 4 deletions(-)
+
+diff --git a/include/avp/platform/platform.h b/include/avp/platform/platform.h
+index 036ce25..764eec3 100644
+--- a/include/avp/platform/platform.h
++++ b/include/avp/platform/platform.h
+@@ -7,6 +7,11 @@
+ 
+ enum {
+     AVP_PLATFORM_BASE = 0x00400000,
++    /*
++     * Virtualization.framework leaves this register at 0 (platform.c), which
++     * is also how the ROM tells it from the t8110 machine it was written for.
++     */
++    AVP_PLATFORM_CHIP_ID = AVP_PLATFORM_BASE + 0x6f0,
+     AVP_PLATFORM_VARIANT_CAPACITY = 64,
+     AVP_AP_NONCE_SIZE = 32,
+     AVP_SEP_NONCE_SIZE = 20,
+diff --git a/src/image/boot/source_image.c b/src/image/boot/source_image.c
+index f747f1e..174b10e 100644
+--- a/src/image/boot/source_image.c
++++ b/src/image/boot/source_image.c
+@@ -4,6 +4,7 @@
+ #include "avp/crypto/hash/corecrypto_sha512_compat.h"
+ #include "avp/crypto/hash/sha256.h"
+ #include "avp/platform/mmio.h"
++#include "avp/platform/platform.h"
+ #include "avp/runtime/memory/runtime_memory.h"
+ #include "lzfse.h"
+ 
+@@ -332,6 +333,12 @@ static bool prepare_source_fixture(const uint8_t *image, uint32_t image_size) {
+  * panics on finding it already locked -- so this runs once, here, before the
+  * firmware starts.  Bit 16 of `+0x40` is the factory lock on the ROM manifest
+  * and is not ours to touch; the board seeds it.
++ *
++ * Only the t8110 machine has the block.  Virtualization.framework maps nothing
++ * at `0x2_3D2E_0000` unless the guest has about 7.5 GiB of memory or more:
++ * below that the first read of `+0x84` aborts and the ROM parks in pvpanic
++ * before LLB runs, and above it the window is guest RAM.  Its iBoot boots on
++ * Apple's ROM, which publishes nothing here, so there the ROM leaves it alone.
+  */
+ enum {
+     SOURCE_IMAGE_SIDP_BOOT = 0x23d2e0044ull,
+@@ -349,6 +356,9 @@ static void source_image_publish_boot_manifest(
+     AVPCCSHA512Context context;
+     uint8_t digest[AVP_SHA384_DIGEST_SIZE];
+ 
++    if (mmio_read32(AVP_PLATFORM_CHIP_ID) == 0) {
++        return;
++    }
+     if (image->encoded_manifest_bytes == 0 ||
+         image->encoded_manifest_size == 0) {
+         source_image_diagnostic(
+diff --git a/src/platform/platform.c b/src/platform/platform.c
+index bf18fb7..6891e6a 100644
+--- a/src/platform/platform.c
++++ b/src/platform/platform.c
+@@ -13,7 +13,6 @@ enum {
+     PLATFORM_ENTROPY_OFFSET = 0x38,
+     PLATFORM_BOOT_CONTEXT_OFFSET = 0x300,
+     PLATFORM_VARIANT_OFFSET = 0x5c8,
+-    PLATFORM_CHIP_ID_OFFSET = 0x6f0,
+     /*
+      * The matching vphone600 machine profile carries these values outside
+      * the readable identity registers.
+@@ -91,9 +90,7 @@ void platform_publish_boot_context(const AVPBootContext *context) {
+ 
+ void platform_read_identity(AVPPlatformIdentity *identity) {
+     identity->ecid = platform_ecid();
+-    identity->chip_id = mmio_read32(
+-        AVP_PLATFORM_BASE + PLATFORM_CHIP_ID_OFFSET
+-    );
++    identity->chip_id = mmio_read32(AVP_PLATFORM_CHIP_ID);
+     if (identity->chip_id == 0) {
+         identity->chip_id = VPHONE600_CHIP_ID;
+     }

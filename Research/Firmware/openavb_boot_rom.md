@@ -133,6 +133,21 @@ was found on a live machine by the first thing that stopped, in this order:
    slot, and AVPBooter's "not full" send predicate were each tried and are
    not needed.
 
+7. **SIDP block on a small guest** (carried as
+   `0001-Publish-the-iLLB-manifest-digest-on-t8110-only.patch`). Before LLB
+   runs, `source_image_publish_boot_manifest` writes the LLB manifest's
+   SHA-384 into the t8110 SIDP block (`0x2_3D2E_0044`, `+0x74`, `+0x84`).
+   Virtualization.framework maps nothing there unless the guest has about
+   7.5 GiB of memory or more, the same threshold as OpenSEP's warm-boot mark
+   and DART (`opensep_sep_rom.md`). On a 6144 MB iPhone17,3 iOS 27.0.1
+   machine the first read of `+0x84` aborted right after `iLLB container
+   accepted`; the AP sat in `pvpanic_trigger` with x19 = `0x2_3D2E_0084`, the
+   SEP waited in its mailbox, and `vm create`'s first boot check timed out.
+   The 2026-10-18 validation ran on 8192 MB machines, where the block is
+   guest RAM. The vresearch101 iBoot boots on Apple's ROM, which publishes
+   nothing there, so the patch skips the publish when the chip ID register
+   reads 0, as it does under Virtualization.framework (change 2).
+
 **How these were found.** The VM's GDB stub (the lower of the two ports
 `lsof -iTCP -sTCP:LISTEN` shows for the `com.apple.Virtualization.VirtualMachine`
 XPC process) reads registers and memory: the AP's PC, ESR/ELR/FAR, OpenAVB's
@@ -144,6 +159,11 @@ disassemble with `llvm-mc`). OpenAVB's own diagnostics (`OpenBootROM: …`)
 reach the VM's serial log.
 
 ## Validation
+
+- 6144 MB (2026-10-19, change 7 and OpenSEP's two patches): an iPhone17,3
+  iOS 27.0.1 machine boots on OpenAVB and OpenSEP, vphoned answers 13 s after
+  launch, and three guest reboots come back in 9 to 10 s
+  (`opensep_sep_rom.md` has the run).
 
 - Normal boot: an iPhone17,3 iOS 26.6.2 machine restored on Apple's ROM, with
   `romImages.avpBooter` pointed at OpenAVB, prints `OpenBootROM: SEP bootstrap
@@ -174,8 +194,8 @@ log show `OpenBootROM:` for OpenAVB.
 
 ## Upstream
 
-All six changes are upstream: 1 to 5 in owngoal-dev/OpenAVB#1 (folded into
-`115169e`), 6 in owngoal-dev/OpenAVB#2. vphone carries no patch. The pin is
+Changes 1 to 6 are upstream: 1 to 5 in owngoal-dev/OpenAVB#1 (folded into
+`115169e`), 6 in owngoal-dev/OpenAVB#2. Change 7 is carried as a patch until owngoal-dev/OpenAVB#3 is merged. The pin is
 #2's own commit, `3c7e7f6`, not its merge `63c1ead`: both have the same tree
 and `main` reaches both, but upstream has rewritten `main` once, and GitHub
 keeps a PR's head commit reachable (`refs/pull/2/head`) after a rewrite. If
