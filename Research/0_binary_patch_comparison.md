@@ -3319,3 +3319,12 @@ seal. So for a VM whose plan enables `filesystem-boot-cryptex_merge`:
   `vm create` and Launchpad now record the preset before `fw prepare`, which
   read `standard` before: the GPU staging followed the wrong selection for any
   other preset as well.
+
+The merged image must not carry the host's `.fseventsd`. `diskutil image
+attach` mounts it browsable, so fseventsd starts a log on every writable
+mount, and Apple's system volumes have none. With the log in the image, the
+mtree listed `.fseventsd`, the restore wrote `.fseventsd/.ramdisk-boot-done`
+into the restored volume, and `seal_system_volume` failed ("mtree: cannot
+generate the XML dictionary", 26.6 on cloudOS 23E5207q, 2026-10-19). Each
+writable mount now deletes the directory before it unmounts, which also stops
+fseventsd writing it again for that mount.

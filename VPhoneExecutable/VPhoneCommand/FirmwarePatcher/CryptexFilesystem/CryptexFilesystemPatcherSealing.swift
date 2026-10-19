@@ -96,6 +96,7 @@ extension CryptexFilesystemPatcher {
         print("Modification time: \(remap ? modificationTime : "none")")
         FileManager.default.createFile(atPath: mtreeRemapPath.path, contents: remapContent.data(using: .utf8))
 
+        try removeHostEventLog(mount: mount)
         try unmount(mount: mount)
         let sealvolume = try identifyApfsSealvolume()
         FileManager.default.createFile(atPath: sealLogPath.path, contents: nil)
@@ -179,6 +180,9 @@ extension CryptexFilesystemPatcher {
             "/private/var/MobileAsset/PreinstalledAssetsV2",
             "/private/var/staged_system_apps",
         ]
+        // First: createDigestAndHash takes the remap time from /private/var,
+        // so the removals below have to be the last change to the volume.
+        try removeHostEventLog(mount: mount)
         var didEdit = false
         for path in removedPaths {
             if FileManager.default.fileExists(atPath: mount.appending(path)) {

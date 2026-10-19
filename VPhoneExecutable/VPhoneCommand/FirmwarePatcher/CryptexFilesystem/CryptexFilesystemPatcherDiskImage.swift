@@ -142,6 +142,21 @@ extension CryptexFilesystemPatcher {
         ])
     }
 
+    /// Delete the event log the host's fseventsd keeps on a writable mount.
+    ///
+    /// Apple's system volumes have no `.fseventsd`, and the restore writes
+    /// `.fseventsd/.ramdisk-boot-done` into the one it restores. A log the host
+    /// left in the image shows up in the mtree, the restored volume then no
+    /// longer matches it, and the restore fails at `seal_system_volume`
+    /// ("mtree: cannot generate the XML dictionary"). Deleting the directory on
+    /// the mounted volume also stops fseventsd writing it again for this mount.
+    func removeHostEventLog(mount: String) throws {
+        let log = URL(fileURLWithPath: mount).appending(path: ".fseventsd")
+        if FileManager.default.fileExists(atPath: log.path) {
+            try FileManager.default.removeItem(at: log)
+        }
+    }
+
     func unmount(mount: String) throws {
         _ = try runProcess("/usr/sbin/diskutil", ["unmount", mount])
     }

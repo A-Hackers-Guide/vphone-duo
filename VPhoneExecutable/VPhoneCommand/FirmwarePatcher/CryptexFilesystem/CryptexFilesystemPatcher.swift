@@ -180,6 +180,7 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
             if gate.isEnabled(FirmwareRestoreImagePatchSet.launchdCacheLoader) {
                 try patchLaunchdCacheLoader(targetMount: targetMount)
             }
+            try removeHostEventLog(mount: targetMount)
         }
 
         guard attachedDevices.isEmpty else {
