@@ -81,7 +81,9 @@ merged as `02ca2e5`. Upstream then rewrote `main` into one commit, `115169e`,
 which keeps those changes and builds the same image the patched `54b67bf`
 did. A sixth change, found later, went upstream in
 [owngoal-dev/OpenAVB#2](https://github.com/owngoal-dev/OpenAVB/pull/2) as
-`3c7e7f6`, which is the pin; OpenAVB's `make verify` passes on it. Each change
+`3c7e7f6`. A seventh went upstream in
+[owngoal-dev/OpenAVB#3](https://github.com/owngoal-dev/OpenAVB/pull/3) as
+`65a776e`, which is the pin. Each change
 was found on a live machine by the first thing that stopped, in this order:
 
 1. **ROM aperture is read-only.** `_start` stores `avp_el2_present` at
@@ -133,8 +135,8 @@ was found on a live machine by the first thing that stopped, in this order:
    slot, and AVPBooter's "not full" send predicate were each tried and are
    not needed.
 
-7. **SIDP block on a small guest** (carried as
-   `0001-Publish-the-iLLB-manifest-digest-on-t8110-only.patch`). Before LLB
+7. **SIDP block on a small guest** (owngoal-dev/OpenAVB#3, carried as a
+   patch until it was merged). Before LLB
    runs, `source_image_publish_boot_manifest` writes the LLB manifest's
    SHA-384 into the t8110 SIDP block (`0x2_3D2E_0044`, `+0x74`, `+0x84`).
    Virtualization.framework maps nothing there unless the guest has about
@@ -194,11 +196,12 @@ log show `OpenBootROM:` for OpenAVB.
 
 ## Upstream
 
-Changes 1 to 6 are upstream: 1 to 5 in owngoal-dev/OpenAVB#1 (folded into
-`115169e`), 6 in owngoal-dev/OpenAVB#2. Change 7 is carried as a patch until owngoal-dev/OpenAVB#3 is merged. The pin is
-#2's own commit, `3c7e7f6`, not its merge `63c1ead`: both have the same tree
-and `main` reaches both, but upstream has rewritten `main` once, and GitHub
-keeps a PR's head commit reachable (`refs/pull/2/head`) after a rewrite. If
+All seven changes are upstream: 1 to 5 in owngoal-dev/OpenAVB#1 (folded into
+`115169e`), 6 in owngoal-dev/OpenAVB#2, 7 in owngoal-dev/OpenAVB#3. vphone
+carries no patch. The pin is #3's own commit, `65a776e`, not its merge
+`234a080`: both have the same tree and `main` reaches both, but upstream has
+rewritten `main` once, and GitHub keeps a PR's head commit reachable
+(`refs/pull/3/head`) after a rewrite. If
 upstream rewrites `main` again, `UpdateOpenAVB.sh` fails at checkout; move the
 pin to the rewritten commit that builds the same image.
 

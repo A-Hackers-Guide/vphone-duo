@@ -37,9 +37,9 @@ next start; the ROM it replaces stays in the folder. `vm info` prints
 
 ## The build
 
-`make PLATFORM=vresearch1 build/OpenSEP.bin` at the pinned commit, with the
-patches in `Resources/OpenSEP/patches/` applied (two: the warm-boot check
-and the DART walk, below). `vresearch1` is OpenSEP's default and the row of its handoff table
+`make PLATFORM=vresearch1 build/OpenSEP.bin` at the pinned commit, with no
+patches. The pin, `8b1633f`, is the head of owngoal-dev/OpenSEP#1, which
+fixed the warm-boot check and the DART walk below. `vresearch1` is OpenSEP's default and the row of its handoff table
 that stands in for Virtualization.framework's AVPSEPBooter: the SEPOS runtime
 is entered at the runtime region's base (`0x06000000`) with the handoff pointer
 in `x0`, `x1` zero, and the firmware building its own translation tables. The
@@ -76,8 +76,8 @@ and loaded by iBoot at boot, `sepfw-load-at-boot = 1`) stays as it was.
   `OPEN_SECURE_ROM_ENFORCE_IMAGE_TRUST`. The `vphone600` firmware is not
   encrypted, so OpenSEP's table of iPhone14,4 firmware keys is never used here.
 - **Warm boot.** OpenSEP's reset path checks a warm-boot word at
-  `0x2_3D2E_4804` that only the t8110 runtime writes, and the pinned commit
-  does it on `vresearch1` too. Virtualization.framework maps nothing at that
+  `0x2_3D2E_4804` that only the t8110 runtime writes, and the initial
+  import (`39ff3d7`) did it on `vresearch1` too. Virtualization.framework maps nothing at that
   IPA unless the guest has about 7.5 GiB of memory or more (measured on macOS
   27.0.1 26A434: DFU came up at 7680 and 8192 MB, never at 4096, 6144 or
   7168 MB). Below that the load is the SEP core's first fault: VBAR_EL1 is
@@ -87,8 +87,7 @@ and loaded by iBoot at boot, `sepfw-load-at-boot = 1`) stays as it was.
   `virtual-clock` threads). The AP's ROM, OpenAVB or Apple's, then spins in
   its mailbox acquire, `vm launch --dfu` says the VM started, and
   `recovery-probe` never finds it. Single-stepping the SEP core through its
-  GDB stub stops on that load. The carried patch
-  (`0001-Check-the-warm-boot-mark-on-t8110-only.patch`) leaves the check out
+  GDB stub stops on that load. Since `ef26920` (owngoal-dev/OpenSEP#1) the check is left out
   of the `vresearch1` build, which then always starts cold; guest reboots,
   which restart the SEP with the AP, come back cold anyway (see Validation).
   Above the threshold the IPA is guest RAM, so the unpatched check could also
@@ -96,16 +95,15 @@ and loaded by iBoot at boot, `sepfw-load-at-boot = 1`) stays as it was.
 - **DART.** OpenSEP translated every address that arrives over the mailbox
   through dart-sep's stream zero, reading its TCR and TTBR at IPA
   `0x2_5D2C_0000`, the t8110 DART. That IPA has the same threshold. With the
-  warm-boot patch alone a 6144 MB iPhone17,3 iOS 27.0.1 machine came up in
+  warm-boot fix alone a 6144 MB iPhone17,3 iOS 27.0.1 machine came up in
   DFU, took iBSS, iBEC, the ramdisk and `RestoreSEP`, entered restore mode,
   and lost restored right after NORData (`Could not read data (-256)`), with
   no crash report from the framework (by then OpenSEP's own vector table is
   set, so a fault there would end in OpenSEP's panic path; that was not
-  observed directly). With the second patch the same restore finishes. On
+  observed directly). With the DART fix too, the same restore finishes. On
   the 8 GiB machines of the first validation the read was guest RAM that
   still read zero, so the walk took the stream as unprogrammed and used the
-  address as it is. The second patch
-  (`0002-Walk-the-DART-on-t8110-only.patch`) makes that the `vresearch1`
+  address as it is. Since `8b1633f` (owngoal-dev/OpenSEP#1) that is the `vresearch1`
   behaviour.
 
 ## Validation
@@ -142,11 +140,11 @@ To check the image after an update: `UpdateOpenSEP.sh` with no argument
 rebuilds the pinned commit and compares byte for byte. To check a machine:
 `vphone-cli vm info <vm>` prints `seprom:`.
 
-### 6144 MB, with both patches (2026-10-19)
+### 6144 MB, with both fixes (2026-10-19)
 
 On this Mac (M5 Pro, macOS 27.0.1 26A434), iPhone17,3 iOS 27.0.1 (24A446) /
 cloudOS 26.4 (23E5207q), 6 CPU, 6144 MB, `vm create --no-template` from a
-build of upstream `61b4efb2` with both patches (image `92690b9c…`):
+build of vphone upstream `61b4efb2` with both fixes, as patches then (the image is the one `8b1633f` builds, `92690b9c…`):
 
 - DFU comes up through OpenAVB, the restore ends `Restore Finished`, CFW
   installs.
@@ -188,7 +186,8 @@ Not covered: iPad guests, other iOS versions, and the Mac fleet's own hosts
 
 ## Upstream
 
-Two patches are carried in `Resources/OpenSEP/patches/` as `git format-patch`
-files until owngoal-dev/OpenSEP#1 is merged: the warm-boot check and the DART walk
-above. `UpdateOpenSEP.sh`
-refuses a patch that no longer applies; delete it once the pin moves past it.
+Both fixes above are upstream in owngoal-dev/OpenSEP#1, and vphone carries no
+patch. The pin is the PR's head, `8b1633f`, which `main` reaches through the
+merge `74b2359` (same tree). A change upstream has not taken yet goes in
+`Resources/OpenSEP/patches/` as a `git format-patch` file until it is merged;
+`UpdateOpenSEP.sh` refuses a patch that no longer applies.

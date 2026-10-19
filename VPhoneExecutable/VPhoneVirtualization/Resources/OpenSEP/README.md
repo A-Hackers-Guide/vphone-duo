@@ -11,8 +11,8 @@ each new machine folder.
 | | |
 | --- | --- |
 | Source | `https://github.com/owngoal-dev/OpenSEP` |
-| Commit | `39ff3d7572059668077388dd907b63308ddf645e` |
-| Patches | `patches/*.patch`, applied in order (two, see below) |
+| Commit | `8b1633f7e6606f0bc9e1422c93e8d2e056154d2f` |
+| Patches | `patches/*.patch`, applied in order (none) |
 | Target | `make PLATFORM=vresearch1 build/OpenSEP.bin` |
 | Toolchain | Homebrew LLVM 23.1.3 (`clang`, `llvm-objcopy`), Homebrew LLD 23.1.3 |
 | SHA-256 | `92690b9c7e900ec0054271dbbc0444ee2d8567c8d41d3a2e491ba011e2b08b12` |
@@ -27,21 +27,14 @@ header). It clones and builds outside the repository and needs
 
 ## Patches
 
-- `0001-Check-the-warm-boot-mark-on-t8110-only.patch`. The reset path reads
-  a warm-boot mark at IPA `0x2_3D2E_4804` that only the t8110 runtime writes.
-  Virtualization.framework maps nothing there for a guest with less than about
-  7.5 GiB of memory, so the load aborts before the vector table is set, the
-  framework ends the SEP core (`Unhandled exception code`) and the AP's ROM
-  waits for the mailbox forever: DFU never comes up. The patch leaves the
-  check out of the `vresearch1` build. Proposed upstream in
-  [owngoal-dev/OpenSEP#1](https://github.com/owngoal-dev/OpenSEP/pull/1).
-- `0002-Walk-the-DART-on-t8110-only.patch`. Mailbox addresses were translated
-  through the t8110 DART, whose registers OpenSEP reads at IPA
-  `0x2_5D2C_0000`. Under the same memory threshold that read aborts inside
-  OpenSEP's own vector table during the first image copy of a restore, the
-  SEP panics, and restored drops the connection right after NORData. The
-  `vresearch1` build now uses the addresses as they are. Proposed upstream in
-  [owngoal-dev/OpenSEP#1](https://github.com/owngoal-dev/OpenSEP/pull/1).
+None. The initial import, `39ff3d7`, read two t8110 addresses that
+Virtualization.framework backs only for a guest with about 7.5 GiB of memory
+or more: the warm-boot mark at `0x2_3D2E_4804`, which stopped DFU, and the
+DART at `0x2_5D2C_0000`, which broke a restore after NORData. vphone carried
+both fixes until upstream took them in
+[owngoal-dev/OpenSEP#1](https://github.com/owngoal-dev/OpenSEP/pull/1). The pin
+is that PR's head, `8b1633f`, which `main` reaches through the merge `74b2359`
+(same tree). `Research/Firmware/opensep_sep_rom.md` has the evidence.
 
 If vphone needs a change upstream has not taken yet, put it in
 `patches/` as a `git format-patch` file. `UpdateOpenSEP.sh` applies patches in
