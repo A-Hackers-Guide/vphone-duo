@@ -92,6 +92,19 @@ done
 for preset in "$resources/patches_presets/"*.plist; do
     /usr/bin/plutil -lint -s "$preset" || { print -u2 "Malformed patch preset: ${preset:t}"; exit 1; }
 done
+# Every kernelcache recipe has its symbol map and bundle list, and its donor.
+for manifest in "$resources/kernelcache_recipes/bases/"*/manifest.json; do
+    recipe=${manifest:h}
+    for key in symbols kexts; do
+        file=$(/usr/bin/plutil -extract $key raw -o - "$manifest") || { print -u2 "Malformed kernelcache recipe: ${recipe:t}"; exit 1; }
+        [[ -s "$recipe/$file" ]] || { print -u2 "Kernelcache recipe ${recipe:t} lacks $file"; exit 1; }
+    done
+    donor=$(/usr/bin/plutil -extract donor raw -o - "$manifest")
+    [[ -s "$resources/kernelcache_recipes/donors/$donor/manifest.json" ]] || {
+        print -u2 "Kernelcache recipe ${recipe:t} names a missing donor: $donor"
+        exit 1
+    }
+done
 # New machines copy this ROM. Without it vm new would fail, and OpenAVB is
 # distributed only with its licences. The ROM window is 512 KiB.
 for name in OpenAVB.bin LICENSE APSL-2.0.txt; do

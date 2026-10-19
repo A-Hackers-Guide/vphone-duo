@@ -270,10 +270,38 @@ extension FirmwarePipeline {
 
         // 7. Kernel — the public CFW firmware includes the former EXP
         //    hv_vmm rename after the base and custom-firmware patches.
+        //    On a cloudOS without vphone600 components the research board's
+        //    kernelcache has no iPhone virtualisation kexts: its release kernel
+        //    is rebuilt with them first (KernelCacheMixer), and the patchers
+        //    run over that.
+        let kernelMixPatch = FirmwareResearchBoardPatchSet.kernelMix
+        let mixesKernel = includesSet(FirmwareResearchBoardPatchSet.identifier)
+            && isEnabled(kernelMixPatch, fallback: true)
+            && !notApplicablePatches.contains(kernelMixPatch)
+        let restoreKernelPath = try? Self.manifestComponentPath("RestoreKernelCache", in: restoreDir)
+        let kernelMix: (() throws -> (container: Data, record: PatchRecord))? = mixesKernel ? { [self] in
+            guard let restoreKernelPath else {
+                throw PatcherError.fileNotFound("RestoreKernelCache in the restore tree's BuildManifest.plist")
+            }
+            // As shipped: the stash once a run has put it aside.
+            let shipped = try Data(contentsOf: pristineInput(for: restoreDir.appending(path: restoreKernelPath)).url)
+            let mixer = try KernelCacheMixer(recipes: .locate(), verbose: verbose)
+            let base = try mixer.base(for: shipped)
+            let record = PatchRecord(
+                patchID: kernelMixPatch,
+                component: "kernelcache",
+                fileOffset: 0,
+                virtualAddress: nil,
+                originalBytes: Data(),
+                patchedBytes: Data(),
+                description: "the \(base.id) research board kernelcache, rebuilt with the \(base.donor) virtualisation kexts",
+            )
+            return try (mixer.mix(kernelcache: shipped), record)
+        } : nil
         components.append(ComponentDescriptor(
             name: "kernelcache",
             inRestoreDir: true,
-            searchPatterns: ["kernelcache.research.vphone600"],
+            searchPatterns: [(try? Self.manifestComponentPath("KernelCache", in: restoreDir)) ?? "kernelcache.research.vphone600"],
             patcherFactories: {
                 switch variant {
                 case .regular:
@@ -308,7 +336,24 @@ extension FirmwarePipeline {
                     )
                 }
             }(),
+            replacement: kernelMix,
         ))
+
+        // 7a. The kernel restore boots. On a cloudOS without vphone600 components
+        //     it is the mix as well, with no patcher over it; vphone600's release
+        //     kernel is restored as shipped and needs no component.
+        if includesSet(FirmwareResearchBoardPatchSet.identifier),
+           Self.researchBoardStandsIn(restoreDir: restoreDir),
+           let restoreKernelPath
+        {
+            components.append(ComponentDescriptor(
+                name: "RestoreKernelCache",
+                inRestoreDir: true,
+                searchPatterns: [restoreKernelPath],
+                patcherFactories: [],
+                replacement: kernelMix,
+            ))
+        }
 
         // 8. DeviceTree — JB includes the former EXP identity and camera
         //    properties so the guest presents a consistent iPhone17,3 identity.

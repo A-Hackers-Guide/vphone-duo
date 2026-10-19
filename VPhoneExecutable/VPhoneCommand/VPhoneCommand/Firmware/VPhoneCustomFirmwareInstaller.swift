@@ -550,8 +550,16 @@ struct VPhoneCustomFirmwareInstaller {
         let callerUID = invokingUser?.uid
         let bundleDirectory = try pinBundle(owner: callerUID)
         let bundlePath = try bundleDirectory.path
-        if Self.restoredCustomisedSystem(readPatchPlan(in: bundleDirectory)) {
+        let recordedPlan = readPatchPlan(in: bundleDirectory)
+        if Self.restoredCustomisedSystem(recordedPlan) {
             throw Self.restoreImageRefusal(mode)
+        }
+        // Its originals hold the research board's kernel, not the mix.
+        if recordedPlan?.isEnabled(FirmwareResearchBoardPatchSet.kernelMix) == true {
+            throw ValidationError(
+                "This VM boots a kernelcache rebuilt from the research board's (its cloudOS has no vphone600 components), "
+                    + "which a kernel update cannot rebuild. Change its kernel patches with `fw patch` and a restore instead.",
+            )
         }
 
         let disk = try openDiskImage(in: bundleDirectory, path: bundlePath, owner: callerUID)

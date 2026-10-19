@@ -40,6 +40,7 @@ enum VPhoneFirmwarePreparer {
         device productType: String? = nil,
         otaSource: String? = nil,
         otaKey: String? = nil,
+        checksKernelcacheMix: Bool = false,
         bundle: VPhoneBundle,
         resources: VPhoneResources,
     ) throws {
@@ -156,6 +157,16 @@ enum VPhoneFirmwarePreparer {
         let originalManifest = phoneTree.appendingPathComponent("BuildManifest.plist")
         try clone(originalManifest, to: phoneTree.appendingPathComponent("iPhone-BuildManifest.plist"))
         try FirmwareManifest.generate(iPhoneDir: phoneTree, cloudOSDir: cloudTree, device: restored, verbose: true)
+        // A cloudOS without vphone600 components restores the research board's,
+        // whose kernelcache `fw patch` rebuilds from a recipe.
+        if FirmwarePipeline.researchBoardStandsIn(restoreDir: phoneTree) {
+            let recipe = try KernelCacheMixer.recipe(forRestoreTree: phoneTree)
+            print("[+] No vphone600 components in this cloudOS: the research board stands in, kernelcache recipe \(recipe.id)")
+            // `vm create` would otherwise stop only at `fw patch`, after the GPU restore.
+            if checksKernelcacheMix {
+                try KernelCacheMixer.checkMixable(restoreTree: phoneTree)
+            }
+        }
         let userland = staging.appendingPathComponent(VPhoneOTAArchive.userlandDirectoryName, isDirectory: true)
         if let ota {
             try stageOTA(ota, device: device, restoreTree: phoneTree, userland: userland)

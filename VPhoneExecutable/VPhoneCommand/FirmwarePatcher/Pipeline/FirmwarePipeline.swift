@@ -93,6 +93,13 @@ public final class FirmwarePipeline {
         /// in-place behaviour and opt out here.
         var restorable: Bool = true
 
+        /// A container standing in for the shipped file, and the record of the
+        /// swap: the patchers run over its payload and are saved into it. The
+        /// research board's kernelcache is replaced by its mix this way
+        /// (KernelCacheMixer), whose container carries kmutil's layout
+        /// properties rather than the shipped kernel's.
+        var replacement: (() throws -> (container: Data, record: PatchRecord))? = nil
+
         /// The same descriptor with more patchers appended after the existing ones.
         func appending(_ factories: [(Data, Bool) throws -> any Patcher]) -> ComponentDescriptor {
             guard !factories.isEmpty else { return self }
@@ -102,6 +109,7 @@ public final class FirmwarePipeline {
                 searchPatterns: searchPatterns,
                 patcherFactories: patcherFactories + factories,
                 restorable: restorable,
+                replacement: replacement,
             )
         }
     }
@@ -226,7 +234,7 @@ public final class FirmwarePipeline {
 
     /// Whether the restore tree boots the research board's device tree, which
     /// `FirmwareManifest` takes when the cloudOS has no vphone600ap.
-    static func researchBoardStandsIn(restoreDir: URL) -> Bool {
+    public static func researchBoardStandsIn(restoreDir: URL) -> Bool {
         (try? manifestComponentPath("RestoreDeviceTree", in: restoreDir))?.contains(".vresearch101") ?? false
     }
 
@@ -320,7 +328,7 @@ public final class FirmwarePipeline {
             // is what the restore image patches expect.
             let keepsOriginal = component.restorable
 
-            guard !component.patcherFactories.isEmpty else {
+            guard !component.patcherFactories.isEmpty || component.replacement != nil else {
                 log("  [=] \(component.name): no patches for \(variant.rawValue)")
                 // The preset dropped this component's whole patch set. If an earlier
                 // run patched it, the file on disk is now carrying patches nothing
@@ -355,7 +363,17 @@ public final class FirmwarePipeline {
                         : "  original: re-patching the copy in \(Self.originalsDirectoryName)/")
                 }
             }
-            let rawData = try loader.load(from: sourceURL)
+            var rawData = try loader.load(from: sourceURL)
+            // The stand-in goes where the shipped file was, so `save` below
+            // repackages into its container.
+            var replacementRecord: PatchRecord?
+            if let replacement = component.replacement {
+                let (container, record) = try replacement()
+                try container.write(to: fileURL)
+                rawData = try loader.load(from: fileURL)
+                replacementRecord = record
+                log("  replaced by the stand-in for \(record.patchID)")
+            }
             log("  format: \(rawData.count) bytes")
 
             let currentData: Data
@@ -373,6 +391,17 @@ public final class FirmwarePipeline {
                 guard stashedNow else { throw error }
                 discardStash(for: fileURL)
                 throw staleFirmwareError(component: component.name, underlying: error)
+            }
+
+            if let replacementRecord {
+                // Already in place; the patchers' result, if any, is saved into it.
+                if !componentRecords.isEmpty {
+                    try loader.save(currentData, to: fileURL)
+                }
+                log("  [+] saved")
+                allRecords.append(replacementRecord)
+                allRecords.append(contentsOf: componentRecords)
+                continue
             }
 
             if componentRecords.isEmpty {

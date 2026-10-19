@@ -3412,6 +3412,42 @@ which gives the same 10-byte header for TXM and the kernel as before and 6
 bytes for the SEP image. `SEPResearchBoardTests` checks all of this against
 Apple's 26.1 and 26.4 beta images when an IPSW in `ipsws/` carries both.
 
-`fw prepare` still refuses a cloudOS without vphone600ap
-(`VPhoneIPSWCache.checkPair`): the guest also needs a kernel with the
-iPhone's kexts, which the research board's kernelcache does not have.
+### The research board's kernelcache
+
+**`kernel-boot-vresearch101_kext_mix`** (`KernelCacheMixer`) gives the research
+board's kernelcache the iPhone virtualisation kexts it lacks (paravirtual GPU,
+touch, audio, FairPlay, ...). For the cloudOS's `kernelcache.release.vresearch101`
+it finds the recipe in `Contents/Resources/kernelcache_recipes` by SHA-256, then:
+
+1. extracts the donor, the vphone600 kernelcache of the 26.4 beta (23E5207q,
+   read once from its cloudOS IPSW), and the base into KDKs with
+   `ipsw kernel extract --kdk --symbols`, naming the stripped symbols from the
+   recipe's maps;
+2. keeps the recipe's bundle list: the base without its research-board-only
+   kexts, plus the donor kexts that link against the base kernel;
+3. stages the bundles as a root-owned volume (kmutil reads no other kexts and
+   takes the host's own in their place without a word) and links it with
+   `kmutil create -a arm64e -n boot -s all -z -x --compress --img4-encode
+   --split-ro-rx-tags`;
+4. puts back Apple's CPU subtype if the builder wrote another, and checks that
+   every requested bundle was linked.
+
+The mix replaces both `KernelCache` and `RestoreKernelCache`, so restore boots
+it too. The pipeline keeps kmutil's container (its `PAYP` properties describe
+the new layout) and saves the preset's kernel patches into it
+(`ComponentDescriptor.replacement`); `minimal` adds none. The shipped kernels stay
+in `FirmwareOriginals`. Mixes are cached in `~/.vphone/kernelcache/mix`, keyed
+by the kernelcaches, the maps and bundle list, the `ipsw` binary's hash and the
+builder layout.
+
+Requirements: an `ipsw` with `kernel extract --kdk`, named by `VPHONE_IPSW`
+(vphone-cli does not ship it); root; and for every base here (26.4–26.7, all
+`kernel-last`) the kmutil of macOS 26.4 or later. `fw prepare` now pairs a
+cloudOS without vphone600ap and refuses one whose kernelcache no recipe covers.
+`cfw update-kernel` refuses on a mixed kernel, whose originals are the research
+board's.
+
+Checked on 2026-10-19: a `minimal` VM of iOS 26.6 on cloudOS 26.6 (23G71) restores
+and boots, and vphoned answers. The 26.4 (23E244), 26.5 and 26.7 recipes are the
+ones the research workflow built and validated statically (26.4 also booted
+there); they have not run through this pipeline yet.

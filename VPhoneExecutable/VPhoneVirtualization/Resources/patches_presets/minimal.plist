@@ -53,6 +53,7 @@
 			<string>ibec-boot-bootx_precondition</string>
 			<string>ibec-boot-image4_callback</string>
 			<string>ibec-cfw-serial_label</string>
+			<string>kernel-boot-vresearch101_kext_mix</string>
 			<string>llb-boot-boot_args</string>
 			<string>llb-boot-image4_callback</string>
 			<string>llb-boot-panic_bypass</string>

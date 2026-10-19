@@ -129,6 +129,9 @@ fi
 /bin/mkdir -p "$resources/patches_presets"
 /bin/cp "$root/VPhoneExecutable/VPhoneVirtualization/Resources/patches_presets/"*.plist \
     "$resources/patches_presets/"
+# What `fw patch` rebuilds a research board kernelcache from; see its README.
+/bin/rm -rf "$resources/kernelcache_recipes"
+/bin/cp -R "$root/VPhoneExecutable/VPhoneVirtualization/Resources/kernelcache_recipes" "$resources/"
 
 "${0:a:h}/SyncStrings.sh"
 /usr/bin/xcrun xcstringstool compile \

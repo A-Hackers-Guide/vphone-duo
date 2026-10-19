@@ -513,6 +513,7 @@ public struct VPhoneVirtualMachineCreator {
             device: options.device,
             otaSource: options.otaSource,
             otaKey: options.otaKey,
+            checksKernelcacheMix: true,
             bundle: bundle, resources: resources,
         )
         print("[+] Firmware prepared (iPhone + cloudOS merged into bundle).")
