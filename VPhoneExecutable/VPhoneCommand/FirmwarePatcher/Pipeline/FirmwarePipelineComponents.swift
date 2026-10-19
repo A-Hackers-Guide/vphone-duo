@@ -321,6 +321,7 @@ extension FirmwarePipeline {
         //    names none (catalogue tests) keeps vphone600's.
         let dtIncludeIdentity = variant == .jb || variant == .exp
         let convertsResearchBoard = includesSet(FirmwareResearchBoardPatchSet.identifier)
+            && !notApplicablePatches.contains(FirmwareResearchBoardPatchSet.deviceTreeConversion)
         let deviceTreePath = (try? Self.manifestComponentPath("RestoreDeviceTree", in: restoreDir))
             ?? "Firmware/all_flash/DeviceTree.vphone600ap.im4p"
         components.append(ComponentDescriptor(
@@ -362,6 +363,25 @@ extension FirmwarePipeline {
                     )
                     p.gate = gate
                     p.convertsResearchBoard = convertsResearchBoard
+                    return p
+                }] : [],
+            ))
+        }
+
+        // 8c. SEP — only the research board's is patched, on a cloudOS without
+        //     vphone600 components (FirmwareResearchBoardPatchSet). vphone600's is
+        //     restored as Apple ships it.
+        let sepPatch = FirmwareResearchBoardPatchSet.sepDispatch
+        if includesSet(FirmwareResearchBoardPatchSet.identifier),
+           Self.researchBoardStandsIn(restoreDir: restoreDir)
+        {
+            components.append(ComponentDescriptor(
+                name: VPhoneFirmwareComponent.sep.rawValue,
+                inRestoreDir: true,
+                searchPatterns: [try Self.manifestComponentPath("RestoreSEP", in: restoreDir)],
+                patcherFactories: isEnabled(sepPatch, fallback: true) ? [{ data, verbose in
+                    let p = SEPResearchBoardPatcher(data: data, verbose: verbose)
+                    p.gate = gate
                     return p
                 }] : [],
             ))

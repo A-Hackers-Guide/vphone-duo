@@ -224,6 +224,12 @@ public final class FirmwarePipeline {
         return allRecords
     }
 
+    /// Whether the restore tree boots the research board's device tree, which
+    /// `FirmwareManifest` takes when the cloudOS has no vphone600ap.
+    static func researchBoardStandsIn(restoreDir: URL) -> Bool {
+        (try? manifestComponentPath("RestoreDeviceTree", in: restoreDir))?.contains(".vresearch101") ?? false
+    }
+
     func resolveFirmwareApplicability(
         restoreDir: URL,
         iOSBase: VPhoneVersion?,
@@ -231,6 +237,12 @@ public final class FirmwarePipeline {
         plan: VPhonePatchPlan?,
     ) throws {
         notApplicablePatches = []
+        // The research board patches convert what a cloudOS without vphone600
+        // components supplies; any other restore tree has nothing for them.
+        if !Self.researchBoardStandsIn(restoreDir: restoreDir) {
+            let researchBoard = FirmwareResearchBoardPatchSet.manifest.patches.map(\.identifier)
+            notApplicablePatches.formUnion(researchBoard.filter { plan?.isEnabled($0) ?? true })
+        }
         let sealPatch = RestoreRamDiskSealPatcher.patchIdentifier
         let sealSelected = plan?.isEnabled(sealPatch)
             ?? (iOSBase?.major == 27 && cloudOS?.major == 26 && cloudOS?.minor == 4)

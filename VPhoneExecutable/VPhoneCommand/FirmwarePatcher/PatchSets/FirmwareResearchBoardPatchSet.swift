@@ -4,12 +4,13 @@
 // 26.1–26.4 beta cloudOS releases carry a vphone600ap identity. Every other
 // cloudOS ships the research board alone, vresearch101ap, and `fw prepare` then
 // takes its components instead (`FirmwareManifest.generate`). The patches here
-// turn those into what vphone600 would have been.
+// turn those into what vphone600 would have been: the device tree
+// (DeviceTreeResearchBoardConversion.swift) and SEPD (SEPResearchBoardPatcher.swift).
 //
-// Every shipped preset names this set. Its patches only write where they find
-// the research board, so on a cloudOS with vphone600 components they record
-// nothing: the fallback costs the other presets nothing and needs no version
-// gate. They are boot-essential where they apply.
+// Every shipped preset names this set. On a cloudOS with vphone600 components
+// its patches are not applicable (`FirmwarePipeline.resolveFirmwareApplicability`)
+// and write nothing, so the fallback costs the other presets nothing and needs
+// no version gate. They are boot-essential where they apply.
 
 import Foundation
 import VPhonePatchKit
@@ -19,6 +20,8 @@ public enum FirmwareResearchBoardPatchSet {
 
     /// The research board's device tree, rewritten as the vphone600 one.
     public static let deviceTreeConversion = "devicetree-boot-vresearch101_conversion"
+    /// The research board's SEPD, answering one operation as vphone600's does.
+    public static let sepDispatch = "sep-boot-vresearch101_sepd_dispatch"
 
     public static let manifest = VPhonePatchSetManifest(
         identifier: identifier,
@@ -30,6 +33,13 @@ public enum FirmwareResearchBoardPatchSet {
                 title: "vphone600 device tree",
                 summary: "Gives the research board's device tree the vphone600 identity, product properties and nodes, so a cloudOS without vphone600ap boots an iPhone userland. Runs before every other device tree patch.",
                 target: .firmware(.deviceTree),
+                bootEssential: true,
+            ),
+            VPhonePatchDeclaration(
+                identifier: sepDispatch,
+                title: "vphone600 SEPD dispatch",
+                summary: "Sends SEPD operation 0x31 to the handler vphone600's SEP uses for it, and recomputes the FIPS HMAC the change invalidates.",
+                target: .firmware(.sep),
                 bootEssential: true,
             ),
         ],

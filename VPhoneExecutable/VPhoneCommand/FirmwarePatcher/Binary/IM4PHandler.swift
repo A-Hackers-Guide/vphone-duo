@@ -5,7 +5,9 @@ import Img4tool
 
 /// Handles loading, extracting, and re-packaging IM4P firmware containers.
 public enum IM4PHandler {
-    private static let paypPreservingFourCCs: Set<String> = ["trxm", "krnl"]
+    /// Their `PAYP` properties (`arms`/`tz0s` for the SEP) describe how the
+    /// image is loaded, so a rebuilt container keeps them.
+    private static let paypPreservingFourCCs: Set<String> = ["trxm", "krnl", "sepi"]
     /// Written back LZFSE-compressed: the image the boot ROM decodes itself.
     static let lzfseFourCCs: Set<String> = ["ibss"]
 
@@ -73,18 +75,43 @@ public enum IM4PHandler {
     }
 
     private static func appendPAYPIfPresent(from original: Data, to rebuilt: Data) throws -> Data {
-        let marker = Data("PAYP".utf8)
-        guard let markerRange = original.range(of: marker, options: .backwards),
-              markerRange.lowerBound >= 10
-        else {
+        guard let start = paypStart(in: original) else {
             return rebuilt
         }
 
-        let payp = original[(markerRange.lowerBound - 10) ..< original.endIndex]
+        let payp = original[start ..< original.endIndex]
         var output = rebuilt
         try updateTopLevelDERLength(of: &output, adding: payp.count)
         output.append(payp)
         return output
+    }
+
+    /// Where the `[0]` element carrying the `PAYP` properties starts: the one
+    /// whose DER length runs exactly to the end of the container. Its headers
+    /// (`A0 len`, `30 len`, `16 04`) take 10 bytes with two-byte lengths (TXM,
+    /// kernel) and 6 with short ones (SEP).
+    static func paypStart(in data: Data) -> Int? {
+        guard let marker = data.range(of: Data("PAYP".utf8), options: .backwards) else { return nil }
+        for start in stride(from: marker.lowerBound - 6, through: max(data.startIndex, marker.lowerBound - 16), by: -1) {
+            guard data[start] == 0xA0,
+                  let (length, size) = derLength(in: data, at: start + 1),
+                  start + 1 + size + length == data.endIndex
+            else { continue }
+            return start
+        }
+        return nil
+    }
+
+    /// A DER length at `index`, and how many bytes it takes.
+    private static func derLength(in data: Data, at index: Int) -> (length: Int, size: Int)? {
+        guard index < data.endIndex else { return nil }
+        let first = data[index]
+        if first & 0x80 == 0 {
+            return (Int(first), 1)
+        }
+        let count = Int(first & 0x7F)
+        guard (1 ... 4).contains(count), index + count < data.endIndex else { return nil }
+        return (data[index + 1 ... index + count].reduce(0) { ($0 << 8) | Int($1) }, 1 + count)
     }
 
     private static func updateTopLevelDERLength(of data: inout Data, adding extraBytes: Int) throws {

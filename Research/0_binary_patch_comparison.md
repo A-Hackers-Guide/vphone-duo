@@ -3360,9 +3360,11 @@ releases, have the research board alone (vresearch101ap). `FirmwareManifest`
 now takes the research identities for the vphone600 components when there is
 no vphone600ap, and leaves `RecoveryMode` out when the identity has none.
 The new set `com.vphone.patchset.research.board` turns those components into
-vphone600's. Every shipped preset names it. Its patches write only where they
-find the research board, so a cloudOS with vphone600 components records
-nothing and stays byte-identical.
+vphone600's. Every shipped preset names it. When the restore tree's
+`RestoreDeviceTree` is not the research board's, `fw patch` records its patches
+as not applicable (`FirmwarePipeline.resolveFirmwareApplicability`), so a
+cloudOS with vphone600 components builds no SEP component, converts nothing
+and stays byte-identical, and receipts do not claim the patches.
 
 **`devicetree-boot-vresearch101_conversion`**
 (`DeviceTreeResearchBoardConversion.swift`) rewrites the research tree before
@@ -3391,6 +3393,24 @@ property for property. The only differences are the build `time-stamp`, the
 order properties are stored in, and the phandle numbers, which are compared
 through the node each reference names. `DeviceTreeResearchBoardTests` runs
 that comparison whenever an IPSW in `ipsws/` carries both trees.
+
+**`sep-boot-vresearch101_sepd_dispatch`** (`SEPResearchBoardPatcher.swift`)
+patches SEPD in the research board's SEP firmware. On the 26.4 beta, which
+carries both, vphone600's SEPD sends operation 0x31 to the handler it shares
+with 0x12 and others, which zeroes the reply; vresearch101's gives 0x31 a
+handler of its own, which replies with a constant from `__const`. The patch
+copies 0x12's switch table entry into 0x31's. The table is found on decoded
+operands, as the bounds-checked switch (`cmp`, `csel ls`, `adrp` + `add` or
+`adr` + `nop`, `ldrsw … lsl #2`, `adr`, `add`, `br`) whose bound covers 0x31,
+and must be the only one. SEPD is found through the root argument object after
+the "Built by legion2P" banner. The table lies in `__text`, and from 26.4 on SEPD
+carries `__TEXT,__fipspost_hmac`, an HMAC-SHA256 of `__text` with an all-zero
+key (both stock 26.4 SEPDs match it), which is recomputed. 26.1's SEPD has no
+such section. A rebuilt `sepi` container keeps its `PAYP` load properties
+(`arms`, `tz0s`): `IM4PHandler` now finds the `PAYP` element by its DER length,
+which gives the same 10-byte header for TXM and the kernel as before and 6
+bytes for the SEP image. `SEPResearchBoardTests` checks all of this against
+Apple's 26.1 and 26.4 beta images when an IPSW in `ipsws/` carries both.
 
 `fw prepare` still refuses a cloudOS without vphone600ap
 (`VPhoneIPSWCache.checkPair`): the guest also needs a kernel with the

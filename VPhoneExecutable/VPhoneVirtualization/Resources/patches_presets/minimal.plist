@@ -60,6 +60,7 @@
 			<string>llb-cfw-display_scale</string>
 			<string>llb-cfw-serial_label</string>
 			<string>manifest-boot-digest_rehash</string>
+			<string>sep-boot-vresearch101_sepd_dispatch</string>
 		</array>
 	</dict>
 	<key>Summary</key>
