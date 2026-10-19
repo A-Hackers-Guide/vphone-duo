@@ -21,6 +21,8 @@ public enum FirmwareGuestSystemPatchSet {
 
     public static let installCoordinationPersona = "system-installcoordination_proxy-cfw-persona_lookup"
     public static let installCoordinationPersonaMarker = "/usr/lib/vphone-installcoordination-persona-lookup"
+    public static let metalCacheReuse = "system-systemhook-cfw-metal_cache_reuse"
+    public static let metalCacheReuseMarker = "/usr/lib/vphone-metal-cache-reuse"
     public static let gyroscope = "system-backboardd-cfw-gyroscope"
     public static let attitude = "system-apps-cfw-attitude"
     public static let arm64eX1DyldBootstrap = "system-dyld-boot-arm64e_x1_bootstrap"
@@ -260,6 +262,16 @@ public enum FirmwareGuestSystemPatchSet {
                 summary: "Allows only the CoreDevice installation proxy to look up UserManager through the launchd hook on the hybrid guest.",
                 target: .guestFile(path: installCoordinationPersonaMarker),
                 applicability: ios27,
+            ),
+            VPhonePatchDeclaration(
+                identifier: metalCacheReuse,
+                title: "Keep Metal shader caches",
+                summary: """
+                Has SystemHook set FS_CACHE_REUSE_ON_REBOOT=1 in every guest process, so Metal's \
+                shader caches, which libCoreFSCache stamps with the boot session, survive a reboot \
+                and backboardd does not rebuild its pipelines after every boot.
+                """,
+                target: .guestFile(path: metalCacheReuseMarker),
             ),
 
             // MARK: Guest Payload

@@ -216,6 +216,14 @@ static void vpLoadLibrary(const char *kind, const char *library) {
 
 // xpcproxy needs this bridge because launchd only spawns the proxy, not its target.
 __attribute__((constructor)) static void vpLogProcess(void) {
+    // libCoreFSCache stamps every Metal shader cache with the boot session and
+    // resets it on the next boot unless this is set, so the paravirtual GPU's
+    // pipelines would be rebuilt after every boot. Set before any Metal code
+    // runs, in every process. See
+    // Research/Guest/gpu_acceleration.md.
+    if (access("/usr/lib/vphone-metal-cache-reuse", F_OK) == 0)
+        setenv("FS_CACHE_REUSE_ON_REBOOT", "1", 0);
+
     char path[PATH_MAX];
     uint32_t length = sizeof(path);
     if (_NSGetExecutablePath(path, &length) != 0)

@@ -222,6 +222,290 @@ recompile is therefore a limitation of the host paravirtual GPU, not a guest
 patch we can write. (A per-app `MTLBinaryArchive` inside a guest app would
 persist that app's own pipelines, but that is an app change, not a VM one.)
 
+### Seeding the cache from the host (2026-10-18)
+
+The section above concluded that only Apple's framework could fix the misses.
+The cache is plain files in a user-owned directory, so a host process can write
+into it before a task opens it. That works. A seed is safe only when it holds
+what **the same guest process** compiled in an earlier boot. A seed that mixes
+entries from several processes hangs the guest GPU. The safe form works, but
+it buys little: about two points of on-time frames. So nothing ships.
+
+Measured on `Lychee` (iPhone, iOS 27.0.1, cloudOS 26.4 (23E5207q) driver,
+macOS 27.0.1 host, bundle 2.10.1).
+
+#### What the host checks on a hit
+
+`-[ParavirtualizedGraphicsGPUTask handshakeWithTaskRoot:…cachePath:cacheExtension:reply:]`
+in `com.apple.gpusw.ParavirtualizedGraphicsGPUTask` consumes the sandbox
+extension and calls `MTLSetShaderCachePath(cachePath)`. Without a path it sets
+`FS_CACHE_SIZE=0`. Everything after that is Metal's ordinary per-process
+function cache, `MTLCompilerFSCache` under `MultiLevelBinaryFSCache` in
+`Metal.framework`. PG adds no format and no check of its own.
+
+`MTLCompilerFSCache::getElementImpl(MTLUINT256_t, void**, size_t*)` looks up the
+key, requires the entry to be longer than 64 bytes, and compares the first 32
+bytes with `SHA-256` of the body and the next 32 with the key it asked for. A
+mismatch calls `invalidateCache()`, and a match returns the body. That is the
+whole check. Nothing on a hit names a process, a device or a driver. A
+well-formed entry is used as it is, whatever task wrote it.
+
+PG then builds the pipeline with
+`newComputePipelineStateWithDescriptor:options:0 reflection:nil error:`, after
+`setResourceIndex:` and `setForceResourceIndex:YES` from the guest's command.
+On failure it logs `Failed to create compute pipeline: …` to its host log.
+
+#### File layout
+
+- `com.apple.paravirtualizedgraphics-<ecid in decimal>/task-<random>/<arch>/functions.{list,data}`,
+  `<arch>` being `16777235_530` here. A task's directory goes away when its
+  process exits. The framework leaves a directory that no task owns where it
+  is: ten made by earlier experiments outlived many boots.
+- `functions.list`: a 32-byte constant header, then for each entry its fields
+  and its key, then 8 zero bytes. The first entry's fields are `u32` tag, `u64`
+  0, `u64` size, `u64` offset; the others' are `u64` 0, `u64` size, `u64`
+  offset. A key is 32 bytes and comes *after* its entry's fields.
+- `functions.data`: the entries, 8-byte aligned, padded to a multiple of 64 KiB.
+  An entry is `SHA-256(body)`, its own key, then the body. `size` counts all
+  three.
+- Bodies are of two kinds. A Mach-O (`feedfacf`) holds an AGX binary with
+  `__TEXT,__text` and `__GPU_METADATA`, `__GPU_LD_MD`, `__GPU_STATS_MD`,
+  and the rest. A blob starting `ef13c710` carries argument names
+  (`mvp_matrix`, `view_matrix`, `Params_t`…), which looks like reflection.
+  These are the "pairs" seen earlier. In the 656-entry task, 400 are Mach-O
+  and 256 are blobs.
+
+#### Why a mixed seed breaks
+
+The same key holds different bytes in different processes. Every
+cross-process difference found (44 shared keys over six tasks of one boot)
+falls in one of three places:
+
+- `__GPU_STATS_MD`: the compile time. Harmless.
+- One `u32` in `__GPU_LD_MD`, in the record `0x0c, 0x10, ID, 0, 0, len, name`
+  (the name being the AGX function's, such as `fca15dhmha4` or `eot`). In one
+  task the ID follows the order of compilation: entries 29 to 43 carry 29 to
+  43. Each binary therefore embeds a per-process compile counter.
+- One or two words in the reflection blobs (for example 121 against 123).
+
+Rewriting every Mach-O ID to `1000000 + n`, with the SHA-256 recomputed, did
+**not** stop the failure on its own. The ID is not the whole story, and what
+else ties an entry to its process was not pinned down.
+
+The failure itself, now with both logs:
+
+- Host (`log stream` for the GPU task and `MTLCompilerService`): every compile
+  in backboardd's task succeeds, and no `Failed to create compute pipeline`
+  is logged. `downsample_4_compute` is never sent to the compiler: it is a hit.
+- Guest (`logs.syslog` for backboardd, taken while Camera launches): within
+  about 2 s, backboardd's CoreAnimation command buffers end with
+  `Caused GPU Hang Error (00000003:kIOGPUCommandBufferCallbackErrorHang)`.
+  The GPU restarts, and only then does the next `newComputePipelineState…`
+  fail. That failure is the `Compilation failed` abort in
+  `CA::OGL::MetalContext::get_compute_pipeline` under
+  `BlurStateCompute::downsample_box_4`.
+
+So a hit is not rejected. It is *executed*, and the binary from another process
+hangs the GPU. The ddmin pair from earlier, list positions 34 and 35, turns out
+to be AGX's own blit kernel `blit_uber_buf_to_tex_uint`, not a CoreAnimation
+kernel. The oracle was also flaky. Neither result was worth chasing.
+
+#### Seeding a task with its own entries
+
+The first task the guest creates after start, about 7 s in, is backboardd's.
+That is its render server: a backboardd crash takes down that host task.
+`prefill` here fills only that task's directory, with the files the same task
+had at the end of the previous boot.
+
+| Seed for backboardd's task | Boot, unlock, launch Camera | Result |
+| --- | --- | --- |
+| Its own files from a previous cold boot | 3 runs | 0 restarts each |
+| The `boot1` union of every task | 2 runs | 14 and 393 restarts |
+| The `boot1` union with every ID rewritten | 1 run | 105 restarts |
+
+The full test then ran as three pairs: a cold boot, then a boot whose backboardd
+task was seeded with that cold boot's backboardd files. Each boot launched all
+eleven apps, Camera included. Compile CPU is the per-process delta of host
+`MTLCompilerService` CPU time across the workload.
+
+| Run | GPU restarts | New backboardd / cameracaptured crashes | Host compile CPU | Compiles, all (backboardd) |
+| --- | --- | --- | --- | --- |
+| cold 1 | 0 | 0 | 3.86 s | 640 (374) |
+| seeded 1 | 0 | 0 | 1.58 s | 270 (4) |
+| cold 2 | 0 | 0 | 3.76 s | 632 (373) |
+| seeded 2 | 0 | 0 | 1.58 s | 273 (7) |
+| cold 3 | 0 | 0 | 3.89 s | 640 (374) |
+| seeded 3 | 0 | 0 | 1.82 s | 313 (27) |
+
+These runs also reported frame pacing. Those numbers are void, for two
+reasons. They came from `AppUsage.lastSubmittedTime` of the host task's
+`AGXDeviceUserClient`, which was later seen not to move at all during
+animations. And the workload's `{"t":"home"}` is not a command
+(`unknown command: home`; the home button is `{"t":"key","name":"home"}`),
+so the apps opened on top of each other and the stores never held the
+go-home animation.
+
+Two more seeded runs went wrong because the harness picked a leftover union
+directory instead of backboardd's task. They gave 1010 restarts each, which
+confirms the mixed case once more.
+
+#### Where the first-use lag is
+
+The complaint, reproduced: after a boot, opening Settings and going home is
+choppy, and it smooths out after a few rounds. Frames here come from the guest:
+a launchd job polls QuartzCore's exported `CARenderServerGetFrameCounter(0)`
+every 0.5 ms and logs each change. Lychee renders at 60 Hz (gaps cluster at
+14–17 ms). "On time" is a gap of 20 ms or less. Each window is the 3 s after
+`apps.launch` of Settings (open) or the home key (close), five rounds, starting
+about 14 s after the VM is up.
+
+| Window | Cold A on time (bb compiles, Settings compiles) | Cold B | backboardd seeded from cold B |
+| --- | --- | --- | --- |
+| open1 | 69.8% (29, 23) | 68.3% (31, 20 in open2) | 75.6% (0, 15) |
+| close1 | **36.1%** (57) | **43.6%** (61) | **38.1%** (0) |
+| open2 | 76.1% (19) | 51.1% (20) | 81.6% (0) |
+| close2 | 80.0% (2) | 73.3% (1) | 74.4% (1) |
+| open3–5 | 83–86% | 78–87% | 80–86% |
+| close3–5 | 79–84% | 69–77% | 70–78% |
+
+Seeding backboardd's host task removed every **host** compile, and the first
+go-home was still as choppy (38%). There is a second compile stage, in the
+guest, and that is where the remaining first-use cost sits.
+
+#### The guest's own shader cache is thrown away at every boot
+
+Per round, on a cold boot (guest `processes.list` CPU at each window edge, host
+`proc_pid_rusage` of the VM service and the GPU tasks): the first go-home differs
+from later ones in one way only. The **guest's** `MTLCompilerService` takes
+0.41 s of CPU there (0.49 s in open1, 0.15 s in open2, then nothing), while
+SpringBoard and backboardd use the same CPU in every round. Host disk reads of
+`Disk.img` are negligible. Its log (`logs.syslog` for `MTLCompilerService`)
+shows the work is all for backboardd: over three rounds, 71
+`MTLSpecializeFunctionToArchive` requests (820 ms) and 90 `MTLBuildFunctions`
+(189 ms), on every boot.
+
+Why the guest compiles at all, and why it starts over at each boot:
+
+- CoreAnimation normally renders from precompiled pipelines in
+  `MTLBinaryArchive`s. On the paravirtual GPU, backboardd logs `Precompiled
+  pipelines disabled on unsupported hardware.`, so every pipeline is built at
+  run time, on its render thread.
+- backboardd does keep a Metal cache. `StartWindowServer` calls
+  `MTLSetShaderCachePath` with its system container's Caches
+  (`/private/var/containers/Data/System/<uuid>/Library/Caches`, holding
+  `functions.{list,data}` and `32023/libraries.*`). Within one boot it works: a
+  backboardd killed and relaunched compiles nothing.
+- Across a boot it does not. The cache key is constant: the driver's
+  `-[AppleParavirtDevice setupCompiler]` passes `cacheUUID` = SHA-256 of its
+  own build date, and Metal mixes in only its build stamp. But
+  `libCoreFSCache.dylib` writes `kern.bootsessionuuid` into the head of
+  `functions.list` (bytes 4–39, after the magic `45 36 27 18`). At open it
+  resets a cache stamped by another boot. Seen directly: the header went from
+  `96E73E64-…` to `30366BEF-…` with the boot session, and `functions.list`
+  from 19,372 bytes to 1,004. A clean `system.shutdown` changes nothing.
+  Every guest Metal cache follows the same rule, SpringBoard's and the apps'
+  (`/var/mobile/Library/Caches/<bundle id>/com.apple.metal`) included.
+- `libCoreFSCache` reads `FS_CACHE_REUSE_ON_REBOOT`. With it set, a cache from
+  another boot is kept. Verified without rebooting: write a foreign UUID into
+  the header and relaunch backboardd. Without the variable the cache resets
+  (19,260 to 5,932 bytes). With it set through `launchd.setenv`, nothing
+  changes (19,148 bytes, foreign header kept) and backboardd compiles 2
+  functions in the guest instead of 92.
+
+Effect on the first go-home, five Settings rounds after a backboardd relaunch
+with a foreign UUID in its cache (a stand-in for a boot):
+
+| Guest cache | Host cache for backboardd's new task | Runs | close1 on time | Guest compiles for backboardd |
+| --- | --- | --- | --- | --- |
+| reset (today) | cold | 3 | 50.9 / 50.0 / 51.9% | 92–93 |
+| reused | cold (about 120 host compiles) | 2 | 56.4 / 56.9% | 2–3 |
+| reused | seeded with its own files | 2 | 65.3 / 71.4% | 0–2 |
+
+Later go-homes run at about 78–83% on time in every mode, and no run had a GPU
+restart. Fixing both caches makes the first go-home better than any cold one,
+and it is the only combination that does. It is not yet as smooth as a warm
+one. Settings' own first open still compiles about 20 functions on the host.
+
+What setting the variable at boot takes:
+
+- iOS launchd ignores `/private/var/db/com.apple.xpc.launchd/config/system.plist`
+  `EnvironmentVariables` (tried: not applied, cache reset). `launchd.setenv`
+  lasts only until the next boot.
+- So the variable comes from SystemHook (`VPhoneGuestComponents/SystemHook`),
+  which is inserted into every spawn. Its constructor calls
+  `setenv("FS_CACHE_REUSE_ON_REBOOT", "1", 0)` first, before the xpcproxy,
+  `DISABLE_TWEAKS` and per-daemon early returns, and before any Metal code in
+  the process runs. It does so only while `/usr/lib/vphone-metal-cache-reuse`
+  exists. That marker is the patch `system-systemhook-cfw-metal_cache_reuse`
+  (Guest System set, on in `standard`, off for Apple TV): `cfw install` and
+  `cfw update-environment` write it when the patch is selected and remove it
+  when it is not. A SystemHook without the marker behaves as before.
+- The host half is the backboardd-only seed above, with the same caveat: it
+  relies on backboardd's task being the first one created. It is not part of
+  this patch.
+
+#### Real reboots with the patch (2026-10-19)
+
+`Lychee` again, now on a local 2.10.1 build with the patch. Each run is a real
+reboot: vphoned `system.shutdown`, then `vm start`, unlock, 10 s, then five
+Settings rounds measured as above (guest `CARenderServerGetFrameCounter`
+probe, 3 s windows, on time = gap of 20 ms or less). Guest compiles are the
+`Compilation SUCCESS (ParentProcessName=backboardd…` lines in `logs.syslog` for
+`MTLCompilerService` over the rounds. The header is bytes 4–39 of backboardd's
+`functions.list` in its system container. The host cache was cold in every
+run. GPU restarts are the `Trying to restart GPU` lines in that boot's
+`Lychee.log`.
+
+| Run | Bundle | Header after boot | `functions.list` before shutdown → after boot | backboardd guest compiles | GPU restarts | close1 on time | close2–5 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| base1 | 2.10.1 | new | 10,356 → 10,804 | 142 | 0 | 30.4% | 67–90% |
+| base2 | 2.10.1 | new | 19,372 → 10,692 | 146 | 0 | 31.7% | 66–86% |
+| new1 | patched | kept | 6,156 → 8,844 | 159 | 0 | 31.8% | 62–93% |
+| new2 | patched | kept | 19,204 → 19,316 | **0** | 0 | **43.9%** | 67–90% |
+| new3 | patched | kept | 19,316 → 19,316 | **0** | 0 | **37.3%** | 63–89% |
+
+- The cache now outlives a reboot: the header stays `8A5597B7-…` through three
+  boots and the file keeps its size, where every unpatched boot writes a new
+  boot UUID and starts again from about 10 KB.
+- new1 compiled as much as a cold boot because the boot before it was the
+  first with the variable and did no rounds, so its cache held 6 KB. From then
+  on (new2, new3) backboardd compiles nothing in the guest during the rounds,
+  and `MTLCompilerService` logs nothing at all.
+- The first go-home rises from about 31% to 37–44% on time. That is less than
+  the 51% → 56% the fake-boot stand-in predicted for the guest cache alone
+  (from a lower starting point here: a real boot has more going on in its first
+  minute than a relaunched backboardd). Later rounds are unchanged. The rest
+  of the first go-home is the host cache, which still recompiles at every boot.
+- Installing it here: Lychee had no restore tree for `cfw install`, and
+  `cfw update-environment` refused to run with less than 50 GiB free on the
+  volume (17 GiB). The new SystemHook reached the guest through vphoned's live
+  environment sync at `vm start`, and the marker was written with vphoned
+  `files.write`, i.e. the bytes the installer writes, not the installer itself.
+  The installer step is unchanged code in the same shape as the persona-lookup
+  marker next to it, and is not exercised by this run.
+
+#### Verdict
+
+- Per-process host seeding is safe in every run made: eleven with Camera or the
+  Settings loop, three of them with all eleven apps.
+- Neither cache alone fixes the first-use lag. The guest's Metal cache, reset at
+  every boot through `kern.bootsessionuuid`, is half of it. The host's per-task
+  cache, emptied with every task, is the other half. With both kept, the first
+  go-home goes from about 51% to 65–71% on time.
+- The guest half is an environment variable that Apple's own library honours,
+  and it reaches every process. It ships as
+  `system-systemhook-cfw-metal_cache_reuse`. On real reboots it keeps the
+  guest cache and removes every guest compile, taking the first go-home from
+  about 31% to 37–44%. The host half rests on the first-task assumption
+  described above and does not ship.
+
+
+The tools for these runs were scratch code outside the repo: a cache dumper, an
+ID rewriter, the guest frame-counter job (C, built with `xcrun -sdk iphoneos
+clang`) and zsh drivers. The method to repeat: watch the guest log for `Trying
+to restart GPU` and capture backboardd's syslog while Camera launches. A result
+without the restart count is worthless, and so is one that stops before Camera.
+
 ## Heap Textures Have No CPU Layout
 
 On the iPadOS 26.6.2 iPad Pro guest (cloudOS 26.4 driver, `standard` preset),

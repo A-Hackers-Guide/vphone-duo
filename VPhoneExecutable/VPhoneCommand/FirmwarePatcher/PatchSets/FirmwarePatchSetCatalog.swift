@@ -248,6 +248,7 @@ public enum FirmwarePatchSetCatalog {
         "system-mobileactivationd-boot-should_hactivate",
         FirmwareGuestSystemPatchSet.arm64eX1MountBootstrap,
         "system-paravirt_gpu-cfw-heap_index_offset",
+        "system-systemhook-cfw-metal_cache_reuse",
         "system-systemversion-cfw-build_version",
         "system-virtiosound-cfw-hal_plugin",
         "system-virtualaudio-cfw-microphone_graph_chains",
