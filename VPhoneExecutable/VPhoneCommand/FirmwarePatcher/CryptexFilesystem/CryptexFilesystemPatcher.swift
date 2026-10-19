@@ -105,6 +105,10 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
         let mtreePath = try createMtree(filesystem: unencryptedImage)
 
         print("Creating digest database and root hash…")
+        // The merged image was shrunk to its minimum size. With a remap,
+        // apfs_sealvolume copies the whole fsroot tree first and fails with
+        // ENOSPC (exit 65) in the space that is left.
+        try growImage(dmg: unencryptedImage, by: 2 << 30)
         let (digestDbPath, rootHashPath) = try createDigestAndHash(
             filesystem: unencryptedImage,
             mtree: mtreePath,

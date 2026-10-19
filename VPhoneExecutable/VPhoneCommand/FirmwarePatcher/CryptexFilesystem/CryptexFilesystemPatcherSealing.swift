@@ -99,12 +99,21 @@ extension CryptexFilesystemPatcher {
         try unmount(mount: mount)
         let sealvolume = try identifyApfsSealvolume()
         FileManager.default.createFile(atPath: sealLogPath.path, contents: nil)
-        _ = try runProcess(sealvolume.path, [
-            "-R", mtreeRemapPath.path,
-            "-U", digestDbPath.path, // Save digest records
-            "-M", rootHashPath.path, // Save root hash
-            device,
-        ], output: sealLogPath)
+        do {
+            _ = try runProcess(sealvolume.path, [
+                "-R", mtreeRemapPath.path,
+                "-U", digestDbPath.path, // Save digest records
+                "-M", rootHashPath.path, // Save root hash
+                device,
+            ], output: sealLogPath)
+        } catch {
+            // apfs_sealvolume says why it rejects a volume only in its log
+            // (exit 65 = EX_DATAERR), which goes with the temporary directory.
+            let log = (try? String(contentsOf: sealLogPath, encoding: .utf8)) ?? ""
+            print("apfs_sealvolume log (last 60 lines):")
+            print(log.split(separator: "\n", omittingEmptySubsequences: false).suffix(60).joined(separator: "\n"))
+            throw error
+        }
         return (digestDbPath, rootHashPath)
     }
 

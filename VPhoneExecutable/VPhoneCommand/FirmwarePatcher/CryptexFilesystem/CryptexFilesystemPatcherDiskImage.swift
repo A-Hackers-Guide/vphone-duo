@@ -133,6 +133,15 @@ extension CryptexFilesystemPatcher {
         ])
     }
 
+    /// Add `bytes` to the image's size, for a tool that needs room on a
+    /// volume `shrinkImage` left at its minimum.
+    func growImage(dmg: URL, by bytes: Int) throws {
+        let size = try FileManager.default.attributesOfItem(atPath: dmg.path)[.size] as? Int ?? 0
+        _ = try runProcess("/usr/sbin/diskutil", [
+            "image", "resize", "-size", String(size + bytes), dmg.path,
+        ])
+    }
+
     func unmount(mount: String) throws {
         _ = try runProcess("/usr/sbin/diskutil", ["unmount", mount])
     }
