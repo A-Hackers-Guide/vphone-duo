@@ -3290,7 +3290,7 @@ gone. The preset names three sets:
 | `filesystem-boot-mobileactivationd_should_hactivate` | The `should_hactivate` patch, in the image |
 | `filesystem-boot-vphoned` | vphoned and its launch daemon, in the image |
 | `filesystem-boot-launchd_cache_loader_unsecure_cache_gate` | Lets launchd read the launch daemons from the volume |
-| `manifest-boot-digest_rehash` | Rewrites every BuildManifest digest to the files the restore now sends |
+| `manifest-boot-digest_rehash` | Rewrites every BuildManifest digest to the files the restore now sends; for an AEA archive, the digest of its decrypted image, which is what Apple's manifests hold and what an 18.x restore checks the written image against |
 
 The kernel and TXM stay stock, and the restore installs a system whose seal
 the stock kernel verifies. `CryptexFilesystemPatcher` and `ManifestHashPatcher` used
