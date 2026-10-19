@@ -3328,3 +3328,17 @@ into the restored volume, and `seal_system_volume` failed ("mtree: cannot
 generate the XML dictionary", 26.6 on cloudOS 23E5207q, 2026-10-19). Each
 writable mount now deletes the directory before it unmounts, which also stops
 fseventsd writing it again for that mount.
+
+The root hash `fw patch` computes has to be the one the restore computes, and
+it was not ("Invalid root hash", `apfs_sealvolume` exit 65 in
+`seal_system_volume`):
+
+- The remap's `MODIFICATION` was the time of `/private/var` in the mtree,
+  on the assumption that `removeSpecificSystemFiles` changes it last. The
+  restore's own `mtree -m` sets it from the root entry (`.`), not from the
+  newest one: run on 2026-10-19, the device took the root's
+  `1792405582.069334279` while `/private/var` said `…582.936736187`. The
+  remap takes the root's time now.
+- `createDigestAndHash` mounted the image writable only to unmount it again
+  for `apfs_sealvolume`, which needs the device; the mount changed the volume
+  after the mtree described it. It attaches the image with `-noMount` now.

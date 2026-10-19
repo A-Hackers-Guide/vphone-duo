@@ -142,6 +142,29 @@ extension CryptexFilesystemPatcher {
         ])
     }
 
+    /// Attach an image without mounting anything, and return its APFS volume's
+    /// device node.
+    func attachImageWithoutMounting(path: URL) throws -> String {
+        let output: String
+        do {
+            output = try runProcess("/usr/sbin/diskutil", ["image", "attach", "-noMount", path.path])
+        } catch let ProcessError.failed(status, output) {
+            detachReportedImage(in: output)
+            throw ProcessError.failed(status, output)
+        }
+        for line in output.split(whereSeparator: \.isNewline) {
+            let fields = line.split(whereSeparator: \.isWhitespace)
+            guard fields.count >= 2, fields[0].hasPrefix("/dev/disk"), fields[1] == "Apple_APFS_Volume" else {
+                continue
+            }
+            let device = String(fields[0])
+            attachedDevices.insert(device)
+            return device
+        }
+        detachReportedImage(in: output)
+        throw FirmwareManifest.ManifestError.missingKey("APFS volume in \(path.lastPathComponent)")
+    }
+
     /// Delete the event log the host's fseventsd keeps on a writable mount.
     ///
     /// Apple's system volumes have no `.fseventsd`, and the restore writes
@@ -155,10 +178,6 @@ extension CryptexFilesystemPatcher {
         if FileManager.default.fileExists(atPath: log.path) {
             try FileManager.default.removeItem(at: log)
         }
-    }
-
-    func unmount(mount: String) throws {
-        _ = try runProcess("/usr/sbin/diskutil", ["unmount", mount])
     }
 
     /// attachImage returns the device and mount point

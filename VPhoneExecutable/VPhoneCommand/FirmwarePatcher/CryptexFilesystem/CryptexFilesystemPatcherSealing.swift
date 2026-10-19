@@ -68,7 +68,10 @@ extension CryptexFilesystemPatcher {
     }
 
     func createDigestAndHash(filesystem: URL, mtree: URL, remap: Bool) throws -> (URL, URL) {
-        let (device, mount) = try attachImage(path: filesystem)
+        // Not mounted: apfs_sealvolume needs only the device, and a mount would
+        // change the volume after the mtree described it, so the root hash here
+        // would differ from the one the restore computes from that mtree.
+        let device = try attachImageWithoutMounting(path: filesystem)
         defer { try? detachImage(deviceNode: device) }
 
         let tmpDir = try createTmpDir()
@@ -77,10 +80,8 @@ extension CryptexFilesystemPatcher {
         let mtreeRemapPath = tmpDir.appending(path: "mtree_remap.xml")
         let sealLogPath = tmpDir.appending(path: "seal.log")
 
-        // We want to get the nanosecond timestamp of the last modification before the mtree collection.
-        // We know that we remove directories in /private/var in removeSpecificSystemFiles last.
-        // Therefore, we parse the modification time of /private/var.
-        let modificationTime = try parsePrivateVarTime(mtree: mtree)
+        // The modification time the restore will derive from the mtree.
+        let modificationTime = try parseRootTime(mtree: mtree)
         let remapContent = """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -96,8 +97,6 @@ extension CryptexFilesystemPatcher {
         print("Modification time: \(remap ? modificationTime : "none")")
         FileManager.default.createFile(atPath: mtreeRemapPath.path, contents: remapContent.data(using: .utf8))
 
-        try removeHostEventLog(mount: mount)
-        try unmount(mount: mount)
         let sealvolume = try identifyApfsSealvolume()
         FileManager.default.createFile(atPath: sealLogPath.path, contents: nil)
         do {
@@ -118,7 +117,12 @@ extension CryptexFilesystemPatcher {
         return (digestDbPath, rootHashPath)
     }
 
-    func parsePrivateVarTime(mtree: URL) throws -> String {
+    /// The root directory's modification time in the mtree, in nanoseconds.
+    ///
+    /// The restore seals the volume with the time its own `mtree -m` derives,
+    /// which is the root entry's (`.`), not the newest entry's. Any other value
+    /// gives this side a root hash the restore rejects ("Invalid root hash").
+    func parseRootTime(mtree: URL) throws -> String {
         guard let mtreeData = FileManager.default.contents(atPath: mtree.path),
               let text = String(data: mtreeData, encoding: .utf8)
         else {
@@ -126,35 +130,24 @@ extension CryptexFilesystemPatcher {
         }
         let lines = text.split(whereSeparator: \.isNewline).map(String.init)
 
-        // Find the section header for /private/var
-        guard let sectionIndex = lines.firstIndex(of: "# ./private/var") else {
-            throw FirmwareManifest.ManifestError.fileNotFound("the /private/var entry in \(mtree.path)")
+        // The first section, "# .", describes the root; its entry is named ".".
+        guard let sectionIndex = lines.firstIndex(of: "# ."),
+              let entryIndex = lines[(sectionIndex + 1)...].firstIndex(where: { $0.hasPrefix(". ") })
+        else {
+            throw FirmwareManifest.ManifestError.fileNotFound("the root entry in \(mtree.path)")
         }
-
-        // Look at the lines after that header until the next section header
-        for line in lines[(sectionIndex + 1)...] {
-            // Stop if we hit the next section
-            if line.hasPrefix("# ./") {
-                break
-            }
-
-            // The metadata line for /private/var starts with "var "
-            guard line.hasPrefix("var ") else { continue }
-
-            // Extract time=...
-            guard let match = line.range(of: #"time=([0-9]+(?:\.[0-9]+)?)"#,
-                                         options: .regularExpression)
-            else {
-                throw FirmwareManifest.ManifestError.fileNotFound("the /private/var modification time in \(mtree.path)")
-            }
-
-            let matchedText = String(line[match])
-            return matchedText
-                .replacingOccurrences(of: "time=", with: "")
-                .replacingOccurrences(of: ".", with: "")
+        // An entry continues on the next line after a trailing backslash.
+        var entry = ""
+        for line in lines[entryIndex...] {
+            entry += line
+            guard line.hasSuffix("\\") else { break }
         }
-
-        throw FirmwareManifest.ManifestError.fileNotFound("the /private/var entry in \(mtree.path)")
+        guard let match = entry.range(of: #"time=([0-9]+(?:\.[0-9]+)?)"#, options: .regularExpression) else {
+            throw FirmwareManifest.ManifestError.fileNotFound("the root modification time in \(mtree.path)")
+        }
+        return String(entry[match])
+            .replacingOccurrences(of: "time=", with: "")
+            .replacingOccurrences(of: ".", with: "")
     }
 
     func createMtree(filesystem: URL) throws -> URL {
@@ -180,8 +173,6 @@ extension CryptexFilesystemPatcher {
             "/private/var/MobileAsset/PreinstalledAssetsV2",
             "/private/var/staged_system_apps",
         ]
-        // First: createDigestAndHash takes the remap time from /private/var,
-        // so the removals below have to be the last change to the volume.
         try removeHostEventLog(mount: mount)
         var didEdit = false
         for path in removedPaths {
