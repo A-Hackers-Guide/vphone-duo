@@ -211,6 +211,12 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
         /// reaches the Mac at, through a record vphoned registers with the
         /// guest's mDNSResponder. Nil means yes; see `VPhoneNetworking.plan`.
         public let resolvesMacName: Bool?
+        /// Whether, in `nat`, the guest reaches the other machines on the Mac's
+        /// shared network and they reach it, as a watch and the phone it pairs
+        /// with must. Nil means yes, except for a fixed address on the first
+        /// shared network, set before this existed; false keeps vmnet's
+        /// isolation, where each guest reaches only the Mac and beyond.
+        public let reachesPeers: Bool?
 
         public enum NetworkMode: String, Codable, Sendable {
             case nat
@@ -236,6 +242,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
             portForwards: [PortForward]? = nil,
             localHostName: String? = nil,
             resolvesMacName: Bool? = nil,
+            reachesPeers: Bool? = nil,
         ) {
             self.mode = mode
             self.macAddress = macAddress
@@ -244,6 +251,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
             self.portForwards = portForwards
             self.localHostName = localHostName
             self.resolvesMacName = resolvesMacName
+            self.reachesPeers = reachesPeers
         }
 
         /// The same configuration with one field replaced.
@@ -255,6 +263,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
             portForwards: [PortForward]?? = nil,
             localHostName: String?? = nil,
             resolvesMacName: Bool?? = nil,
+            reachesPeers: Bool?? = nil,
         ) -> NetworkConfig {
             NetworkConfig(
                 mode: mode ?? self.mode,
@@ -264,6 +273,7 @@ public struct VPhoneVirtualMachineManifest: Codable, Sendable {
                 portForwards: portForwards ?? self.portForwards,
                 localHostName: localHostName ?? self.localHostName,
                 resolvesMacName: resolvesMacName ?? self.resolvesMacName,
+                reachesPeers: reachesPeers ?? self.reachesPeers,
             )
         }
 
