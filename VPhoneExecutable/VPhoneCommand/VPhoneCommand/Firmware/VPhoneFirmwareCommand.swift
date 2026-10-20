@@ -14,6 +14,7 @@ struct VPhoneFirmwareCommand: ParsableCommand {
             VPhoneFirmwareInspectCommand.self,
             VPhoneFirmwarePrepareCommand.self,
             VPhoneFirmwarePatchCommand.self,
+            VPhoneFirmwareKernelcacheCommand.self,
             VPhoneFirmwarePatchesCommand.self,
             VPhoneFirmwareSetPatchesCommand.self,
             VPhoneFirmwareManifestCommand.self,
@@ -392,6 +393,16 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
         if mergesRestoreImage, geteuid() != 0 {
             throw ValidationError("The \(selection.presetIdentifier) preset rebuilds the system image, which needs root. Run this command with sudo.")
         }
+        // A research board kernelcache is mixed beforehand (`fw kernelcache`),
+        // since linking it needs root; root builds it here if need be.
+        if geteuid() != 0, !selection.blockedPatches.contains(FirmwareResearchBoardPatchSet.kernelMix),
+           let kernelcache = try FirmwarePipeline(vmDirectory: bundle.url, variant: .jb).researchBoardKernelcache()
+        {
+            let state = try KernelCacheMixer(recipes: .locate()).state(for: kernelcache)
+            if state != .mixed {
+                throw ValidationError(KernelCacheMixer.linkInstructions(staged: state == .staged).replacingOccurrences(of: "<vm>", with: name))
+            }
+        }
 
         let pipeline = FirmwarePipeline(
             vmDirectory: bundle.url,
@@ -651,5 +662,57 @@ extension VPhoneLibraryOption {
             ? libraryRoot
             : "'" + libraryRoot.replacingOccurrences(of: "'", with: "'\\''") + "'"
         return " --library-root \(quoted)"
+    }
+}
+
+// MARK: - kernelcache
+
+/// Builds the kernelcache mix of a VM on a cloudOS without vphone600
+/// components, in the two steps that need different users: staging runs `ipsw`
+/// and is the invoking user's, linking runs kmutil and is root's. `fw patch`
+/// then takes the mix from the cache. See KernelCacheMixer.
+struct VPhoneFirmwareKernelcacheCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "kernelcache",
+        abstract: "Build a research board VM's kernelcache mix: stage it as yourself (VPHONE_IPSW), link it with sudo",
+    )
+
+    @OptionGroup var lib: VPhoneLibraryOption
+    @Argument(help: "VM name") var name: String?
+    @Flag(help: ArgumentHelp(
+        "Only link a staged volume; never stage, so no ipsw runs (the Launchpad helper's root run)",
+        visibility: .hidden,
+    ))
+    var linkOnly = false
+
+    func run() throws {
+        let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
+        let bundle = try lib.library.bundle(named: name)
+        guard let kernelcache = try FirmwarePipeline(vmDirectory: bundle.url, variant: .jb).researchBoardKernelcache() else {
+            print("[=] \(name)'s cloudOS has vphone600 components; its kernelcache needs no mix.")
+            return
+        }
+        let mixer = try KernelCacheMixer(recipes: .locate())
+        let state = try mixer.state(for: kernelcache)
+        if state == .mixed {
+            print("[+] The kernelcache mix is ready; `fw patch` takes it from the cache.")
+            return
+        }
+        if geteuid() == 0 {
+            if state == .missing {
+                guard !linkOnly else {
+                    throw ValidationError("\(name)'s kernelcache mix is not staged. Stage it first, as yourself: \(KernelCacheMixer.ipswEnvironmentVariable)=<ipsw> vphone-cli fw kernelcache \(name)")
+                }
+                try mixer.stage(kernelcache: kernelcache)
+            }
+            try mixer.link(kernelcache: kernelcache)
+            print("[+] The kernelcache mix is ready; `fw patch` takes it from the cache.")
+            return
+        }
+        guard !linkOnly else {
+            throw ValidationError("Linking the kernelcache mix needs root. Run this command with sudo.")
+        }
+        try mixer.stage(kernelcache: kernelcache)
+        print("[+] Staged. Link it with: sudo vphone-cli fw kernelcache \(name)")
     }
 }

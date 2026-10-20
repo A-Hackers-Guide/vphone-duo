@@ -3437,8 +3437,20 @@ it too. The pipeline keeps kmutil's container (its `PAYP` properties describe
 the new layout) and saves the preset's kernel patches into it
 (`ComponentDescriptor.replacement`); `minimal` adds none. The shipped kernels stay
 in `FirmwareOriginals`. Mixes are cached in `~/.vphone/kernelcache/mix`, keyed
-by the kernelcaches, the maps and bundle list, the `ipsw` binary's hash and the
-builder layout.
+by the kernelcaches, the maps and bundle list and the builder layout.
+
+Only the link needs root, and root runs no `ipsw`. `fw kernelcache <vm>` stages
+the mix as the user (both extractions and the volume) and links it under sudo:
+root copies the staged volume into a fresh root-only directory, walking it by
+descriptor, refusing every symbolic link but the KDK's pointer to the volume's
+extensions and normalising modes (kmutil skips a kext with a group- or
+world-writable file as silently as one root does not own), and runs kmutil on
+the copy. The Launchpad helper's link runs with `--link-only`, which never
+stages. kmutil records the absolute path of every codeless kext, which moves
+the end of `__PRELINK_INFO`: the volume path takes the length of the build root
+Apple linked the base in, read from the base's own prelink info, so a mix no
+longer depends on where it is built. The 26.6 mix then has the segment layout
+of the hand-built research mix that booted.
 
 Requirements: an `ipsw` with `kernel extract --kdk`, named by `VPHONE_IPSW`
 (vphone-cli does not ship it); root; and for every base here (26.4–26.7, all

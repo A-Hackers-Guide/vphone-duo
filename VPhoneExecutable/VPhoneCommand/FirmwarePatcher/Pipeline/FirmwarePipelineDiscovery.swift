@@ -35,6 +35,17 @@ extension FirmwarePipeline {
         return restoreDir
     }
 
+    /// The research board kernelcache the VM's mix is built from, as shipped:
+    /// its `RestoreKernelCache`, from the originals once `fw patch` has put it
+    /// aside. Nil when the restore tree has vphone600 components.
+    public func researchBoardKernelcache() throws -> Data? {
+        let restoreDir = try findRestoreDirectory()
+        guard Self.researchBoardStandsIn(restoreDir: restoreDir) else { return nil }
+        let file = try restoreDir.appending(path: Self.manifestComponentPath("RestoreKernelCache", in: restoreDir))
+        let stashed = originalURL(for: file).flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
+        return try Data(contentsOf: stashed ?? file)
+    }
+
     /// `ProductVersion` from a manifest in `restoreDir`, or nil if absent/unreadable.
     static func readProductVersion(_ restoreDir: URL, manifest: String) -> String? {
         let url = restoreDir.appendingPathComponent(manifest)

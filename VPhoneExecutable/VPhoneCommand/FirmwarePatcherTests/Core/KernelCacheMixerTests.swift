@@ -46,14 +46,22 @@ struct KernelCacheMixerTests {
         #expect(!base.kernel.matches(sha: String(repeating: "0", count: 64)))
     }
 
-    @Test("A cached mix is keyed by the ipsw binary that extracted it")
-    func cacheKeyFollowsIPSW() throws {
-        let base = try #require(try Self.recipes.bases().first)
-        let donor = try Self.recipes.donor(id: base.donor)
+    @Test("A mix is keyed by its recipe alone, which the root link can compute without ipsw")
+    func cacheKeyFollowsRecipe() throws {
+        let bases = try Self.recipes.bases()
         let mixer = KernelCacheMixer(recipes: Self.recipes, verbose: false)
-        let first = try mixer.cacheKey(base: base, donor: donor, ipswHash: "1")
-        #expect(try mixer.cacheKey(base: base, donor: donor, ipswHash: "1") == first)
-        #expect(try mixer.cacheKey(base: base, donor: donor, ipswHash: "2") != first)
+        let keys = try bases.map { try mixer.cacheKey(base: $0, donor: Self.recipes.donor(id: $0.donor)) }
+        #expect(Set(keys).count == bases.count)
+        let first = try #require(bases.first)
+        #expect(try mixer.cacheKey(base: first, donor: Self.recipes.donor(id: first.donor)) == keys.first)
+    }
+
+    @Test("The volume path takes the length of the build root the base records")
+    func buildRootLength() throws {
+        let root = "/AppleInternal/Library/BuildRoots/4~X/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.6.Internal.sdk"
+        let prelink = "<dict><key>_CodelessKextBundlePath</key><string>\(root)/System/Library/Extensions/A.kext</string></dict>"
+        #expect(try KernelCacheMixer.buildRootLength(of: Data(repeating: 0, count: 64) + Data(prelink.utf8)) == root.count)
+        #expect(throws: PatcherError.self) { try KernelCacheMixer.buildRootLength(of: Data("no prelink info".utf8)) }
     }
 
     @Test("macOS 26.4 is the first builder that links kernel-last")
@@ -120,6 +128,16 @@ struct KernelCacheMixerTests {
 
         #expect(throws: PatcherError.self) {
             try KernelCacheKDK.mix(base: base, donor: donor, wanted: wanted + ["com.apple.nowhere"], output: output)
+        }
+
+        // The staged volume root links holds no link but the KDK's own.
+        try KernelCacheVolumeCopy.checkLinks(in: volume, kdk: "KDK_26.6_23G71.kdk")
+        try FileManager.default.createSymbolicLink(
+            atPath: volume.appending(path: "System/Library/Extensions/Kept.kext/Kept2").path,
+            withDestinationPath: "/etc/master.passwd",
+        )
+        #expect(throws: PatcherError.self) {
+            try KernelCacheVolumeCopy.checkLinks(in: volume, kdk: "KDK_26.6_23G71.kdk")
         }
     }
 }

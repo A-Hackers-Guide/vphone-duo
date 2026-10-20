@@ -40,13 +40,23 @@ from the cloudOS IPSW, once, and kept with its extraction in
 ## Requirements
 
 - An `ipsw` with `kernel extract --kdk` (blacktop/ipsw), named by `VPHONE_IPSW`.
-  vphone-cli does not ship it.
-- Root: kmutil only reads kexts owned by root:wheel, and links the host's own
-  kexts in place of any others without a word.
+  vphone-cli does not ship it, and runs it only as the invoking user.
+- Root for the link: kmutil only reads kexts owned by root:wheel, and links the
+  host's own kexts in place of any others without a word.
 - A kmutil of the base's `builderLayout`: macOS 26.4 or later for every base here.
 
-Mixed kernelcaches are cached in `~/.vphone/kernelcache/mix`, keyed by everything
-that decides their bytes.
+`vphone-cli fw kernelcache <vm>` stages the mix as the user (the extractions
+and the volume, in `~/.vphone/kernelcache/staged`), and under sudo links it:
+root copies the volume into a directory of its own, refusing any link out of
+it, and runs kmutil on the copy. `fw patch` then takes the mix from the cache;
+run as `sudo VPHONE_IPSW=<ipsw> vphone-cli fw patch` it does both itself.
+
+Mixed kernelcaches are cached in `~/.vphone/kernelcache/mix`, keyed by the recipe,
+with kmutil's log beside each. Remove `~/.vphone/kernelcache` to rebuild them.
+
+kmutil records the absolute path of every codeless kext, so the volume is linked
+at a path as long as the build root Apple linked the base in, read from the
+base. The mix then does not depend on where it is built.
 
 ## Adding a base
 

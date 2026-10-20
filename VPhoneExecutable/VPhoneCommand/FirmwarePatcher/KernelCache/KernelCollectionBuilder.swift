@@ -26,7 +26,7 @@ enum KernelCollectionBuilder {
     }
 
     /// Refuses before anything is extracted when this Mac cannot link `base`.
-    static func checkHost(for base: KernelCacheBase) throws {
+    static func checkLayout(for base: KernelCacheBase) throws {
         let host = ProcessInfo.processInfo.operatingSystemVersion
         let layout = layout(forMacOS: host)
         guard layout == base.builderLayout else {
@@ -34,11 +34,6 @@ enum KernelCollectionBuilder {
                 "the iOS \(base.productVersion) kernelcache must be linked \(base.builderLayout.rawValue), "
                     + "and the kmutil of macOS \(host.majorVersion).\(host.minorVersion) links \(layout.rawValue): "
                     + (base.builderLayout == .kernelLast ? "update this Mac to macOS 26.4 or later" : "link it on macOS 15"),
-            )
-        }
-        guard geteuid() == 0 else {
-            throw PatcherError.invalidFormat(
-                "linking the kernelcache needs root: kmutil only reads kexts owned by root. Run this command with sudo.",
             )
         }
     }
