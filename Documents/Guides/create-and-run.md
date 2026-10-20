@@ -1,3 +1,4 @@
+| `~/.vphone/kernelcache/` | Kernelcache mixes for cloudOS releases without vphone600 components, their staged volumes and the donor extraction |
 # Create and run a VM
 
 [Documentation](../README.md) · [Host setup](host-setup.md) · [Compatibility](compatibility.md)
@@ -22,6 +23,8 @@ By default that pipeline builds a [template](#templates) rather than the VM itse
 `--cpu`, `--memory`, `--network` and `--unlock-at-startup` set those `vm config` settings on the new VM (defaults: 8 cores, 8192 MB, nat, off). `--skip-first-boot` leaves out the final boot, for a caller that boots the VM itself.
 
 `fw prepare` creates a temporary vphone VM with no network device, starts it in DFU, and restores the selected cloudOS IPSW using this project's restore backend. It mounts the restored System volume read-only, extracts the GPU bundle, then removes the temporary VM. This first restore supplies the GPU driver for the second, hybrid iPhone restore. The extracted bundle is cached per cloudOS build in `~/.vphone/gpu-drivers/`, so later machines on the same cloudOS skip the temporary restore. `vm create` and `fw prepare` also accept `--gpu-driver-bundle /path/to/AppleParavirtGPUMetalIOGPUFamily.bundle` to reuse a previously extracted bundle without the temporary restore. The CLI checks its iPhoneOS platform version against the selected cloudOS version. Each restore obtains its own ticket online.
+
+A cloudOS after the 26.4 beta has no vphone600 components, and the research board stands in ([Compatibility](compatibility.md)). Its kernelcache is rebuilt with the vphone600 virtualisation kexts, which needs an `ipsw` with `kernel extract --kdk` and root for the link. Run the whole creation as `sudo VPHONE_IPSW=/path/to/ipsw vphone-cli vm create ...`, or stage the mix as yourself after `fw prepare` with `VPHONE_IPSW=/path/to/ipsw vphone-cli fw kernelcache <vm>`, link it with `sudo vphone-cli fw kernelcache <vm>`, and continue with `fw patch` as usual.
 
 The build also ships an arm64e GPU compiler plugin in the bundle. `fw prepare` copies it into the staged GPU bundle before firmware patching and installation.
 
@@ -133,6 +136,8 @@ It works out the key as `vm create` does. The builds come from the IPSWs when th
 ### In Launchpad
 
 Launchpad 2.9 creates machines from templates by default. New Machine opens on a short page: the name, the device and iOS version from the firmware catalog, and a Slim System switch. A row below it sums up the rest and opens Advanced Options, four pages for hardware; the template and its parts (the trim tier and kept languages, the service profile, and which system apps go); the Core Bundle, custom IPSWs and patches; and the location, network and restore options. The row counts the settings that differ from the defaults and names anything there that stops Create. Turning off Create from a template restores the machine on its own, as `--no-template` does, with keys of its own and without slimming. Apple Account is not offered: the guest refuses its sign-in either way, so Launchpad passes `--accounts-off` whenever the service profile is trimmed. The sheet grows with its page up to 600 points and scrolls past that, so its buttons stay on a laptop screen.
+
+Under Firmware, a release that also runs on its own cloudOS (`fw catalog`'s third column) offers that cloudOS beside the recommended one, with the `ipsw` that stages the kernelcache mix. The creation then stages the mix as you and has the helper link it as root, which asks for authorization once.
 
 The creation runs `vm template find` first. When a current template matches, it clones the machine (`vm create --template <id> --skip-first-boot`) and boots it. When none does, it builds the template in a temporary machine of the same library, named `template-` and eight hex digits, with its usual steps (restore, then `cfw install` through the helper), then `vm template trim`, the headless `vm template setup --strict` and `vm template adopt --iphone-source … --cloudos-source … --expect <id>`, and clones the machine from the result. The setup boot fails when an app it should remove stays, and the adopt fails when the build's key comes out other than the one `find` computed, so a build is never saved under an id later creations would not find. Each is a step of its own with its duration, and a failed one shows the reason `vphone-cli` gave.
 

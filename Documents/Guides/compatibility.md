@@ -15,19 +15,24 @@ These are the two iPhone17,3 combinations exercised with the native JB pipeline 
 | --- | --- | --- | --- |
 | PR #486 | `17,3_26.6.2_23G90` | `26.4-23E5207q` | JB patches, restore, CFW, boot, vphoned ping |
 | PR #486 | `17,3_27.0_24A435` | `26.4-23E5207q` | JB patches, restore, CFW, boot, vphoned ping |
+| Research board | `17,3_26.6_23G71` | `26.6-23G71` | standard and Minimal presets from the CLI, standard from Launchpad (2026-10-20): converted device tree and SEP, kernelcache mix, restore, CFW, boot, vphoned ping |
+| Research board | `17,3_26.5_23F77` | `26.5-23F75` | standard preset from the CLI (2026-10-20): GPU driver from a temporary cloudOS restore, kernelcache mix, restore, CFW, boot, vphoned ping |
+| Research board | `17,3_26.4_23E246` | `26.4-23E244` | standard preset from the CLI (2026-10-20): GPU driver from a temporary cloudOS restore, kernelcache mix, restore, CFW, boot, vphoned ping |
 
-The cloudOS 26.4 beta image (`26.4-23E5207q`) is the newest one that contains `vphone600ap`, the identity the guest's kernel, SEP and device tree come from. Every cloudOS release after it was checked on 2026-10-03 and lists only the PCC boards and `vresearch101ap`: `iPhone99,11` is gone from `SupportedProductTypes`, and there is no `kernelcache.*.vphone600`, `sep-firmware.vphone600` or `DeviceTree.vphone600ap`. None of them can boot a guest; `fw prepare` refuses them before extracting anything.
+The cloudOS 26.4 beta image (`26.4-23E5207q`) is the newest one that contains `vphone600ap`, the identity the guest's kernel, SEP and device tree come from, and it stays the recommended cloudOS: it needs nothing beyond vphone-cli. Every cloudOS release after it was checked on 2026-10-03 and lists only the PCC boards and `vresearch101ap`: `iPhone99,11` is gone from `SupportedProductTypes`, and there is no `kernelcache.*.vphone600`, `sep-firmware.vphone600` or `DeviceTree.vphone600ap`.
 
-| cloudOS | `vresearch101ap` | `vphone600ap` |
-| --- | --- | --- |
-| `26.4-23E5207q` (beta) | yes | yes |
-| `26.4-23E244` | yes | no |
-| `26.4.1-23E254` | yes | no |
-| `26.5-23F75` | yes | no |
-| `26.5.2-23F83` | yes | no |
-| `26.6-23G71` | yes | no |
-| `26.6.1-23G82` | yes | no |
-| `26.7-23H20` | yes | no |
+On such a cloudOS the research board stands in (the Research Board patch set): `fw patch` turns its device tree and SEP into vphone600's and rebuilds its kernelcache with the vphone600 virtualisation kexts, from a recipe for that kernelcache. That needs an `ipsw` with `kernel extract --kdk` and root for the link (`vphone-cli fw kernelcache`; see [the recipes](../../VPhoneExecutable/VPhoneVirtualization/Resources/kernelcache_recipes/README.md)). `fw prepare` refuses a cloudOS no recipe covers. `fw catalog` lists each iOS release's own cloudOS beside the recommended one, and Launchpad offers it under Firmware.
+
+| cloudOS | `vresearch101ap` | `vphone600ap` | kernelcache recipe |
+| --- | --- | --- | --- |
+| `26.4-23E5207q` (beta) | yes | yes | not needed |
+| `26.4-23E244` | yes | no | yes |
+| `26.4.1-23E254` | yes | no | no |
+| `26.5-23F75` | yes | no | yes |
+| `26.5.2-23F83` | yes | no | no |
+| `26.6-23G71` | yes | no | yes |
+| `26.6.1-23G82` | yes | no | no |
+| `26.7-23H20` | yes | no | yes |
 
 Use `vphone-cli fw catalog` to inspect the current catalogue. Other iPhone and iPad versions may work with `26.4-23E5207q`, but they have not passed this same end-to-end check.
 

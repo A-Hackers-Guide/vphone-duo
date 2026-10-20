@@ -3460,6 +3460,9 @@ cloudOS without vphone600ap and refuses one whose kernelcache no recipe covers.
 board's.
 
 Checked on 2026-10-19: a `minimal` VM of iOS 26.6 on cloudOS 26.6 (23G71) restores
-and boots, and vphoned answers. The 26.4 (23E244), 26.5 and 26.7 recipes are the
-ones the research workflow built and validated statically (26.4 also booted
-there); they have not run through this pipeline yet.
+and boots, and vphoned answers. Checked on 2026-10-20 with the standard preset:
+iOS 26.5 (23F77) on cloudOS 26.5 (23F75) and iOS 26.4 (23E246) on cloudOS 26.4
+(23E244) restore and boot the same way, their GPU driver taken from a temporary
+cloudOS restore. The 26.7 recipe is one the research workflow built and
+validated statically; it has not run through this pipeline yet (26.7 has no
+iPhone release to pair it with).
