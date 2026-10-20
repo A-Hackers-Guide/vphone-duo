@@ -32,6 +32,8 @@ not there yet.
 | `{"t":"key","name":"home"}` | `home`, `power`, `volup`, `voldown` are hardware HID keys. Any other name (`return`, `cmd+v`) goes to vphoned `input.key` |
 | `{"t":"type","text":"Hello"}` | Sets the **guest clipboard**; it does not type |
 | `{"t":"rpc","method":"<vphoned method>","params":{…}}` | Calls any vphoned method; see [rpc-methods](rpc-methods.md) |
+| `{"t":"push","local":"/abs/host/file","path":"/abs/guest/file","mode":"755"}` | Streams a Mac file into the guest, any size. A `path` ending in `/` keeps the file's name; `mode` defaults to the Mac file's permissions. `result` has `path`, `local`, `size` |
+| `{"t":"pull","path":"/abs/guest/file","local":"/abs/host/file"}` | Streams a guest file to the Mac; `local` may be a folder. Written beside `local` and renamed when complete |
 
 Unknown `t`, or missing fields, give `{"ok":false,"error":"…"}`.
 

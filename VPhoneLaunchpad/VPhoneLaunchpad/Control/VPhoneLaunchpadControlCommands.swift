@@ -63,6 +63,8 @@ struct VPhoneLaunchpadControlCommands {
         case "cfw.update-kernel": return try await updateKernelControl(request, emit: emit)
         case "guest.send": return try await sendToGuest(request)
         case "guest.rpc": return try await callGuest(request)
+        case "guest.push": return try await transferFile(request, push: true)
+        case "guest.pull": return try await transferFile(request, push: false)
         case "guest.unlock": return try await unlockGuest(request)
         case "exec": return try await exec(request, emit: emit)
         default: throw VPhoneLaunchpadError("\(command.name) is not handled by this Launchpad.")
@@ -970,6 +972,28 @@ struct VPhoneLaunchpadControlCommands {
             "screen": request.flag("screen"),
         ]
         return try await VPhoneLaunchpadGuestSocket.send(object, socketPath: Self.controlSocket(machine))
+    }
+
+    /// `guest push` and `guest pull`: vphone-vm streams the file between the
+    /// Mac and vphoned's `/v1/files/content`, so neither the 1 MiB limit on a
+    /// vphone.sock line nor one on a JSON body applies.
+    private func transferFile(_ request: VPhoneLaunchpadControlRequest, push: Bool) async throws -> Any {
+        let machine = try await machine(request)
+        var object: [String: Any] = push
+            ? ["t": "push", "local": request.arguments[1], "path": request.arguments[2]]
+            : ["t": "pull", "path": request.arguments[1], "local": request.arguments[2]]
+        if let mode = request.option("mode") {
+            object["mode"] = mode
+        }
+        do {
+            // As long as vphone-vm's own limit on one transfer.
+            return try await VPhoneLaunchpadGuestSocket.send(object, socketPath: Self.controlSocket(machine), timeout: 2 * 60 * 60)
+        } catch let error as VPhoneLaunchpadError where error.detail?.hasPrefix("unknown command: p") == true {
+            throw VPhoneLaunchpadError(
+                "The Core Bundle \(machine.name) runs cannot copy files.",
+                detail: "guest push and guest pull need a newer VPhone.bundle. Bind the machine to one with vm set-bundle and start it again.",
+            )
+        }
     }
 
     /// vphoned's `screen.unlock`: the display on and the Lock Screen passed,

@@ -121,6 +121,8 @@ version while a machine is bound to it; rebind or delete those machines first.
 | `cfw update-kernel <name>` | Re-patch the kernelcache from the machine's current selection and swap it into Preboot, keeping the data (VM off); the data-preserving way to change a kernel patch on an installed VM, no restore tree needed |
 | `guest send <name> <json>` | One raw `vphone.sock` request (tap, swipe, key, screenshot) |
 | `guest rpc <name> <method> [params]` | Any vphoned method, see `Research/vphoned_http_api.md`. When vphoned refuses it, the last stderr line is its error object as JSON (`code`, `message`, `results`, `reason` …) |
+| `guest push <name> <local> <guest-path> [--mode <octal>]` | Copy a Mac file into the guest. It streams through vphoned, so size is not limited by `guest rpc`'s 1 MiB JSON line; use it for binaries and IPAs. A guest path ending in `/` keeps the file's name; the mode defaults to the Mac file's permissions |
+| `guest pull <name> <guest-path> <local>` | Copy a guest file to the Mac, streamed; `local` may be a folder. The file replaces `local` only once complete |
 | `guest unlock <name> [--passcode <code>] [--timeout <seconds>]` | Turn the screen on and unlock the guest, whatever state it was in (vphoned `screen.unlock`). `--passcode` is needed only when the guest has one |
 | `exec [--bundle <version>] <vphone-cli arguments>` | Run the default bundle's `vphone-cli`, or that version's, streaming its output. `--bundle` must come first |
 

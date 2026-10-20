@@ -198,6 +198,10 @@ nonisolated struct VPhoneLaunchpadControlCommand: Sendable {
              summary: "Send one raw vphone.sock request, such as {\"t\":\"tap\",\"x\":645,\"y\":1398}."),
         Self(name: "guest.rpc", arguments: ["name", "method", "params..."], options: ["root"], flags: ["screen"],
              summary: "Call a vphoned method; params is one JSON object."),
+        Self(name: "guest.push", arguments: ["name", "local", "path"], options: ["root", "mode"], flags: [],
+             summary: "Copy a file from this Mac into the guest, streamed, any size. A path ending in / keeps the file's name; --mode is octal, the Mac file's permissions by default."),
+        Self(name: "guest.pull", arguments: ["name", "path", "local"], options: ["root"], flags: [],
+             summary: "Copy a file from the guest to this Mac, streamed, any size. local may be a folder; the file replaces it only once complete."),
         Self(name: "guest.unlock", arguments: ["name"], options: ["root", "passcode", "timeout"], flags: [],
              summary: "Turn the screen on and unlock the guest (vphoned screen.unlock). --passcode enters the passcode of a guest that has one; --timeout is in seconds, 10 by default."),
 
@@ -311,8 +315,8 @@ extension VPhoneLaunchpadControlRequest {
             throw Failure(message: "wrong number of arguments.", detail: "usage: vphone-launchpad-cli \(command.usage)")
         }
         // The app runs elsewhere; a relative path means nothing to it.
-        if command.name == "bundle.install-local" {
-            positional[0] = URL(fileURLWithPath: positional[0]).standardizedFileURL.path
+        if let index = ["bundle.install-local": 0, "guest.push": 1, "guest.pull": 2][command.name] {
+            positional[index] = URL(fileURLWithPath: positional[index]).standardizedFileURL.path
         }
         if let root = request.options["root"] {
             request.options["root"] = URL(fileURLWithPath: root).standardizedFileURL.path
