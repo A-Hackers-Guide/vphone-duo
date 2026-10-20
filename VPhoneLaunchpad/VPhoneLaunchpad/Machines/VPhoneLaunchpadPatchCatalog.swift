@@ -287,12 +287,16 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
     /// no boot chain: `fw patch` runs as root, and nothing writes the system
     /// afterwards, so there is no template and no slimming.
     static let minimalPreset = "minimal"
+    /// The preset an Apple Watch guest gets, mirroring
+    /// `VPhonePatchPreset.watchOSIdentifier`: `minimal` for the watch board.
+    static let watchOSPreset = "watchos"
 
     /// The preset a new machine of `productType` starts from.
     static func defaultPreset(forDevice productType: String?) -> String {
         switch productType {
         case "AppleTV14,1": tvOS4KPreset
         case let type? where type.hasPrefix("AppleTV"): tvOSPreset
+        case let type? where type.hasPrefix("Watch"): watchOSPreset
         default: defaultPreset
         }
     }
@@ -321,7 +325,7 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
 
     /// The `--preset` flag `fw patch` and `fw patches` carry, if any.
     var customisesRestoredSystem: Bool {
-        preset == Self.minimalPreset
+        preset == Self.minimalPreset || preset == Self.watchOSPreset
     }
 
     var presetArguments: [String] {

@@ -91,6 +91,13 @@ struct VPhoneLaunchpadNewMachineView: View {
         usesOwnCloudOS && !usesCustomSources ? selectedPairing?.matchingCloudOS : nil
     }
 
+    /// Whether `fw patch` rebuilds the kernelcache, which needs the ipsw: on
+    /// the release's own cloudOS, and always for a watch, whose kexts no
+    /// cloudOS kernelcache has.
+    private var rebuildsKernelcache: Bool {
+        ownCloudOS != nil || !usesCustomSources && selectedGuest?.isWatch == true
+    }
+
     private var hasKernelcacheIPSW: Bool {
         FileManager.default.isExecutableFile(atPath: kernelcacheIPSW)
     }
@@ -182,7 +189,7 @@ struct VPhoneLaunchpadNewMachineView: View {
 
     private var canCreate: Bool {
         nameProblem == nil && advancedProblem == nil && sources != nil && bundleVersion != nil
-            && (ownCloudOS == nil || hasKernelcacheIPSW)
+            && (!rebuildsKernelcache || hasKernelcacheIPSW)
     }
 
     var body: some View {
@@ -411,6 +418,11 @@ struct VPhoneLaunchpadNewMachineView: View {
                 ? "On its own cloudOS, \(own.name): the kernelcache is rebuilt, which asks for administrator access once."
                 : "Choose an ipsw with `kernel extract --kdk` in Advanced Options to run on \(own.name).")
                 .foregroundStyle(hasKernelcacheIPSW ? Color.secondary : Color.red)
+        } else if rebuildsKernelcache, let cloudOS = selectedPairing?.recommendedCloudOS.name {
+            Text(hasKernelcacheIPSW
+                ? "With \(cloudOS): the kernelcache is rebuilt with the watch's kexts, which asks for administrator access once."
+                : "Choose an ipsw with `kernel extract --kdk` in Advanced Options: the watch's kernelcache is rebuilt with its kexts.")
+                .foregroundStyle(hasKernelcacheIPSW ? Color.secondary : Color.red)
         } else if let selectedGuest, let cloudOS = selectedPairing?.recommendedCloudOS.name {
             Text("Recommended firmware pairings for \(selectedGuest.detailedName), with \(cloudOS).")
                 .foregroundStyle(.secondary)
@@ -594,6 +606,9 @@ struct VPhoneLaunchpadNewMachineView: View {
                 }
             } else {
                 LabeledContent("cloudOS", value: selectedPairing?.recommendedCloudOS.name ?? "—")
+                if rebuildsKernelcache {
+                    sourceField("ipsw", $kernelcacheIPSW)
+                }
             }
         } header: {
             Text("Firmware")
@@ -602,6 +617,8 @@ struct VPhoneLaunchpadNewMachineView: View {
                 ? "These two files replace the device and version chosen on the basic page."
                 : ownCloudOS != nil
                 ? "On its own cloudOS the release boots its own kernel, rebuilt with the vphone600 virtualisation kexts: the ipsw (with `kernel extract --kdk`) stages it as you, and the helper links it as root."
+                : rebuildsKernelcache
+                ? "A watch boots the cloudOS kernel rebuilt with its own kexts: the ipsw (with `kernel extract --kdk`) stages it as you, and the helper links it as root."
                 : "The device and version are chosen on the basic page; cloudOS goes with them.")
                 .foregroundStyle(.secondary)
         }
@@ -732,16 +749,17 @@ struct VPhoneLaunchpadNewMachineView: View {
 
     /// Select a guest device and its newest release.
     private func choose(_ productType: String?) {
-        let wasAppleTV = isAppleTVGuest
+        let hadOwnPreset = hasOwnPresetGuest
         let wasGuest = guest
         guest = productType
         pairing = selectedGuest?.defaultPairing?.id
-        // Each Apple TV starts from a preset of its own.
-        guard isAppleTVGuest != wasAppleTV || isAppleTVGuest && wasGuest != productType else { return }
-        // An Apple TV guest is restored on its own with a tvOS preset:
-        // templates and slimming drive iOS Setup Assistant and its apps.
+        // Each Apple TV and Apple Watch starts from a preset of its own.
+        guard hasOwnPresetGuest != hadOwnPreset || hasOwnPresetGuest && wasGuest != productType else { return }
+        // An Apple TV or Apple Watch guest is restored on its own with a
+        // preset of its own: templates and slimming drive iOS Setup Assistant
+        // and its apps.
         patches = VPhoneLaunchpadPatchSelection()
-        if isAppleTVGuest {
+        if hasOwnPresetGuest {
             patches.preset = VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: productType)
             usesTemplate = false
             slimming.slim = false
@@ -755,6 +773,11 @@ struct VPhoneLaunchpadNewMachineView: View {
     /// An Apple TV from the catalog, which is built without a template.
     private var isAppleTVGuest: Bool {
         !usesCustomSources && selectedGuest?.isAppleTV == true
+    }
+
+    /// An Apple TV or Apple Watch from the catalog: each has a preset of its own.
+    private var hasOwnPresetGuest: Bool {
+        !usesCustomSources && (selectedGuest?.isAppleTV == true || selectedGuest?.isWatch == true)
     }
 
     /// Read again whenever the preset or the version changes: `inPreset`, which
@@ -803,8 +826,9 @@ struct VPhoneLaunchpadNewMachineView: View {
             iphoneSource: iphone,
             cloudOSSource: cloudOS,
             // An iPad IPSW often covers two sizes; name the one chosen. An
-            // Apple TV is named too, so the restore tree and log say which.
-            device: usesCustomSources ? nil : selectedGuest.flatMap { $0.isPad || $0.isAppleTV ? $0.productType : nil },
+            // Apple TV or Apple Watch is named too, so the restore tree and
+            // log say which.
+            device: usesCustomSources ? nil : selectedGuest.flatMap { $0.isPad || $0.isAppleTV || $0.isWatch ? $0.productType : nil },
             cpuCount: cpu,
             memoryMB: memoryMB,
             diskSizeGB: diskSizeGB,
@@ -814,7 +838,7 @@ struct VPhoneLaunchpadNewMachineView: View {
             keepArtifacts: keepArtifacts,
             usesTemplate: usesTemplate,
             slimming: slimming,
-            kernelcacheIPSW: ownCloudOS == nil ? nil : kernelcacheIPSW,
+            kernelcacheIPSW: rebuildsKernelcache ? kernelcacheIPSW : nil,
         )
         let pipeline = model.machines.create(options)
         model.machines.selection = [pipeline.machine]
