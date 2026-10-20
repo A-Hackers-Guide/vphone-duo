@@ -396,6 +396,8 @@ public final class DeviceTreePatcher: BufferedPatcher {
         if presentsGuest {
             try applyGuestEdits(root: root)
         }
+        // After the board edits, which remove a placeholder the board has too.
+        applyWatchCompanion(root: root)
 
         // Every guest, every tree: no VM has the haptics the node promises.
         applyHapticsRemoval(root: root)

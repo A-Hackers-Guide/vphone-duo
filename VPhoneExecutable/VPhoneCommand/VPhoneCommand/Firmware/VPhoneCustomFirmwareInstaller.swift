@@ -1332,6 +1332,25 @@ struct VPhoneCustomFirmwareInstaller {
             live: &live, failures: &failures,
         )
 
+        // The feature plist exists from iOS 26. Turning the patch off restores
+        // the original.
+        let bluetoothID = FirmwareGuestSystemPatchSet.virtualBluetooth
+        let bluetoothPath = CustomFirmwareBluetoothVirtualController.relativePath
+        isolate([bluetoothID]) {
+            if !version.hasPrefix("1"), on(bluetoothID) {
+                try patchCopy(
+                    of: bluetoothPath, in: system, work: work,
+                    verb: "patch-virtual-bluetooth", backupSafe: backupSafe(bluetoothID),
+                )
+                live.insert(bluetoothID)
+            } else if try revertCopy(of: bluetoothPath, in: system) {
+                print("  [+] \(bluetoothID): restored the Bluetooth feature flags")
+            } else if priorGuest.contains(bluetoothID) {
+                print("  [!] \(bluetoothID): no backup to revert (not revertible)")
+                live.insert(bluetoothID)
+            }
+        }
+
         // A missing legacy plan must not apply this iOS-27-only change to
         // other bases. Turning it off restores the original feature plist.
         let locationdID = FirmwareGuestSystemPatchSet.locationdCohorting

@@ -138,6 +138,10 @@ struct VPhoneLaunchpadSlimmingSections: View {
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
                 Text("About 140 launch daemons a research machine rarely needs, Apple Account's among them.")
+                if slimming.trimsServices {
+                    // terminusd and the nano daemons are among them.
+                    Text("A phone with these services off cannot pair an Apple Watch.")
+                }
                 if slimming.removesApps {
                     Text("^[\(slimming.removedApps.count) system app](inflect: true) removed; Camera and Phone are never removed.")
                 } else {

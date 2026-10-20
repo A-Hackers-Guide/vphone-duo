@@ -3543,3 +3543,15 @@ imports from them, is in the watchOS 26.4 arm64e cache; `ui.ocr` and
 Checked on 2026-10-20: `vm create --device Watch7,18` with the Watch7,18 26.4
 (23T240) IPSW and cloudOS 26.4 (23E244) links the mix, restores, boots, and
 vphoned answers the first-boot ping.
+
+### Pairing with a phone
+
+See `Research/Guest/watch_pairing.md`. The watch preset now patches activation
+(`filesystem-boot-mobileactivationd_should_hactivate`, on the arm64e slice of
+the universal binary), and three patches are new:
+
+| Patch | Target | Change |
+| --- | --- | --- |
+| `devicetree-cfw-watch_companion` | an iPhone guest's tree | `/product/watch-companion = 1`, added where the board copy removed a placeholder. vphone600's `syscfg/waco` has no syscfg value on a VM, so iBoot drops it and the phone pairs with no watch. |
+| `system-bluetoothd-cfw-btvc_le_connection` | `/System/Library/FeatureFlags/Domain/BluetoothFeatures.plist`, `cfw install`, iOS 26+ | `EnableBTVCLeConnection.Enabled = true`: bluetoothd's virtual LE controller may connect. Reverted from the `.bak` when turned off; blocked for tvOS. |
+| `filesystem-exp-btvc_le_connection` | the same file in the restore image (`minimal`, `watchos`) | The same flag, written before the seal. |

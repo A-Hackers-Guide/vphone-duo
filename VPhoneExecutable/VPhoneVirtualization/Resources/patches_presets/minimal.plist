@@ -44,11 +44,13 @@
 			<string>devicetree-cfw-product_audio_microphone_array</string>
 			<string>devicetree-cfw-product_haptics_node</string>
 			<string>devicetree-cfw-serial_number</string>
+			<string>devicetree-cfw-watch_companion</string>
 			<string>filesystem-boot-cryptex_merge</string>
 			<string>filesystem-boot-gpu_driver</string>
 			<string>filesystem-boot-launchd_cache_loader_unsecure_cache_gate</string>
 			<string>filesystem-boot-mobileactivationd_should_hactivate</string>
 			<string>filesystem-boot-vphoned</string>
+			<string>filesystem-exp-btvc_le_connection</string>
 			<string>ibec-boot-boot_args</string>
 			<string>ibec-boot-bootx_precondition</string>
 			<string>ibec-boot-image4_callback</string>

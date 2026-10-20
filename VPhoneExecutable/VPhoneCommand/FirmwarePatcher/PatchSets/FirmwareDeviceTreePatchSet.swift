@@ -223,6 +223,11 @@ public enum FirmwareDeviceTreePatchSet {
                 "Copies app-macho-architecture from a TV board's own device tree into the installed tree, so its userland sees the donor's architecture. Restore, iPhone and iPad trees are unchanged.",
             ),
             property(
+                "devicetree-cfw-watch_companion",
+                "Watch companion",
+                "Sets /product/watch-companion to 1 on an iPhone guest. vphone600 takes it from syscfg, which has no waco on a VM, so the phone would pair with no watch and the Watch app would stay hidden.",
+            ),
+            property(
                 "devicetree-cfw-watch_presentation",
                 "Watch display and gestalt variant",
                 "Copies a watch board's display gamut, display mode and framebuffer identifier, and rewrites the gestalt variant tags MobileGestalt reads in place of syscfg from the board's values, so the watch UI finds its screen class.",

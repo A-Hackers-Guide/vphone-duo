@@ -96,7 +96,7 @@ Every step has a deadline. A failed step stops the VM, records nothing and leave
 | `--slim on\|off` | on | `off` trims nothing and keeps every app and service. The setup boot still runs: Setup is skipped and the snapshot deleted. |
 | `--trim none\|conservative\|standard` | standard | The offline trim above. |
 | `--keep-languages <list>` | `en,zh-Hans,zh` | The languages `--trim standard` keeps. |
-| `--service-profile trimmed\|none` | trimmed | vphoned's trimmed profile: about 140 launchd jobs off, the App Store daemons and sign-in follow-up among them. |
+| `--service-profile trimmed\|none` | trimmed | vphoned's trimmed profile: about 140 launchd jobs off, the App Store daemons and sign-in follow-up among them. A phone with this profile cannot pair an Apple Watch (see `Research/Guest/watch_pairing.md`). |
 | `--remove-apps on\|off` | on | Removes App Store, Home, TV, News, FaceTime, iTunes Store, Messages, Games, Find My and Wallet. Camera and Phone stay. |
 | `--keep-apps <ids>` | none | Bundle IDs from that list to keep, comma-separated (`com.apple.findmy,com.apple.Passbook`). |
 | `--accounts-off` | off | Also turns off `akd`, `amsaccountsd` and `appleaccountd`. The guest then cannot sign in to an Apple Account. |

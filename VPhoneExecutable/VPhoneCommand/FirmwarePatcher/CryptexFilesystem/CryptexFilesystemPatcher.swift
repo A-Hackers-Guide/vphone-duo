@@ -90,6 +90,7 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
         (FirmwareRestoreImagePatchSet.mobileActivation, "Patch mobileactivationd"),
         (FirmwareRestoreImagePatchSet.vphoned, "Install vphoned and its launch daemon"),
         (FirmwareRestoreImagePatchSet.launchdCacheLoader, "Patch launchd_cache_loader"),
+        (FirmwareRestoreImagePatchSet.virtualBluetooth, "Enable LE connections over the virtual Bluetooth controller"),
     ]
 
     @discardableResult
@@ -186,6 +187,12 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
             }
             if gate.isEnabled(FirmwareRestoreImagePatchSet.launchdCacheLoader) {
                 try patchLaunchdCacheLoader(targetMount: targetMount)
+            }
+            if gate.isEnabled(FirmwareRestoreImagePatchSet.virtualBluetooth) {
+                try CustomFirmwareBluetoothVirtualController.patch(
+                    at: URL(filePath: targetMount).appending(path: CustomFirmwareBluetoothVirtualController.relativePath),
+                )
+                print("  [+] \(CustomFirmwareBluetoothVirtualController.feature) on")
             }
             try removeHostEventLog(mount: targetMount)
         }

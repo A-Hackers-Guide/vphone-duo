@@ -171,6 +171,7 @@ extension CryptexFilesystemPatcher {
     func patchMobileActivation(targetMount: String) throws {
         let target = URL(filePath: targetMount)
         let mobileActivationdPath = target.appending(path: "/usr/libexec/mobileactivationd")
+        try thinToArm64e(mobileActivationdPath)
         // `resign: false` because the sign below replaces the signature, and
         // re-attesting would refuse an unsigned input the Python accepted.
         try CustomFirmwareMobileActivation.patch(fileAt: mobileActivationdPath, resign: false)

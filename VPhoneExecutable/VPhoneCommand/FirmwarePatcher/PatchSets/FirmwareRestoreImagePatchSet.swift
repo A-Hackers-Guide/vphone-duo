@@ -26,6 +26,7 @@ public enum FirmwareRestoreImagePatchSet {
     public static let mobileActivation = "filesystem-boot-mobileactivationd_should_hactivate"
     public static let vphoned = "filesystem-boot-vphoned"
     public static let launchdCacheLoader = "filesystem-boot-launchd_cache_loader_unsecure_cache_gate"
+    public static let virtualBluetooth = "filesystem-exp-btvc_le_connection"
     public static let digestRehash = "manifest-boot-digest_rehash"
 
     private static func filesystem(_ identifier: String, _ title: String, _ summary: String) -> VPhonePatchDeclaration {
@@ -67,6 +68,12 @@ public enum FirmwareRestoreImagePatchSet {
                 launchdCacheLoader,
                 "Launch daemon cache",
                 "Lets launchd load the launch daemons from the system volume instead of the signed cache, so vphoned starts.",
+            ),
+            VPhonePatchDeclaration(
+                identifier: virtualBluetooth,
+                title: "Virtual Bluetooth",
+                summary: "Turns on the feature flag that lets bluetoothd connect over its virtual controller, which a watch and its phone talk over once paired.",
+                target: .firmware(.filesystem),
             ),
             VPhonePatchDeclaration(
                 identifier: digestRehash,

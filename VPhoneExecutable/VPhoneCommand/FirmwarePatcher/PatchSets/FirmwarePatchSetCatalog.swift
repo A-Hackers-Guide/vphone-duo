@@ -225,6 +225,7 @@ public enum FirmwarePatchSetCatalog {
     /// the iPhone 19 ARM64E_X1 boot path.
     public static let tvOSBlockedPatches: Set<String> = [
         FirmwareGuestSystemPatchSet.arm64eX1CacheBootstrap,
+        FirmwareGuestSystemPatchSet.virtualBluetooth,
         "dyld-boot-iomfb_force_kern",
         "dyld-boot-iomfb_swapend",
         "dyld-boot-lockdown_mode",
@@ -320,6 +321,7 @@ public enum FirmwarePatchSetCatalog {
         "devicetree-cfw-island_notch_location",
         "devicetree-cfw-product_haptics_node",
         "devicetree-cfw-product_audio_microphone_array",
+        "devicetree-cfw-watch_companion",
     ]
 
     /// The boot chain patches ``minimalPreset`` keeps: iBEC's and LLB's, which the
@@ -379,19 +381,17 @@ public enum FirmwarePatchSetCatalog {
     ]
 
     /// ``minimalPreset`` for an Apple Watch: its device tree presents the watch
-    /// board, and activation stays stock. The shipped `watchos.plist` must
-    /// match this.
+    /// board. The shipped `watchos.plist` must match this.
     public static let watchOSPreset = VPhonePatchPreset(
         identifier: VPhonePatchPreset.watchOSIdentifier,
         title: "Apple Watch",
-        summary: "Minimal for an Apple Watch guest: the watch board's device tree, and a resealed system with vphoned and the GPU driver restored onto a stock kernel and TXM.",
+        summary: "Minimal for an Apple Watch guest: the watch board's device tree, and a resealed system with vphoned, the GPU driver and activation restored onto a stock kernel and TXM.",
         patchSets: minimalPreset.patchSets,
         selection: .allow(
             minimalBootChainPatches
                 .union(watchOSDeviceTreePatches)
                 .union(FirmwareResearchBoardPatchSet.manifest.patches.map(\.identifier))
-                .union(FirmwareRestoreImagePatchSet.manifest.patches.map(\.identifier))
-                .subtracting([FirmwareRestoreImagePatchSet.mobileActivation]),
+                .union(FirmwareRestoreImagePatchSet.manifest.patches.map(\.identifier)),
         ),
     )
 

@@ -425,6 +425,21 @@ struct DeviceTreeGuestDeviceTests {
         #expect(twice.patchedData == once.patchedData)
     }
 
+    // MARK: - Watch Companion
+
+    @Test(arguments: Guest.allCases)
+    func `only an iPhone guest says it pairs with a watch`(guest: Guest) throws {
+        let (patched, records) = try Self.patched(Self.tree.serialized(), as: guest)
+        let property = Self.read(patched)["device-tree/product"]?["watch-companion"]
+        if guest == .iPhone {
+            #expect(property?.0 == 0)
+            #expect(property?.1 == Data([1, 0, 0, 0]))
+            #expect(records.contains { $0.patchID == "devicetree-cfw-watch_companion" })
+        } else {
+            #expect(!records.contains { $0.patchID == "devicetree-cfw-watch_companion" })
+        }
+    }
+
     // MARK: - Haptics
 
     @Test(arguments: Guest.allCases)

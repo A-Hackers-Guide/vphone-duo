@@ -64,6 +64,7 @@ extension DeviceTreePatcher {
     static let tvAppArchitecturePatch = "devicetree-cfw-tv_app_architecture"
     static let watchPresentationPatch = "devicetree-cfw-watch_presentation"
     static let watchDriverKitPatch = "devicetree-cfw-watch_driverkit"
+    static let watchCompanionPatch = "devicetree-cfw-watch_companion"
     static let hapticsPatch = "devicetree-cfw-product_haptics_node"
     static let microphoneArrayPatch = "devicetree-cfw-product_audio_microphone_array"
 
@@ -596,6 +597,49 @@ extension DeviceTreePatcher {
         ))
         if verbose {
             print("  -node  : /product/haptics, no actuator or haptic server on a VM (\(removed.count)B)  [\(Self.hapticsPatch)]")
+        }
+    }
+
+    // MARK: - Watch Companion
+
+    /// Give an iPhone guest's `/product/watch-companion` the value 1, adding it
+    /// where the board copy removed it. Returns its value before (nil when it
+    /// was absent), or nil changes when it already is a plain 1.
+    ///
+    /// vphone600's is `syscfg/waco`, which the VM's syscfg does not have, so
+    /// iBoot drops the property and MobileGestalt answers that the phone pairs
+    /// with no watch: the Watch app has no icon, and NanoRegistry's clients
+    /// never see the watch nanoregistryd discovers.
+    static func presentWatchCompanion(in root: DTNode) -> (before: Data?, after: Data)? {
+        guard let product = optionalChild(of: root, named: "product") else { return nil }
+        let value = Data([1, 0, 0, 0])
+        if let existing = product.properties.first(where: { $0.name == "watch-companion" }) {
+            guard existing.flags & placeholderFlag != 0 || existing.value != value else { return nil }
+            let before = existing.value
+            existing.flags = 0
+            existing.value = value
+            return (before, value)
+        }
+        product.properties.append(DTProperty(name: "watch-companion", flags: 0, value: value, valueOffset: 0))
+        return (nil, value)
+    }
+
+    /// Applies `presentWatchCompanion(in:)` to an iPhone guest's tree.
+    func applyWatchCompanion(root: DTNode) {
+        guard device.family == .iPhone, gateAllows(Self.watchCompanionPatch),
+              let change = Self.presentWatchCompanion(in: root)
+        else { return }
+        patches.append(PatchRecord(
+            patchID: Self.watchCompanionPatch,
+            component: component,
+            fileOffset: 0,
+            virtualAddress: nil,
+            originalBytes: change.before ?? Data(),
+            patchedBytes: change.after,
+            description: "Set /device-tree/product/watch-companion = 1",
+        ))
+        if verbose {
+            print("  =prop  : /product/watch-companion = 1, the VM syscfg has no waco  [\(Self.watchCompanionPatch)]")
         }
     }
 
