@@ -375,7 +375,7 @@ request carries `"force": true`.
 | Input | `input.touch`, `input.hid`, `input.button {name}`, `input.key {name}`, `input.type {text, delay_ms?}`, `input.paste {text}`, `input.tap`, `input.double_tap`, `input.long_press`, `input.swipe`, `input.drag {points}`, `input.touch_sequence {events}` — gesture coordinates are screen points; `input.pointer {x, y, seq?}`, `input.scroll {phase, dx?, dy?, x?, y?}` (capability `pointer_scroll`, see below) |
 | UI | `ui.tree` (alias `accessibility.tree`), `ui.element_at`, `ui.tap_element`, `ui.wait`, `ui.wait_gone`, `ui.ocr {languages?, min_confidence?}`, `ui.describe`, `screen.screenshot` |
 | Processes | `processes.list {filter?}`, `processes.kill {pid, signal?}` **force**, `memory.jetsam`, `memory.pressure` (only the three kernel memory sysctls, for polling) |
-| launchd | `services.list`, `status`, `print`, `dump`, `disabled`, `start`, `enable`, `load`, `profile` (see below); `services.stop`, `disable`, `remove`, `signal`, `unload`, `profile.apply {profile, groups?, allow?}` **force**; `launchd.getenv`, `setenv`, `unsetenv`. On tvOS, which never enables user sessions, they read the system domain alone; before icli 0.8.6 the foreground-user lookup trapped there and killed vphoned |
+| launchd | `services.list`, `status`, `print`, `dump`, `disabled`, `start`, `enable`, `load`, `profile` (see below), `kickstart {label, kill?}` (`launchctl kickstart`, capability `service_kickstart`, see below); `services.stop`, `disable`, `remove`, `signal`, `unload`, `profile.apply {profile, groups?, allow?}` **force**, and `kickstart` with `kill` **force**; `launchd.getenv`, `setenv`, `unsetenv`. On tvOS, which never enables user sessions, they read the system domain alone; before icli 0.8.6 the foreground-user lookup trapped there and killed vphoned |
 | Logs | `logs.syslog {seconds, process?, level?, max_lines?}` (a bounded capture of at most 60 s), `logs.crashes {bundle_id?}`, `logs.crash {path}` |
 | Darwin notifications | `notify.post {name, state?}` (`postDarwinNotification`; `state` is a UInt64, as a number or a decimal string, stored before the post), `notify.state {name}` (`darwinNotificationState`) |
 | Network, security | `network.capture {seconds, interface?, filter?}` (writes a pcap in the guest scratch directory and returns its path), `network.ipv4.get {interface?}`, `network.ipv4.set {interface?, method, address?, subnet_mask?, router?, dns?}`, `network.hostname.get`, `network.hostname.set {local_host_name?}`, `device.name.get`, `device.name.set {name}` (see below), `network.static_names.get`, `network.static_names.set {entries}`, `network.resolve {host, family?, port?, first_only?, timeout_ms?}` (see below), `security.ssl_killswitch` |
@@ -578,6 +578,17 @@ template's pin until `vphone-vm` connects. `device.info` carries
 guest's own `System/System/ComputerName` in configd's preferences, which a
 clone inherits.
 
+`services.kickstart {label, kill?}` (capability `service_kickstart`, icli
+0.9.1) is `launchctl kickstart`: launchd spawns the job now, whether or not
+its launch conditions hold, and answers the new `pid`. A running instance is
+left alone and the answer says `unchanged`. With `"kill": true` (**force**)
+launchd kills the running instance, waits for it to exit and spawns a new
+one, which runs the program as it is on disk now. This is how a re-deployed
+daemon takes over: `services.load` of a label launchd already holds is a
+no-op, so a new binary would otherwise wait for the next reboot. Kickstarting
+vphoned's own label with `kill` ends the process answering the call; the
+caller sees the connection drop and reconnects to the new instance.
+
 `services.profile` (capability `service_profile`) reports the service profile
 and `services.profile.apply` **force** applies one
 (`VPhoneDaemon/Daemon/GuestAPI+ServiceProfile.swift`, lists in
@@ -671,7 +682,7 @@ Account passwords, boot logo rendering and package installation, removal and
 repository changes are deliberately not exposed. `/v1/health` lists the new
 areas in `capabilities` (`device_info`, `display`, `audio`, `input_gestures`,
 `ui_inspection`, `processes`, `services`, `logs`, `network_capture`,
-`app_details`, `system_control`, `system_shutdown`, `file_tools`, `packages`, `environment_update`, `udid_override`, `setup_skip`, `setup_settle`, `service_profile`, `network_ipv4`, `network_hostname`, `device_name`, `network_static_names`, `network_resolve`, `display_auto_lock`, `screen_unlock`) so a host can hide
+`app_details`, `system_control`, `system_shutdown`, `file_tools`, `packages`, `environment_update`, `udid_override`, `setup_skip`, `setup_settle`, `service_profile`, `service_kickstart`, `network_ipv4`, `network_hostname`, `device_name`, `network_static_names`, `network_resolve`, `display_auto_lock`, `screen_unlock`) so a host can hide
 panels an older agent cannot serve. icli failures reach the caller with
 icli's own error `code` (`failed`, `unavailable`, `device_locked`, …) and
 message.

@@ -35,6 +35,7 @@ invalid-request error, read the source named there instead of guessing keys.
   `device.screen` reports, not the pixels used by the socket's `tap`.
 - **force methods** refuse to run unless the params carry `"force":true`:
   `processes.kill`, `services.stop|disable|remove|signal|unload`,
+  `services.kickstart` with `kill`,
   `apps.uninstall|unregister|unregister_dir`, `system.respring`,
   `system.reboot`, `system.shutdown`, `setup.skip`. The flag is the
   confirmation: use it only for what the user asked.
@@ -173,6 +174,7 @@ are the usual way to hit the reply size problem.
 | `services.list` | none | launchd |
 | `services.status`, `services.print` | `label` | |
 | `services.start`, `services.enable` | `label` | |
+| `services.kickstart` | `label`, `kill?` | `launchctl kickstart`; answers the new `pid`. `kill` (force) replaces a running instance, so a re-deployed daemon runs its new binary; without it a running service is left alone (capability `service_kickstart`) |
 | `services.stop`, `disable`, `remove`, `unload` (force) | `label` | |
 | `launchd.getenv` / `setenv` / `unsetenv` | `key`, `value?` | |
 
