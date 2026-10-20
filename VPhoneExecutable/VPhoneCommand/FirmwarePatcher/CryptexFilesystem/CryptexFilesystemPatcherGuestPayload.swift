@@ -34,6 +34,7 @@ extension CryptexFilesystemPatcher {
     func patchLaunchdCacheLoader(targetMount: String) throws {
         let target = URL(filePath: targetMount)
         let launchdCacheLoaderPath = target.appending(path: "/usr/libexec/launchd_cache_loader")
+        try thinToArm64e(launchdCacheLoaderPath)
         // Patched in place with no `.bak` to restore from, so this is the call
         // site that needs the port's idempotence. No re-attestation: the sign
         // below replaces the whole signature anyway.
@@ -95,7 +96,7 @@ extension CryptexFilesystemPatcher {
     /// that VM. vphoned is cross-compiled at build time now
     /// by the Xcode guest target and staged into the bundle.
     func stageVphoned(to vphonedBin: URL) throws {
-        let prebuilt = try VPhoneGuestBinaries.resolve("vphoned")
+        let prebuilt = try VPhoneGuestBinaries.resolve(VPhoneResources.vphonedName(for: guestFamily))
         try FileManager.default.copyItem(at: prebuilt, to: vphonedBin)
     }
 
@@ -114,6 +115,9 @@ extension CryptexFilesystemPatcher {
         try FileManager.default.copyItem(at: staged, to: bundle)
         // Clean AppleDouble files if the host copy created any.
         try deleteAppleDoubleFiles(under: bundle)
+        if guestFamily == .watch {
+            try retargetGPUBundle(bundle, to: MachOBuildPlatform.watchOS)
+        }
         try chownRecursively(uid: 0, gid: 0, at: bundle)
         for path in [
             bundle,
@@ -135,6 +139,33 @@ extension CryptexFilesystemPatcher {
         ] {
             try setMode(0o644, at: path)
         }
+    }
+
+    /// The driver and its compiler plugin are built for iOS, and dyld refuses a
+    /// library of another platform than the process's: on a watch they say
+    /// watchOS, are signed again and the bundle sealed again.
+    func retargetGPUBundle(_ bundle: URL, to platform: UInt32) throws {
+        for name in ["AppleParavirtGPUMetalIOGPUFamily", "libAppleParavirtCompilerPluginIOGPUFamily.dylib"] {
+            let file = bundle.appending(path: name)
+            var data = try Data(contentsOf: file)
+            try MachOBuildPlatform.set(platform, in: &data)
+            try data.write(to: file)
+            try VPhoneSigner.sign(
+                fileAt: file,
+                options: .init(identifier: nil, entitlements: nil, mergesExisting: true, style: .appleAdHoc),
+            )
+        }
+        // No --identifier: codesign keeps the one the bundle already carries.
+        _ = try runProcess("/usr/bin/codesign", ["-f", "-s", "-", "--timestamp=none", bundle.path])
+        print("  [+] GPU driver retargeted to \(platform == MachOBuildPlatform.watchOS ? "watchOS" : "platform \(platform)")")
+    }
+
+    /// A watch's binaries are universal (arm64_32 and arm64e); the VM runs the
+    /// arm64e slice, which is the one the patchers read. Keeps a thin binary.
+    func thinToArm64e(_ file: URL) throws {
+        let data = try Data(contentsOf: file)
+        guard MachOFatSlice.isFat(data) else { return }
+        try MachOFatSlice.slice(data).write(to: file)
     }
 
     func patchMobileActivation(targetMount: String) throws {

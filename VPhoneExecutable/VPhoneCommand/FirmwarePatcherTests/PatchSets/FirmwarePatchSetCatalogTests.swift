@@ -137,13 +137,17 @@ struct FirmwarePatchSetCatalogTests {
                     // presets drop exactly the iOS ones an Apple TV has no port of.
                     let tvPresets = [VPhonePatchPreset.tvOSIdentifier, VPhonePatchPreset.tvOS4KIdentifier]
                     // `minimal` drops every boot chain patch but iBEC's and LLB's:
-                    // its system is customised before the restore instead.
+                    // its system is customised before the restore instead. The
+                    // watch preset drops activation besides, which pairing needs.
+                    let restoreImagePresets = [VPhonePatchPreset.minimalIdentifier, VPhonePatchPreset.watchOSIdentifier]
                     let expected = if tvPresets.contains(preset.identifier) {
                         Set(plan.droppedBootEssentials).isSubset(of: FirmwarePatchSetCatalog.tvOSBlockedPatches)
-                    } else if preset.identifier == VPhonePatchPreset.minimalIdentifier {
+                    } else if restoreImagePresets.contains(preset.identifier) {
                         Set(plan.droppedBootEssentials).isDisjoint(with: FirmwarePatchSetCatalog.minimalBootChainPatches)
                             && plan.droppedBootEssentials.allSatisfy {
                                 FirmwareBootChainPatchSet.manifest.patches.map(\.identifier).contains($0)
+                                    || (preset.identifier == VPhonePatchPreset.watchOSIdentifier
+                                        && $0 == FirmwareRestoreImagePatchSet.mobileActivation)
                             }
                     } else {
                         plan.droppedBootEssentials.isEmpty
@@ -172,10 +176,11 @@ struct FirmwarePatchSetCatalogTests {
     }
 
     @Test
-    func `Only minimal names the restore image, and patches only iBEC, LLB, the device tree and the research board besides`() throws {
+    func `Only minimal and its watch form name the restore image, and patch only iBEC, LLB, the device tree and the research board besides`() throws {
         for preset in FirmwarePatchSetCatalog.builtInPresets {
             let namesRestoreImage = preset.patchSets.map(\.identifier).contains(FirmwareRestoreImagePatchSet.identifier)
-            #expect(namesRestoreImage == (preset.identifier == VPhonePatchPreset.minimalIdentifier), "\(preset.identifier)")
+            let restoreImagePresets = [VPhonePatchPreset.minimalIdentifier, VPhonePatchPreset.watchOSIdentifier]
+            #expect(namesRestoreImage == restoreImagePresets.contains(preset.identifier), "\(preset.identifier)")
         }
         let plan = try VPhonePatchPlan.resolve(
             preset: FirmwarePatchSetCatalog.minimalPreset,
@@ -188,6 +193,15 @@ struct FirmwarePatchSetCatalogTests {
         let researchBoard = Set(FirmwareResearchBoardPatchSet.manifest.patches.map(\.identifier))
         #expect(plan.enabled == restoreImage.union(FirmwarePatchSetCatalog.minimalDeviceTreePatches).union(bootChain).union(researchBoard))
         #expect(plan.droppedBootEssentials.allSatisfy { !$0.hasPrefix("ibec-") && !$0.hasPrefix("llb-") })
+
+        let watch = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.watchOSPreset,
+            patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("26.4"),
+            cloudOS: VPhoneVersion("26.4"),
+        )
+        #expect(watch.enabled == restoreImage.subtracting([FirmwareRestoreImagePatchSet.mobileActivation])
+            .union(FirmwarePatchSetCatalog.watchOSDeviceTreePatches).union(bootChain).union(researchBoard))
     }
 
     @Test

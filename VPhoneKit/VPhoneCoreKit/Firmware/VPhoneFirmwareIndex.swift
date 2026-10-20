@@ -59,9 +59,9 @@ public enum VPhoneFirmwareIndex {
     // MARK: - Queries
 
     /// Every released iOS restore URL for one device identifier, newest first.
-    /// AppleDB files an iPad's releases under iPadOS.
+    /// AppleDB files an iPad's releases under iPadOS, a watch's under watchOS.
     public static func restoreURLs(forDevice device: String) async throws -> [String] {
-        try await releases(os: device.hasPrefix("iPad") ? "iPadOS" : "iOS", device: device)
+        try await releases(os: device.hasPrefix("iPad") ? "iPadOS" : device.hasPrefix("Watch") ? "watchOS" : "iOS", device: device)
             .map(\.url.absoluteString)
     }
 

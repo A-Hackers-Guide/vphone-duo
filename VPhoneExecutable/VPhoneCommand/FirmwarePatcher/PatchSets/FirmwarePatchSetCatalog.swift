@@ -363,6 +363,38 @@ public enum FirmwarePatchSetCatalog {
         ),
     )
 
+    /// The device tree patches ``watchOSPreset`` keeps: the board presentation
+    /// of its own tree, the watch display and DriverKit, and what no VM has.
+    public static let watchOSDeviceTreePatches: Set<String> = [
+        "devicetree-cfw-serial_number",
+        "devicetree-cfw-ipad_artwork",
+        "devicetree-cfw-ipad_product",
+        "devicetree-cfw-ipad_buttons",
+        "devicetree-cfw-ipad_identity",
+        "devicetree-cfw-ipad_audio",
+        "devicetree-cfw-watch_presentation",
+        "devicetree-cfw-watch_driverkit",
+        "devicetree-cfw-product_haptics_node",
+        "devicetree-cfw-product_audio_microphone_array",
+    ]
+
+    /// ``minimalPreset`` for an Apple Watch: its device tree presents the watch
+    /// board, and activation stays stock. The shipped `watchos.plist` must
+    /// match this.
+    public static let watchOSPreset = VPhonePatchPreset(
+        identifier: VPhonePatchPreset.watchOSIdentifier,
+        title: "Apple Watch",
+        summary: "Minimal for an Apple Watch guest: the watch board's device tree, and a resealed system with vphoned and the GPU driver restored onto a stock kernel and TXM.",
+        patchSets: minimalPreset.patchSets,
+        selection: .allow(
+            minimalBootChainPatches
+                .union(watchOSDeviceTreePatches)
+                .union(FirmwareResearchBoardPatchSet.manifest.patches.map(\.identifier))
+                .union(FirmwareRestoreImagePatchSet.manifest.patches.map(\.identifier))
+                .subtracting([FirmwareRestoreImagePatchSet.mobileActivation]),
+        ),
+    )
+
     /// The presets the bundle ships.
-    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, experimentalPreset, tvOSPreset, tvOS4KPreset, minimalPreset]
+    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, experimentalPreset, tvOSPreset, tvOS4KPreset, minimalPreset, watchOSPreset]
 }

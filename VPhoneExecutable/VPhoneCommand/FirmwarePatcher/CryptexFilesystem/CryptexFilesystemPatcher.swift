@@ -2,6 +2,9 @@
 //
 // Merge the cryptex filesystems inside the main OS filesystem.
 //
+// A watchOS image has no cryptexes: its dyld caches are in the OS image, and
+// only the guest payload is added before the seal.
+//
 // 1. Collect the AppOS and SystemOS Cryptex from the iPhone BuildManifest
 // 2. With the OS, AppOS, and SystemOS images, attach them and copy them to a target image
 // 3. Create trustcache for resulting image
@@ -32,6 +35,8 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
 
     var buildManiest: Data
     var rebuiltData: Data?
+    /// The guest's `VPhoneGuestDevice.Family`, from the preserved iPhone manifest.
+    lazy var guestFamily = VPhoneGuestDevice.Family(rawValue: FirmwarePipeline.guestFamily(restoreDir: restoreDir)) ?? .iPhone
     var tmpDirectories: [URL] = []
     var attachedDevices: Set<String> = []
 
@@ -153,14 +158,16 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
             let (targetDevice, targetMount) = try attachImage(path: targetImagePath, forceRW: true)
             defer { try? detachImage(deviceNode: targetDevice) }
 
-            print("- Merging App OS cryptex…")
-            try copyCryptex(targetMount: targetMount, appOS: true)
+            if guestFamily != .watch {
+                print("- Merging App OS cryptex…")
+                try copyCryptex(targetMount: targetMount, appOS: true)
 
-            print("- Merging System OS cryptex…")
-            try copyCryptex(targetMount: targetMount, systemOS: true)
+                print("- Merging System OS cryptex…")
+                try copyCryptex(targetMount: targetMount, systemOS: true)
 
-            print("- Fixing dyld cache…")
-            try addDyldSymlinks(targetMount: targetMount)
+                print("- Fixing dyld cache…")
+                try addDyldSymlinks(targetMount: targetMount)
+            }
 
             if gate.isEnabled(FirmwareRestoreImagePatchSet.gpuDriver) {
                 print("- Fixing GPU driver…")

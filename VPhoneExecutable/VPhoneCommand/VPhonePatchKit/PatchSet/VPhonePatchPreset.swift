@@ -86,6 +86,10 @@ public struct VPhonePatchPreset: Sendable, Hashable, Codable, Identifiable {
     /// userland taken from the device's OTA.
     public static let tvOS4KIdentifier = "tvos-4k"
 
+    /// The identifier an Apple Watch guest gets: ``minimalIdentifier`` for a
+    /// watch, which presents its own board.
+    public static let watchOSIdentifier = "watchos"
+
     /// Whether this is the preset a VM gets by default.
     public var isStandard: Bool {
         identifier == Self.standardIdentifier

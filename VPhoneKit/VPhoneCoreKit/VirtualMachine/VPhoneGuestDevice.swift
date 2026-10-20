@@ -19,12 +19,14 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         case iPhone
         case iPad
         case appleTV
+        case watch
 
         public var osName: String {
             switch self {
             case .iPhone: "iOS"
             case .iPad: "iPadOS"
             case .appleTV: "tvOS"
+            case .watch: "watchOS"
             }
         }
     }
@@ -171,6 +173,18 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         screen: .init(width: 3840, height: 2160, pixelsPerInch: 144, scale: 2.0),
     )
 
+    /// Apple Watch Series 11 (GPS), 46 mm: 416x496 at 330 ppi, 208x248 points.
+    /// The research board's kernel boots it with the watchOS kexts of its IPSW
+    /// (the `watch` kernelcache recipe); N227b's device tree supplies the watch
+    /// idiom and 2x identity.
+    public static let watch7_18 = VPhoneGuestDevice(
+        family: .watch,
+        productType: "Watch7,18",
+        deviceClass: "n227bap",
+        productName: "Apple Watch Series 11 (GPS)",
+        screen: .init(width: 416, height: 496, pixelsPerInch: 330, scale: 2.0),
+    )
+
     /// Whether the guest's userland is plain arm64 rather than arm64e: only
     /// the Apple TV HD's. It has no paravirtual GPU driver to load, and its
     /// dyld needs the TV TPRO patches.
@@ -197,6 +211,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         iPad16_3, iPad16_5,
         iPad17_1, iPad17_3,
         appleTV5_3, appleTV14_1,
+        watch7_18,
     ]
 
     /// Cellular models that ship in the same IPSW as a known Wi-Fi model and map
@@ -231,7 +246,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     public func restoreTreeName(version: String, build: String) -> String {
         switch family {
         case .iPhone: "\(productType)_\(version)_\(build)_Restore"
-        case .iPad, .appleTV: "iPhoneOS_\(productType)_\(version)_\(build)_Restore"
+        case .iPad, .appleTV, .watch: "iPhoneOS_\(productType)_\(version)_\(build)_Restore"
         }
     }
 

@@ -144,7 +144,7 @@ if /usr/bin/grep -q 'AVPSEPBooter-' "$resources/OpenSEP/OpenSEP.bin"; then
     exit 1
 fi
 
-for name in vphoned vphoned-tvos launchdhook-vphone.dylib SystemHook-vphone.dylib libcamfix.dylib \
+for name in vphoned vphoned-tvos vphoned-watchos launchdhook-vphone.dylib SystemHook-vphone.dylib libcamfix.dylib \
     libvcamcaptured.dylib libmisfix.dylib libhapticsfix.dylib libbatteryhealthfix.dylib libdevicehubfix.dylib libdevicename.dylib \
     libprefsfix.dylib libsigninfix.dylib libvphonegyro.dylib libvphoneaccelerometer.dylib libvphoneattitude.dylib libAppleParavirtCompilerPluginIOGPUFamily.dylib; do
     require_signed_macho "$guest/$name"
@@ -204,6 +204,9 @@ while IFS= read -r file; do
             # tvOS dyld refuses an iOS-platform daemon on an Apple TV guest.
             [[ "$platform" == TVOS ]] || { print -u2 "Non-tvOS binary: ${file#$bundle/}"; exit 1; }
             ;;
+        "$guest/vphoned-watchos")
+            [[ "$platform" == WATCHOS ]] || { print -u2 "Non-watchOS binary: ${file#$bundle/}"; exit 1; }
+            ;;
         "$guest/"*)
             [[ "$platform" == IOS ]] || { print -u2 "Non-iOS binary in guest-resources: ${file#$bundle/}"; exit 1; }
             ;;
@@ -227,7 +230,7 @@ vm_entitlements="$(/usr/bin/codesign -d --entitlements - --xml "$macos/vphone-vm
     print -u2 "Guest daemon entitlements leaked into vphone-vm"
     exit 1
 }
-for daemon in vphoned vphoned-tvos; do
+for daemon in vphoned vphoned-tvos vphoned-watchos; do
     daemon_entitlements="$(/usr/bin/codesign -d --entitlements - --xml "$guest/$daemon" 2>/dev/null)"
     [[ "$daemon_entitlements" == *'com.apple.CommCenter.fine-grained'* &&
         "$daemon_entitlements" != *'com.apple.private.virtualization'* ]] || {

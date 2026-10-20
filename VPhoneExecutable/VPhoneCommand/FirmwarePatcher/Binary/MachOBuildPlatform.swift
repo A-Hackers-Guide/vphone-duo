@@ -2,7 +2,8 @@
 //
 // dyld refuses to load a library into a process of another platform. An
 // Apple TV guest's processes are tvOS, so an iOS-built library a TV guest
-// loads, the paravirtual GPU driver, is marked tvOS before it is installed.
+// loads, the paravirtual GPU driver, is marked tvOS before it is installed;
+// on a watch guest, watchOS.
 // The code signature no longer matches afterwards: the caller signs.
 
 import Foundation
@@ -10,6 +11,7 @@ import Foundation
 public enum MachOBuildPlatform {
     public static let iOS: UInt32 = 2
     public static let tvOS: UInt32 = 3
+    public static let watchOS: UInt32 = 4
 
     public enum Error: Swift.Error, Equatable {
         case notThin64BitMachO

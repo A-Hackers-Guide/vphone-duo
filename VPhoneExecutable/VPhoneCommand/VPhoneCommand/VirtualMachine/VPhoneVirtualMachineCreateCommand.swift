@@ -100,12 +100,17 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
     }
 
     /// An Apple TV takes the TV preset; one whose userland comes from an OTA
-    /// takes the arm64e one, with the GPU driver and the userland swap.
+    /// takes the arm64e one, with the GPU driver and the userland swap. An
+    /// Apple Watch takes the watch preset.
     private var defaultPreset: String {
-        guard let guest = VPhoneGuestDevice.named(device), guest.family == .appleTV else {
-            return VPhonePatchPreset.standardIdentifier
+        switch VPhoneGuestDevice.named(device) {
+        case let guest? where guest.family == .appleTV:
+            guest.restoreBase == nil ? VPhonePatchPreset.tvOSIdentifier : VPhonePatchPreset.tvOS4KIdentifier
+        case let guest? where guest.family == .watch:
+            VPhonePatchPreset.watchOSIdentifier
+        default:
+            VPhonePatchPreset.standardIdentifier
         }
-        return guest.restoreBase == nil ? VPhonePatchPreset.tvOSIdentifier : VPhonePatchPreset.tvOS4KIdentifier
     }
 
     func validate() throws {

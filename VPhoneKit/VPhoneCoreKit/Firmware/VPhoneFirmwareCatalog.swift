@@ -458,6 +458,15 @@ public enum VPhoneFirmwareCatalog {
         ]),
     ]
 
+    /// Apple Watch releases. The watch boots the research board kernel of the
+    /// cloudOS its kernelcache recipe is for, rebuilt with the watchOS kexts:
+    /// 26.4 (23E244) for watchOS 26.4.
+    static let watchReleases: [(devices: [String], releases: [(version: String, url: String)])] = [
+        (devices: ["Watch7,18"], releases: [
+            ("26.4", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-09130/486B2E2B-DEDB-4DCF-80F0-7A84ED51B074/Watch7,18_26.4_23T240_Restore.ipsw"),
+        ]),
+    ]
+
     /// Full OTAs of devices without an IPSW, oldest first. Each has a
     /// `tvReleases` entry of its `baseVersion` for its `restoreBase`. The keys
     /// are AppleDB's.
@@ -498,7 +507,7 @@ public enum VPhoneFirmwareCatalog {
     /// The URL of the base device's IPSW `release` is restored over.
     public static func restoreBaseURL(for release: VPhoneOTARelease) -> String? {
         guard let base = VPhoneGuestDevice.named(release.productType)?.restoreBase else { return nil }
-        let releases = (iPhoneReleases + iPadReleases + tvReleases).first { $0.devices.contains(base.productType) }?.releases
+        let releases = (iPhoneReleases + iPadReleases + tvReleases + watchReleases).first { $0.devices.contains(base.productType) }?.releases
         return releases?.first { $0.version == release.baseVersion }?.url
     }
 
@@ -506,6 +515,7 @@ public enum VPhoneFirmwareCatalog {
     /// or another model's releases with the cloudOS an iPhone17,3 of that
     /// release uses. A cellular iPad gets its Wi-Fi model's; an Apple TV gets
     /// cloudOS 26.4, the only kernel its TPRO compatibility patch covers; a
+    /// watch gets the research board cloudOS its kernelcache recipe covers; a
     /// device without an IPSW gets one per OTA for it, named for the OTA: the
     /// base's IPSW when the OTA is of the same version, else the OTA itself,
     /// which `fw prepare` restores over its base's IPSW; an unknown device
@@ -514,7 +524,7 @@ public enum VPhoneFirmwareCatalog {
         guard let guest = VPhoneGuestDevice.named(device) else { return [] }
         guard guest.presentsBoard else { return pairings }
         let restored = guest.restoreBase ?? guest
-        var releases = (iPhoneReleases + iPadReleases + tvReleases).first { $0.devices.contains(restored.productType) }?.releases ?? []
+        var releases = (iPhoneReleases + iPadReleases + tvReleases + watchReleases).first { $0.devices.contains(restored.productType) }?.releases ?? []
         if restored != guest {
             releases = otaReleases.filter { $0.productType == guest.productType }.compactMap { ota in
                 guard let base = releases.first(where: { $0.version == ota.baseVersion }) else { return nil }
@@ -522,9 +532,11 @@ public enum VPhoneFirmwareCatalog {
             }
         }
         return releases.map { release in
-            let cloudOS = guest.family == .appleTV
-                ? VPhoneCloudOSOption(name: "cloudOS 26.4", url: cloud264)
-                : recommendedCloudOS(forVersion: release.version)
+            let cloudOS = switch guest.family {
+            case .appleTV: VPhoneCloudOSOption(name: "cloudOS 26.4", url: cloud264)
+            case .watch: researchBoardCloudOS(forVersion: release.version) ?? recommendedCloudOS(forVersion: release.version)
+            case .iPhone, .iPad: recommendedCloudOS(forVersion: release.version)
+            }
             return VPhoneFirmwarePairing(
                 device: guest.productType,
                 iosName: "\(guest.family.osName) \(release.version)",

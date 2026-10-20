@@ -8,9 +8,10 @@
 // chain, kernel and TXM stay stock, and nothing writes the System volume after the
 // restore, because that would break the seal.
 //
-// Only the `minimal` preset names this set. Every patch in it is boot-essential for
-// that preset, and naming it nowhere else keeps `standard` from counting them as
-// dropped.
+// Only the `minimal` preset and its watch form, `watchos`, name this set. Every
+// patch in it is boot-essential for them, and naming it nowhere else keeps
+// `standard` from counting them as dropped. A watchOS image has no cryptexes:
+// for a watch the merge only reseals the image with the guest payload.
 
 import Foundation
 import VPhonePatchKit

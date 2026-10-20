@@ -62,6 +62,8 @@ extension DeviceTreePatcher {
     static let iPadIdentityPatch = "devicetree-cfw-ipad_identity"
     static let iPadAudioPatch = "devicetree-cfw-ipad_audio"
     static let tvAppArchitecturePatch = "devicetree-cfw-tv_app_architecture"
+    static let watchPresentationPatch = "devicetree-cfw-watch_presentation"
+    static let watchDriverKitPatch = "devicetree-cfw-watch_driverkit"
     static let hapticsPatch = "devicetree-cfw-product_haptics_node"
     static let microphoneArrayPatch = "devicetree-cfw-product_audio_microphone_array"
 
@@ -172,6 +174,12 @@ extension DeviceTreePatcher {
                                    action: .set(architecture), patchID: tvAppArchitecturePatch))
         }
 
+        if let idiom = value(sourceProduct, "artwork-device-idiom"),
+           String(decoding: idiom.prefix { $0 != 0 }, as: UTF8.self) == "watch"
+        {
+            edits += watchEdits(product: product, value: { value(sourceProduct, $0) })
+        }
+
         for (name, patchID) in copiedProductProperties {
             let action: GuestEdit.Action = value(sourceProduct, name).map { .set($0) } ?? .remove
             edits.append(GuestEdit(nodePath: product, property: name, action: action, patchID: patchID))
@@ -204,6 +212,53 @@ extension DeviceTreePatcher {
         }
         edits.append(GuestEdit(nodePath: ["device-tree"], property: "compatible",
                                action: .set(Self.compatible(board: Data(first))), patchID: iPadIdentityPatch))
+        return edits
+    }
+
+    // MARK: - Watch
+
+    /// `/product` properties a watch's display is described by, beyond those
+    /// every board copies.
+    static let watchDisplayProperties = ["artwork-display-gamut", "artwork-dynamic-displaymode", "framebuffer-identifier"]
+
+    /// The gestalt variant tags MobileGestalt reads in place of syscfg on the
+    /// VM, and the board's `/product` property each stands for. vphone600's
+    /// carry the D47's values; a watch whose tags still describe a phone shows
+    /// no UI ("unsupported screen class"). A property the board lacks is a
+    /// boolean it does not have: 0.
+    static let watchVariantTags: [(tag: String, property: String)] = [
+        ("tag-ards", "artwork-device-subtype"),
+        ("tag-arsf", "artwork-scale-factor"),
+        ("tag-codf", "compatible-device-fallback"),
+        ("tag-tprt", "sub-product-type"),
+        ("tag-crid", "chrome-identifier"),
+        ("tag-dcrd", "display-corner-radius"),
+        ("tag-fbid", "framebuffer-identifier"),
+        ("tag-prde", "product-description"),
+        ("tag-isnl", "island-notch-location"),
+        ("tag-waco", "watch-companion"),
+    ]
+
+    static let watchVariantNode = ["device-tree", "product", "vphone600-gestalt-variants", "d47vm2025vre-variant"]
+
+    /// The edits a watch board needs besides the common copy: its display
+    /// properties, the variant tags, and `supports-driverkit`. The VM's touch
+    /// screen is a USB device whose HID driver is a dext, and launchd starts
+    /// driverkitd only on a device tree that says so; a real watch has no USB
+    /// touch screen, so N227b's tree does not.
+    static func watchEdits(product: [String], value: (String) -> Data?) -> [GuestEdit] {
+        var edits: [GuestEdit] = []
+        for name in watchDisplayProperties {
+            let action: GuestEdit.Action = value(name).map { .set($0) } ?? .remove
+            edits.append(GuestEdit(nodePath: product, property: name, action: action, patchID: watchPresentationPatch))
+        }
+        let absent = Data(count: 4)
+        for (tag, property) in watchVariantTags {
+            edits.append(GuestEdit(nodePath: watchVariantNode, property: tag,
+                                   action: .set(value(property) ?? absent), patchID: watchPresentationPatch))
+        }
+        edits.append(GuestEdit(nodePath: product, property: "supports-driverkit",
+                               action: .set(Data([1, 0, 0, 0])), patchID: watchDriverKitPatch))
         return edits
     }
 

@@ -222,6 +222,16 @@ public enum FirmwareDeviceTreePatchSet {
                 "TV app architecture",
                 "Copies app-macho-architecture from a TV board's own device tree into the installed tree, so its userland sees the donor's architecture. Restore, iPhone and iPad trees are unchanged.",
             ),
+            property(
+                "devicetree-cfw-watch_presentation",
+                "Watch display and gestalt variant",
+                "Copies a watch board's display gamut, display mode and framebuffer identifier, and rewrites the gestalt variant tags MobileGestalt reads in place of syscfg from the board's values, so the watch UI finds its screen class.",
+            ),
+            property(
+                "devicetree-cfw-watch_driverkit",
+                "Watch DriverKit",
+                "Sets supports-driverkit on a watch guest, so launchd starts driverkitd for the dext that drives the VM's USB touch screen.",
+            ),
         ],
         provides: ["vphone.devicetree"],
     )
