@@ -59,6 +59,7 @@ enum VPhonePCCGPURecovery {
         // The manifest already consumed this tree. Move it into the temporary
         // machine so restore reads only from that machine's directory.
         try fm.moveItem(at: cloudOSDirectory, to: temporaryRestore)
+        try acceptVirtualDevice(manifest: temporaryRestore.appending(path: "BuildManifest.plist"))
         let launcher = try VPhoneGuestLaunchPlanner()
         let (executable, arguments) = launcher.plan(["--config", vm.configURL.path, "--dfu"])
         let dfu = VPhoneManagedProcess(executable, arguments, cwd: vm.url, echo: false)
@@ -104,6 +105,22 @@ enum VPhonePCCGPURecovery {
             into: restoreDirectory, expectedPlatformVersion: expectedPlatformVersion,
             diskMayBeAttached: &diskMayBeAttached,
         )
+    }
+
+    /// The temporary VM reports iPhone99,11, which cloudOS releases after the
+    /// 26.4 beta drop from `SupportedProductTypes` while keeping the
+    /// vresearch101ap identity it restores. idevicerestore refuses a manifest
+    /// that does not list the device, so add it to this copy.
+    static func acceptVirtualDevice(manifest url: URL) throws {
+        let productType = "iPhone99,11"
+        guard var manifest = try PropertyListSerialization.propertyList(
+            from: Data(contentsOf: url), format: nil,
+        ) as? [String: Any] else { return }
+        let types = manifest["SupportedProductTypes"] as? [String] ?? []
+        guard !types.contains(productType) else { return }
+        manifest["SupportedProductTypes"] = types + [productType]
+        try PropertyListSerialization.data(fromPropertyList: manifest, format: .xml, options: 0)
+            .write(to: url, options: .atomic)
     }
 
     private static func stageFromSystemDisk(
