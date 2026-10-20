@@ -337,6 +337,10 @@
 	</array>
 	<key>com.apple.private.vfs.snapshot</key>
 	<true/>
+	<key>com.apple.private.xpc.service-attach</key>
+	<true/>
+	<key>com.apple.private.xpc.service-configure</key>
+	<true/>
 	<key>com.apple.rootless.critical</key>
 	<true/>
 	<key>com.apple.rootless.datavault.metadata</key>

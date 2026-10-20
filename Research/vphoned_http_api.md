@@ -579,7 +579,7 @@ guest's own `System/System/ComputerName` in configd's preferences, which a
 clone inherits.
 
 `services.kickstart {label, kill?}` (capability `service_kickstart`, icli
-0.9.1) is `launchctl kickstart`: launchd spawns the job now, whether or not
+0.9.2) is `launchctl kickstart`: launchd spawns the job now, whether or not
 its launch conditions hold, and answers the new `pid`. A running instance is
 left alone and the answer says `unchanged`. With `"kill": true` (**force**)
 launchd kills the running instance, waits for it to exit and spawns a new
@@ -588,6 +588,11 @@ daemon takes over: `services.load` of a label launchd already holds is a
 no-op, so a new binary would otherwise wait for the next reboot. Kickstarting
 vphoned's own label with `kill` ends the process answering the call; the
 caller sees the connection drop and reconnects to the new instance.
+On iOS 27 launchd allows kickstart only to a caller holding
+`com.apple.private.xpc.service-configure` and `service-attach`, which
+vphoned's entitlements carry; it answers success with the running pid
+rather than EALREADY when nothing changed, and icli reports that as
+`unchanged` too.
 
 `services.profile` (capability `service_profile`) reports the service profile
 and `services.profile.apply` **force** applies one
