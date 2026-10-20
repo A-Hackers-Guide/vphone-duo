@@ -38,11 +38,20 @@ import VPhoneCoreKit
 ///                                                 When vphoned refuses it, `"error"` is the message
 ///                                                 and `"guest_error"` vphoned's whole error object
 ///                                                 (`code`, `message`, `results`, `reason`, `errno` …)
+///   {"t":"push","local":"/abs/host/file","path":"/abs/guest/file","mode":"755"}
+///                                               → streams a host file into the guest through vphoned's
+///                                                 `PUT /v1/files/content`, any size. A `path` ending in `/`
+///                                                 takes the host file's name; `mode` defaults to the host
+///                                                 file's permissions. `"result"` has `path`, `local`, `size`
+///   {"t":"pull","path":"/abs/guest/file","local":"/abs/host/file"}
+///                                               → streams a guest file to the host; `local` may be a
+///                                                 directory. The file replaces `local` only once complete
 ///   {"t":"network"}                             → the NIC's state, in `"result"`
 ///   {"t":"network","link":"down"}               → unplug (`up` replugs); not saved
 ///
-/// All commands except "screenshot" and "rpc" wait briefly then capture a
-/// compact screen image returned as `"image":"<base64>"` in the response.
+/// All commands except "screenshot", "rpc", "push", "pull" and "network" wait
+/// briefly then capture a compact screen image returned as
+/// `"image":"<base64>"` in the response.
 /// Pass `"screen":false` to skip the capture; "rpc" captures only when sent
 /// `"screen":true`.
 @MainActor
@@ -259,6 +268,41 @@ class VPhoneHostAutomationServer {
                 let wantRPCScreen = json["screen"] as? Bool ?? false
                 let image = wantRPCScreen ? await settledCompactScreenshot(delayMs: screenDelay) : nil
                 return Self.reply(ok: true, image: image, result: result)
+
+            case "push":
+                guard let local = json["local"] as? String, local.hasPrefix("/"),
+                      var path = json["path"] as? String, path.hasPrefix("/")
+                else {
+                    return Self.reply(ok: false, error: "push requires local (an absolute host path) and path (an absolute guest path)")
+                }
+                var status = stat()
+                guard stat(local, &status) == 0, status.st_mode & S_IFMT == S_IFREG else {
+                    return Self.reply(ok: false, error: "push: \(local) is not a readable regular file")
+                }
+                if path.hasSuffix("/") {
+                    path += (local as NSString).lastPathComponent
+                }
+                // The host file's permissions unless the request names others,
+                // so a pushed executable stays executable.
+                let mode = json["mode"] as? String ?? String(status.st_mode & 0o777, radix: 8)
+                let size = try await connectedControl().pushFile(
+                    from: URL(fileURLWithPath: local), to: path, permissions: mode,
+                )
+                return Self.reply(ok: true, result: ["path": path, "local": local, "size": size])
+
+            case "pull":
+                guard let path = json["path"] as? String, path.hasPrefix("/"),
+                      let local = json["local"] as? String, local.hasPrefix("/")
+                else {
+                    return Self.reply(ok: false, error: "pull requires path (an absolute guest path) and local (an absolute host path)")
+                }
+                var destination = URL(fileURLWithPath: local)
+                var isDirectory: ObjCBool = false
+                if FileManager.default.fileExists(atPath: local, isDirectory: &isDirectory), isDirectory.boolValue {
+                    destination.appendPathComponent((path as NSString).lastPathComponent)
+                }
+                let size = try await connectedControl().pullFile(path, to: destination)
+                return Self.reply(ok: true, result: ["path": path, "local": destination.path, "size": size])
 
             case "network":
                 guard let virtualMachine else {

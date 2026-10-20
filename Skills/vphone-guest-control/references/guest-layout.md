@@ -153,18 +153,22 @@ difference is the `/rootfs` prefix.
 
 ## Handing a file to vphoned
 
-To let an RPC (for example `apps.install`) read a file you put in through ssh:
+`guest push` copies a Mac file to a real-root guest path, streamed, any size,
+with no ssh and no `--api-listen`. `guest pull` brings one back:
 
 ```sh
-scp -P 2222 App.ipa mobile@127.0.0.1:/tmp/App.ipa      # lands in the jbroot's /tmp
-ssh -p 2222 mobile@127.0.0.1 'mv /tmp/App.ipa /rootfs/private/var/tmp/App.ipa'
+vphone-launchpad-cli guest push myphone App.ipa /private/var/tmp/
 vphone-launchpad-cli guest rpc myphone apps.install '{"path":"/private/var/tmp/App.ipa"}'
+vphone-launchpad-cli guest pull myphone /private/var/mobile/Library/Logs/x.log .
 ```
 
-Without ssh, use RPC only: `files.write` for small text. Binaries need the
-HTTP route `PUT /v1/files/content?path=<abs path>`, which exists only when the
-VM was launched with `vphone-cli vm launch --api-listen` outside `vm start`; ask
-the user rather than relaunching a running machine.
+The mode follows the Mac file (`--mode 755` to set it), so an executable
+stays executable. Paths are real-root paths, so a roothide file goes under the
+absolute `.jbroot-<hex>` path from `bootstrap.inspect`, not `/var/jb`. It needs
+a Core Bundle that has `push` on `vphone.sock`; an older one says it cannot
+copy files. There, `files.write` takes only small files (one 1 MiB JSON line,
+no append), and larger ones go through ssh: `scp -P 2222` into the jbroot's
+`/tmp`, then `mv` to `/rootfs/private/var/tmp/`.
 
 ## Installing a `.deb`
 

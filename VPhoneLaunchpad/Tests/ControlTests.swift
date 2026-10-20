@@ -40,6 +40,16 @@ struct ControlTests {
         let (root, _) = try parse(["vm", "stop", "lab-01", "--root", "/tmp/a/../b"])
         precondition(root.option("root") == "/tmp/b", "Root standardized: \(String(describing: root.option("root")))")
 
+        // The host side of a copy is resolved here; the guest side stays as typed.
+        let cwd = FileManager.default.currentDirectoryPath
+        let (push, _) = try parse(["guest", "push", "lab-01", "build/./tool", "/var/jb/usr/bin/", "--mode", "755"])
+        precondition(push.command == "guest.push" && push.option("mode") == "755", "Push: \(push)")
+        precondition(push.arguments == ["lab-01", URL(fileURLWithPath: cwd).appendingPathComponent("build/tool").path, "/var/jb/usr/bin/"], "Push paths: \(push.arguments)")
+        let (pull, _) = try parse(["guest", "pull", "lab-01", "/var/mobile/a.log", "/tmp/x/../out"])
+        precondition(pull.command == "guest.pull" && pull.arguments == ["lab-01", "/var/mobile/a.log", "/tmp/out"], "Pull paths: \(pull.arguments)")
+        precondition(failure(["guest", "pull", "lab-01", "/a"])?.message == "wrong number of arguments.", "Pull needs a local path")
+        precondition(failure(["guest", "pull", "lab-01", "/a", "/b", "--mode", "644"])?.message == "unknown option --mode.", "Pull has no mode")
+
         precondition(failure(["vm"])?.message == "vm needs a command.", "A group alone")
         precondition(failure(["vm", "start"])?.message == "wrong number of arguments.", "Missing name")
         precondition(failure(["vm", "start", "a", "--nope"])?.message == "unknown option --nope.", "Unknown option")
