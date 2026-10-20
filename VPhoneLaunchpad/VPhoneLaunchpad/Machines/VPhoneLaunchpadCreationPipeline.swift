@@ -59,6 +59,10 @@ final class VPhoneLaunchpadCreationPipeline {
         /// of its own.
         var usesTemplate = true
         var slimming = VPhoneLaunchpadSlimming()
+        /// The ipsw that stages the kernelcache mix of a machine on its
+        /// release's own cloudOS (`fw kernelcache --ipsw`), whose link the helper
+        /// runs as root. Nil for every other machine.
+        var kernelcacheIPSW: String?
 
         var machine: VPhoneLaunchpadMachinePath {
             VPhoneLaunchpadMachinePath(libraryRoot: libraryRoot, name: name)
@@ -440,6 +444,22 @@ final class VPhoneLaunchpadCreationPipeline {
                     onLine: tee,
                 )
             }
+            let libraryRoot = Self.canonicalPath(URL(fileURLWithPath: options.libraryRoot, isDirectory: true))
+            // On the release's own cloudOS the kernelcache is mixed first: staged
+            // here, as the user, with the chosen ipsw, and linked by the helper as
+            // root, which runs no ipsw. `fw patch` takes the mix from the cache.
+            if let ipsw = options.kernelcacheIPSW {
+                try await run(["fw", "kernelcache", name, "--ipsw", ipsw] + library, onLine: tee)
+                let status = try await helper.linkKernelcache(
+                    bundleVersion: version,
+                    machineName: name,
+                    libraryRoot: libraryRoot,
+                    onLine: tee,
+                )
+                guard status == 0 else {
+                    throw VPhoneLaunchpadError(String(localized: "Unable to link the kernelcache. Check the log for details."), detail: log.tail)
+                }
+            }
             guard options.patches.customisesRestoredSystem else {
                 try await run(patchArguments(name) + library, onLine: tee)
                 return
@@ -450,7 +470,7 @@ final class VPhoneLaunchpadCreationPipeline {
             let status = try await helper.patchRestoreImage(
                 bundleVersion: version,
                 machineName: name,
-                libraryRoot: Self.canonicalPath(URL(fileURLWithPath: options.libraryRoot, isDirectory: true)),
+                libraryRoot: libraryRoot,
                 onLine: tee,
             )
             guard status == 0 else {

@@ -285,6 +285,25 @@ final class VPhoneLaunchpadHelperClient {
         }
     }
 
+    /// Links the kernelcache mix a machine on a research board cloudOS staged,
+    /// as root. Output lines go to `onLine`.
+    func linkKernelcache(
+        bundleVersion: String,
+        machineName: String,
+        libraryRoot: String,
+        onLine: @escaping @Sendable (String) -> Void,
+    ) async throws -> Int32 {
+        try await runFirmware(machineName: machineName, libraryRoot: libraryRoot, onLine: onLine) { proxy, authorization, reply in
+            proxy.linkKernelcache(
+                authorization: authorization,
+                bundleVersion: bundleVersion,
+                machineName: machineName,
+                libraryRoot: libraryRoot,
+                reply: reply,
+            )
+        }
+    }
+
     /// Runs `cfw update-environment` as root: redeploys the given bundle's
     /// guest resources into a stopped machine. Output lines go to `onLine`.
     func updateGuestEnvironment(

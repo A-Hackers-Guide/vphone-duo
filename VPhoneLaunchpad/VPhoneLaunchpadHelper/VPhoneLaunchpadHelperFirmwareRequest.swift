@@ -17,6 +17,9 @@ struct VPhoneLaunchpadHelperFirmwareRequest {
         /// merges and reseals the system image before the restore. `fw patch`
         /// refuses to run as root for any other selection.
         case patchRestoreImage
+        /// `fw kernelcache --link-only`: links the kernelcache mix the user
+        /// staged. It never stages, so no ipsw runs as root.
+        case linkKernelcache
     }
 
     typealias MachineKey = VPhoneLaunchpadHelperFirmwareAdmission.MachineKey
@@ -89,6 +92,8 @@ struct VPhoneLaunchpadHelperFirmwareRequest {
                          "--work-parent", workParent]
         case .patchRestoreImage:
             arguments = ["fw", "patch", machineName, "--library-root", libraryRoot, "--restore-image-only"]
+        case .linkKernelcache:
+            arguments = ["fw", "kernelcache", machineName, "--library-root", libraryRoot, "--link-only"]
         }
 
         self.executable = executable

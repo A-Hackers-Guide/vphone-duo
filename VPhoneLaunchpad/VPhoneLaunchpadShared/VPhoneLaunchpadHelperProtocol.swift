@@ -76,6 +76,19 @@ nonisolated protocol VPhoneLaunchpadHelperProtocol {
         reply: @escaping @Sendable (Int32, String?) -> Void,
     )
 
+    /// Runs `vphone-cli fw kernelcache --link-only` from a store bundle as root:
+    /// links the kernelcache mix the user staged for a machine on a cloudOS
+    /// without vphone600 components. kmutil reads only kexts root owns; the
+    /// child copies the stage into a directory of its own first and runs no
+    /// ipsw. Same output channel and reply as `installCustomFirmware`.
+    func linkKernelcache(
+        authorization: Data,
+        bundleVersion: String,
+        machineName: String,
+        libraryRoot: String,
+        reply: @escaping @Sendable (Int32, String?) -> Void,
+    )
+
     /// Runs `vphone-cli cfw update-environment` from a store bundle as root:
     /// redeploys the bundle's guest resources into a stopped machine and
     /// nothing else. Same output channel and reply as `installCustomFirmware`,

@@ -613,6 +613,13 @@ struct VPhoneLaunchpadControlCommands {
         } else {
             slimming = try Self.slimming(request, usesTemplate: usesTemplate)
         }
+        // A machine on its release's own cloudOS stages its kernelcache mix with
+        // an ipsw, as New Machine's ipsw field; `fw kernelcache` does nothing
+        // on a cloudOS that still has vphone600 components.
+        let kernelcacheIPSW = request.option("ipsw")
+        if let kernelcacheIPSW, !FileManager.default.isExecutableFile(atPath: kernelcacheIPSW) {
+            throw VPhoneLaunchpadError("--ipsw names \(kernelcacheIPSW), which is not an executable.")
+        }
         let options = try VPhoneLaunchpadCreationPipeline.Options(
             name: machine.name,
             libraryRoot: machine.libraryRoot,
@@ -629,6 +636,7 @@ struct VPhoneLaunchpadControlCommands {
             keepArtifacts: request.flag("keep-artifacts"),
             usesTemplate: usesTemplate,
             slimming: slimming,
+            kernelcacheIPSW: kernelcacheIPSW,
         )
         return library.create(options)
     }

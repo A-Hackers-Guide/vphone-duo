@@ -232,6 +232,9 @@ nonisolated struct VPhoneLaunchpadFirmwareCatalog: Decodable, Sendable {
     struct Pairing: Decodable, Hashable, Identifiable, Sendable {
         let ios: Image
         let recommendedCloudOS: Image
+        /// The release's own cloudOS, on the research board, from a bundle that
+        /// links its kernelcache mix (`fw kernelcache`).
+        var matchingCloudOS: Image?
 
         var id: String {
             ios.url

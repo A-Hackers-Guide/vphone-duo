@@ -147,12 +147,12 @@ public final class KernelCacheMixer {
     /// Extracts both kernelcaches and stages the volume kmutil links, as the
     /// invoking user: the one step that runs `ipsw`. Does nothing when the mix
     /// or its volume is already in the cache.
-    public func stage(kernelcache: Data) throws {
+    public func stage(kernelcache: Data, ipsw ipswPath: String? = nil) throws {
         let (base, paths) = try locations(for: kernelcache)
         guard !FileManager.default.fileExists(atPath: paths.mixed.path), !Self.isStaged(paths.staged) else { return }
         try KernelCollectionBuilder.checkLayout(for: base)
         let donor = try recipes.donor(id: base.donor)
-        let ipsw = try Self.ipsw()
+        let ipsw = try Self.ipsw(ipswPath)
 
         let fm = FileManager.default
         try? fm.removeItem(at: paths.staged)
@@ -417,11 +417,11 @@ public final class KernelCacheMixer {
         return data
     }
 
-    /// The `ipsw` named by `VPHONE_IPSW`, with `kernel extract --kdk`.
-    static func ipsw() throws -> (url: URL, hash: String) {
+    /// The `ipsw` given, or else named by `VPHONE_IPSW`, with `kernel extract --kdk`.
+    static func ipsw(_ given: String? = nil) throws -> (url: URL, hash: String) {
         let hint = "The kernelcache mix needs an ipsw with `kernel extract --kdk`; set \(ipswEnvironmentVariable) to its path "
             + "(under sudo: `sudo \(ipswEnvironmentVariable)=<path> vphone-cli ...`)."
-        guard let path = ProcessInfo.processInfo.environment[ipswEnvironmentVariable], !path.isEmpty else {
+        guard let path = given ?? ProcessInfo.processInfo.environment[ipswEnvironmentVariable], !path.isEmpty else {
             throw PatcherError.fileNotFound("ipsw. \(hint)")
         }
         let url = URL(fileURLWithPath: path)

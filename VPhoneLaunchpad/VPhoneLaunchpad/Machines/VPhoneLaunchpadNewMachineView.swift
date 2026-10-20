@@ -34,6 +34,11 @@ struct VPhoneLaunchpadNewMachineView: View {
     @State private var usesCustomSources = false
     @State private var iphoneSource = ""
     @State private var cloudOSSource = ""
+    /// Run the release on its own cloudOS, where the research board stands in
+    /// for vphone600 and the kernelcache is mixed (`fw kernelcache`).
+    @State private var usesOwnCloudOS = false
+    /// The ipsw that stages a mix; vphone-cli does not ship one.
+    @AppStorage("KernelcacheIPSW") private var kernelcacheIPSW = ""
     @State private var cpu = Self.defaultCPU
     @State private var memoryMB = Self.defaultMemoryMB
     @State private var diskSizeGB = Self.defaultDiskSizeGB
@@ -78,7 +83,16 @@ struct VPhoneLaunchpadNewMachineView: View {
             let cloudOS = cloudOSSource.trimmingCharacters(in: .whitespaces)
             return iphone.isEmpty || cloudOS.isEmpty ? nil : (iphone, cloudOS)
         }
-        return selectedPairing.map { ($0.ios.url, $0.recommendedCloudOS.url) }
+        return selectedPairing.map { ($0.ios.url, ownCloudOS?.url ?? $0.recommendedCloudOS.url) }
+    }
+
+    /// The release's own cloudOS, when chosen and the pairing has one.
+    private var ownCloudOS: VPhoneLaunchpadFirmwareCatalog.Image? {
+        usesOwnCloudOS && !usesCustomSources ? selectedPairing?.matchingCloudOS : nil
+    }
+
+    private var hasKernelcacheIPSW: Bool {
+        FileManager.default.isExecutableFile(atPath: kernelcacheIPSW)
     }
 
     private var effectiveName: String {
@@ -168,6 +182,7 @@ struct VPhoneLaunchpadNewMachineView: View {
 
     private var canCreate: Bool {
         nameProblem == nil && advancedProblem == nil && sources != nil && bundleVersion != nil
+            && (ownCloudOS == nil || hasKernelcacheIPSW)
     }
 
     var body: some View {
@@ -391,6 +406,11 @@ struct VPhoneLaunchpadNewMachineView: View {
             } else {
                 Text("Choose an iPhone IPSW and a cloudOS IPSW in Advanced Options.").foregroundStyle(.red)
             }
+        } else if let own = ownCloudOS {
+            Text(hasKernelcacheIPSW
+                ? "On its own cloudOS, \(own.name): the kernelcache is rebuilt, which asks for administrator access once."
+                : "Choose an ipsw with `kernel extract --kdk` in Advanced Options to run on \(own.name).")
+                .foregroundStyle(hasKernelcacheIPSW ? Color.secondary : Color.red)
         } else if let selectedGuest, let cloudOS = selectedPairing?.recommendedCloudOS.name {
             Text("Recommended firmware pairings for \(selectedGuest.detailedName), with \(cloudOS).")
                 .foregroundStyle(.secondary)
@@ -564,6 +584,14 @@ struct VPhoneLaunchpadNewMachineView: View {
             if usesCustomSources {
                 sourceField("iPhone IPSW", $iphoneSource)
                 sourceField("cloudOS IPSW", $cloudOSSource)
+            } else if let pairing = selectedPairing, let own = pairing.matchingCloudOS {
+                Picker("cloudOS", selection: $usesOwnCloudOS) {
+                    Text(verbatim: pairing.recommendedCloudOS.name).tag(false)
+                    Text(verbatim: own.name).tag(true)
+                }
+                if usesOwnCloudOS {
+                    sourceField("ipsw", $kernelcacheIPSW)
+                }
             } else {
                 LabeledContent("cloudOS", value: selectedPairing?.recommendedCloudOS.name ?? "—")
             }
@@ -572,6 +600,8 @@ struct VPhoneLaunchpadNewMachineView: View {
         } footer: {
             Text(usesCustomSources
                 ? "These two files replace the device and version chosen on the basic page."
+                : ownCloudOS != nil
+                ? "On its own cloudOS the release boots its own kernel, rebuilt with the vphone600 virtualisation kexts: the ipsw (with `kernel extract --kdk`) stages it as you, and the helper links it as root."
                 : "The device and version are chosen on the basic page; cloudOS goes with them.")
                 .foregroundStyle(.secondary)
         }
@@ -784,6 +814,7 @@ struct VPhoneLaunchpadNewMachineView: View {
             keepArtifacts: keepArtifacts,
             usesTemplate: usesTemplate,
             slimming: slimming,
+            kernelcacheIPSW: ownCloudOS == nil ? nil : kernelcacheIPSW,
         )
         let pipeline = model.machines.create(options)
         model.machines.selection = [pipeline.machine]

@@ -115,6 +115,23 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
         )
     }
 
+    func linkKernelcache(
+        authorization: Data,
+        bundleVersion: String,
+        machineName: String,
+        libraryRoot: String,
+        reply: @escaping @Sendable (Int32, String?) -> Void,
+    ) {
+        runFirmware(
+            .linkKernelcache,
+            authorization: authorization,
+            bundleVersion: bundleVersion,
+            machineName: machineName,
+            libraryRoot: libraryRoot,
+            reply: reply,
+        )
+    }
+
     func updateGuestEnvironment(
         authorization: Data,
         bundleVersion: String,

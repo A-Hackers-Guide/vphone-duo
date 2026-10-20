@@ -684,6 +684,8 @@ struct VPhoneFirmwareKernelcacheCommand: ParsableCommand {
         visibility: .hidden,
     ))
     var linkOnly = false
+    @Option(help: ArgumentHelp("The ipsw to stage with (default: $VPHONE_IPSW)", valueName: "path"))
+    var ipsw: String?
 
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
@@ -703,7 +705,7 @@ struct VPhoneFirmwareKernelcacheCommand: ParsableCommand {
                 guard !linkOnly else {
                     throw ValidationError("\(name)'s kernelcache mix is not staged. Stage it first, as yourself: \(KernelCacheMixer.ipswEnvironmentVariable)=<ipsw> vphone-cli fw kernelcache \(name)")
                 }
-                try mixer.stage(kernelcache: kernelcache)
+                try mixer.stage(kernelcache: kernelcache, ipsw: ipsw)
             }
             try mixer.link(kernelcache: kernelcache)
             print("[+] The kernelcache mix is ready; `fw patch` takes it from the cache.")
@@ -712,7 +714,7 @@ struct VPhoneFirmwareKernelcacheCommand: ParsableCommand {
         guard !linkOnly else {
             throw ValidationError("Linking the kernelcache mix needs root. Run this command with sudo.")
         }
-        try mixer.stage(kernelcache: kernelcache)
+        try mixer.stage(kernelcache: kernelcache, ipsw: ipsw)
         print("[+] Staged. Link it with: sudo vphone-cli fw kernelcache \(name)")
     }
 }
