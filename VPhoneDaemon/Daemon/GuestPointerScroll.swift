@@ -2,7 +2,8 @@ import Foundation
 
 // MARK: - Pointer Scroll
 
-/// The parameters of `input.pointer` and `input.scroll`.
+/// The parameters of `input.pointer` and `input.scroll`, which IcliKit's
+/// virtual pointer carries out (`GuestAPI+Pointer.swift`).
 ///
 /// A scroll goes in phases, the way a trackpad's does: `began` before the
 /// first delta, `changed` for each delta, then `ended` or `cancelled`. iPadOS
@@ -14,21 +15,11 @@ import Foundation
 /// Nothing here touches the guest, so `VPhoneDaemon/Tests/run-logic-tests.sh`
 /// builds this file on the Mac.
 enum GuestPointerScroll {
-    enum Phase: String {
+    enum Phase: String, CaseIterable {
         case began
         case changed
         case ended
         case cancelled
-
-        /// The `IOHIDEventPhaseBits` value the scroll event carries.
-        var bits: Int32 {
-            switch self {
-            case .began: 1
-            case .changed: 2
-            case .ended: 4
-            case .cancelled: 8
-            }
-        }
     }
 
     /// A position in the interface as it is shown, 0...1 from the top-left
@@ -77,6 +68,17 @@ enum GuestPointerScroll {
             throw Problem(message: "seq must be a whole number within 0...\(maximumSequence)")
         }
         return UInt64(sequence)
+    }
+
+    /// `input.pointer`'s optional `buttons`, the buttons held from that move
+    /// on: bit 0 primary, bit 1 secondary, bit 2 middle. None held when it is
+    /// absent, so a client that only hovers never presses one.
+    static func buttons(_ params: [String: Any]) throws(Problem) -> Int32 {
+        guard let value = params["buttons"] else { return 0 }
+        guard let buttons = number(value), (0 ... 7).contains(buttons), buttons.rounded() == buttons else {
+            throw Problem(message: "buttons must be a whole number within 0...7")
+        }
+        return Int32(buttons)
     }
 
     static func scroll(_ params: [String: Any]) throws(Problem) -> Scroll {

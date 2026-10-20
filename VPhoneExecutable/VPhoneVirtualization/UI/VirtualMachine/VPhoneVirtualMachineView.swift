@@ -199,21 +199,16 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     override func mouseDown(with event: NSEvent) {
         // Clicking the VM display should always restore keyboard focus.
         window?.makeFirstResponder(self)
-        // A synthetic trackpad finger would fight this touch for the same slot.
-        finishScrollTouch()
-        if nativeScrollActive {
-            endNativeScroll()
-            nativeScrollMomentumDropped = true
+        let localPoint = convert(event.locationInWindow, from: nil)
+        if pressPointer(Self.primaryPointerButton, at: localPoint) {
+            return
         }
         // A click is a touch, and iPadOS hides its pointer under a finger: the
         // Mac's shows where the drag is until the mouse moves freely again.
         if guestPointerFollowsMouse {
             NSCursor.arrow.set()
         }
-        releaseSecondaryPress()
-        let localPoint = convert(event.locationInWindow, from: nil)
-        currentTouchSwipeAim = hitTestEdge(at: localPoint)
-        if sendTouchEvent(phase: 0, localPoint: localPoint, timestamp: event.timestamp) {
+        if beginTouch(at: localPoint, timestamp: event.timestamp) {
             return
         }
         super.mouseDown(with: event)
@@ -221,7 +216,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
 
     override func mouseDragged(with event: NSEvent) {
         let localPoint = convert(event.locationInWindow, from: nil)
-        if sendTouchEvent(phase: 1, localPoint: localPoint, timestamp: event.timestamp) {
+        if dragPointer(to: localPoint) || sendTouchEvent(phase: 1, localPoint: localPoint, timestamp: event.timestamp) {
             return
         }
         super.mouseDragged(with: event)
@@ -229,10 +224,15 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
 
     override func mouseUp(with event: NSEvent) {
         let localPoint = convert(event.locationInWindow, from: nil)
-        if !sendTouchEvent(phase: 3, localPoint: localPoint, timestamp: event.timestamp) {
+        if releasePointer(Self.primaryPointerButton, at: localPoint) {
+            if hidesHostCursor {
+                Self.hiddenCursor.set()
+            }
+            return
+        }
+        if !endTouch(at: localPoint, timestamp: event.timestamp) {
             super.mouseUp(with: event)
         }
-        currentTouchSwipeAim = 0
         // Bring the guest's pointer back where the finger lifted.
         if guestPointerFollowsMouse, let control {
             if hidesHostCursor {
@@ -245,15 +245,20 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     // MARK: - Secondary Click
 
     /// A right click is iPadOS's secondary click: the context menu under the
-    /// pointer. The guest has a touchscreen and no pointer, so it is replayed
-    /// as a touch-and-hold, which is what opens the same menu by finger. A
-    /// click released before the hold registers is kept down until it has.
-    /// Holding and dragging carries on as a drag, as a finger would.
+    /// pointer. Where the guest's pointer follows the mouse it is that
+    /// pointer's secondary button. Elsewhere the guest has a touchscreen and
+    /// no pointer, so it is replayed as a touch-and-hold, which is what opens
+    /// the same menu by finger. A click released before the hold registers is
+    /// kept down until it has. Holding and dragging carries on as a drag, as a
+    /// finger would.
     override func rightMouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        let localPoint = convert(event.locationInWindow, from: nil)
+        if pressPointer(Self.secondaryPointerButton, at: localPoint) {
+            return
+        }
         finishScrollTouch()
         releaseSecondaryPress()
-        let localPoint = convert(event.locationInWindow, from: nil)
         // A hold is never an edge swipe, wherever it lands.
         currentTouchSwipeAim = 0
         guard sendTouchEvent(phase: 0, localPoint: localPoint, timestamp: event.timestamp) else {
@@ -265,6 +270,9 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     }
 
     override func rightMouseDragged(with event: NSEvent) {
+        if dragPointer(to: convert(event.locationInWindow, from: nil)) {
+            return
+        }
         guard secondaryPressPoint != nil, secondaryReleaseWork == nil else {
             super.rightMouseDragged(with: event)
             return
@@ -275,6 +283,9 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     }
 
     override func rightMouseUp(with event: NSEvent) {
+        if releasePointer(Self.secondaryPointerButton, at: convert(event.locationInWindow, from: nil)) {
+            return
+        }
         guard secondaryPressPoint != nil, secondaryReleaseWork == nil else {
             super.rightMouseUp(with: event)
             return
@@ -301,6 +312,75 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         guard let point = secondaryPressPoint else { return }
         secondaryPressPoint = nil
         sendTouchEvent(phase: 3, localPoint: point, timestamp: ProcessInfo.processInfo.systemUptime)
+    }
+
+    // MARK: - Pointer Clicks
+
+    private static let primaryPointerButton = 1
+    private static let secondaryPointerButton = 2
+
+    /// The buttons Mac clicks hold down on the guest's pointer.
+    private var pointerButtons = 0
+
+    /// On a guest whose pointer follows the mouse a click is that pointer's,
+    /// as on an iPad with a trackpad. A touch is the wrong input there: iPadOS
+    /// ignores a touch on an alert's button while the pointer hovers it, until
+    /// the pointer hides itself a few seconds after it last moved.
+    private var clicksWithGuestPointer: Bool {
+        guestPointerFollowsMouse && control?.supportsPointerButtons == true
+    }
+
+    /// Presses `button` on the guest's pointer at `localPoint`, ending any
+    /// scroll or touch first. False when a click is a touch on this guest.
+    private func pressPointer(_ button: Int, at localPoint: NSPoint) -> Bool {
+        guard clicksWithGuestPointer, let control else { return false }
+        finishScrollTouch()
+        if nativeScrollActive {
+            endNativeScroll()
+            nativeScrollMomentumDropped = true
+        }
+        releaseSecondaryPress()
+        pointerButtons |= button
+        control.setPointer(interfacePoint(localPoint), buttons: pointerButtons)
+        return true
+    }
+
+    /// Moves the guest's pointer with its buttons held. False when none is.
+    private func dragPointer(to localPoint: NSPoint) -> Bool {
+        guard pointerButtons != 0, let control else { return false }
+        control.setPointer(interfacePoint(localPoint), buttons: pointerButtons)
+        return true
+    }
+
+    /// Releases `button`. False when the guest's pointer is not holding it, so
+    /// a release whose press was a touch lifts the finger instead.
+    private func releasePointer(_ button: Int, at localPoint: NSPoint) -> Bool {
+        guard pointerButtons & button != 0, let control else { return false }
+        pointerButtons &= ~button
+        control.setPointer(interfacePoint(localPoint), buttons: pointerButtons)
+        return true
+    }
+
+    // MARK: - Touches
+
+    /// Puts a finger down at `localPoint`, after ending every other input that
+    /// would fight it for the same slot. False when there is no touch path.
+    @discardableResult
+    private func beginTouch(at localPoint: NSPoint, timestamp: TimeInterval) -> Bool {
+        finishScrollTouch()
+        if nativeScrollActive {
+            endNativeScroll()
+            nativeScrollMomentumDropped = true
+        }
+        releaseSecondaryPress()
+        currentTouchSwipeAim = hitTestEdge(at: localPoint)
+        return sendTouchEvent(phase: 0, localPoint: localPoint, timestamp: timestamp)
+    }
+
+    @discardableResult
+    private func endTouch(at localPoint: NSPoint, timestamp: TimeInterval) -> Bool {
+        defer { currentTouchSwipeAim = 0 }
+        return sendTouchEvent(phase: 3, localPoint: localPoint, timestamp: timestamp)
     }
 
     // MARK: - Trackpad Gestures
@@ -826,22 +906,9 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         ))
     }
 
-    /// Synthesize an NSEvent at a given window point.
-    private func synthesizeMouseEvent(type: NSEvent.EventType, at windowPoint: NSPoint) -> NSEvent? {
-        NSEvent.mouseEvent(
-            with: type,
-            location: windowPoint,
-            modifierFlags: [],
-            timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: window?.windowNumber ?? 0,
-            context: nil,
-            eventNumber: 0,
-            clickCount: type == .leftMouseUp ? 0 : 1,
-            pressure: type == .leftMouseUp ? 0.0 : 1.0,
-        )
-    }
-
     /// Inject a tap at pixel coordinates (matching screenshot image dimensions).
+    /// Always a touch, even where a Mac click is the guest pointer's: a tap
+    /// stands for a finger, and the pointer shows only once the mouse moves.
     func injectTap(pixelX: Double, pixelY: Double, screenWidth: Int, screenHeight: Int) {
         let localPoint = pixelToLocal(
             pixelX: pixelX,
@@ -849,20 +916,13 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
             screenWidth: screenWidth,
             screenHeight: screenHeight,
         )
-        let windowPoint = convert(localPoint, to: nil)
-
-        if let downEvent = synthesizeMouseEvent(type: .leftMouseDown, at: windowPoint) {
-            mouseDown(with: downEvent)
-        }
+        beginTouch(at: localPoint, timestamp: ProcessInfo.processInfo.systemUptime)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            guard let self else { return }
-            if let upEvent = synthesizeMouseEvent(type: .leftMouseUp, at: windowPoint) {
-                mouseUp(with: upEvent)
-            }
+            self?.endTouch(at: localPoint, timestamp: ProcessInfo.processInfo.systemUptime)
         }
     }
 
-    /// Inject a swipe from one pixel coordinate to another.
+    /// Inject a swipe from one pixel coordinate to another, as a finger.
     func injectSwipe(
         fromX: Double,
         fromY: Double,
@@ -879,36 +939,25 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
             screenHeight: screenHeight,
         )
         let endLocal = pixelToLocal(pixelX: toX, pixelY: toY, screenWidth: screenWidth, screenHeight: screenHeight)
-        let startWindow = convert(startLocal, to: nil)
-        let endWindow = convert(endLocal, to: nil)
 
         let steps = max(10, durationMs / 16)
         let stepInterval = Double(durationMs) / Double(steps) / 1000.0
 
-        if let downEvent = synthesizeMouseEvent(type: .leftMouseDown, at: startWindow) {
-            mouseDown(with: downEvent)
-        }
+        beginTouch(at: startLocal, timestamp: ProcessInfo.processInfo.systemUptime)
 
         for i in 1 ... steps {
             let t = Double(i) / Double(steps)
-            let x = startWindow.x + (endWindow.x - startWindow.x) * t
-            let y = startWindow.y + (endWindow.y - startWindow.y) * t
-            let pt = NSPoint(x: x, y: y)
-            let delay = stepInterval * Double(i)
-
-            if i < steps {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                    guard let self else { return }
-                    if let dragEvent = synthesizeMouseEvent(type: .leftMouseDragged, at: pt) {
-                        mouseDragged(with: dragEvent)
-                    }
-                }
-            } else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                    guard let self else { return }
-                    if let upEvent = synthesizeMouseEvent(type: .leftMouseUp, at: pt) {
-                        mouseUp(with: upEvent)
-                    }
+            let pt = NSPoint(
+                x: startLocal.x + (endLocal.x - startLocal.x) * t,
+                y: startLocal.y + (endLocal.y - startLocal.y) * t,
+            )
+            DispatchQueue.main.asyncAfter(deadline: .now() + stepInterval * Double(i)) { [weak self] in
+                guard let self else { return }
+                let now = ProcessInfo.processInfo.systemUptime
+                if i < steps {
+                    sendTouchEvent(phase: 1, localPoint: pt, timestamp: now)
+                } else {
+                    endTouch(at: pt, timestamp: now)
                 }
             }
         }
@@ -925,10 +974,10 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     ///
     /// The touch starts a hair inside the left edge on purpose: the system only
     /// reads a drag as the back gesture when the touch *begins* in the
-    /// screen-edge zone. It goes through `injectSwipe`, which synthesises
-    /// ordinary mouse events, so the touch follows whichever injection path the
-    /// running base uses (vphoned on iOS 18, the native VZ multitouch path on
-    /// 26 and later).
+    /// screen-edge zone. It goes through `injectSwipe`, which is always a
+    /// touch, even where a Mac click is the guest pointer's, and follows
+    /// whichever injection path the running base uses (vphoned on iOS 18, the
+    /// native VZ multitouch path on 26 and later).
     /// True while a back swipe is in flight. A second press during one cannot
     /// stack another gesture on top of it, which is what made a double press
     /// look like nothing happened.

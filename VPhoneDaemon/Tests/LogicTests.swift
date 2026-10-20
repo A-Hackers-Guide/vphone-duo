@@ -365,10 +365,8 @@ enum LogicTests {
                     Scroll(phase: .began, dx: 0, dy: 0, pointer: nil), "deltas default to 0")
         expectEqual(try? GuestPointerScroll.scroll(["phase": "began", "x": 0, "y": 1]),
                     Scroll(phase: .began, dx: 0, dy: 0, pointer: .init(x: 0, y: 1)), "a pointer position comes with it")
-        expectEqual(GuestPointerScroll.Phase.began.bits, 1)
-        expectEqual(GuestPointerScroll.Phase.changed.bits, 2)
-        expectEqual(GuestPointerScroll.Phase.ended.bits, 4)
-        expectEqual(GuestPointerScroll.Phase.cancelled.bits, 8)
+        expectEqual(GuestPointerScroll.Phase.allCases.map(\.rawValue), ["began", "changed", "ended", "cancelled"],
+                    "the names IcliKit's ScrollPhase takes")
         let phase = "phase must be began, changed, ended or cancelled"
         expectEqual(scrollProblem([:]), phase)
         expectEqual(scrollProblem(["phase": "move"]), phase)
@@ -389,6 +387,12 @@ enum LogicTests {
         expectEqual(try? GuestPointerScroll.sequence(["seq": 9_007_199_254_740_992.0]), 1 << 53)
         for bad: Any in [-1, 1.5, true, "7", 9_007_199_254_740_994.0] {
             expect((try? GuestPointerScroll.sequence(["seq": bad])) == nil, "seq \(bad) is refused")
+        }
+        expectEqual(try? GuestPointerScroll.buttons([:]), 0, "no buttons held when there are none")
+        expectEqual(try? GuestPointerScroll.buttons(["buttons": 1]), 1)
+        expectEqual(try? GuestPointerScroll.buttons(["buttons": 7]), 7)
+        for bad: Any in [-1, 8, 1.5, true, "1"] {
+            expect((try? GuestPointerScroll.buttons(["buttons": bad])) == nil, "buttons \(bad) is refused")
         }
     }
 }
