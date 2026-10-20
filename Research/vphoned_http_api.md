@@ -372,7 +372,7 @@ request carries `"force": true`.
 | --- | --- |
 | Device | `device.snapshot`, `device.info` (snapshot plus network, screen, rotation, brightness, volume, low power, Developer Mode, agent, `device_name` `{name, own_name}`: the pinned name and the guest's own ComputerName), `device.screen`, `device.network`, `device.ioreg {plane}`, `device.environment`, `device.basebin {archive?}` |
 | Display, audio | `display.brightness {value?}`, `display.rotation {orientation?}`, `display.orientation` (`{degrees, source}`: SpringBoard's interface orientation without a screen capture, for polling; `degrees` is null while SpringBoard has no answer; capability `display_orientation`), `display.rotation_lock {locked}`, `display.auto_lock` (`{auto_lock_seconds, never, lock_screen_minimum_seconds}`: Auto-Lock and the Lock Screen timeout vphoned keeps in step with it, see below; capability `display_auto_lock`), `screen.unlock {passcode?, timeout?}` (`{locked, screen_off, was_locked, was_screen_off}`: the display on and the Lock Screen passed, see below; capability `screen_unlock`), `audio.volume {value?, category?}`, `audio.state` |
-| Input | `input.touch`, `input.hid`, `input.button {name}`, `input.key {name}`, `input.type {text, delay_ms?}`, `input.paste {text}`, `input.tap`, `input.double_tap`, `input.long_press`, `input.swipe`, `input.drag {points}`, `input.touch_sequence {events}` — gesture coordinates are screen points; `input.pointer {x, y, seq?}`, `input.scroll {phase, dx?, dy?, x?, y?}` (capability `pointer_scroll`, see below) |
+| Input | `input.touch`, `input.hid`, `input.button {name}`, `input.key {name}`, `input.type {text, delay_ms?}`, `input.paste {text}`, `input.tap`, `input.double_tap`, `input.long_press`, `input.swipe`, `input.drag {points}`, `input.touch_sequence {events}` — gesture coordinates are screen points; `input.pointer {x, y, seq?, buttons?}`, `input.scroll {phase, dx?, dy?, x?, y?}` (capabilities `pointer_scroll` and `pointer_buttons`, see below) |
 | UI | `ui.tree` (alias `accessibility.tree`), `ui.element_at`, `ui.tap_element`, `ui.wait`, `ui.wait_gone`, `ui.ocr {languages?, min_confidence?}`, `ui.describe`, `screen.screenshot` |
 | Processes | `processes.list {filter?}`, `processes.kill {pid, signal?}` **force**, `memory.jetsam`, `memory.pressure` (only the three kernel memory sysctls, for polling) |
 | launchd | `services.list`, `status`, `print`, `dump`, `disabled`, `start`, `enable`, `load`, `profile` (see below), `kickstart {label, kill?}` (`launchctl kickstart`, capability `service_kickstart`, see below); `services.stop`, `disable`, `remove`, `signal`, `unload`, `profile.apply {profile, groups?, allow?}` **force**, and `kickstart` with `kill` **force**; `launchd.getenv`, `setenv`, `unsetenv`. On tvOS, which never enables user sessions, they read the system domain alone; before icli 0.8.6 the foreground-user lookup trapped there and killed vphoned |
@@ -464,32 +464,53 @@ offers the last fix again every 10 s until the guest takes it, since the Mac
 sends a new one only when it moves. A preset or a replay pauses sync for that
 run without changing the setting.
 
-`input.pointer` and `input.scroll` (capability `pointer_scroll`, iPad guests
-only; REST `POST /v1/input/pointer`, `POST /v1/input/scroll`) scroll the way an
-iPad with a trackpad does, instead of with a dragging finger. On first use
-vphoned creates a virtual pointing device (a HID user device with an absolute
-position, `VPhoneDaemon/Native/vphoned_pointer.m`); iPadOS then shows a pointer,
+`input.pointer` and `input.scroll` (capabilities `pointer_scroll` and
+`pointer_buttons`, iPad guests only; REST `POST /v1/input/pointer`,
+`POST /v1/input/scroll`) point, click and scroll the way an iPad with a
+trackpad does, instead of with a finger. They drive IcliKit's virtual
+pointing device (`pointerMove`, `pointerScroll`; a HID user device with an
+absolute position, `Sources/IcliPrivate/Pointer.m` in icli), which vphoned
+creates on first use and keeps while it runs; iPadOS then shows a pointer,
 which hides itself after a few seconds without movement.
 
-- `input.pointer {x, y, seq?}` puts the pointer at x, y: 0...1 from the
-  top-left corner of the interface as it is shown, in any orientation.
-  Requests run concurrently, so a client that sends moves without waiting
-  for each answer numbers them with an increasing `seq` (a whole number up
-  to 2^53); a move that lands after a higher one is dropped, and still
-  answers. Without `seq` every move is applied.
+- `input.pointer {x, y, seq?, buttons?}` puts the pointer at x, y: 0...1 from
+  the top-left corner of the interface as it is shown, in any orientation.
+  `buttons` are the buttons held from that move on, a whole number 0...7: bit
+  0 primary, bit 1 secondary, bit 2 middle; without it none are held. Holding
+  one is a pointer click, which iPadOS answers as a trackpad's, not as a
+  touch. Requests run concurrently, so a client that sends moves without
+  waiting for each answer numbers them with an increasing `seq` (a whole
+  number up to 2^53); a move that lands after a higher one is dropped,
+  buttons and all, and still answers. Without `seq` every move is applied. A
+  client therefore sends button changes in order, and no move numbered past
+  one until it has been answered.
 - `input.scroll {phase, dx?, dy?, x?, y?}` sends one scroll event to the view
-  under the pointer, after moving the pointer to x, y when they are given.
+  under the pointer, after moving the pointer to x, y when they are given; the
+  buttons held stay as they are.
   `phase` is `began`, `changed`, `ended` or `cancelled`: `began` first, a
   `changed` per delta, then `ended`. `dx` and `dy` are interface points with a
   browser wheel event's signs, positive `dy` toward the end of the content,
   under the guest's natural scrolling setting (on by default); each is at most
   10000.
 
+A click under a visible pointer has to be the pointer's. iPadOS ignores a
+touch on an alert's button while the pointer hovers it, until the pointer has
+hidden itself: on an iPadOS 26.6.2 guest a touch within 0.3 s of the pointer
+moving onto SpringBoard's Remove App Cancel button failed 6 times out of 6;
+with a Mac click sent as `buttons` the VM window closed it on the first
+click every time, after resting on the button. The window therefore sends a
+Mac click as `buttons` on a `pointer_buttons` guest, and keeps touches for
+`vphone.sock`'s `tap` and `swipe` and the back gesture. IcliKit sends a
+button change as a button event rather than a report bit: backboardd never
+releases a button that a report pressed, and a stuck button loses every
+later click of every pointing device.
+
 The view moves by the deltas and by nothing else: iPadOS does not run on
 after `ended`, so a client that wants a trackpad's momentum sends it as more
 `changed` deltas first. The first few points of a scroll start the gesture
-and do not move the view (about 15 points on iPadOS 26). Both answer
-`invalid_operation` when the device cannot be made or is not ready yet.
+and do not move the view (about 15 points on iPadOS 26). Both answer with
+IcliKit's error, `unavailable` or `failed`, when the device cannot be made or
+is not ready yet.
 
 `time.timezone` (capability `timezone`; REST `GET/PUT /v1/timezone`) returns
 `{identifier, automatic, seconds_from_gmt}`: the Olson name

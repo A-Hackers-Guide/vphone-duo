@@ -191,6 +191,8 @@ final class VPhoneGuestControl {
         orderedInput = nil
         openScroll = nil
         pendingPointer = nil
+        openPointerPress = nil
+        heldPointerButtons = 0
         orderedLocation?.cancel()
         orderedLocation = nil
         device = nil
@@ -348,9 +350,20 @@ final class VPhoneGuestControl {
         isConnected && guestCapabilities.contains("pointer_scroll")
     }
 
+    /// Whether a button held in a pointer move is a click (`input.pointer`'s
+    /// `buttons`), so a Mac click can be the guest pointer's.
+    var supportsPointerButtons: Bool {
+        isConnected && guestCapabilities.contains("pointer_buttons")
+    }
+
     @ObservationIgnored private var pointersInFlight = 0
     @ObservationIgnored private var pendingPointer: CGPoint?
     @ObservationIgnored private var lastPointerSequence: UInt64 = 0
+    /// The buttons the last `setPointer` holds down.
+    @ObservationIgnored private var heldPointerButtons = 0
+    /// `setPointer` requests not yet answered.
+    @ObservationIgnored private var pointerPressesQueued = 0
+    @ObservationIgnored private var openPointerPress: PendingPointerPress?
 
     /// Moves in flight at once. Each request is its own connection; waiting
     /// for one answer before the next put a round trip behind every move.
@@ -361,26 +374,82 @@ final class VPhoneGuestControl {
     /// on the order of touches, and a mouse that keeps moving would hold every
     /// click behind it. Moves go out at once, numbered so that vphoned drops
     /// one that lands after a later one; past `maximumPointersInFlight` the
-    /// newest position waits for the next free slot.
+    /// newest position waits for the next free slot. While a button is down,
+    /// or its release has not been answered, the newest position waits too: a
+    /// move holds no buttons, and one numbered past a press would release it.
     func movePointer(to point: CGPoint) {
-        guard pointersInFlight < Self.maximumPointersInFlight else {
+        guard pointersInFlight < Self.maximumPointersInFlight, heldPointerButtons == 0, pointerPressesQueued == 0
+        else {
             pendingPointer = point
             return
         }
-        // Microseconds of uptime: increasing across reconnects and restarts of
-        // this process, which a guest that keeps running may still remember.
-        let now = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000)
-        lastPointerSequence = max(now, lastPointerSequence + 1)
-        let params: [String: Any] = ["x": Double(point.x), "y": Double(point.y), "seq": lastPointerSequence]
+        let params: [String: Any] = ["x": Double(point.x), "y": Double(point.y), "seq": nextPointerSequence()]
         pointersInFlight += 1
         Task {
             _ = try? await call("input.pointer", params: params)
             pointersInFlight -= 1
-            if let next = pendingPointer {
-                pendingPointer = nil
-                movePointer(to: next)
-            }
+            movePendingPointer()
         }
+    }
+
+    /// The position a press or a drag still waiting in the input queue sends.
+    private final class PendingPointerPress {
+        var point: CGPoint
+        let buttons: Int
+
+        init(point: CGPoint, buttons: Int) {
+            self.point = point
+            self.buttons = buttons
+        }
+    }
+
+    /// Puts the guest's pointer at `point` with `buttons` held, bit 0 primary
+    /// and bit 1 secondary: a click that is the pointer's, as a trackpad's is,
+    /// and not a touch. In the ordered input queue, after the keys and touches
+    /// sent before it, so no press or release is reordered or dropped. A drag
+    /// that keeps the same buttons down joins the move still waiting there,
+    /// so a guest slower than the mouse gets fewer moves and loses no release.
+    func setPointer(_ point: CGPoint, buttons: Int) {
+        heldPointerButtons = buttons
+        // A hover from before the press would land after it.
+        pendingPointer = nil
+        if let open = openPointerPress, open.buttons == buttons {
+            open.point = point
+            return
+        }
+        let open = PendingPointerPress(point: point, buttons: buttons)
+        openPointerPress = open
+        pointerPressesQueued += 1
+        let previous = orderedInput
+        orderedInput = Task {
+            await previous?.value
+            if openPointerPress === open {
+                openPointerPress = nil
+            }
+            if !Task.isCancelled {
+                let params: [String: Any] = [
+                    "x": Double(open.point.x), "y": Double(open.point.y), "buttons": open.buttons,
+                    "seq": nextPointerSequence(),
+                ]
+                do { _ = try await call("input.pointer", params: params) } catch { print("[control] input.pointer: \(error)") }
+            }
+            pointerPressesQueued -= 1
+            movePendingPointer()
+        }
+    }
+
+    private func movePendingPointer() {
+        guard let next = pendingPointer else { return }
+        pendingPointer = nil
+        movePointer(to: next)
+    }
+
+    /// Microseconds of uptime: increasing across reconnects and restarts of
+    /// this process, which a guest that keeps running may still remember.
+    private func nextPointerSequence() -> UInt64 {
+        let now = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000)
+        lastPointerSequence = max(now, lastPointerSequence + 1)
+        return lastPointerSequence
     }
 
     /// The `changed` deltas waiting in the input queue, added up until that
