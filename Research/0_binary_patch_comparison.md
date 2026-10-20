@@ -3466,3 +3466,62 @@ iOS 26.5 (23F77) on cloudOS 26.5 (23F75) and iOS 26.4 (23E246) on cloudOS 26.4
 cloudOS restore. The 26.7 recipe is one the research workflow built and
 validated statically; it has not run through this pipeline yet (26.7 has no
 iPhone release to pair it with).
+
+## Apple Watch guests (2026-10-20)
+
+A Watch7,18 (Apple Watch Series 11, N227b) IPSW restores as a guest of its own
+family (`VPhoneGuestDevice.watch7_18`, 416x496 at 330 ppi, scale 2). No
+cloudOS ships a kernel for a watch VM, and the vphone600 kexts are iOS builds,
+so the watch boots the 26.4 research board kernel (23E244) rebuilt with the
+watchOS kexts of its own IPSW. It takes the `watchos` preset: `minimal` with the
+watch board's device tree in place of the iPhone17,3 identity, and activation
+stock (`filesystem-boot-mobileactivationd_should_hactivate` is off; pairing
+needs it).
+
+### The watch kernelcache
+
+`kernel-boot-vresearch101_kext_mix` with the recipe `watch_26.4_23T240`. A
+recipe now names the guest family it is for (`guest`) and its kext sources in
+order (`sources`); each kext comes from the first source that has it, the KPI
+bundles (System.kext) always from the base, so the base kernel resolves them.
+A donor without a cloudOS URL is read from the guest's own restore tree.
+
+| Source | Kexts |
+| --- | --- |
+| `watch7c_26.4_23T240`: `kernelcache.release.watch7c` of the Watch7,18 IPSW | 105: the watchOS families and drivers a vphone600 target built with `OSPRODUCT=WatchOS` takes, per the KDK's KernelCacheBuilder makefiles |
+| base: 23E244 `kernelcache.release.vresearch101` | 11: ARMGIC, PVPanic, ParavirtGPU, VPIOP, VirtIO, VirtualPlatform, usb.cdc, ParavirtIOSurface, VirtIOStorage, and AppleUSBXHCI/XHCIPCI for the VM's USB touch screen; plus the 7 KPI bundles |
+| `vphone600_26.4_23E5207q` | 6: VideoToolboxParavirtualization, AvpFairPlayDriver, driverkit.serial, usb.cdc.acm, usb.serial, VirtIONeuralEngineDevice |
+
+The 23E244 kernel was chosen because its KPI symbol sets, C++ class sizes and
+syscall, Mach trap and MIG tables equal the watch kernel's. Both maps are the
+research results: the watch kernelcache symbolicated with BinDiff against the
+23E5207i KDK, and the 23E244 map of the iPhone recipe with about 2,400 fixes the
+watch kexts' imports need (70 kernel-import binds resolved by three-way
+alignment against the macOS 26.5.1 vmapple kernel, every `__ZTV`/MetaClass
+label from `ipsw kernel cpp`, and IOSurface getters labelled 0x14 before their
+entry, which failed PAC on `retab`). On 2026-10-20 the staged volume's kernel
+and all 124 kext executables were byte-identical to the research mix that
+booted to Setup with working touch.
+
+### Device tree
+
+The installed tree presents N227b through the board copy iPad and Apple TV
+guests use (`devicetree-cfw-ipad_*`). A watch needs two more:
+
+| Patch | Change |
+| --- | --- |
+| `devicetree-cfw-watch_presentation` | `/product` `artwork-display-gamut`, `artwork-dynamic-displaymode` and `framebuffer-identifier` from N227b; the `vphone600-gestalt-variants/d47vm2025vre-variant` tags MobileGestalt reads in place of syscfg on the VM (`tag-ards`, `-arsf`, `-codf`, `-tprt`, `-crid`, `-dcrd`, `-fbid`, `-prde` from the matching N227b properties, `-isnl` and `-waco` 0). With the D47's values the watch UI finds no screen class ("unsupported screen class, no apple logo found") and stays black. |
+| `devicetree-cfw-watch_driverkit` | `/product/supports-driverkit = 1`. The VM's touch screen is a USB device behind XHCI whose HID driver is the dext `com.apple.AppleUserHIDDrivers`; launchd starts driverkitd only on a tree that says so, and N227b's does not (a watch has no USB touch screen). |
+
+### Restore image
+
+A watchOS image has no cryptexes: its dyld caches (arm64_32 and arm64e) are in
+the OS image. For a watch `filesystem-boot-cryptex_merge` skips the cryptex
+copies and dyld symlinks and only reseals the image with the guest payload.
+`filesystem-boot-gpu_driver` marks the iOS driver and its compiler plugin
+watchOS (`MachOBuildPlatform.watchOS`, re-signed, bundle resealed), as the
+tvOS installer does; all its imports are in the watchOS 26.4 arm64e cache.
+`filesystem-boot-launchd_cache_loader_unsecure_cache_gate` thins the universal
+binary to its arm64e slice first (`MachOFatSlice`). vphoned is the arm64 daemon
+marked watchOS (`vphoned-watchos`); its HID presses reach the crown as Home
+(consumer 0x40) and the side button as Power (0x30).
