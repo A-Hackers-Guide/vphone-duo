@@ -29,7 +29,7 @@ not there yet.
 | `{"t":"screenshot","path":"/abs/shot.png"}` | Full-resolution capture to `path` (PNG or JPEG by extension). Without `path` it saves to the Desktop |
 | `{"t":"tap","x":645,"y":1398}` | Tap |
 | `{"t":"swipe","x1":645,"y1":2600,"x2":645,"y2":1400,"ms":300}` | Swipe; `ms` defaults to 300 |
-| `{"t":"key","name":"home"}` | `home`, `power`, `volup`, `voldown` are hardware HID keys. Any other name (`return`, `cmd+v`) goes to vphoned `input.key` |
+| `{"t":"key","name":"home"}` | `home`, `power`, `volup`, `voldown`, `side` (an Apple Watch's side button, consumer 0x95) are hardware HID keys. Any other name (`return`, `cmd+v`) goes to vphoned `input.key` |
 | `{"t":"type","text":"Hello"}` | Sets the **guest clipboard**; it does not type |
 | `{"t":"rpc","method":"<vphoned method>","params":{…}}` | Calls any vphoned method; see [rpc-methods](rpc-methods.md) |
 | `{"t":"push","local":"/abs/host/file","path":"/abs/guest/file","mode":"755"}` | Streams a Mac file into the guest, any size. A `path` ending in `/` keeps the file's name; `mode` defaults to the Mac file's permissions. `result` has `path`, `local`, `size` |

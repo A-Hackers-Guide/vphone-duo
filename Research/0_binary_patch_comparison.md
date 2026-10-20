@@ -3524,7 +3524,16 @@ tvOS installer does; all its imports are in the watchOS 26.4 arm64e cache.
 `filesystem-boot-launchd_cache_loader_unsecure_cache_gate` thins the universal
 binary to its arm64e slice first (`MachOFatSlice`). vphoned is the arm64 daemon
 marked watchOS (`vphoned-watchos`); its HID presses reach the crown as Home
-(consumer 0x40) and the side button as Power (0x30).
+(consumer 0x40). The side button is consumer Help (0x0C/0x95), not Power:
+N227b's `/buttons` node names two buttons, `help` and `menu`, and Carousel's
+`-[CSLHIDEventStreamWriter _eventForUsagePage:usage:down:]` maps 0x0C/0x40 to
+the crown, 0x0C/0x95 to the side button (to the Action button only when
+`shouldSimulateSting`) and vendor 0xFF01/0x200 to the Action button, which a
+Series 11 lacks. `-[CSLUIHIDHandler init]` reads consumer Power (0x30) as the
+separate `power` mask, which only sleeps or wakes the display. The VM window's
+Device › Side Button (watch guests only) and the host automation key `side`
+send 0x95; on 2026-10-20 it woke the `pair-watch` guest and opened Control
+Center from the watch face, where 0x30 turned the display off.
 
 vphoned links Vision (IcliKit's OCR) weakly: watchOS ships no Vision, and dyld
 refused the daemon. Every other library it links strongly, and every symbol it
