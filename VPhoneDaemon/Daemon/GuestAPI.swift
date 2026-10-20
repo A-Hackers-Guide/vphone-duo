@@ -123,6 +123,7 @@ enum GuestAPI {
                 "processes",
                 "services",
                 "service_profile",
+                "service_kickstart",
                 "logs",
                 "network_capture",
                 "app_details",

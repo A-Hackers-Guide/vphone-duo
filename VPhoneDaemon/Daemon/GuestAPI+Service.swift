@@ -35,6 +35,13 @@ extension GuestAPI {
             return try applyServiceProfile(params)
         case "services.start":
             return try startService(string(params, "label"))
+        case "services.kickstart":
+            let label = try string(params, "label")
+            let kill = bool(params, "kill")
+            if kill {
+                try requireForce(params, "kill and restart \(label)")
+            }
+            return try kickstartService(label, kill: kill)
         case "services.enable":
             return try setServiceEnabled(string(params, "label"), enabled: true)
         case "services.stop":

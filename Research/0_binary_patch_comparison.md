@@ -2435,6 +2435,19 @@ override after `udid.set` and after a reboot, and the guest's own after
 `udid.clear`. Details and the measurements are in
 `Research/Guest/xcode_install_signature_gate.md`, "The host sees it too".
 
+## vphoned launchd service entitlements (2026-10-20)
+
+`VPhoneDaemon.entitlements` adds `com.apple.private.xpc.service-configure`
+and `com.apple.private.xpc.service-attach` (true) for `services.kickstart`.
+icli 0.9.1's device regression on iOS 27.0.1 guests found that launchd
+refuses kickstart with status 144 unless the caller holds both; icli's own
+binary carries them, and a library consumer such as vphoned has to sign
+with them itself. Not yet observed on a guest with vphoned:
+`services.stop` and `unload` were answered 144 without service-configure,
+so whether they now succeed is unverified, and the notes that say so
+(`Research/Guest/service_trimming.md`, `GuestServiceProfile`) are left as
+they are until a guest shows otherwise.
+
 ## vphoned accessibility client entitlements (2026-09-30)
 
 `VPhoneDaemon.entitlements` adds three true booleans:
