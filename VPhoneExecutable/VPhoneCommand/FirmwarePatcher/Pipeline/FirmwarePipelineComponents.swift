@@ -298,6 +298,7 @@ extension FirmwarePipeline {
                         applyProMotion: applyProMotion,
                         applyTVTPROPagers: isEnabled(FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers, fallback: false),
                         applyParavirtUserClients: applyParavirtUserClients,
+                        applyParavirtTask3: isEnabled(FirmwarePatchSetCatalog.paravirtTask3Patch, fallback: false),
                         includeBase: includeKernelBase,
                         includeCustomFirmware: includeKernelCustomFirmware,
                         includeHypervisor: includeHypervisor,
@@ -447,6 +448,7 @@ extension FirmwarePipeline {
         applyProMotion: Bool,
         applyTVTPROPagers: Bool,
         applyParavirtUserClients: Bool,
+        applyParavirtTask3: Bool,
         includeBase: Bool,
         includeCustomFirmware: Bool,
         includeHypervisor: Bool,
@@ -468,6 +470,7 @@ extension FirmwarePipeline {
                 p.applyProMotion = applyProMotion
                 p.applyTVTPROPagers = applyTVTPROPagers
                 p.applyParavirtUserClients = applyParavirtUserClients
+                p.applyParavirtTask3 = applyParavirtTask3
                 p.gate = gate
                 return p
             }

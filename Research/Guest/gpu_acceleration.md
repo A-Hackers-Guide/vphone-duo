@@ -215,6 +215,11 @@ So this cannot be fixed by a guest firmware patch, which is the only thing
   giving the guest driver code to populate it would be new kext code — but it
   would still only matter if the host read it, which it does not.
 
+**Correction (2026-10-19):** the guest does switch that byte. It is
+supportsTask3, set by the binary version the guest kext negotiates, and a
+kernel patch can ask for it. See "The keyed host cache: binary version 252
+(Task3)" below. The rest of this paragraph predates that.
+
 Reaching the host cache would mean changing the host ParavirtualizedGraphics
 framework. That is Apple's code on the sealed system volume, and the shipped
 bundle runs only system libraries, so it is out of scope. The post-boot
@@ -505,6 +510,57 @@ ID rewriter, the guest frame-counter job (C, built with `xcrun -sdk iphoneos
 clang`) and zsh drivers. The method to repeat: watch the guest log for `Trying
 to restart GPU` and capture backboardd's syslog while Camera launches. A result
 without the restart count is worthless, and so is one that stops before Camera.
+
+#### The keyed host cache: binary version 252 (Task3), 2026-10-19
+
+The host half can be fixed the way Apple designed it: a task cache named after
+the guest process, which therefore persists, instead of one named at random.
+
+Where the feature byte comes from. `-[_PGDevice setBinaryVersion:]` fills the
+host's `APVFeatures` from the version the guest kext asks for
+(`getAPVFeaturesForVersion`, a ladder reached through a jump table for versions
+200–252). Field names from the ivar's type encoding in the GPU task binary:
+
+| Offset | Field | First version |
+| --- | --- | --- |
+| `0x33` | supportsMultipleDisplays | 245 |
+| `0x34` | supportsDisplayBrightnessCaps | 250 |
+| `0x35` | supportsHDRContentHeadroom | 251 |
+| `0x36` | supportsTask3 | 252 |
+
+The host logs the request: `Guest requested binary version: 245, setting
+binary version to: 245` for the cloudOS 26.4 kext.
+
+What 250–252 change on the host (macOS 27.0.1), from every read of those bytes:
+`0x34` only in `-[_PGDisplayNub testUpdateBrightnessCaps:]`; `0x35` nowhere
+found; `0x36` only in `calculateCachePathAndExtension:`. The GPU task process
+reads its copy of the struct in one place, the handshake, and only
+supportsArgumentBuffers. The version itself (`_binaryVersion`, `+0x4e0`) is
+read only for MMIO readback and suspend/resume.
+
+The guest side, in AppleParavirtGPUIOGPUFamily (cloudOS 26.4):
+
+- `setupVersion` writes its version to device register `+0x34`, reads back what
+  the host granted, and builds its own feature table from it. That table stops
+  at 245, so a granted 252 is invalid to the guest and it steps back down.
+  Nothing else in the kext reads the stored version (`+0x51c`).
+- Each task's root page is a fresh 16 KiB buffer. The kext writes a 40-byte
+  header (`0x00`–`0x27`; the word at `+4` is 2), and bytes `0x28`–`0x3b`, the
+  ones Task3 reads as the key, stay zero.
+
+Phase 1, `kernel-exp-paravirt_gpu_task3`: the request becomes 252 and the
+guest's features are computed from its original 245. Verified on `Lychee`
+(installed with `cfw update-kernel`): the host logs `Guest requested binary
+version: 252, setting binary version to: 252`, 0 GPU restarts, Settings opens
+and closes normally, and task directories still have 20-character random names,
+because the key bytes are zero. On its own it changes nothing visible; it is
+the switch the identity write needs.
+
+Phase 2, not done: write a stable per-program identity (20 bytes, such as a hash
+of the process's code signature or name) at `0x28` when the kext fills the
+header. The kext never touches process identity, and the kernel has no symbols,
+so this needs a code-cave patch calling kernel functions found by semantic
+anchors.
 
 ## Heap Textures Have No CPU Layout
 

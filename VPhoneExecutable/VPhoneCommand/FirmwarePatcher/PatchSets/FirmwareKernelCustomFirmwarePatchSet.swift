@@ -317,6 +317,19 @@ public enum FirmwareKernelCustomFirmwarePatchSet {
                 """,
                 target: .firmware(.kernelcache),
             ),
+
+            // MARK: Paravirtual GPU
+
+            VPhonePatchDeclaration(
+                identifier: FirmwarePatchSetCatalog.paravirtTask3Patch,
+                title: "GPU Task3 version",
+                summary: """
+                Research: the guest GPU driver asks the host for binary version 252 \
+                (Task3) while keeping its own features, so the host can key each \
+                guest process's shader cache instead of starting it empty.
+                """,
+                target: .firmware(.kernelcache),
+            ),
         ],
         requires: ["vphone.kernel.base"],
         provides: ["vphone.kernel.cfw"],

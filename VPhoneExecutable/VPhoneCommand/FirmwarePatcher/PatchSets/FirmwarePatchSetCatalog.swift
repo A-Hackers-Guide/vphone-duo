@@ -61,7 +61,7 @@ public enum FirmwarePatchSetCatalog {
         Set(FirmwareKernelFridaPatchSet.manifest.patches.map(\.identifier))
             .union(hypervisorConcealmentPatches)
             .union(experimentalIdentityPatches)
-            .union([FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers, misTrustAuthPatch, FirmwareGuestSystemPatchSet.settingsRootRows, FirmwareGuestSystemPatchSet.settingsSoftwareUpdate, FirmwareGuestSystemPatchSet.tvTPRO, FirmwareGuestSystemPatchSet.tvOTAUserland])
+            .union([FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers, misTrustAuthPatch, FirmwareGuestSystemPatchSet.settingsRootRows, FirmwareGuestSystemPatchSet.settingsSoftwareUpdate, FirmwareGuestSystemPatchSet.tvTPRO, FirmwareGuestSystemPatchSet.tvOTAUserland, paravirtTask3Patch])
 
     /// ProMotion: the 120 Hz timing for the paravirtual display.
     ///
@@ -77,6 +77,12 @@ public enum FirmwarePatchSetCatalog {
     /// old name. See
     /// `Research/Guest/display_refresh_rate.md`.
     public static let proMotionPatch = "kernel-cfw-display_promotion"
+
+    /// Paravirtual GPU binary version 252 (Task3) with the guest keeping its own
+    /// features: lets the host key each task's shader cache by guest-supplied
+    /// bytes. Off unless a VM selects it. See
+    /// `Research/Guest/gpu_acceleration.md`.
+    public static let paravirtTask3Patch = "kernel-exp-paravirt_gpu_task3"
 
     /// Identifiers a released bundle declared that a later one renamed, old to new.
     ///

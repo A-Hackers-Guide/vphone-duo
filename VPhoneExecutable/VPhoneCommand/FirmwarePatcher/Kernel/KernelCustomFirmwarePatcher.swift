@@ -46,6 +46,10 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
     /// writes what the reference records were taken from.
     public var applyParavirtUserClients = false
 
+    /// Paravirtual GPU binary version 252 (Task3). Opt-in; false here so a patcher
+    /// built directly writes what the reference records were taken from.
+    public var applyParavirtTask3 = false
+
     public func findAll() throws -> [PatchRecord] {
         parseMachO()
         buildADRPIndex()
@@ -117,6 +121,11 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
         // fixed 60 Hz mode, unless the VM blocked it.
         if applyProMotion {
             patchParavirtDisplayRefreshRate()
+        }
+
+        // Opt-in: ask the host for the Task3 binary version.
+        if applyParavirtTask3 {
+            patchParavirtTask3Version()
         }
 
         // Group C
