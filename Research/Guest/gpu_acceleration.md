@@ -556,11 +556,153 @@ and closes normally, and task directories still have 20-character random names,
 because the key bytes are zero. On its own it changes nothing visible; it is
 the switch the identity write needs.
 
-Phase 2, not done: write a stable per-program identity (20 bytes, such as a hash
-of the process's code signature or name) at `0x28` when the kext fills the
-header. The kext never touches process identity, and the kernel has no symbols,
-so this needs a code-cave patch calling kernel functions found by semantic
-anchors.
+#### Task3 executable identity implementation, 2026-10-20
+
+Phase 2 extends the same opt-in declaration with `.identity_hook` and
+`.identity_code`. All four sites are discovered and encoded before any write;
+an unresolved site aborts a selected Task3 operation. It remains opt-in under
+`kernel-exp-paravirt_gpu_task3`; the runtime coverage below is one host/guest
+combination. Lychee explicitly enables it in its patch selection.
+
+The key is the owning executable's **20-byte code-signing cdhash**. It is neither
+a process name nor a PID, and it is obtained from the task recorded by the GPU
+task's superclass, rather than `current_proc()`. Concurrent tasks for the same
+executable intentionally share an identity; different executable builds have
+different identities. A missing proc or cdhash leaves twenty zero bytes, which
+retains the host's ephemeral fallback. No host cache files are mixed or copied.
+
+Reveal procedure (cloudOS 26.4 `kernelcache.research.vphone600`, XNU
+12377.100.591.502.1, UUID `784F88D3-2AF5-3D4A-AB00-365607646E44`):
+
+1. Anchor the GPU task initializer with `Failed to create Page Table Lock`.
+   Its root header tail has stores at offsets 8, 16, 20, 28 and 36; hook the
+   descriptor load immediately after that tail, before descriptor preparation
+   and host task registration. Observed initializer `0xfffffe0007ec6b54`, hook
+   `0xfffffe0007ec6e18`, root pointer x8, self x19, displaced
+   `ldr x0,[x19,#0x228]`. The allocation is a fresh 16 KiB page, although its
+   header view is 40 bytes; the host separately reads 60 bytes for Task3. The
+   matcher follows the sized allocation's saved return into the same descriptor
+   ivar and requires at least 60 bytes of backing storage.
+2. Follow the initializer's superclass vtable call, checking that it receives
+   the original x2 task argument. In `IOGPUTask::init` at
+   `0xfffffe00085df244`, the task is retained and stored at self+0x28. Derive
+   this displacement from the store of the saved incoming task argument; it
+   is not an assumed IOGPU or XNU structure layout.
+3. Anchor `flow_divert_get_app_data` with `(%u): failed to get the cdhash`.
+   The call whose null result reaches that log, followed by the 20-byte CDHASH
+   TLV append, identifies `cs_get_cdhash` at `0xfffffe0009199c4c`. Its body
+   matches `bsd/kern/kern_cs.c`: CS_SIGNED test, authenticated text-vnode load,
+   `ubc_cs_blob_get`, null check, pointer to the blob's cdhash. It returns a
+   pointer, not a copied hash.
+4. That same caller's `proc_task` sequence reveals the `proc_struct_size`
+   global (`0xfffffe00096f94b0` in this image). Find the inverse getter through
+   references to that global: subtract it from incoming task, validate the
+   proc zone, test `TF_HASPROC` (0x00800000), return proc or null. This is
+   `get_bsdtask_info` at `0xfffffe0008d7f140`, matching
+   `osfmk/kern/bsd_kern.c`. It is a leaf without a PAC prologue, so a generic
+   preceding-PAC function finder is unsuitable for this helper.
+
+The trampoline clears the key, saves x0–x18 and LR in a 160-byte aligned stack
+frame, calls both helpers with null checks, copies exactly five 32-bit words to
+root+0x28, restores registers and SP, replays the descriptor load and resumes.
+The original next block does not consume incoming NZCV before its virtual
+descriptor call. No original header bytes are changed. Kernel addresses above
+are research observations only; the patch uses Capstone operands, in-image
+xrefs and decoded kernelcache rebases, without these addresses or offsets.
+
+REA/Hopper evidence: task initializer
+`ev_97a491f7966123b66da8c5af9fa362bff268001ed04d1852c8d29f0131e0852e`,
+flow-divert caller
+`ev_bf9605f45f5e2ee44e2ec3ffad5da9c09169a458c131844a3a8f566c681865fb`,
+cdhash getter
+`ev_ca619a3011ec225a768642db3ad6537ef2258616da2141359e3dcb838d46b707`.
+Kernel collection SHA-256
+`86895a2eebeb7fcfb68bcd60f2d7e685687faea07ee31166fb58c872b38e0d92`.
+The symbol database's linked JSON dumps are absent in this checkout; no
+external symbol dump is required by the implementation. Hopper merged some
+neighboring functions; bounded Capstone disassembly established actual entry
+points. Static evidence establishes code behavior, not runtime cache reuse.
+
+Validation procedure: encoder parity against Keystone 0.9.2 and Capstone,
+fixture discovery and no-write failure tests, trampoline execution with
+deliberately clobbered volatile registers, then install with `cfw update-kernel`.
+On Lychee, verify version 252, persistent 40-hex task keys across full reboots,
+per-program separation, Settings animation rounds, Camera, host/guest compiler
+activity and the per-boot `Trying to restart GPU` count. Performance conclusions
+require those runtime checks; warm-state animation limits above still apply.
+
+Local validation: 61 targeted tests across encoder, catalogue, version,
+selection, declaration, plan, gate and Task3 suites passed. The final Task3 pass
+also tests both missing anchors and confirms that no Task3 bytes are emitted.
+The complete `VPhone` bundle build and bundle admission passed. After macOS
+administrator authorization, `cfw update-kernel Lychee` installed all four
+Task3 sites, with no undeclared patch records. The temporary lowered free-space
+check was used only by the installation test bundle on this volume (31 GiB
+free), then restored to 50 GiB in source. Runtime tests use the separately
+installed final bundle `2.10.1-local.e2defa6e`, which retains the 50 GiB check.
+
+Runtime method: macOS 27.0.1 host, iOS 27.0.1 (24A446) guest with cloudOS
+26.4 (23E5207q) driver, five CPUs, 8 GiB RAM, existing guest cache-reuse marker
+enabled. Start with an empty host ECID cache, perform five Settings open/home
+rounds (three-second pauses), launch Camera for ten seconds, shut down the
+guest, and start a fresh VM process. No host files are seeded or copied. Each
+boot logs negotiated version 252. Host compiler counts select only
+`ParentProcessName=com_apple_gpusw_Paravirtualized_*`; fixed display conversion
+work in the Virtualization process and unrelated host programs are excluded.
+The guest compiler capture lasts 55 seconds around the application tests;
+host capture includes boot through shutdown. Both compile counters count log
+events, not unique shaders.
+
+Two identities independently checked against guest binaries with
+`codesign -d --verbose=4`:
+
+| Executable | cdhash and retained host directory suffix |
+| --- | --- |
+| backboardd | `e5543fa5f8667c6cb0d0da787f1b029a9ee3350d` |
+| SpringBoard | `73c64934fd90e09f461a339f84dad665f0669885` |
+
+Preferences itself did not create a directory matching its executable hash in
+these runs; CoreAnimation work is performed by the rendering servers. Nine
+distinct `task-<40 hex>` directories survived the first shutdown and were
+reused on the next boot. Host GPU task process IDs change between boots, so
+this is disk persistence rather than retained task-service memory.
+
+| Full boot | Retained keys | Host GPU compiles, whole run | Host GPU compiles, Settings rounds | Guest compiles, 55 s | GPU restarts | First home on time | Home rounds 2–5 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 01, empty host cache | 9 | 631 | 121 | 64 | 0 | 44.4% | 61–72% |
+| 02, reused | same 9 | 17 | 5 | 11 | 0 | 61.8% | 66–74% |
+| 03, reused | same 9 | 12 | **0** | 22 | 0 | 59.2% | 63–72% |
+
+Camera reached the foreground and returned home in all three runs. The
+backboardd host `functions.list` grew from 31,404 to 32,692 to 34,036 bytes as
+additional variants were learned. SpringBoard's stayed at 4,412 bytes. Guest
+compiles were attributed to backboardd and include Camera and late work;
+remaining variants still compile, so neither counter is promised to reach zero
+for an arbitrary workload. The eight fixed host display conversion compiles
+per run are outside these task caches.
+
+Frame figures use the guest `CARenderServerGetFrameCounter` probe, aligned to
+host command windows at probe launch, and count observed inter-sample gaps
+between zero and one second as on time when at most 20 ms. They include pauses
+inside each open/home command window, are not animation FPS, and are only a
+small repeated-workload comparison on this machine. The cold host run already
+had the guest cache-reuse change; this is not an unpatched-versus-patched A/B.
+The host compilation reduction and key retention directly establish cache
+reuse. The remaining frame gaps establish that **persistent caches do not
+eliminate all animation lag**. Scheduling, VM rendering and other work remain.
+
+No new crash reports appeared during the first two application-test windows.
+The third produced a Passbook widget `SIGTRAP`: `_assertionFailure` →
+`swift_unexpectedError` → FinanceKit+7,719,608. Its fault, frames and image UUIDs
+match an existing October 18 report, predating this identity patch. No new
+backboardd or cameracaptured crash appeared. A fourth full boot then launched
+Notes, Calendar, Reminders, Settings, Safari, News, Podcasts, Tips, Music,
+Camera and Contacts, returning home between launches. All eleven foreground
+checks passed, with zero GPU restarts and no new crash reports during the
+application-test window. Lychee was shut down normally afterward. The temporary
+installation bundle with the lowered disk check was removed from Launchpad.
+Raw runtime captures and the Swift report driver are local scratch artifacts under
+`/tmp/vphone-shader-cache-hopper/`, not shipped components.
 
 ## Heap Textures Have No CPU Layout
 

@@ -191,6 +191,12 @@ public enum ARM64Encoder {
         return ARM64.encodeU32(insn)
     }
 
+    /// SUB Xd, Xn, #imm12; register 31 denotes SP, without changing flags.
+    public static func encodeSubImm12(rd: UInt32, rn: UInt32, imm12: UInt32) -> Data? {
+        guard rd < 32, rn < 32, imm12 < 4096 else { return nil }
+        return ARM64.encodeU32(0xD100_0000 | (imm12 << 10) | (rn << 5) | rd)
+    }
+
     /// Encode MOVZ Wd, #imm16 (32-bit).
     ///
     /// Format: `[31] = 0 (sf)`, `[30:29] = 10`, `[28:23] = 100101`,
@@ -281,7 +287,19 @@ public enum ARM64Encoder {
         return ARM64.encodeU32(insn)
     }
 
+    /// LDR Xt, [Xn, #offset]; rn 31 is SP, scaled by eight.
+    public static func encodeLdrXUnsignedOffset(rt: UInt32, rn: UInt32, offset: UInt32) -> Data? {
+        guard rt < 32, rn < 32, offset % 8 == 0, offset / 8 < 4096 else { return nil }
+        return ARM64.encodeU32(0xF940_0000 | ((offset / 8) << 10) | (rn << 5) | rt)
+    }
+
     // MARK: - Stores
+
+    /// STR Wt, [Xn, #offset]; rn 31 is SP, scaled by four.
+    public static func encodeStrWUnsignedOffset(rt: UInt32, rn: UInt32, offset: UInt32) -> Data? {
+        guard rt < 32, rn < 32, offset % 4 == 0, offset / 4 < 4096 else { return nil }
+        return ARM64.encodeU32(0xB900_0000 | ((offset / 4) << 10) | (rn << 5) | rt)
+    }
 
     /// Encode `STR Xt, [Xn, #offset]` — 64-bit store, unsigned scaled offset.
     ///

@@ -322,11 +322,12 @@ public enum FirmwareKernelCustomFirmwarePatchSet {
 
             VPhonePatchDeclaration(
                 identifier: FirmwarePatchSetCatalog.paravirtTask3Patch,
-                title: "GPU Task3 version",
+                title: "GPU Task3 shader cache",
                 summary: """
                 Research: the guest GPU driver asks the host for binary version 252 \
-                (Task3) while keeping its own features, so the host can key each \
-                guest process's shader cache instead of starting it empty.
+                (Task3) while keeping its own features, and writes the owning \
+                executable's code-signing hash into each task root. The host \
+                retains a separate shader cache for each executable across boots.
                 """,
                 target: .firmware(.kernelcache),
             ),

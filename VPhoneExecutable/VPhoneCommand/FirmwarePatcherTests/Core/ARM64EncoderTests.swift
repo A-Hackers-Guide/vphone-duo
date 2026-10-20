@@ -522,7 +522,38 @@ struct ARM64EncoderKeystoneParityTests {
         .init(source: "autib1716", keystone: 0xD503_21DF, encoded: ARM64.autib1716, origin: "Keystone hint #14"),
     ]
 
-    static let allCases: [ARM64EncodingCase] = asmCallSiteCases + operandCoverageCases + x1ComparisonCases + x1LoweringCases
+    // Keystone 0.9.2, ks_asm via a scratch C driver linked to libkeystone.a.
+    static let task3Cases: [ARM64EncodingCase] = [
+        .init(source: "ldr x0, [x19, #0x28]", keystone: 0xF940_1660, encoded: ARM64Encoder.encodeLdrXUnsignedOffset(rt: 0, rn: 19, offset: 40), origin: "Task3 owner"),
+        .init(source: "ldr x30, [sp, #152]", keystone: 0xF940_4FFE, encoded: ARM64Encoder.encodeLdrXUnsignedOffset(rt: 30, rn: 31, offset: 152), origin: "Task3 LR restore"),
+        .init(source: "ldr xzr, [x0, #32760]", keystone: 0xF97F_FC1F, encoded: ARM64Encoder.encodeLdrXUnsignedOffset(rt: 31, rn: 0, offset: 32760), origin: "maximum offset"),
+        .init(source: "ldr x9, [sp]", keystone: 0xF940_03E9, encoded: ARM64Encoder.encodeLdrXUnsignedOffset(rt: 9, rn: 31, offset: 0), origin: "zero offset"),
+        .init(source: "str w10, [x9, #40]", keystone: 0xB900_292A, encoded: ARM64Encoder.encodeStrWUnsignedOffset(rt: 10, rn: 9, offset: 40), origin: "Task3 hash copy"),
+        .init(source: "str wzr, [x8, #56]", keystone: 0xB900_391F, encoded: ARM64Encoder.encodeStrWUnsignedOffset(rt: 31, rn: 8, offset: 56), origin: "Task3 zero fallback"),
+        .init(source: "str w0, [sp]", keystone: 0xB900_03E0, encoded: ARM64Encoder.encodeStrWUnsignedOffset(rt: 0, rn: 31, offset: 0), origin: "SP and zero offset"),
+        .init(source: "str w30, [x29, #16380]", keystone: 0xB93F_FFBE, encoded: ARM64Encoder.encodeStrWUnsignedOffset(rt: 30, rn: 29, offset: 16380), origin: "maximum offset"),
+        .init(source: "sub sp, sp, #160", keystone: 0xD102_83FF, encoded: ARM64Encoder.encodeSubImm12(rd: 31, rn: 31, imm12: 160), origin: "Task3 aligned frame"),
+        .init(source: "sub x0, x1, #4095", keystone: 0xD13F_FC20, encoded: ARM64Encoder.encodeSubImm12(rd: 0, rn: 1, imm12: 4095), origin: "maximum immediate"),
+        .init(source: "sub x30, sp, #0", keystone: 0xD100_03FE, encoded: ARM64Encoder.encodeSubImm12(rd: 30, rn: 31, imm12: 0), origin: "zero immediate"),
+    ]
+
+    static let allCases: [ARM64EncodingCase] = asmCallSiteCases + operandCoverageCases + x1ComparisonCases + x1LoweringCases + task3Cases
+
+    @Test func `Task3 encoders reject invalid registers and offsets`() {
+        for invalid in [UInt32(32), 100] {
+            #expect(ARM64Encoder.encodeLdrXUnsignedOffset(rt: invalid, rn: 0, offset: 0) == nil)
+            #expect(ARM64Encoder.encodeLdrXUnsignedOffset(rt: 0, rn: invalid, offset: 0) == nil)
+            #expect(ARM64Encoder.encodeStrWUnsignedOffset(rt: invalid, rn: 0, offset: 0) == nil)
+            #expect(ARM64Encoder.encodeStrWUnsignedOffset(rt: 0, rn: invalid, offset: 0) == nil)
+            #expect(ARM64Encoder.encodeSubImm12(rd: invalid, rn: 0, imm12: 0) == nil)
+            #expect(ARM64Encoder.encodeSubImm12(rd: 0, rn: invalid, imm12: 0) == nil)
+        }
+        #expect(ARM64Encoder.encodeLdrXUnsignedOffset(rt: 0, rn: 0, offset: 4) == nil)
+        #expect(ARM64Encoder.encodeLdrXUnsignedOffset(rt: 0, rn: 0, offset: 32768) == nil)
+        #expect(ARM64Encoder.encodeStrWUnsignedOffset(rt: 0, rn: 0, offset: 2) == nil)
+        #expect(ARM64Encoder.encodeStrWUnsignedOffset(rt: 0, rn: 0, offset: 16384) == nil)
+        #expect(ARM64Encoder.encodeSubImm12(rd: 0, rn: 0, imm12: 4096) == nil)
+    }
 
     @Test func `new X1 encoders refuse unencodable operands`() {
         #expect(ARM64Encoder.encodeMaddSubX(subtract: false, rd: 32, rn: 0, rm: 0, ra: 0) == nil)

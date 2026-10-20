@@ -123,9 +123,13 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
             patchParavirtDisplayRefreshRate()
         }
 
-        // Opt-in: ask the host for the Task3 binary version.
+        // Opt-in: negotiate Task3 and identify the executable before registration.
         if applyParavirtTask3 {
-            patchParavirtTask3Version()
+            guard patchParavirtTask3Version() else {
+                throw NSError(domain: "FirmwarePatcher.ParavirtTask3", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "Cannot resolve the complete Task3 shader-cache patch; kernel was not installed",
+                ])
+            }
         }
 
         // Group C
