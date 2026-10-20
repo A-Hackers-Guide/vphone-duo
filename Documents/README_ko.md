@@ -4,6 +4,9 @@
 
 Apple Silicon Mac에서 가상 iPhone을 실행합니다.
 
+> [!WARNING]
+> 본 프로젝트는 암호화폐나 토큰을 발행하거나 그 발행을 승인한 적이 없으며, 암호화폐 결제나 기부도 받지 않습니다. 본 프로젝트의 이름을 내세워 발행·홍보하거나 본 프로젝트와의 관련성을 주장하는 암호화폐와 토큰은 모두 사기입니다.
+
 ![macOS에서 실행 중인 가상 iPhone](demo.jpeg)
 
 vphone-cli는 Apple의 Virtualization.framework와 PCC 연구용 가상 머신으로 iOS를 실행하며, 보안 연구, 리버스 엔지니어링, 디버깅에 적합합니다.

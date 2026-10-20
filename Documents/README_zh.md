@@ -4,6 +4,9 @@
 
 在 Apple Silicon Mac 上运行虚拟 iPhone。
 
+> [!WARNING]
+> 本项目从未发行或授权发行任何虚拟货币或代币，也不接受任何虚拟货币付款或捐赠。任何以本项目名义发行、推广或声称与本项目有关的虚拟货币或代币，均属诈骗。
+
 ![在 macOS 上运行的虚拟 iPhone](demo.jpeg)
 
 vphone-cli 使用 Apple 的 Virtualization.framework 和 PCC 研究虚拟机运行 iOS，适合安全研究、逆向和调试。

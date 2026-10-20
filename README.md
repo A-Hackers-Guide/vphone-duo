@@ -4,6 +4,9 @@
 
 Run a virtual iPhone on an Apple Silicon Mac.
 
+> [!WARNING]
+> This project has never issued or authorized any cryptocurrency or token, and does not accept cryptocurrency payments or donations. Any cryptocurrency or token issued or promoted in this project's name, or claiming any affiliation with it, is a scam.
+
 ![Virtual iPhone running on macOS](Documents/demo.jpeg)
 
 vphone-cli runs iOS with Apple's Virtualization.framework and PCC research virtual machines, for security research, reverse engineering, and debugging.
