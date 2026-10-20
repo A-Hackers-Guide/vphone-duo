@@ -45,6 +45,15 @@ static bool gTouchUnavailableLogged;
 #define VP_DIG_TOUCH 0x00000002u
 #define VP_DIG_POSITION 0x00000004u
 #define VP_DIG_IDENTITY 0x00000020u
+// Edge flags as touch firmware reports them for a touch that starts at a screen
+// edge. UIKit (_UIEventHIDTouchEdgeTypeForHIDEvent) maps 0x800 to edge type 1,
+// which UIScreenEdgePanGestureRecognizer requires to begin, and bits 24-27 to
+// the edge aim (1 bottom, 2 top, 4 right, 8 left). Without them SpringBoard's
+// bottom-edge home gesture (and Control Center / Notification Center from the
+// top) never starts. The VZ USB touchscreen reports none of this: its HID
+// report has only index, range, touch, x and y per finger.
+#define VP_DIG_FROM_EDGE 0x00000800u
+#define VP_DIG_AIM_SHIFT 24
 #define VP_TRANSDUCER_HAND 1
 // kIOHIDEventFieldDigitizerIsDisplayIntegrated: (kIOHIDEventTypeDigitizer << 16) | offset.
 #define VP_FIELD_IS_DISPLAY_INTEGRATED ((((uint32_t)11) << 16) | 25)
@@ -138,6 +147,43 @@ void vp_hid_touch2(int phase, double x1, double y1, double x2, double y2) {
         case 3: // up
         default:
             dispatch_digitizer_points(xs, ys, 2, 0, 0, VP_DIG_TOUCH | VP_DIG_IDENTITY);
+            break;
+    }
+}
+
+// Host edge code (`_VZTouch` swipeAim: 1 top, 2 bottom, 4 right, 8 left) to the
+// HID edge flags, kept for the whole touch like real firmware does.
+static uint32_t edge_flags(int edge) {
+    uint32_t aim = 0;
+    if (edge & 1) aim |= 2; // top
+    if (edge & 2) aim |= 1; // bottom
+    if (edge & 4) aim |= 4; // right
+    if (edge & 8) aim |= 8; // left
+    return aim ? (VP_DIG_FROM_EDGE | (aim << VP_DIG_AIM_SHIFT)) : 0;
+}
+
+void vp_hid_touch_edge(int phase, double x, double y, int edge) {
+    if (!gTouchClient) {
+        if (!vp_hid_load() && !gTouchUnavailableLogged) {
+            gTouchUnavailableLogged = true;
+            NSLog(@"vphoned: edge touch injection unavailable on this base");
+        }
+        if (!gTouchClient) return;
+    }
+
+    const uint32_t flags = edge_flags(edge);
+    const double xs[1] = {x};
+    const double ys[1] = {y};
+    switch (phase) {
+        case 0: // down
+            dispatch_digitizer_points(xs, ys, 1, 1, 1, VP_DIG_TOUCH | VP_DIG_IDENTITY | flags);
+            break;
+        case 1: // move
+            dispatch_digitizer_points(xs, ys, 1, 1, 1, VP_DIG_POSITION | flags);
+            break;
+        case 3: // up
+        default:
+            dispatch_digitizer_points(xs, ys, 1, 0, 0, VP_DIG_TOUCH | VP_DIG_IDENTITY | flags);
             break;
     }
 }

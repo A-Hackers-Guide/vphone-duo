@@ -313,14 +313,30 @@ final class VPhoneGuestControl {
         enqueueInput("input.hid", params: params)
     }
 
-    func sendTouch(phase: Int, x: Double, y: Double) {
+    /// `edge` is the screen edge the touch started at, in `_VZTouch` swipeAim
+    /// encoding (1 top, 2 bottom, 4 right, 8 left, 0 none). A guest with
+    /// `touch_edge` injects such a touch with the digitizer edge flags UIKit's
+    /// screen-edge gestures (home, Control Center) require.
+    func sendTouch(phase: Int, x: Double, y: Double, edge: Int = 0) {
         let name =
             switch phase {
             case 0: "down"
             case 1: "move"
             default: "up"
             }
-        enqueueInput("input.touch", params: ["phase": name, "x": x, "y": y, "normalized": true])
+        var params: [String: Any] = ["phase": name, "x": x, "y": y, "normalized": true]
+        if edge != 0, supportsEdgeTouch {
+            params["edge"] = edge
+        }
+        enqueueInput("input.touch", params: params)
+    }
+
+    /// Whether the guest can inject a touch carrying screen-edge flags. The
+    /// VZ USB touchscreen cannot: its HID report has no field for them, so
+    /// `_VZTouch`'s swipeAim never reaches the guest and SpringBoard's
+    /// bottom-edge home gesture does not start.
+    var supportsEdgeTouch: Bool {
+        isConnected && guestCapabilities.contains("touch_edge")
     }
 
     /// Whether the guest takes two fingers in one hand event. Guests that only
