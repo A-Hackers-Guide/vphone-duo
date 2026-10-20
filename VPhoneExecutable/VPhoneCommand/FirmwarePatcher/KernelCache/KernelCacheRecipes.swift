@@ -43,13 +43,33 @@ public struct KernelCacheBase: Decodable, Sendable {
     public let symbols: String
     /// Bundle identifiers of the mix, one per line.
     public let kexts: String
-    public let donor: String
+    /// The guest family the recipe is for (`VPhoneGuestDevice.Family`), when
+    /// not an iPhone or iPad: a watch links another kext set against the same
+    /// kernel.
+    public let guest: String?
+    /// Where the kexts come from, in order: `base` and donor ids. Each kext is
+    /// taken from the first that has it; the kernel and its KPI bundles
+    /// (System.kext) always from the base. Default: the base, then `donor`.
+    let sources: [String]?
+    let donor: String?
     public let builderLayout: BuilderLayout
 
     public internal(set) var directory = URL(fileURLWithPath: "/")
 
     enum CodingKeys: String, CodingKey {
-        case id, productVersion, kernel, symbols, kexts, donor, builderLayout
+        case id, productVersion, kernel, symbols, kexts, guest, sources, donor, builderLayout
+    }
+
+    static let baseSource = "base"
+
+    /// `sources`, or the base and its one donor.
+    public var kextSources: [String] {
+        sources ?? [Self.baseSource] + (donor.map { [$0] } ?? [])
+    }
+
+    /// The donor ids among `kextSources`.
+    public var donors: [String] {
+        kextSources.filter { $0 != Self.baseSource }
     }
 
     public var symbolsURL: URL {
@@ -65,13 +85,14 @@ public struct KernelCacheBase: Decodable, Sendable {
     }
 }
 
-/// A donor of the virtualisation kexts (`donors/<id>/manifest.json`).
+/// A donor of kexts (`donors/<id>/manifest.json`).
 public struct KernelCacheDonor: Decodable, Sendable {
     public let id: String
     public let description: String?
     public let kernel: KernelCacheFile
-    /// The cloudOS IPSW the donor kernelcache is read from.
-    public let cloudOSSource: String
+    /// The cloudOS IPSW the donor kernelcache is read from; nil for one the
+    /// guest's own IPSW ships, read from the VM's restore tree.
+    public let cloudOSSource: String?
     /// Symbol map, for a stripped donor.
     public let symbols: String?
 
@@ -129,11 +150,17 @@ public struct KernelCacheRecipes: Sendable {
         return donor
     }
 
-    /// The recipe for a kernelcache, given as its IM4P or decompressed bytes.
-    public func base(forKernelcache data: Data) throws -> KernelCacheBase? {
+    /// The recipe for a kernelcache, given as its IM4P or decompressed bytes,
+    /// and the guest family (`VPhoneGuestDevice.Family` raw value) it boots.
+    public func base(forKernelcache data: Data, guest: String) throws -> KernelCacheBase? {
         let sha = Self.sha256(data)
-        return try bases().first { $0.kernel.matches(sha: sha) }
+        let own = Self.ownRecipeGuests.contains(guest) ? guest : nil
+        return try bases().first { $0.kernel.matches(sha: sha) && $0.guest == own }
     }
+
+    /// Guest families that need a recipe of their own; the others share the
+    /// iPhone's.
+    static let ownRecipeGuests: Set<String> = ["watch"]
 
     private func manifests(in subdirectory: String) throws -> [URL] {
         let directory = root.appending(path: subdirectory)

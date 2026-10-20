@@ -99,11 +99,22 @@ for manifest in "$resources/kernelcache_recipes/bases/"*/manifest.json; do
         file=$(/usr/bin/plutil -extract $key raw -o - "$manifest") || { print -u2 "Malformed kernelcache recipe: ${recipe:t}"; exit 1; }
         [[ -s "$recipe/$file" ]] || { print -u2 "Kernelcache recipe ${recipe:t} lacks $file"; exit 1; }
     done
-    donor=$(/usr/bin/plutil -extract donor raw -o - "$manifest")
-    [[ -s "$resources/kernelcache_recipes/donors/$donor/manifest.json" ]] || {
-        print -u2 "Kernelcache recipe ${recipe:t} names a missing donor: $donor"
-        exit 1
-    }
+    # The donor, or the kext sources in order (the base and donors).
+    donors=()
+    if count=$(/usr/bin/plutil -extract sources raw -o - "$manifest" 2>/dev/null); then
+        for (( i = 0; i < count; i++ )); do
+            source=$(/usr/bin/plutil -extract sources.$i raw -o - "$manifest")
+            [[ $source == base ]] || donors+=($source)
+        done
+    else
+        donors=($(/usr/bin/plutil -extract donor raw -o - "$manifest"))
+    fi
+    for donor in $donors; do
+        [[ -s "$resources/kernelcache_recipes/donors/$donor/manifest.json" ]] || {
+            print -u2 "Kernelcache recipe ${recipe:t} names a missing donor: $donor"
+            exit 1
+        }
+    done
 done
 # New machines copy this ROM. Without it vm new would fail, and OpenAVB is
 # distributed only with its licences. The ROM window is 512 KiB.

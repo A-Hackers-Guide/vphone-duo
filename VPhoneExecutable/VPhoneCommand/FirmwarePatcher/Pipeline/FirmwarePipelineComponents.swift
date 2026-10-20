@@ -286,7 +286,8 @@ extension FirmwarePipeline {
             // As shipped: the stash once a run has put it aside.
             let shipped = try Data(contentsOf: pristineInput(for: restoreDir.appending(path: restoreKernelPath)).url)
             let mixer = try KernelCacheMixer(recipes: .locate(), verbose: verbose)
-            let base = try mixer.base(for: shipped)
+            let input = KernelCacheMixer.Input(kernelcache: shipped, guest: guestDevice.family.rawValue, restoreTree: restoreDir)
+            let base = try mixer.base(for: input)
             let record = PatchRecord(
                 patchID: kernelMixPatch,
                 component: "kernelcache",
@@ -294,9 +295,9 @@ extension FirmwarePipeline {
                 virtualAddress: nil,
                 originalBytes: Data(),
                 patchedBytes: Data(),
-                description: "the \(base.id) research board kernelcache, rebuilt with the \(base.donor) virtualisation kexts",
+                description: "the \(base.id) research board kernelcache, rebuilt with the kexts of \(base.donors.joined(separator: " and "))",
             )
-            return try (mixer.mix(kernelcache: shipped), record)
+            return try (mixer.mix(input), record)
         } : nil
         components.append(ComponentDescriptor(
             name: "kernelcache",

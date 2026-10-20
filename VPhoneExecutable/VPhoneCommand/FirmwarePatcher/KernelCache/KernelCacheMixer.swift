@@ -64,15 +64,31 @@ public final class KernelCacheMixer {
 
     // MARK: - Identification
 
-    public func base(for kernelcache: Data) throws -> KernelCacheBase {
-        if let base = try recipes.base(forKernelcache: kernelcache) {
+    /// A research board kernelcache to rebuild, and the guest it boots.
+    public struct Input {
+        /// The kernelcache as shipped (IM4P or decompressed).
+        public let kernelcache: Data
+        /// `VPhoneGuestDevice.Family` raw value of the guest.
+        public let guest: String
+        /// The VM's restore tree, which holds a donor the guest's IPSW ships.
+        public let restoreTree: URL
+
+        public init(kernelcache: Data, guest: String, restoreTree: URL) {
+            self.kernelcache = kernelcache
+            self.guest = guest
+            self.restoreTree = restoreTree
+        }
+    }
+
+    public func base(for input: Input) throws -> KernelCacheBase {
+        if let base = try recipes.base(forKernelcache: input.kernelcache, guest: input.guest) {
             return base
         }
-        let supported = (try? recipes.bases().map(\.id).joined(separator: ", ")) ?? "none"
+        let supported = (try? recipes.bases().map { ($0.guest.map { "\($0) " } ?? "iOS ") + $0.id }.joined(separator: ", ")) ?? "none"
         throw PatcherError.invalidFormat(
             "this cloudOS has no vphone600 components, and no kernelcache recipe covers its research board kernelcache "
-                + "(SHA-256 \(KernelCacheRecipes.sha256(kernelcache))) to rebuild with the virtualisation kexts; "
-                + "recipes exist for iOS \(supported)",
+                + "(SHA-256 \(KernelCacheRecipes.sha256(input.kernelcache))) for this \(input.guest) guest "
+                + "to rebuild with the virtualisation kexts; recipes exist for \(supported)",
         )
     }
 
@@ -80,18 +96,18 @@ public final class KernelCacheMixer {
     /// with. `fw prepare` asks, so a cloudOS no recipe covers is refused before
     /// anything is patched.
     public static func recipe(forRestoreTree restoreDir: URL) throws -> KernelCacheBase {
-        try KernelCacheMixer(recipes: .locate(), verbose: false).base(for: kernelcache(inRestoreTree: restoreDir))
+        try KernelCacheMixer(recipes: .locate(), verbose: false).base(for: input(forRestoreTree: restoreDir))
     }
 
     /// Throws what `mix` would for `restoreDir`, without building anything.
     /// `vm create` asks as soon as `fw prepare` finds the recipe, not at
     /// `fw patch` after the restores.
     public static func checkMixable(restoreTree restoreDir: URL) throws {
-        let kernelcache = try kernelcache(inRestoreTree: restoreDir)
+        let input = try Self.input(forRestoreTree: restoreDir)
         let mixer = try KernelCacheMixer(recipes: .locate(), verbose: false)
-        let state = try mixer.state(for: kernelcache)
+        let state = try mixer.state(for: input)
         guard state != .mixed else { return }
-        try KernelCollectionBuilder.checkLayout(for: mixer.locations(for: kernelcache).base)
+        try KernelCollectionBuilder.checkLayout(for: mixer.locations(for: input).base)
         guard geteuid() == 0 else {
             throw PatcherError.invalidFormat(linkInstructions(staged: state == .staged))
         }
@@ -100,9 +116,10 @@ public final class KernelCacheMixer {
         }
     }
 
-    static func kernelcache(inRestoreTree restoreDir: URL) throws -> Data {
+    static func input(forRestoreTree restoreDir: URL) throws -> Input {
         let path = try FirmwarePipeline.manifestComponentPath("RestoreKernelCache", in: restoreDir)
-        return try Data(contentsOf: restoreDir.appending(path: path), options: .mappedIfSafe)
+        let data = try Data(contentsOf: restoreDir.appending(path: path), options: .mappedIfSafe)
+        return Input(kernelcache: data, guest: FirmwarePipeline.guestFamily(restoreDir: restoreDir), restoreTree: restoreDir)
     }
 
     // MARK: - Mix
@@ -117,8 +134,8 @@ public final class KernelCacheMixer {
         case missing
     }
 
-    public func state(for kernelcache: Data) throws -> State {
-        let (_, paths) = try locations(for: kernelcache)
+    public func state(for input: Input) throws -> State {
+        let (_, paths) = try locations(for: input)
         if FileManager.default.fileExists(atPath: paths.mixed.path) {
             return .mixed
         }
@@ -128,9 +145,9 @@ public final class KernelCacheMixer {
     /// The mixed kernelcache (an IMG4 `krnl` container) for a research board
     /// one: from the cache, linked from a staged volume (root), or staged and
     /// linked in one go (root with `VPHONE_IPSW`).
-    public func mix(kernelcache: Data) throws -> Data {
-        let (base, paths) = try locations(for: kernelcache)
-        log("  [kc] base \(base.id) (iOS \(base.productVersion)), donor \(base.donor)")
+    public func mix(_ input: Input) throws -> Data {
+        let (base, paths) = try locations(for: input)
+        log("  [kc] base \(base.id) (\(base.productVersion)), donors \(base.donors.joined(separator: ", "))")
         if let data = try? Data(contentsOf: paths.mixed), !data.isEmpty {
             log("  [kc] using the cached mix \(paths.mixed.path)")
             return data
@@ -139,19 +156,19 @@ public final class KernelCacheMixer {
             throw PatcherError.invalidFormat(Self.linkInstructions(staged: Self.isStaged(paths.staged)))
         }
         if !Self.isStaged(paths.staged) {
-            try stage(kernelcache: kernelcache)
+            try stage(input)
         }
-        return try link(kernelcache: kernelcache)
+        return try link(input)
     }
 
     /// Extracts both kernelcaches and stages the volume kmutil links, as the
     /// invoking user: the one step that runs `ipsw`. Does nothing when the mix
     /// or its volume is already in the cache.
-    public func stage(kernelcache: Data, ipsw ipswPath: String? = nil) throws {
-        let (base, paths) = try locations(for: kernelcache)
+    public func stage(_ input: Input, ipsw ipswPath: String? = nil) throws {
+        let (base, paths) = try locations(for: input)
         guard !FileManager.default.fileExists(atPath: paths.mixed.path), !Self.isStaged(paths.staged) else { return }
         try KernelCollectionBuilder.checkLayout(for: base)
-        let donor = try recipes.donor(id: base.donor)
+        let donors = try base.donors.map { try recipes.donor(id: $0) }
         let ipsw = try Self.ipsw(ipswPath)
 
         let fm = FileManager.default
@@ -160,8 +177,8 @@ public final class KernelCacheMixer {
         try fm.createDirectory(at: work, withIntermediateDirectories: true)
         log("  [kc] staging in \(paths.staged.path)")
 
-        let donorKDK = try donorKDK(donor, ipsw: ipsw)
-        let payload = try Self.payload(of: kernelcache)
+        let donorKDKs = try donors.map { try donorKDK($0, restoreTree: input.restoreTree, ipsw: ipsw) }
+        let payload = try Self.payload(of: input.kernelcache)
         try Self.check(payload, base.kernel.decompressedSHA256, "decompressed \(base.kernel.file)")
         let decompressed = work.appending(path: "\(base.kernel.file).decompressed")
         try payload.write(to: decompressed)
@@ -173,8 +190,12 @@ public final class KernelCacheMixer {
 
         let identifiers = try base.kextIdentifiers()
         let mixKDK = work.appending(path: "mix/\(base.kernel.kdk)")
-        let (removed, added) = try KernelCacheKDK.mix(base: baseKDK, donor: donorKDK, wanted: identifiers, output: mixKDK)
-        log("  [kc] mix: \(identifiers.count) kexts, \(removed.count) research board kexts removed, \(added.count) added from the donor")
+        let sources = base.kextSources.map { source in
+            base.donors.firstIndex(of: source).map { donorKDKs[$0] } ?? baseKDK
+        }
+        let (removed, added) = try KernelCacheKDK.mix(base: baseKDK, sources: sources, wanted: identifiers, output: mixKDK)
+        let addedText = zip(donors, donorKDKs).map { "\(added[$1]?.count ?? 0) from \($0.id)" }.joined(separator: ", ")
+        log("  [kc] mix: \(identifiers.count) kexts, \(removed.count) research board kexts removed, \(addedText)")
         try KernelCacheKDK.makeVolume(kdk: mixKDK, identifiers: identifiers, output: paths.staged.appending(path: "volume"))
         try fm.removeItem(at: work)
         try Data(ipsw.hash.utf8).write(to: paths.staged.appending(path: "ipsw.sha256"))
@@ -190,8 +211,8 @@ public final class KernelCacheMixer {
     /// the volume is copied into a directory only root can reach, with nothing
     /// in it that points outside, and kmutil links that copy.
     @discardableResult
-    public func link(kernelcache: Data) throws -> Data {
-        let (base, paths) = try locations(for: kernelcache)
+    public func link(_ input: Input) throws -> Data {
+        let (base, paths) = try locations(for: input)
         if let data = try? Data(contentsOf: paths.mixed), !data.isEmpty {
             return data
         }
@@ -203,7 +224,7 @@ public final class KernelCacheMixer {
             throw PatcherError.fileNotFound("the staged \(base.id) kernelcache volume in \(paths.staged.path); run `vphone-cli fw kernelcache` with \(Self.ipswEnvironmentVariable) first")
         }
 
-        let payload = try Self.payload(of: kernelcache)
+        let payload = try Self.payload(of: input.kernelcache)
         let copy = try KernelCacheVolumeCopy(
             staged: paths.staged.appending(path: "volume"), kdk: base.kernel.kdk, pathLength: Self.buildRootLength(of: payload),
         )
@@ -236,9 +257,9 @@ public final class KernelCacheMixer {
     }
 
     /// The recipe and where its mix and staged volume are kept.
-    func locations(for kernelcache: Data) throws -> (base: KernelCacheBase, paths: (mixed: URL, staged: URL)) {
-        let base = try base(for: kernelcache)
-        let key = try cacheKey(base: base, donor: recipes.donor(id: base.donor))
+    func locations(for input: Input) throws -> (base: KernelCacheBase, paths: (mixed: URL, staged: URL)) {
+        let base = try base(for: input)
+        let key = try cacheKey(base: base, donors: base.donors.map { try recipes.donor(id: $0) })
         return (base, (
             cacheDirectory.appending(path: "mix/\(base.id)/\(key).im4p"),
             cacheDirectory.appending(path: "staged/\(base.id)/\(key)"),
@@ -331,7 +352,7 @@ public final class KernelCacheMixer {
     }
 
     /// The donor's KDK, extracted once into `donors/<id>`.
-    func donorKDK(_ donor: KernelCacheDonor, ipsw: (url: URL, hash: String)) throws -> URL {
+    func donorKDK(_ donor: KernelCacheDonor, restoreTree: URL, ipsw: (url: URL, hash: String)) throws -> URL {
         let fm = FileManager.default
         let directory = cacheDirectory.appending(path: "donors/\(donor.id)")
         let kdk = directory.appending(path: "extract/\(donor.kernel.kdk)")
@@ -347,7 +368,7 @@ public final class KernelCacheMixer {
             return kdk
         }
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
-        let payload = try Self.payload(of: donorKernelcache(donor, in: directory))
+        let payload = try Self.payload(of: donorKernelcache(donor, in: directory, restoreTree: restoreTree))
         try Self.check(payload, donor.kernel.decompressedSHA256, "decompressed donor \(donor.kernel.file)")
         let decompressed = directory.appending(path: "\(donor.kernel.file).decompressed")
         try payload.write(to: decompressed)
@@ -361,14 +382,22 @@ public final class KernelCacheMixer {
         return extracted
     }
 
-    /// The donor kernelcache, kept in `directory` once read from its cloudOS
-    /// IPSW. Only that one entry is downloaded.
-    func donorKernelcache(_ donor: KernelCacheDonor, in directory: URL) throws -> Data {
+    /// The donor kernelcache: from the guest's restore tree for one its IPSW
+    /// ships, else kept in `directory` once read from its cloudOS IPSW, of
+    /// which only that one entry is downloaded.
+    func donorKernelcache(_ donor: KernelCacheDonor, in directory: URL, restoreTree: URL) throws -> Data {
+        guard let cloudOSSource = donor.cloudOSSource else {
+            let data = try Data(contentsOf: restoreTree.appending(path: donor.kernel.file), options: .mappedIfSafe)
+            guard donor.kernel.matches(sha: KernelCacheRecipes.sha256(data)) else {
+                throw PatcherError.invalidFormat("the guest's \(donor.kernel.file) does not match the \(donor.id) recipe")
+            }
+            return data
+        }
         let local = directory.appending(path: donor.kernel.file)
         if let data = try? Data(contentsOf: local), donor.kernel.matches(sha: KernelCacheRecipes.sha256(data)) {
             return data
         }
-        guard let source = URL(string: donor.cloudOSSource) else {
+        guard let source = URL(string: cloudOSSource) else {
             throw PatcherError.invalidFormat("the \(donor.id) recipe has no valid cloudOS URL")
         }
         log("  [kc] reading \(donor.kernel.file) from \(source.absoluteString)")
@@ -390,12 +419,19 @@ public final class KernelCacheMixer {
     /// layout and this file's steps. Not the ipsw, which the root link does not
     /// run: a stage records which one made it (`ipsw.sha256`), and removing
     /// `~/.vphone/kernelcache` rebuilds everything.
-    func cacheKey(base: KernelCacheBase, donor: KernelCacheDonor) throws -> String {
-        var material = Data("\(Self.identity(base.kernel))|\(Self.identity(donor.kernel))|".utf8)
-        for url in [base.symbolsURL, base.kextsURL] + (donor.symbolsURL.map { [$0] } ?? []) {
+    func cacheKey(base: KernelCacheBase, donors: [KernelCacheDonor]) throws -> String {
+        var material = Data("\(Self.identity(base.kernel))|".utf8)
+        for donor in donors {
+            material += Data("\(Self.identity(donor.kernel))|".utf8)
+        }
+        for url in [base.symbolsURL, base.kextsURL] + donors.compactMap(\.symbolsURL) {
             material += try Data(contentsOf: url)
         }
         material += Data("\(Self.revision)|\(base.builderLayout.rawValue)".utf8)
+        // A recipe with its own source order is keyed on it too.
+        if base.sources != nil {
+            material += Data("|\(base.kextSources.joined(separator: ","))".utf8)
+        }
         return String(KernelCacheRecipes.sha256(material).prefix(16))
     }
 

@@ -23,24 +23,37 @@ struct KernelCacheMixerTests {
     @Test("Every recipe has its map, its bundle list and its donor")
     func recipesAreComplete() throws {
         let bases = try Self.recipes.bases()
-        #expect(bases.map(\.productVersion) == ["26.4", "26.5", "26.6", "26.7"])
+        #expect(bases.map(\.id) == ["26.4_23E246", "26.5_23F77", "26.6_23G71", "26.7_23H20", "watch_26.4_23T240"])
         for base in bases {
             #expect(FileManager.default.fileExists(atPath: base.symbolsURL.path), "\(base.id)")
             let identifiers = try base.kextIdentifiers()
             #expect(identifiers.count > 100, "\(base.id)")
             #expect(Set(identifiers).count == identifiers.count, "\(base.id)")
             #expect(base.builderLayout == .kernelLast, "\(base.id)")
-            let donor = try Self.recipes.donor(id: base.donor)
-            #expect(donor.symbolsURL.map { FileManager.default.fileExists(atPath: $0.path) } == true)
-            #expect(URL(string: donor.cloudOSSource)?.scheme == "https")
+            #expect(base.kextSources.contains("base"), "\(base.id)")
+            for id in base.donors {
+                let donor = try Self.recipes.donor(id: id)
+                #expect(donor.symbolsURL.map { FileManager.default.fileExists(atPath: $0.path) } == true)
+                #expect(donor.cloudOSSource.map { URL(string: $0)?.scheme == "https" } ?? true)
+            }
         }
+    }
+
+    @Test("A watch links its own kext set against the kernel the iPhone recipe uses")
+    func recipeFollowsGuest() throws {
+        let watch = try #require(try Self.recipes.bases().first { $0.guest == "watch" })
+        let shared = try Self.recipes.bases().filter { $0.kernel.matches(sha: watch.kernel.sha256) }
+        #expect(Set(shared.map(\.id)) == ["26.4_23E246", "watch_26.4_23T240"])
+        #expect(watch.kextSources == ["watch7c_26.4_23T240", "base", "vphone600_26.4_23E5207q"])
+        #expect(try Self.recipes.donor(id: "watch7c_26.4_23T240").cloudOSSource == nil)
     }
 
     @Test("A kernelcache is matched by the SHA-256 of its container or of its payload, and nothing else")
     func matchesByHash() throws {
         let base = try #require(try Self.recipes.bases().first)
         let mixer = KernelCacheMixer(recipes: Self.recipes, verbose: false)
-        #expect(throws: PatcherError.self) { try mixer.base(for: Data("not a kernelcache".utf8)) }
+        let input = KernelCacheMixer.Input(kernelcache: Data("not a kernelcache".utf8), guest: "iPhone", restoreTree: URL(fileURLWithPath: "/"))
+        #expect(throws: PatcherError.self) { try mixer.base(for: input) }
         #expect(base.kernel.matches(sha: base.kernel.sha256))
         #expect(base.kernel.matches(sha: base.kernel.decompressedSHA256))
         #expect(!base.kernel.matches(sha: String(repeating: "0", count: 64)))
@@ -50,10 +63,10 @@ struct KernelCacheMixerTests {
     func cacheKeyFollowsRecipe() throws {
         let bases = try Self.recipes.bases()
         let mixer = KernelCacheMixer(recipes: Self.recipes, verbose: false)
-        let keys = try bases.map { try mixer.cacheKey(base: $0, donor: Self.recipes.donor(id: $0.donor)) }
+        let keys = try bases.map { try mixer.cacheKey(base: $0, donors: $0.donors.map { try Self.recipes.donor(id: $0) }) }
         #expect(Set(keys).count == bases.count)
         let first = try #require(bases.first)
-        #expect(try mixer.cacheKey(base: first, donor: Self.recipes.donor(id: first.donor)) == keys.first)
+        #expect(try mixer.cacheKey(base: first, donors: first.donors.map { try Self.recipes.donor(id: $0) }) == keys.first)
     }
 
     @Test("The volume path takes the length of the build root the base records")
@@ -128,6 +141,26 @@ struct KernelCacheMixerTests {
 
         #expect(throws: PatcherError.self) {
             try KernelCacheKDK.mix(base: base, donor: donor, wanted: wanted + ["com.apple.nowhere"], output: output)
+        }
+
+        // A donor listed before the base supplies the kexts both have; the
+        // kernel's KPI bundles stay the base's.
+        let first = root.appending(path: "first/KDK_26.4_23T235.kdk")
+        try Self.kdk(at: first, kexts: [
+            "com.apple.kept": "Kept.kext",
+            "com.apple.kpi.bsd": "System.kext/PlugIns/BSDKernel.kext",
+        ])
+        try Data("first".utf8).write(to: first.appending(path: "System/Library/Extensions/Kept.kext/Kept"))
+        let ordered = root.appending(path: "ordered/KDK_26.6_23G71.kdk")
+        let (_, addedBy) = try KernelCacheKDK.mix(
+            base: base, sources: [first, base, donor], wanted: ["com.apple.kept", "com.apple.driver.AppleParavirtGPU"], output: ordered,
+        )
+        #expect(addedBy[first] == ["com.apple.kept"])
+        #expect(addedBy[donor] == ["com.apple.driver.AppleParavirtGPU"])
+        let kept = ordered.appending(path: "System/Library/Extensions/Kept.kext/Kept")
+        #expect(try String(contentsOf: kept, encoding: .utf8) == "first")
+        #expect(throws: PatcherError.self) {
+            try KernelCacheKDK.mix(base: base, sources: [first, base], wanted: ["com.apple.kpi.bsd"], output: ordered)
         }
 
         // The staged volume root links holds no link but the KDK's own.

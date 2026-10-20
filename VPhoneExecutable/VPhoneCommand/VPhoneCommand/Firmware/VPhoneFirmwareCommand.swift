@@ -396,9 +396,9 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
         // A research board kernelcache is mixed beforehand (`fw kernelcache`),
         // since linking it needs root; root builds it here if need be.
         if geteuid() != 0, !selection.blockedPatches.contains(FirmwareResearchBoardPatchSet.kernelMix),
-           let kernelcache = try FirmwarePipeline(vmDirectory: bundle.url, variant: .jb).researchBoardKernelcache()
+           let input = try FirmwarePipeline(vmDirectory: bundle.url, variant: .jb).researchBoardKernelcache()
         {
-            let state = try KernelCacheMixer(recipes: .locate()).state(for: kernelcache)
+            let state = try KernelCacheMixer(recipes: .locate()).state(for: input)
             if state != .mixed {
                 throw ValidationError(KernelCacheMixer.linkInstructions(staged: state == .staged).replacingOccurrences(of: "<vm>", with: name))
             }
@@ -690,12 +690,12 @@ struct VPhoneFirmwareKernelcacheCommand: ParsableCommand {
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
         let bundle = try lib.library.bundle(named: name)
-        guard let kernelcache = try FirmwarePipeline(vmDirectory: bundle.url, variant: .jb).researchBoardKernelcache() else {
+        guard let input = try FirmwarePipeline(vmDirectory: bundle.url, variant: .jb).researchBoardKernelcache() else {
             print("[=] \(name)'s cloudOS has vphone600 components; its kernelcache needs no mix.")
             return
         }
         let mixer = try KernelCacheMixer(recipes: .locate())
-        let state = try mixer.state(for: kernelcache)
+        let state = try mixer.state(for: input)
         if state == .mixed {
             print("[+] The kernelcache mix is ready; `fw patch` takes it from the cache.")
             return
@@ -705,16 +705,16 @@ struct VPhoneFirmwareKernelcacheCommand: ParsableCommand {
                 guard !linkOnly else {
                     throw ValidationError("\(name)'s kernelcache mix is not staged. Stage it first, as yourself: \(KernelCacheMixer.ipswEnvironmentVariable)=<ipsw> vphone-cli fw kernelcache \(name)")
                 }
-                try mixer.stage(kernelcache: kernelcache, ipsw: ipsw)
+                try mixer.stage(input, ipsw: ipsw)
             }
-            try mixer.link(kernelcache: kernelcache)
+            try mixer.link(input)
             print("[+] The kernelcache mix is ready; `fw patch` takes it from the cache.")
             return
         }
         guard !linkOnly else {
             throw ValidationError("Linking the kernelcache mix needs root. Run this command with sudo.")
         }
-        try mixer.stage(kernelcache: kernelcache, ipsw: ipsw)
+        try mixer.stage(input, ipsw: ipsw)
         print("[+] Staged. Link it with: sudo vphone-cli fw kernelcache \(name)")
     }
 }

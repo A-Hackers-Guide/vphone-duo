@@ -58,6 +58,16 @@ enum KernelCacheKDK {
     /// listed bundles that only `donor` has (at their bundle paths). Nested bundles
     /// keep their parents' directories.
     static func mix(base: URL, donor: URL, wanted: [String], output: URL) throws -> (removed: [String], added: [String]) {
+        let (removed, added) = try mix(base: base, sources: [base, donor], wanted: wanted, output: output)
+        return (removed, added[donor] ?? [])
+    }
+
+    /// Copy `base` to `output` and keep the bundles listed in `wanted`, each from
+    /// the first of `sources` (which includes `base`) that has it; the kernel's
+    /// KPI bundles (System.kext) always stay the base's. Nested bundles keep
+    /// their parents' directories. Returns the base bundles dropped and the
+    /// bundles added from each other source.
+    static func mix(base: URL, sources: [URL], wanted: [String], output: URL) throws -> (removed: [String], added: [URL: [String]]) {
         let fm = FileManager.default
         let wantedSet = Set(wanted)
         if fm.fileExists(atPath: output.path) { try fm.removeItem(at: output) }
@@ -66,13 +76,33 @@ enum KernelCacheKDK {
 
         let outExtensions = output.appending(path: "System/Library/Extensions")
         let have = try bundles(in: output)
+        let available = try sources.map { $0 == base ? have : try bundles(in: $0) }
+        func isKPI(_ relative: String) -> Bool {
+            relative == "System.kext" || relative.hasPrefix("System.kext/")
+        }
+        var owner: [String: Int] = [:]
+        for id in wantedSet {
+            if let relative = have[id], isKPI(relative) {
+                owner[id] = sources.firstIndex(of: base)
+            } else {
+                owner[id] = available.indices.first { index in
+                    available[index][id].map { sources[index] == base || !isKPI($0) } ?? false
+                }
+            }
+        }
+        let missing = wantedSet.filter { owner[$0] == nil }
+        guard missing.isEmpty else {
+            throw PatcherError.fileNotFound("kexts in none of the mix's KDKs: \(missing.sorted().joined(separator: ", "))")
+        }
+        let keptFromBase = Set(wantedSet.filter { sources[owner[$0]!] == base })
+
         var removed: [String] = []
         // Deepest bundles first, so plug-ins go before their parents.
         for (id, relative) in have.sorted(by: { $0.value.split(separator: "/").count > $1.value.split(separator: "/").count }) {
             let path = outExtensions.appending(path: relative)
-            guard !wantedSet.contains(id), fm.fileExists(atPath: path.path) else { continue }
+            guard !keptFromBase.contains(id), fm.fileExists(atPath: path.path) else { continue }
             let keepsWantedPlugin = have.contains { other in
-                wantedSet.contains(other.key) && other.value != relative && other.value.hasPrefix(relative + "/")
+                keptFromBase.contains(other.key) && other.value != relative && other.value.hasPrefix(relative + "/")
             }
             if keepsWantedPlugin {
                 // Keep the directory for its plug-ins, but not the bundle itself.
@@ -84,22 +114,20 @@ enum KernelCacheKDK {
                 continue
             }
             try fm.removeItem(at: path)
-            removed.append(id)
+            if !wantedSet.contains(id) {
+                removed.append(id)
+            }
         }
 
-        let donated = try bundles(in: donor)
-        let donorExtensions = donor.appending(path: "System/Library/Extensions")
-        var added: [String] = []
-        for id in wantedSet.subtracting(have.keys).sorted() {
-            guard let relative = donated[id] else { continue }
-            // Nested plug-ins are copied for their own identifiers.
-            try copyTree(from: donorExtensions.appending(path: relative), to: outExtensions.appending(path: relative), skipping: "PlugIns")
-            added.append(id)
-        }
-
-        let missing = wantedSet.subtracting(have.keys).subtracting(added)
-        guard missing.isEmpty else {
-            throw PatcherError.fileNotFound("kexts in neither the base nor the donor KDK: \(missing.sorted().joined(separator: ", "))")
+        var added: [URL: [String]] = [:]
+        for (index, source) in sources.enumerated() where source != base {
+            let extensions = source.appending(path: "System/Library/Extensions")
+            for id in wantedSet.filter({ owner[$0] == index }).sorted() {
+                let relative = available[index][id]!
+                // Nested plug-ins are copied for their own identifiers.
+                try copyTree(from: extensions.appending(path: relative), to: outExtensions.appending(path: relative), skipping: "PlugIns")
+                added[source, default: []].append(id)
+            }
         }
         return (removed.sorted(), added)
     }
