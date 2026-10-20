@@ -3525,3 +3525,12 @@ tvOS installer does; all its imports are in the watchOS 26.4 arm64e cache.
 binary to its arm64e slice first (`MachOFatSlice`). vphoned is the arm64 daemon
 marked watchOS (`vphoned-watchos`); its HID presses reach the crown as Home
 (consumer 0x40) and the side button as Power (0x30).
+
+vphoned links Vision (IcliKit's OCR) weakly: watchOS ships no Vision, and dyld
+refused the daemon. Every other library it links strongly, and every symbol it
+imports from them, is in the watchOS 26.4 arm64e cache; `ui.ocr` and
+`ui.describe` report that the guest has no text recognition.
+
+Checked on 2026-10-20: `vm create --device Watch7,18` with the Watch7,18 26.4
+(23T240) IPSW and cloudOS 26.4 (23E244) links the mix, restores, boots, and
+vphoned answers the first-boot ping.

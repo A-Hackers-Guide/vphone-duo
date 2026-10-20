@@ -18,6 +18,7 @@ These are the two iPhone17,3 combinations exercised with the native JB pipeline 
 | Research board | `17,3_26.6_23G71` | `26.6-23G71` | standard and Minimal presets from the CLI, standard from Launchpad (2026-10-20): converted device tree and SEP, kernelcache mix, restore, CFW, boot, vphoned ping |
 | Research board | `17,3_26.5_23F77` | `26.5-23F75` | standard preset from the CLI (2026-10-20): GPU driver from a temporary cloudOS restore, kernelcache mix, restore, CFW, boot, vphoned ping |
 | Research board | `17,3_26.4_23E246` | `26.4-23E244` | standard preset from the CLI (2026-10-20): GPU driver from a temporary cloudOS restore, kernelcache mix, restore, CFW, boot, vphoned ping |
+| Research board | `Watch7,18_26.4_23T240` | `26.4-23E244` | `watchos` preset from the CLI and from Launchpad (2026-10-20): watch kernelcache mix, restore, boot, vphoned ping |
 
 The cloudOS 26.4 beta image (`26.4-23E5207q`) is the newest one that contains `vphone600ap`, the identity the guest's kernel, SEP and device tree come from, and it stays the recommended cloudOS: it needs nothing beyond vphone-cli. Every cloudOS release after it was checked on 2026-10-03 and lists only the PCC boards and `vresearch101ap`: `iPhone99,11` is gone from `SupportedProductTypes`, and there is no `kernelcache.*.vphone600`, `sep-firmware.vphone600` or `DeviceTree.vphone600ap`.
 
