@@ -393,6 +393,19 @@ request carries `"force": true`.
 | Profile UDID | `udid.get`, `udid.set {udid}`, `udid.clear` — each returns `{udid, path}`, the UDID the guest gives its profile checks and the host (null: the guest's own) and the settings file it came from; `set` and `clear` also return `restarted_pids`, `usb_serial` and `usb_reenumerated` (see below) |
 | Setup Assistant | `setup.status` (`{pending, running, pid, setup_done, setup_version, current_version, data_migration_done}`), `setup.skip` **force** (sets `SetupDone`, `SetupFinishedAllSteps` and `SetupVersion` in `com.apple.purplebuddy`, restarts SpringBoard, returns the status plus `respring`; while the first boot's data migration is still running it does not restart SpringBoard, which reads the keys when migration ends, and `respring` is `{restarted: false, reason: "data_migration_pending"}`; a restart FrontBoard ignored is refused with `reason: busy`, `retryable: true`, the keys already written); `setup.settle {timeout_s?, poll_s?, stable_polls?}` (read-only wait for first-boot work, see below); `/v1/health` carries `setup_pending` — see `Research/Guest/setup_assistant_skip.md` |
 
+`display.rotation` also reads `accelerometer`: its persisted `degrees`,
+`provider_running`, and the backboardd HID provider's status (enumeration,
+service ID, pid, report interval, dispatch/failure counts and last error).
+`orientation_sink` separately reports the native backboardd bridge's readiness,
+last device orientation and delivery count. This is distinct from raw HID
+dispatch, which by itself did not drive orientation on the research board.
+When the provider is running, setting rotation first publishes a stationary
+gravity pose matching the requested orientation. The existing SpringBoard
+request and interface-orientation readback still decide success; a running HID
+provider is not an acknowledgement that SpringBoard rotated. The selected
+`system-backboardd-cfw-accelerometer` patch installs this provider; older or
+disabled guests retain their existing rotation path.
+
 `display.auto_lock` reads Settings' Auto-Lock (`maxInactivity` in profiled's
 `EffectiveUserSettings.plist`) and SpringBoard's `SBMinimumLockscreenIdleTime`.
 SpringBoard honors Auto-Lock only while unlocked; on the Lock Screen it turns

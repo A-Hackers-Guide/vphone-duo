@@ -1089,6 +1089,7 @@ struct VPhoneCustomFirmwareInstaller {
             guard let plan else {
                 return !FirmwareGuestSystemPatchSet.settingsRowPatches.contains(identifier)
                     && identifier != FirmwareGuestSystemPatchSet.gyroscope
+                    && identifier != FirmwareGuestSystemPatchSet.accelerometer
                     && identifier != FirmwareGuestSystemPatchSet.attitude
             }
             guard plan.isEnabled(identifier) else {
@@ -1253,6 +1254,7 @@ struct VPhoneCustomFirmwareInstaller {
         }
         for (identifier, library) in [
             (FirmwareGuestSystemPatchSet.gyroscope, "libvphonegyro.dylib"),
+            (FirmwareGuestSystemPatchSet.accelerometer, "libvphoneaccelerometer.dylib"),
             (FirmwareGuestSystemPatchSet.attitude, "libvphoneattitude.dylib"),
         ] {
             isolate([identifier]) {

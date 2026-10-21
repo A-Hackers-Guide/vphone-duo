@@ -22,6 +22,7 @@ public enum FirmwareGuestSystemPatchSet {
     public static let installCoordinationPersona = "system-installcoordination_proxy-cfw-persona_lookup"
     public static let installCoordinationPersonaMarker = "/usr/lib/vphone-installcoordination-persona-lookup"
     public static let gyroscope = "system-backboardd-cfw-gyroscope"
+    public static let accelerometer = "system-backboardd-cfw-accelerometer"
     public static let attitude = "system-apps-cfw-attitude"
     public static let arm64eX1DyldBootstrap = "system-dyld-boot-arm64e_x1_bootstrap"
     public static let arm64eX1CacheBootstrap = "dyld-boot-arm64e_x1_bootstrap"
@@ -324,6 +325,14 @@ public enum FirmwareGuestSystemPatchSet {
             ),
 
             // MARK: Motion
+
+            VPhonePatchDeclaration(
+                identifier: accelerometer,
+                title: "Virtual gravity accelerometer",
+                summary: "Installs libvphoneaccelerometer.dylib. Publishes a built-in HID gravity sensor and bridges its classified pose into backboardd's native device-orientation sink. In SpringBoard, recomputes orientation delivery and deferral after the real backlight seed. Follows display.rotation across relaunches; removing the library disables both after a reboot.",
+                target: .guestFile(path: "/usr/lib/libvphoneaccelerometer.dylib"),
+                applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 18, minor: 0)),
+            ),
 
             VPhonePatchDeclaration(
                 identifier: gyroscope,
