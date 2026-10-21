@@ -55,11 +55,22 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     /// A click ended the scroll; the rest of its momentum is dropped until the
     /// fingers start a new one.
     private var nativeScrollMomentumDropped = false
+    /// The timestamp of the scroll's first momentum event, which the fade
+    /// counts from.
+    private var nativeScrollMomentumStart: TimeInterval?
     private var pointerTrackingArea: NSTrackingArea?
 
     /// How long after the fingers lift a scroll waits for AppKit's momentum
     /// before it ends. Momentum starts on the next frame when it starts at all.
     private static let nativeScrollMomentumWait: TimeInterval = 0.05
+    /// Half-life of the fade laid over AppKit's own deceleration. The guest
+    /// takes momentum as more travel of a scroll that is still open, so at
+    /// the content's edge the rubber band went on stretching for the second
+    /// or more AppKit's momentum lasts, and sprang back only after it.
+    private static let nativeScrollMomentumHalfLife: TimeInterval = 0.03
+    /// Faded momentum travel, in guest points per event, below which the
+    /// scroll ends and the rest of the momentum is dropped.
+    private static let nativeScrollMomentumStop: CGFloat = 3
     /// How long a scroll from a wheel without gesture phases stays open after
     /// its last event, as the web console does.
     private static let nativeScrollIdleEnd: TimeInterval = 0.12
@@ -441,8 +452,9 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
 
     /// Scroll the guest the way an iPad with a trackpad scrolls: the view under
     /// its pointer moves by the gesture's travel, and AppKit's momentum is sent
-    /// as more travel, since the guest does not decelerate after `ended`. So a
-    /// swipe runs on as far as it would in a Mac app.
+    /// as more travel, since the guest does not decelerate after `ended`. The
+    /// momentum is faded, so a swipe runs on for a shorter way than in a Mac
+    /// app and the scroll ends soon after the fingers lift.
     private func scrollNatively(_ event: NSEvent, control: VPhoneGuestControl) {
         nativeScrollEndWork?.cancel()
         nativeScrollEndWork = nil
@@ -455,7 +467,18 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
             nativeScrollMomentumDropped = false
             endNativeScroll()
         }
-        let delta = nativeScrollDelta(of: event)
+        var delta = nativeScrollDelta(of: event)
+        if momentum {
+            let start = nativeScrollMomentumStart ?? event.timestamp
+            nativeScrollMomentumStart = start
+            let fade = pow(0.5, (event.timestamp - start) / Self.nativeScrollMomentumHalfLife)
+            delta = CGVector(dx: delta.dx * fade, dy: delta.dy * fade)
+            if delta != .zero, hypot(delta.dx, delta.dy) < Self.nativeScrollMomentumStop {
+                endNativeScroll()
+                nativeScrollMomentumDropped = true
+                return
+            }
+        }
         if !nativeScrollActive, delta != .zero {
             nativeScrollActive = true
             control.sendScroll(phase: "began", pointer: interfacePoint(convert(event.locationInWindow, from: nil)))
@@ -487,6 +510,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     private func endNativeScroll() {
         nativeScrollEndWork?.cancel()
         nativeScrollEndWork = nil
+        nativeScrollMomentumStart = nil
         guard nativeScrollActive else { return }
         nativeScrollActive = false
         control?.sendScroll(phase: "ended")
