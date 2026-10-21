@@ -178,7 +178,7 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         guard try VPhoneVirtualMachineManifest.requireRegularFileIfPresent(at: options.diskURL) else {
             throw VPhoneVirtualMachineError.diskNotFound(options.diskURL.path)
         }
-        let attachment = try VZDiskImageStorageDeviceAttachment(url: options.diskURL, readOnly: false)
+        let attachment = try VPhoneDiskAttachment.make(url: options.diskURL, readOnly: false)
         config.storageDevices = [VZVirtioBlockDeviceConfiguration(attachment: attachment)]
 
         // Network (mode, MAC, address and forwards from the bundle manifest)
