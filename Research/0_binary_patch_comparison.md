@@ -3261,3 +3261,21 @@ in `fw patch`. The SEP firmware (`sep-firmware.vphone600.RELEASE.im4p`, sent as
 before keep Apple's SEP ROM; `vm config --seprom opensep|apple` switches one
 without a restore. `Firmware/opensep_sep_rom.md` has the contract and the
 validation.
+
+## Apply selected Preboot identity during guest updates (2026-10-21)
+
+`preboot-exp-devicetree_identity` was advertised as an `update-environment`
+guest patch but its installer call enabled identity only for full installs.
+Launchpad's Apply to Guest therefore completed with the identity still pending.
+Environment updates now run the existing identity rewrite when the current
+resolved plan selects it, using the installed tree without a restore directory.
+The patch bytes, presets, board-presenting guest guard, post-identity repair
+backup and existing off-state behavior are unchanged. This fixes the same
+delivery path for CLI updates, bundle changes and template guest-patch steps;
+other Preboot repairs already used it. It does not enable the eight firmware
+DeviceTree identity edits or establish that Apple will deliver Photos models.
+
+Validation on `upstream/main` `047642f8` (2.10.1): 77 existing tests in eight
+suites pass, covering guest device trees, patch resolution/catalogue/drift,
+board audio, microphone-array removal, iPhone product properties and haptics.
+The complete `VPhone` Debug build and bundle admission also pass.
