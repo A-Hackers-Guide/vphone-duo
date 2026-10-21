@@ -342,6 +342,26 @@ public final class DeviceTreePatcher: BufferedPatcher {
         if presentsGuest {
             patchesToApply.removeAll { !Self.deviceNeutralPatches.contains($0.patchID) }
         }
+        // An XS-family userland has its own artwork and no Dynamic Island: the
+        // artwork patch writes its subtype, and the island patch removes the
+        // property instead of setting it.
+        if let subtype = device.notchedArtworkSubtype {
+            patchesToApply = patchesToApply.compactMap { patch in
+                switch patch.patchID {
+                case Self.islandNotchLocationPatch:
+                    return nil
+                case "devicetree-cfw-artwork_device_subtype":
+                    return PropertyPatch(
+                        nodePath: patch.nodePath, property: patch.property, length: patch.length, flags: patch.flags,
+                        value: .integer(UInt64(subtype)), patchID: patch.patchID,
+                        description: "Set artwork device subtype to \(subtype) (\(device.productName))",
+                    )
+                default:
+                    return patch
+                }
+            }
+            try removeIslandNotchLocation(root: root)
+        }
         for patch in patchesToApply {
             // Before the property is rewritten, not after: the tree is serialised
             // from these nodes, so a skipped record with a mutated node would

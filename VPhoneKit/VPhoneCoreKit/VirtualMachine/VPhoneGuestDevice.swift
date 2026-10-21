@@ -61,10 +61,19 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
 
     /// Whether the guest boots a device tree of its own that presents this
     /// board, built by `fw patch` from the board's tree in the IPSW. Every
-    /// device but the iPhone17,3 does; that one keeps the fixed D47 identity
-    /// `cfw install` writes into the restored tree.
+    /// device but the iPhone17,3 and the iPhone XS Max does; those keep the
+    /// fixed D47 identity `cfw install` writes into the restored tree.
     public var presentsBoard: Bool {
-        productType != Self.iPhone17_3.productType
+        productType != Self.iPhone17_3.productType && notchedArtworkSubtype == nil
+    }
+
+    /// The artwork subtype of a guest presented as the iPhone17,3 whose own
+    /// userland has none of the iPhone 16's: the XS family's asset catalogs
+    /// only carry 2436 and 2688 artwork, and its SpringBoard no Dynamic Island
+    /// layout. Without it Hello and the wallpaper stay empty and the home
+    /// gesture breaks. Nil for every other device.
+    public var notchedArtworkSubtype: Int? {
+        productType == "iPhone11,6" ? 2688 : nil
     }
 
     // MARK: - Known Devices
@@ -114,6 +123,19 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     public static let iPhone18_5 = iPhone("iPhone18,5", "v159ap", "iPhone 17e", width: 1170, height: 2532)
     /// iPhone 18 Pro (V63AP): 1206x2622, 402x874 points.
     public static let iPhone19_2 = iPhone("iPhone19,2", "v63ap", "iPhone 18 Pro", width: 1206, height: 2622)
+
+    /// iPhone XS Max: 1242x2688 at 458 ppi, 414x896 points. Its IPSW carries the
+    /// iOS 18 releases after 18.6, which the iPhone 16 never got; the research
+    /// board's own iOS 18 kernel boots it (the 18.x kernelcache recipes, `minimal`
+    /// only). It is presented as the iPhone17,3 with its own artwork
+    /// (`notchedArtworkSubtype`).
+    public static let iPhone11_6 = VPhoneGuestDevice(
+        family: .iPhone,
+        productType: "iPhone11,6",
+        deviceClass: "d331pap",
+        productName: "iPhone XS Max",
+        screen: .init(width: 1242, height: 2688, pixelsPerInch: 458, scale: 3.0),
+    )
 
     private static func iPad(
         _ productType: String,
@@ -205,6 +227,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         iPhone17_4, iPhone17_1, iPhone17_2, iPhone17_5,
         iPhone18_3, iPhone18_4, iPhone18_1, iPhone18_2, iPhone18_5,
         iPhone19_2,
+        iPhone11_6,
         iPad16_1,
         iPad15_7,
         iPad15_3, iPad15_5,
@@ -217,6 +240,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     /// Cellular models that ship in the same IPSW as a known Wi-Fi model and map
     /// onto it: the VM has no baseband, so it gets the Wi-Fi identity.
     static let aliases: [String: String] = [
+        "iPhone11,4": "iPhone11,6",
         "iPad16,2": "iPad16,1",
         "iPad15,4": "iPad15,3",
         "iPad15,6": "iPad15,5",

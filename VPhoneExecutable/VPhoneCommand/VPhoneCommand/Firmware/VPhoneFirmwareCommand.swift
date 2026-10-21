@@ -179,7 +179,8 @@ struct VPhoneFirmwareCatalogCommand: ParsableCommand {
     var device: String?
 
     func run() throws {
-        let report = VPhoneFirmwareCatalog.report
+        // Launchpad reads the JSON; the listing names the CLI-only devices too.
+        let report = json ? VPhoneFirmwareCatalog.report : VPhoneFirmwareCatalog.report(includingCLIOnly: true)
         if json {
             try print(String(decoding: JSONEncoder().encode(report), as: UTF8.self))
             return

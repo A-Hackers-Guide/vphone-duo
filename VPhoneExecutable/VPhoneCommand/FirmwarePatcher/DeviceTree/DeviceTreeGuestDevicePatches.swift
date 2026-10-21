@@ -600,6 +600,33 @@ extension DeviceTreePatcher {
         }
     }
 
+    // MARK: - Notched iPhone
+
+    static let islandNotchLocationPatch = "devicetree-cfw-island_notch_location"
+
+    /// Removes `/product/island-notch-location` for a guest whose userland has
+    /// no Dynamic Island layout (`VPhoneGuestDevice.notchedArtworkSubtype`),
+    /// under the patch that otherwise sets it.
+    func removeIslandNotchLocation(root: DTNode) throws {
+        guard gateAllows(Self.islandNotchLocationPatch),
+              let product = Self.optionalChild(of: root, named: "product"),
+              let index = product.properties.firstIndex(where: { $0.name == "island-notch-location" })
+        else { return }
+        let removed = product.properties.remove(at: index)
+        patches.append(PatchRecord(
+            patchID: Self.islandNotchLocationPatch,
+            component: component,
+            fileOffset: removed.valueOffset,
+            virtualAddress: nil,
+            originalBytes: removed.value,
+            patchedBytes: Data(),
+            description: "Remove the island notch location: \(device.productName) has no Dynamic Island",
+        ))
+        if verbose {
+            print("  -prop  : /product/island-notch-location, no Dynamic Island on \(device.productName)  [\(Self.islandNotchLocationPatch)]")
+        }
+    }
+
     // MARK: - Watch Companion
 
     /// Give an iPhone guest's `/product/watch-companion` the value 1, adding it

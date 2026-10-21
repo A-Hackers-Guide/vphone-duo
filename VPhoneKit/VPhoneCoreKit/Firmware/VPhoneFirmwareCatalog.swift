@@ -467,6 +467,27 @@ public enum VPhoneFirmwareCatalog {
         ]),
     ]
 
+    /// iPhone XS Max releases, each paired with its own release's research board
+    /// cloudOS: the 18.x kernelcache recipes rebuild that iOS 18 kernel with the
+    /// cloudOS 26.1 vphone600 kexts. Kernel-first, so macOS 26.4 and later link
+    /// it over ssh on an older Mac (`VPHONE_KMUTIL_SSH`), and only `minimal` boots it.
+    static let iOS18ResearchBoardReleases: [(version: String, url: String, cloudOS: VPhoneCloudOSOption)] = [
+        ("18.1", "https://updates.cdn-apple.com/2024FallFCS/fullrestores/072-12814/E17284F9-4885-4E16-840A-40DF173142B3/iPhone11,2,iPhone11,4,iPhone11,6_18.1_22B83_Restore.ipsw",
+         .init(name: "cloudOS 18.1 (22B83)", url: "https://updates.cdn-apple.com/private-cloud-compute/729b85b9b89b4383e7dfafdf0f5867b8cd2f3e4e69b279c8785dc7d044e377b7")),
+        ("18.2.1", "https://updates.cdn-apple.com/2024FallFCS/fullrestores/072-56807/7999846C-76E5-42DC-A3F0-96E5FD27FF44/iPhone11,2,iPhone11,4,iPhone11,6_18.2.1_22C161_Restore.ipsw",
+         .init(name: "cloudOS 18.2.1 (22C161)", url: "https://updates.cdn-apple.com/private-cloud-compute/0aadbf7c7e768c73e1f0a6331fbcc96e3792a9f2176509f6225059fbad0bb6b6")),
+        ("18.3.1", "https://updates.cdn-apple.com/2025WinterFCS/fullrestores/072-84318/BE724963-525E-4B8D-8E9F-018395E81BA2/iPhone11,2,iPhone11,4,iPhone11,6_18.3.1_22D72_Restore.ipsw",
+         .init(name: "cloudOS 18.3.1 (22D72)", url: "https://updates.cdn-apple.com/private-cloud-compute/0ce2ff6ad1af4052bbabf38a4627506613ca5c2061e198888391a430357f0b39")),
+        ("18.5", "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/082-45658/0CEE897C-AD56-4422-BD70-FA3CB060E23C/iPhone11,2,iPhone11,4,iPhone11,6_18.5_22F76_Restore.ipsw",
+         .init(name: "cloudOS 18.5 (22F76)", url: "https://updates.cdn-apple.com/private-cloud-compute/ceb5e5bde2427bf7a227b61ff307f79c4b9c701f46023262abd763758aea6453")),
+        ("18.6", "https://updates.cdn-apple.com/2025SummerFCS/fullrestores/082-99059/7A2E93FF-79D9-4AD7-862B-5A4B812ADD90/iPhone11,2,iPhone11,4,iPhone11,6_18.6_22G86_Restore.ipsw",
+         .init(name: "cloudOS 18.6 (22G86)", url: "https://updates.cdn-apple.com/private-cloud-compute/8b2181f68080c42ae57bb8bf516715841060ee3aaf8c0ff06e1cf627169ef574")),
+        ("18.7", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/082-75719/D271E370-84A4-494D-8547-BDBE20AC1EEA/iPhone11,2,iPhone11,4,iPhone11,6_18.7_22H20_Restore.ipsw",
+         .init(name: "cloudOS 18.7 (22H20)", url: "https://updates.cdn-apple.com/private-cloud-compute/9b0acae06a068476c5bf0c1ecdf686cf1ff4ead5a9dcf7429c7d86d01033ef9b")),
+        ("18.7.2", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-18690/1C111BF6-B55E-460B-AE63-5343B163CAE4/iPhone11,2,iPhone11,4,iPhone11,6_18.7.2_22H124_Restore.ipsw",
+         .init(name: "cloudOS 18.7.2 (22H43)", url: "https://updates.cdn-apple.com/private-cloud-compute/d425a03c76f1ddb92a65a27d56e80beffe399605018d4d268f5ef8889d0ec9e7")),
+    ]
+
     /// Full OTAs of devices without an IPSW, oldest first. Each has a
     /// `tvReleases` entry of its `baseVersion` for its `restoreBase`. The keys
     /// are AppleDB's.
@@ -522,6 +543,17 @@ public enum VPhoneFirmwareCatalog {
     /// gets none.
     public static func pairings(for device: String) -> [VPhoneFirmwarePairing] {
         guard let guest = VPhoneGuestDevice.named(device) else { return [] }
+        if guest.notchedArtworkSubtype != nil {
+            return iOS18ResearchBoardReleases.map { release in
+                VPhoneFirmwarePairing(
+                    device: guest.productType,
+                    iosName: "iOS \(release.version)",
+                    iosURL: release.url,
+                    cloudosName: release.cloudOS.name,
+                    cloudosURL: release.cloudOS.url,
+                )
+            }
+        }
         guard guest.presentsBoard else { return pairings }
         let restored = guest.restoreBase ?? guest
         var releases = (iPhoneReleases + iPadReleases + tvReleases + watchReleases).first { $0.devices.contains(restored.productType) }?.releases ?? []
@@ -571,6 +603,11 @@ public enum VPhoneFirmwareCatalog {
     /// JSON-friendly projection of the catalog: each build with its recommended
     /// cloudOS, for the iPhone and then per guest device.
     public static var report: VPhoneFirmwareCatalogReport {
+        report(includingCLIOnly: false)
+    }
+
+    /// The catalog, with the devices only the CLI creates when `includingCLIOnly`.
+    public static func report(includingCLIOnly: Bool) -> VPhoneFirmwareCatalogReport {
         func entries(_ pairings: [VPhoneFirmwarePairing]) -> [VPhoneFirmwareCatalogReport.Entry] {
             pairings.map {
                 let ota = otaRelease(source: $0.iosURL)
@@ -591,6 +628,10 @@ public enum VPhoneFirmwareCatalog {
             device: device,
             pairings: entries(pairings),
             devices: VPhoneGuestDevice.known.compactMap { guest in
+                // The iOS 18 research board releases link kernel-first, over ssh
+                // on an older Mac from macOS 26.4 on, which Launchpad's root link
+                // does not: `vphone-cli fw catalog --device` lists them.
+                guard includingCLIOnly || guest.notchedArtworkSubtype == nil else { return nil }
                 let pairings = pairings(for: guest.productType)
                 guard !pairings.isEmpty else { return nil }
                 return .init(
