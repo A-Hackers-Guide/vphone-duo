@@ -23,13 +23,16 @@ struct KernelCacheMixerTests {
     @Test("Every recipe has its map, its bundle list and its donor")
     func recipesAreComplete() throws {
         let bases = try Self.recipes.bases()
-        #expect(bases.map(\.id) == ["26.4_23E246", "26.5_23F77", "26.6_23G71", "26.7_23H20", "watch_26.4_23T240"])
+        #expect(bases.map(\.id) == [
+            "18.1_22B83", "18.2.1_22C161", "18.3.1_22D72", "18.5_22F76", "18.6_22G86", "18.7.2_22H124", "18.7_22H20",
+            "26.4_23E246", "26.5_23F77", "26.6_23G71", "26.7_23H20", "watch_26.4_23T240",
+        ])
         for base in bases {
             #expect(FileManager.default.fileExists(atPath: base.symbolsURL.path), "\(base.id)")
             let identifiers = try base.kextIdentifiers()
             #expect(identifiers.count > 100, "\(base.id)")
             #expect(Set(identifiers).count == identifiers.count, "\(base.id)")
-            #expect(base.builderLayout == .kernelLast, "\(base.id)")
+            #expect(base.builderLayout == (base.productVersion.hasPrefix("18.") ? .kernelFirst : .kernelLast), "\(base.id)")
             #expect(base.kextSources.contains("base"), "\(base.id)")
             for id in base.donors {
                 let donor = try Self.recipes.donor(id: id)
@@ -46,6 +49,18 @@ struct KernelCacheMixerTests {
         #expect(Set(shared.map(\.id)) == ["26.4_23E246", "watch_26.4_23T240"])
         #expect(watch.kextSources == ["watch7c_26.4_23T240", "base", "vphone600_26.4_23E5207q"])
         #expect(try Self.recipes.donor(id: "watch7c_26.4_23T240").cloudOSSource == nil)
+    }
+
+    @Test("iOS 18 bases link kernel-first against the kexts of the cloudOS 26.1 vphone600 kernelcache")
+    func iOS18Recipes() throws {
+        let bases = try Self.recipes.bases().filter { $0.productVersion.hasPrefix("18.") }
+        #expect(bases.count == 7)
+        for base in bases {
+            #expect(base.donors == ["vphone600_26.1_23B78"], "\(base.id)")
+            #expect(base.guest == nil, "\(base.id)")
+        }
+        let donor = try Self.recipes.donor(id: "vphone600_26.1_23B78")
+        #expect(donor.cloudOSSource?.hasPrefix("https://updates.cdn-apple.com/private-cloud-compute/") == true)
     }
 
     @Test("A kernel-first base on a kernel-last Mac needs an ssh builder, and says how to name one")

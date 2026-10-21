@@ -37,13 +37,23 @@ beta cloudOS, the last one with vphone600 components. Only that file is read
 from the cloudOS IPSW, once, and kept with its extraction in
 `~/.vphone/kernelcache/donors`.
 
+The iOS 18 bases (18.1 to 18.7.2, the research board kernels of their own
+release's cloudOS) take their kexts from `vphone600_26.1_23B78`, the vphone600
+kernelcache of the public cloudOS 26.1. Mixing across versions cannot go by
+name: each donor import was resolved by code identity in every base, and both
+maps carry the names those targets have. 18.1 to 18.3.1 leave out the audio
+kexts whose imports have no counterpart there (15 donor kexts instead of 18).
+
 ## Requirements
 
 - An `ipsw` with `kernel extract --kdk` (blacktop/ipsw), named by `VPHONE_IPSW`.
   vphone-cli does not ship it, and runs it only as the invoking user.
 - Root for the link: kmutil only reads kexts owned by root:wheel, and links the
   host's own kexts in place of any others without a word.
-- A kmutil of the base's `builderLayout`: macOS 26.4 or later for every base here.
+- A kmutil of the base's `builderLayout`: macOS 26.4 or later for the iOS 26 bases,
+  macOS 15 or 26.0 to 26.3 for the iOS 18 ones. A Mac with the other layout
+  links over ssh on one that has it (`VPHONE_KMUTIL_SSH`, see
+  `Documents/Guides/create-and-run.md`).
 
 `vphone-cli fw kernelcache <vm>` stages the mix as the user (the extractions
 and the volume, in `~/.vphone/kernelcache/staged`), and under sudo links it:
