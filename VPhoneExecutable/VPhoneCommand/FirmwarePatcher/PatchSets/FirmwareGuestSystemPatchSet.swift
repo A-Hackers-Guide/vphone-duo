@@ -267,9 +267,9 @@ public enum FirmwareGuestSystemPatchSet {
                 identifier: metalCacheReuse,
                 title: "Keep Metal shader caches",
                 summary: """
-                Has SystemHook set FS_CACHE_REUSE_ON_REBOOT=1 in every guest process, so Metal's \
-                shader caches, which libCoreFSCache stamps with the boot session, survive a reboot \
-                and backboardd does not rebuild its pipelines after every boot.
+                Has SystemHook request FS_CACHE_REUSE_ON_REBOOT=1 at process startup, \
+                allowing Metal's guest shader caches to survive a reboot and reducing \
+                repeated shader compilation. An explicit environment setting takes precedence.
                 """,
                 target: .guestFile(path: metalCacheReuseMarker),
             ),

@@ -184,10 +184,12 @@ time in the same boot.
 
 ### Why the cache misses
 
-Virtualization gives ParavirtualizedGraphics a cache directory per VM,
+By default, Virtualization gives ParavirtualizedGraphics a cache directory per VM,
 `$DARWIN_USER_CACHE_DIR/com.apple.paravirtualizedgraphics-<number>`, and each
 host GPU task keeps its Metal function cache in a `task-<key>` directory under
-it. `-[PGRemoteTask calculateCachePathAndExtension:taskRoot:]` picks the key:
+it. The vphone launcher now keeps a durable copy in the machine folder
+(see "Cache location and migration" below). The historical observations here
+predate that relocation. `-[PGRemoteTask calculateCachePathAndExtension:taskRoot:]` picks the key:
 
 - when the device's feature byte `0x36` is set, it reads 60 bytes of the guest's
   task root page and takes the 20 at offset `0x28`; if they are not all zero,
@@ -688,8 +690,10 @@ inside each open/home command window, are not animation FPS, and are only a
 small repeated-workload comparison on this machine. The cold host run already
 had the guest cache-reuse change; this is not an unpatched-versus-patched A/B.
 The host compilation reduction and key retention directly establish cache
-reuse. The remaining frame gaps establish that **persistent caches do not
-eliminate all animation lag**. Scheduling, VM rendering and other work remain.
+reuse. The frame gaps do not establish visible animation stutter: the probe
+does not separate animation frames from idle intervals or command pauses.
+The user reports smooth warmed animations. Quantifying visible hitches would
+require an animation-specific measurement; these samples cannot settle that.
 
 No new crash reports appeared during the first two application-test windows.
 The third produced a Passbook widget `SIGTRAP`: `_assertionFailure` →
@@ -703,6 +707,103 @@ application-test window. Lychee was shut down normally afterward. The temporary
 installation bundle with the lowered disk check was removed from Launchpad.
 Raw runtime captures and the Swift report driver are local scratch artifacts under
 `/tmp/vphone-shader-cache-hopper/`, not shipped components.
+
+#### Cache location and migration, 2026-10-20
+
+The durable host cache now lives at `<machine>/ShaderCache`. For Lychee this is
+`/Users/arbifox/.vphone/machines/Lychee/ShaderCache`. Guest Metal caches remain
+inside the guest filesystem in `Disk.img`; this change relocates the host
+ParavirtualizedGraphics cache only.
+
+An initial symlink experiment preserved every file checksum but failed runtime
+validation: the Virtualization service logged sandbox metadata denials for the
+redirected path, and GPU task compilation rose to 1,525 events without updating
+the relocated files. Symlinks are therefore not the shipped storage design.
+
+Before creating the VM, `VPhoneShaderCache.prepare` uses the machine ECID and
+the invoking user's Darwin cache directory to locate Apple's required working
+directory, `com.apple.paravirtualizedgraphics-<decimal ECID>`. On first use it
+copies an existing unmanaged directory intact into `ShaderCache`. It seeds a real
+working directory from that durable snapshot before each boot. The VM delegate
+checkpoints the working copy at guest shutdown; the parent CLI checkpoints
+again after vphone-vm exits, including device teardown writes. A `.host-ecid`
+file inside the snapshot lets the unentitled CLI find only that ECID's working
+directory, without a private Virtualization API or arbitrary stored host path.
+
+Each transfer copies to a sibling staging directory, then replaces the entire
+destination. Independently warmed `functions.list`/`functions.data` files are
+never merged. Failed copies leave the prior snapshot intact. Permissions use
+the shared host-file walker without following symlinks. Both roots must be real
+directories. The local experimental alias was removed during validation;
+production setup rejects aliases. An ECID lock stays held for the entire VM
+session so concurrent launches cannot replace an active working cache.
+
+Tests cover paired file preservation, checkpointing, repeated setup, a renamed
+machine, host cache eviction/reseeding, whole-snapshot replacement, foreign
+aliases, checkpoint failure, symlink rejection, concurrent launch exclusion and
+hard-linked lock rejection. Initial relocation validation passed twelve
+cache/permission tests and 61 targeted Task3, encoder and patch-selection tests,
+plus the `VPhone` workspace build and bundle admission. The original 50 GiB
+installer guard and shipped Task3 preset defaults are unchanged.
+
+All 14 existing Lychee `functions.list`/`functions.data` checksums matched the
+initial move. With relocation bundle `2.10.1-local.12d3a7da`, two full boot/shutdown
+cycles each passed five Settings rounds and Camera's foreground check. Each
+recorded zero host GPU task compiles, zero guest compiles during the 55-second
+collection, eight fixed host display compiles, eleven retained executable keys
+and zero GPU resets. After the first shutdown, the framework working directory
+was moved aside; the second boot restored it exclusively from the machine
+snapshot and retained all eleven keys. After each shutdown, all 14 paired file
+checksums matched between the working and durable trees. Neither run logged a
+checkpoint error.
+
+The first application-test window produced no new crash report. The second
+produced one Passbook widget SIGTRAP: its exception and first eight fault frames
+exactly match the previously documented FinanceKit assertion failure. A brief
+third boot retrieved that report; Lychee was shut down afterward. These are
+cache-location health checks, not animation smoothness benchmarks.
+The durable snapshot is current after shutdown; changes made during a running
+session reside in Apple's working directory until checkpointed. Killing both
+VM and CLI can lose that session's new entries.
+
+The unfinished Claude handoff and its probe directory are preserved outside
+the checkout at `/Users/arbifox/.vphone/research/shader-cache-2026-10-20/`.
+They are research artifacts, not bundle inputs or proposed PR files.
+The `validation` subdirectory holds the relocation run captures, compilation
+report, checksum manifests and build/test logs.
+
+Deletion semantics correction: the first implementation imported the surviving
+working copy whenever `ShaderCache` was missing, so deleting the durable folder
+could silently restore the warmed host cache. A `.host-ecid` marker in the
+working copy now distinguishes a managed cache from a first-use import. When
+`ShaderCache` is missing and the working copy is managed, preparation starts
+with an empty snapshot and replaces the working copy. Checkpointing also
+respects a missing machine snapshot instead of recreating it at shutdown.
+To regenerate the host cache, stop the VM, delete `<machine>/ShaderCache`,
+then start the VM with the corrected bundle. Deleting it while the VM is
+running does not evict shaders already loaded into memory; the reset takes
+effect at the next boot. Guest Metal caches inside `Disk.img` are a separate
+layer and are not cleared by this host-only reset.
+
+The correction passes fourteen cache/permission tests, including deleting the
+machine snapshot while the VM session is active and deleting it between boots.
+The full bundle build and admission pass. In bundle
+`2.10.1-local.ee7a374e`, the original machine snapshot was moved to an external
+research backup while leaving Apple's managed working copy intact. The next
+boot began with only `.host-ecid` in the machine snapshot and regenerated its
+host caches: 607 GPU task compile events overall, 129 during five Settings
+rounds. The following boot retained all seven newly generated task keys and
+recorded seven GPU task compile events overall, one during Settings. Both had
+zero guest compiles in the 55-second collection, eight fixed display compiles,
+successful Settings/Camera foreground checks and zero GPU resets. All ten
+paired cache file checksums matched after the second shutdown. The reset clears
+the host layer; it does not promise visible lag or a fully cold guest layer.
+The reset test window had no new crash reports. The warm window had one
+Passbook widget report with the same exception and first eight fault frames as
+the preexisting FinanceKit failure; a brief diagnostic boot retrieved it and
+the VM was shut down again.
+Captures and build/test logs are preserved beside the earlier validation under
+`reset-validation`.
 
 ## Heap Textures Have No CPU Layout
 

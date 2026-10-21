@@ -78,9 +78,9 @@ public enum FirmwarePatchSetCatalog {
     /// `Research/Guest/display_refresh_rate.md`.
     public static let proMotionPatch = "kernel-cfw-display_promotion"
 
-    /// Paravirtual GPU binary version 252 (Task3) with the guest keeping its own
-    /// features: lets the host key each task's shader cache by guest-supplied
-    /// bytes. Off unless a VM selects it. See
+    /// Paravirtual GPU Task3: keep the guest's features and supply each owning
+    /// executable's cdhash so the host retains separate shader caches across
+    /// boots. Off unless a VM selects it. See
     /// `Research/Guest/gpu_acceleration.md`.
     public static let paravirtTask3Patch = "kernel-exp-paravirt_gpu_task3"
 
