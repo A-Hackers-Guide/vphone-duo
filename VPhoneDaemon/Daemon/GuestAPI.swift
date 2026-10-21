@@ -100,6 +100,7 @@ enum GuestAPI {
                 "touch2",
                 "hid",
                 "apps",
+                "ota_system_apps",
                 "url",
                 "files",
                 "clipboard",

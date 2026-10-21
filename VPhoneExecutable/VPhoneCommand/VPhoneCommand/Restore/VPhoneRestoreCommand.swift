@@ -1,6 +1,7 @@
 import ArgumentParser
 import FirmwarePatcher
 import Foundation
+import VPhoneArchiveKit
 import VPhoneCoreKit
 import VPhonePatchKit
 import VPhoneRestore
@@ -344,7 +345,17 @@ struct VPhoneCustomFirmwareInstallCommand: ParsableCommand {
     private func recordInstall(in bundle: VPhoneBundle) throws {
         let keepArtifacts = keepArtifacts
         let record = {
-            if let info = try? VPhoneRestoreInfo.recordVariant("jb", toBundle: bundle), info.variant != nil {
+            let receipt = VPhonePatchPresetStore.receipt(forVM: bundle.url)
+            let metadataData = try? Data(contentsOf: bundle.url.appendingPathComponent(VPhoneOTAArchive.userlandDirectoryName)
+                .appendingPathComponent("Upgrade.plist"))
+            let metadata = metadataData.flatMap { try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: String] }
+            if receipt?.parts[VPhoneVirtualMachinePatchReceipt.guestPart]?.patches.contains(FirmwareGuestSystemPatchSet.otaUserland) == true,
+               let target = VPhoneRestoreInfo.derive(fromBundle: bundle),
+               metadata?["Build"] == target.ios.build, metadata?["Version"] == target.ios.version {
+                try VPhoneRestoreInfo(ios: target.ios, cloudOS: target.cloudOS, variant: "jb", device: bundle.manifest.guestProductType)
+                    .write(toBundle: bundle)
+                print("[cfw] recorded full OTA userland \(target.ios.version) (\(target.ios.build))")
+            } else if let info = try? VPhoneRestoreInfo.recordVariant("jb", toBundle: bundle), info.variant != nil {
                 print("[cfw] recorded variant jb, device \(info.device ?? "?")")
             }
             if !keepArtifacts, let removed = try? VPhoneRestoreInfo.removeBuiltFirmware(fromBundle: bundle) {
@@ -352,7 +363,7 @@ struct VPhoneCustomFirmwareInstallCommand: ParsableCommand {
             }
         }
         guard geteuid() == 0, let invokingUser = VPhoneInvokingUser.current else {
-            record()
+            try record()
             return
         }
         do {

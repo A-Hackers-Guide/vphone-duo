@@ -1,5 +1,38 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **Experimental full OTA System update (2026-10-20):**
+> `system-exp-ota_userland` is off in Standard and the TV presets. For a stopped
+> iPhone/iPad guest with a snapshot and prepared target firmware, it replaces
+> System from a matching full OTA and reapplies the target Guest patches from
+> a fresh receipt state. Data/User volumes and SEPStorage are retained. The same
+> private disk clone receives the target kernelcache and TXM payloads under their existing IMG4
+> manifest; this reuses the existing declared TXM patches, adding no instruction
+> patch or fixed offset. The whole System/kernel/TXM transaction aborts on compatibility
+> patch failure. This is host-driven payload installation; Apple's UpdateBrain
+> protocol and application migration are not implied. See
+> [the implementation and validation record](Restore/data_preserving_full_ota.md).
+> **2026-10-21 correction:** full updates also stage, validate and install
+> `payloadv2/links.txt`. The 24A446 iPad OTA omits 24,835 duplicate paths from
+> its numbered chunks. Missing J410 media resources made audiomxd trap in
+> CFRetain(NULL), blocking migration through liveactivitiesd and locationd.
+> No new binary patch is used; the installer restores the OTA's own hard links
+> through confined parent descriptors and checks the resulting inode.
+> Corrected migration and the reference-machine clone subsequently booted with
+> retained data. The clone's protected app reopened its existing data offline
+> at 4/3/2 GB with service profile none. Separate explicit compatibility steps
+> preserved a legacy re-signed app container and synchronized 38 retained Apple
+> app programs from the target IPSW; these are not new binary patches.
+> **2026-10-21 orchestration:** `fw ota` now captures guest policies, takes one
+> disk/SEP/NVRAM checkpoint with separate host configuration/firmware backups,
+> prepares a pinned target, verifies real target migration, restores Auto-Lock
+> through Settings with effective-policy readback, and reapplies the saved service
+> profile. The installer stages target removable-app programs on System;
+> `ota.apps.apply` updates matching, already-installed Apple app programs at their
+> original container paths and quarantines old serialized placeholders. Legacy
+> third-party container signing is a preflight refusal, never an implicit repair.
+> This adds no instruction patches. Full application and performance equivalence
+> remain outside this result; see the runbook for current verification scope.
+
 > **iPhone19,2 / ARM64E_X1 compatibility (validated 2026-10-17):** the tested
 > pairing is iPhone 18 Pro 27.0.1 (24A446), V63AP, with cloudOS 26.4
 > (23E5207q). Cache discovery selects `dyld_shared_cache_arm64e_x1` and its

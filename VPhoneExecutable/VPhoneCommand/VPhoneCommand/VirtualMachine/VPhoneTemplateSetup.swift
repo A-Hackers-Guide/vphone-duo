@@ -112,25 +112,7 @@ final class VPhoneTemplateSetupVirtualMachine: VPhoneTemplateSetupMachine {
     }
 
     func call(_ method: String, params: [String: Any], timeout: TimeInterval) throws -> [String: Any] {
-        let request: [String: Any] = ["t": "rpc", "method": method, "params": params, "screen": false]
-        guard let reply = VPhoneHostAutomationProbe.send(
-            request,
-            socketPath: socketPath,
-            timeout: Int(timeout.rounded(.up)),
-            maximumReply: 64 << 20,
-        ) else {
-            throw VPhoneGuestCallError(kind: .transport, message: "no answer from vphone.sock")
-        }
-        if reply["ok"] as? Bool == true {
-            return reply["result"] as? [String: Any] ?? [:]
-        }
-        let message = reply["error"] as? String ?? "refused"
-        if let detail = reply["guest_error"] as? [String: Any] {
-            throw VPhoneGuestCallError(kind: .refused, message: message, detail: detail)
-        }
-        // The VM answered for the guest: not connected yet, or the request
-        // to vphoned failed on the way.
-        throw VPhoneGuestCallError(kind: .transport, message: message)
+        try VPhoneHostAutomationProbe.rpc(method, params: params, socketPath: socketPath, timeout: Int(timeout.rounded(.up)))
     }
 
     /// SIGINT makes `vphone-vm` ask the guest to shut down and exit once it

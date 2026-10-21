@@ -1,5 +1,6 @@
 import AppleArchive
 import CryptoKit
+import Darwin
 import Foundation
 import System
 import VPhoneCoreKit
@@ -34,6 +35,7 @@ public enum VPhoneOTAArchive {
         case unexpectedSize(URL, expected: Int64, actual: Int64)
         case existingUserland(URL)
         case noSource(String)
+        case deltaUpdate(URL)
 
         public var errorDescription: String? {
             switch self {
@@ -63,6 +65,8 @@ public enum VPhoneOTAArchive {
                 "\(folder.path) already exists. Remove it, then prepare the firmware again."
             case let .noSource(productType):
                 "The firmware catalog has no OTA for \(productType) at this build. Pass the device's full OTA with --ota-source."
+            case let .deltaUpdate(file):
+                "\(file.lastPathComponent) requires a pristine prerequisite build. A modified vphone system needs a full OTA, without PrerequisiteBuild."
             }
         }
     }
@@ -88,6 +92,11 @@ public enum VPhoneOTAArchive {
     /// `TYP` and `YOP` values are one ASCII letter.
     private static let regularFile = UInt64(UInt8(ascii: "F"))
     private static let extractSegment = UInt64(UInt8(ascii: "E"))
+    private static let directoryEntry = UInt64(UInt8(ascii: "D"))
+    private static let symlinkEntry = UInt64(UInt8(ascii: "L"))
+    private static let hardLinkEntry = UInt64(UInt8(ascii: "H"))
+    private static let metadataEntry = UInt64(UInt8(ascii: "M"))
+    private static let payloadEntryTypes: Set = [regularFile, directoryEntry, symlinkEntry, hardLinkEntry]
 
     // MARK: - Key
 
@@ -327,6 +336,7 @@ public enum VPhoneOTAArchive {
     static let firmwarePrefix = "AssetData/boot/"
     static let payloadPrefix = "AssetData/payloadv2/"
     public static let chunkListName = "payload_chunks.txt"
+    public static let hardLinkListName = "links.txt"
     /// The VM folder's copy of the payload, which `cfw install` extracts
     /// over the restored System volume (`system-tv-exp-ota_userland`).
     public static let userlandDirectoryName = "OTAUserland"
@@ -354,6 +364,7 @@ public enum VPhoneOTAArchive {
         build: String,
         deviceTreeDirectory: URL,
         userlandDirectory: URL,
+        requireFullUpdate: Bool = false,
         progress: ((String) -> Void)? = nil,
     ) throws -> StagedUserland {
         let fm = FileManager.default
@@ -370,8 +381,11 @@ public enum VPhoneOTAArchive {
         var wroteDeviceTree = false
         var chunks: [String] = []
         var chunkList: Data?
+        var linkList: Data?
+        var checkedFullUpdate = false
 
         try readMembers(ota, key: key, select: { path in
+            if requireFullUpdate, path == "AssetData/Info.plist" { return .memory }
             if path == manifestPath { return .memory }
             if path == deviceTreeMember {
                 guard identity != nil else { throw Error.missingMember(manifestPath, ota) }
@@ -380,17 +394,26 @@ public enum VPhoneOTAArchive {
             guard path.hasPrefix(payloadPrefix) else { return .skip }
             let name = String(path.dropFirst(payloadPrefix.count))
             if name == chunkListName { return .memory }
+            if name == hardLinkListName { return .memory }
             guard isChunkName(name) else { return .skip }
             guard identity != nil else { throw Error.missingMember(manifestPath, ota) }
+            if requireFullUpdate, !checkedFullUpdate {
+                throw Error.missingMember("AssetData/Info.plist before the payload", ota)
+            }
             return .file(pending.appendingPathComponent(name))
         }, received: { path, data in
-            if path == manifestPath {
+            if requireFullUpdate, path == "AssetData/Info.plist" {
+                try checkFullUpdateInfo(data ?? Data(), of: ota)
+                checkedFullUpdate = true
+            } else if path == manifestPath {
                 identity = try checkManifest(data ?? Data(), of: ota, device: device, build: build)
                 progress?("OTA \(identity!.version) (\(identity!.build)) for \(device.productType)")
             } else if path == deviceTreeMember {
                 wroteDeviceTree = true
             } else if path == payloadPrefix + chunkListName {
                 chunkList = data
+            } else if path == payloadPrefix + hardLinkListName {
+                linkList = data
             } else {
                 let name = String(path.dropFirst(payloadPrefix.count))
                 chunks.append(name)
@@ -403,6 +426,15 @@ public enum VPhoneOTAArchive {
         guard let chunkList else { throw Error.missingMember(payloadPrefix + chunkListName, ota) }
         chunks.sort()
         try checkChunks(chunks, list: chunkList, of: ota)
+        if requireFullUpdate {
+            guard let linkList else { throw Error.missingMember(payloadPrefix + hardLinkListName, ota) }
+            try validatePayloadPaths(chunks.map { pending.appendingPathComponent($0) }, hardLinks: linkList)
+        }
+        if let linkList {
+            // A full update already parsed it while validating the payload.
+            if !requireFullUpdate { _ = try parseHardLinks(linkList) }
+            try linkList.write(to: pending.appendingPathComponent(hardLinkListName))
+        }
         try chunkList.write(to: pending.appendingPathComponent(chunkListName))
         try fm.moveItem(at: pending, to: userlandDirectory)
         try VPhoneHostFilePermissions.makeAccessible(at: userlandDirectory)
@@ -436,6 +468,165 @@ public enum VPhoneOTAArchive {
         guard name.hasPrefix("payload.") else { return false }
         let number = name.dropFirst("payload.".count)
         return !number.isEmpty && number.allSatisfy(\.isASCIIDigit)
+    }
+
+    /// An already modified system cannot satisfy a delta's source hashes.
+    /// Reject it before staging any payload, even if its target manifest matches.
+    static func checkFullUpdateInfo(_ data: Data, of ota: URL) throws {
+        guard let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+            throw Error.unreadable(ota, "its AssetData/Info.plist is malformed")
+        }
+        // OTA asset metadata has used both a flat dictionary and MobileAssetProperties.
+        let properties = info["MobileAssetProperties"] as? [String: Any] ?? info
+        for key in ["PrerequisiteBuild", "PrerequisiteOSVersion"] {
+            if let value = properties[key] {
+                if let text = value as? String, text.isEmpty { continue }
+                if let list = value as? [String], list.isEmpty { continue }
+                throw Error.deltaUpdate(ota)
+            }
+        }
+    }
+
+    /// Before a privileged extraction, inspect every chunk as one filesystem.
+    /// Absolute symlink targets are normal in a guest; a member below such a
+    /// link is not. No extraction is attempted until all chunks pass.
+    public static func validatePayloadPaths(_ chunks: [URL], hardLinks linkList: Data? = nil) throws {
+        var nodes: [String: UInt64] = [:]
+        var hardLinks: [String: String] = [:]
+        func canonical(_ path: String, file: URL) throws -> String {
+            var path = path
+            while path.hasPrefix("./") { path.removeFirst(2) }
+            if path.hasSuffix("/") { path.removeLast() }
+            if path.isEmpty || path == "." { return "" }
+            guard VPhoneSystemTrim.isSafeRelativePath(path) else {
+                throw Error.unreadable(file, "unsafe payload path: \(path)")
+            }
+            return path
+        }
+        for chunk in chunks {
+            let opened = try openArchive(chunk, key: nil)
+            try withExtendedLifetime(opened) {
+                defer {
+                    try? opened.archive.close()
+                    for stream in opened.streams.reversed() { try? stream.close() }
+                }
+                while let header = try readHeader(opened.archive, of: chunk) {
+                    guard case let .uint(_, type)? = header.field(forKey: typKey) else {
+                        throw Error.unreadable(chunk, "payload entry has no type")
+                    }
+                    if type == metadataEntry { continue }
+                    guard payloadEntryTypes.contains(type),
+                          case let .string(_, rawPath)? = header.field(forKey: patKey) else {
+                        throw Error.unreadable(chunk, "payload contains an unsupported filesystem object")
+                    }
+                    let path = try canonical(rawPath, file: chunk)
+                    if path.isEmpty {
+                        guard type == directoryEntry else {
+                            throw Error.unreadable(chunk, "payload replaces its extraction root")
+                        }
+                        continue
+                    }
+                    if let previous = nodes[path], previous != type {
+                        throw Error.unreadable(chunk, "payload changes the type of \(path)")
+                    }
+                    nodes[path] = type
+                    if type == hardLinkEntry {
+                        guard case let .string(_, target)? = header.field(forKey: ArchiveHeader.FieldKey("LNK")) else {
+                            throw Error.unreadable(chunk, "hard link has no target")
+                        }
+                        hardLinks[path] = try canonical(target, file: chunk)
+                    }
+                }
+            }
+        }
+        let label = chunks.first ?? URL(fileURLWithPath: "payload")
+        if let linkList {
+            for link in try parseHardLinks(linkList) {
+                guard nodes[link.source] == regularFile, nodes[link.destination] == nil else {
+                    throw Error.unreadable(label, "hard link \(link.destination) needs an archived regular source and a new destination")
+                }
+                nodes[link.destination] = hardLinkEntry
+                hardLinks[link.destination] = link.source
+            }
+        }
+        // Each ancestor is checked once: one already seen had its whole chain
+        // checked when it was first reached.
+        var checkedParents = Set<String>()
+        for path in nodes.keys {
+            var parent = (path as NSString).deletingLastPathComponent
+            while !parent.isEmpty, checkedParents.insert(parent).inserted {
+                if let type = nodes[parent], type != directoryEntry {
+                    throw Error.unreadable(label, "payload member \(path) traverses non-directory \(parent)")
+                }
+                parent = (parent as NSString).deletingLastPathComponent
+            }
+        }
+        for (path, target) in hardLinks where nodes[target] != regularFile {
+            throw Error.unreadable(label, "hard link \(path) does not target an archived regular file")
+        }
+    }
+
+    public struct HardLink: Equatable, Sendable {
+        public let source: String
+        public let destination: String
+    }
+
+    /// Full OTAs store duplicate files outside the numbered archives: '='
+    /// selects an archived source and each following '+' names a hard link.
+    /// Omitting this list leaves otherwise complete framework bundles broken.
+    public static func parseHardLinks(_ data: Data) throws -> [HardLink] {
+        let label = URL(fileURLWithPath: hardLinkListName)
+        guard data.count <= memoryLimit, let text = String(data: data, encoding: .utf8) else {
+            throw Error.unreadable(label, "hard-link list is too large or not UTF-8")
+        }
+        func path(_ raw: Substring) throws -> String {
+            let value = String(raw)
+            guard VPhoneSystemTrim.isSafeRelativePath(value) else {
+                throw Error.unreadable(label, "unsafe hard-link path: \(value)")
+            }
+            return value
+        }
+        var source: String?
+        var destinations = Set<String>()
+        var links: [HardLink] = []
+        for row in text.split(whereSeparator: \.isNewline) {
+            switch row.first {
+            case "=":
+                source = try path(row.dropFirst())
+            case "+":
+                let destination = try path(row.dropFirst())
+                guard let source, source != destination, destinations.insert(destination).inserted else {
+                    throw Error.unreadable(label, "orphan, self-referencing or duplicate hard link: \(destination)")
+                }
+                links.append(HardLink(source: source, destination: destination))
+            default:
+                throw Error.unreadable(label, "unsupported hard-link record")
+            }
+        }
+        return links
+    }
+
+    /// Called only on the private stopped-disk clone after validating chunks
+    /// together with the list. Both parent walks refuse symlinks and mount
+    /// crossings. The inode readback also refuses a changed source leaf.
+    @discardableResult
+    public static func installHardLinks(_ data: Data, in directory: VPhoneConfinedDirectory) throws -> Int {
+        let links = try parseHardLinks(data)
+        for link in links {
+            // One confined walk per side; the source and the readback use
+            // the parents already pinned.
+            let from = try directory.parent(of: link.source)
+            let to = try directory.parent(of: link.destination)
+            let source = try from.directory.openRegularFile(from.leaf)
+            guard linkat(from.directory.descriptor, from.leaf, to.directory.descriptor, to.leaf, 0) == 0 else {
+                throw VPhoneConfinedDirectoryError.system(link.destination, errno)
+            }
+            guard try to.directory.refersTo(to.leaf, file: source) else {
+                _ = try to.directory.removeItem(to.leaf)
+                throw VPhoneConfinedDirectoryError.changedDuringOpen(link.source)
+            }
+        }
+        return links.count
     }
 
     static func checkManifest(
