@@ -233,6 +233,7 @@ public enum FirmwarePatchSetCatalog {
         RestoreRamDiskSealPatcher.patchIdentifier,
         "system-apps-cfw-attitude",
         "system-backboardd-cfw-gyroscope",
+        "system-backboardd-cfw-accelerometer",
         "system-campo-cfw-entitlements",
         "system-debugserver-cfw-install",
         FirmwareGuestSystemPatchSet.arm64eX1DyldBootstrap,

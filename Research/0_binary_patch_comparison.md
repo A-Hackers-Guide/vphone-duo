@@ -423,6 +423,32 @@
 > platform capability gate and optional IMU match still require guest proof.
 > Reveal evidence and manual acceptance: `Research/Guest/virtual_gyroscope.md`.
 
+> **Gravity accelerometer (2026-10-20; iPadOS 26.6.2 guest verified):**
+> `system-backboardd-cfw-accelerometer` in Guest System, selected by both
+> presets on iOS 18+, installs `/usr/lib/libvphoneaccelerometer.dylib`.
+> SystemHook loads it into backboardd and SpringBoard. A built-in HID accelerometer
+> (page `0xff00`, usage `3`) supplies stationary gravity in g, with a monotonic
+> timestamp and sequence. `display.rotation` publishes the matching physical
+> pose through mobile preferences and a Darwin notification before its existing
+> orientation request. The provider keeps that pose across SpringBoard
+> relaunches; it streams while HID clients request a report interval and emits
+> one sample on enumeration/configuration changes. Raw HID alone was verified
+> insufficient on iPadOS 26.6.2: it enumerated but never gained a subscription,
+> and the language-change wedge remained. The provider also classifies its
+> stationary HID sample and posts it on BKOrientationManager's native queue,
+> replacing the missing hardware classification stage. SpringBoard recomputes
+> delivery and deferral after setup seeds the actual backlight state.
+> No kernel, DSC or system executable bytes change. Disabling the patch removes
+> its library; live environment synchronization never reinstalls an absent copy.
+> Replacing the library requires a reboot, without restarting backboardd during
+> environment installation. HID enumeration/dispatch alone do not establish
+> SpringBoard recovery; native sink delivery and interface readback are
+> separately observable. The isolated `gyro-regress` clone passed gravity-only
+> four-direction rotation, rotation lock/unlock and same-pose language-change
+> relaunch on `2.10.1-local.a8c22dce`, without a recovery respring/lock cycle.
+> Evidence and regression procedure:
+> `Research/Guest/springboard_orientation_stuck.md`.
+
 > **Device attitude (2026-10-08; guest acceptance pending):**
 > `system-apps-cfw-attitude` in Guest System is selected by both presets on
 > iOS 18+. It adds `/usr/lib/libvphoneattitude.dylib`, loaded by SystemHook
