@@ -141,6 +141,40 @@ extension CryptexFilesystemPatcher {
         }
     }
 
+    /// Whether the merged system is iOS 18, whose paravirtual IOSurface driver
+    /// takes no compressed surfaces.
+    var isIOS18: Bool {
+        (try? getProductVersion())?.hasPrefix("18.") ?? false
+    }
+
+    /// iOS 18's AppleParavirtIOSurface maps only address format 0 and rejects
+    /// the compressed surfaces CoreAnimation asks for ("invalid address format
+    /// (3)"): backboardd's framebuffer allocation fails at boot, it retries
+    /// forever, and the screen stays black. Turning off IOSurface and
+    /// framebuffer compression and the deep (10-bit) framebuffer in the
+    /// any-user global domain fixes it, checked across a reboot (a backboardd
+    /// restart also comes up without these keys, so it proves nothing).
+    /// backboardd consults neither com.apple.coreanimation nor the managed
+    /// any-user file. The restore copies the image's /private/var into the
+    /// data volume, so the preferences are written there.
+    func addCoreAnimationDefaults(targetMount: String) throws {
+        let directory = URL(filePath: targetMount).appending(path: "private/var/preferences")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let plist = directory.appending(path: ".GlobalPreferences.plist")
+        var preferences: [String: Any] = [:]
+        if let data = try? Data(contentsOf: plist),
+           let existing = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        {
+            preferences = existing
+        }
+        for key in ["CAEnableIOSurfaceCompression", "CAEnableFramebufferCompression", "CAEnableDeepFramebuffer"] {
+            preferences[key] = false
+        }
+        try PropertyListSerialization.data(fromPropertyList: preferences, format: .binary, options: 0).write(to: plist)
+        try chownRecursively(uid: 0, gid: 0, at: plist)
+        try setMode(0o644, at: plist)
+    }
+
     /// The driver and its compiler plugin are built for iOS, and dyld refuses a
     /// library of another platform than the process's: on a watch they say
     /// watchOS, are signed again and the bundle sealed again.

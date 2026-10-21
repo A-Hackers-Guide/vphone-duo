@@ -72,7 +72,7 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
     /// One record per step the gate lets through. The merge itself is the
     /// patcher: the pipeline builds it only when the merge is on.
     public func findAll() throws -> [PatchRecord] {
-        Self.steps.filter { gate.isEnabled($0.identifier) }.map { step in
+        Self.steps.filter { gate.isEnabled($0.identifier) && ($0.identifier != FirmwareRestoreImagePatchSet.surfaceCompression || isIOS18) }.map { step in
             PatchRecord(
                 patchID: step.identifier,
                 component: "",
@@ -87,6 +87,7 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
     static let steps: [(identifier: String, description: String)] = [
         (FirmwareRestoreImagePatchSet.cryptexMerge, "Merge the cryptex filesystems inside the OS filesystem"),
         (FirmwareRestoreImagePatchSet.gpuDriver, "Install the paravirtual GPU driver"),
+        (FirmwareRestoreImagePatchSet.surfaceCompression, "Turn off CoreAnimation's surface compression (iOS 18)"),
         (FirmwareRestoreImagePatchSet.mobileActivation, "Patch mobileactivationd"),
         (FirmwareRestoreImagePatchSet.vphoned, "Install vphoned and its launch daemon"),
         (FirmwareRestoreImagePatchSet.launchdCacheLoader, "Patch launchd_cache_loader"),
@@ -173,6 +174,10 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
             if gate.isEnabled(FirmwareRestoreImagePatchSet.gpuDriver) {
                 print("- Fixing GPU driver…")
                 try addGpuDriver(targetMount: targetMount)
+            }
+            if gate.isEnabled(FirmwareRestoreImagePatchSet.surfaceCompression), isIOS18 {
+                print("- Turning off CoreAnimation's surface compression (iOS 18)…")
+                try addCoreAnimationDefaults(targetMount: targetMount)
             }
 
             if gate.isEnabled(FirmwareRestoreImagePatchSet.mobileActivation) {

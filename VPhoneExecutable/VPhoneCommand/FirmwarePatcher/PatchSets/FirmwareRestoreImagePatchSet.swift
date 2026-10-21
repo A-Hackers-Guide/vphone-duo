@@ -23,6 +23,8 @@ public enum FirmwareRestoreImagePatchSet {
     /// into the merged image, so they run only with it.
     public static let cryptexMerge = "filesystem-boot-cryptex_merge"
     public static let gpuDriver = "filesystem-boot-gpu_driver"
+    /// Applies to an iOS 18 guest only; the patcher skips it on any other.
+    public static let surfaceCompression = "filesystem-boot-ios18_surface_compression"
     public static let mobileActivation = "filesystem-boot-mobileactivationd_should_hactivate"
     public static let vphoned = "filesystem-boot-vphoned"
     public static let launchdCacheLoader = "filesystem-boot-launchd_cache_loader_unsecure_cache_gate"
@@ -53,6 +55,11 @@ public enum FirmwareRestoreImagePatchSet {
                 gpuDriver,
                 "GPU driver",
                 "Installs the paravirtual GPU driver from the cloudOS into the merged image.",
+            ),
+            filesystem(
+                surfaceCompression,
+                "iOS 18 surface compression",
+                "On iOS 18, turns off CoreAnimation's IOSurface and framebuffer compression and its deep framebuffer, which that release's paravirtual IOSurface driver rejects, leaving the screen black.",
             ),
             filesystem(
                 mobileActivation,
