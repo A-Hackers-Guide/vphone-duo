@@ -107,8 +107,7 @@ public final class KernelCacheMixer {
         let mixer = try KernelCacheMixer(recipes: .locate(), verbose: false)
         let state = try mixer.state(for: input)
         guard state != .mixed else { return }
-        try KernelCollectionBuilder.checkLayout(for: mixer.locations(for: input).base)
-        guard geteuid() == 0 else {
+        guard try geteuid() == 0 || mixer.linksRemotely(input) else {
             throw PatcherError.invalidFormat(linkInstructions(staged: state == .staged))
         }
         if state == .missing {
@@ -152,7 +151,7 @@ public final class KernelCacheMixer {
             log("  [kc] using the cached mix \(paths.mixed.path)")
             return data
         }
-        guard geteuid() == 0 else {
+        guard try geteuid() == 0 || linksRemotely(input) else {
             throw PatcherError.invalidFormat(Self.linkInstructions(staged: Self.isStaged(paths.staged)))
         }
         if !Self.isStaged(paths.staged) {
@@ -167,7 +166,7 @@ public final class KernelCacheMixer {
     public func stage(_ input: Input, ipsw ipswPath: String? = nil) throws {
         let (base, paths) = try locations(for: input)
         guard !FileManager.default.fileExists(atPath: paths.mixed.path), !Self.isStaged(paths.staged) else { return }
-        try KernelCollectionBuilder.checkLayout(for: base)
+        let location = try KernelCollectionBuilder.location(for: base)
         let donors = try base.donors.map { try recipes.donor(id: $0) }
         let ipsw = try Self.ipsw(ipswPath)
 
@@ -204,7 +203,11 @@ public final class KernelCacheMixer {
         if geteuid() == 0 {
             try VPhoneHostFilePermissions.makeAccessible(at: cacheDirectory)
         }
-        log("  [kc] staged; linking needs root")
+        if case .remote = location {
+            log("  [kc] staged")
+        } else {
+            log("  [kc] staged; linking needs root")
+        }
     }
 
     /// Links a staged volume, as root, and caches the result. Runs no `ipsw`:
@@ -216,8 +219,8 @@ public final class KernelCacheMixer {
         if let data = try? Data(contentsOf: paths.mixed), !data.isEmpty {
             return data
         }
-        try KernelCollectionBuilder.checkLayout(for: base)
-        guard geteuid() == 0 else {
+        let location = try KernelCollectionBuilder.location(for: base)
+        if case .host = location, geteuid() != 0 {
             throw PatcherError.invalidFormat(Self.linkInstructions(staged: Self.isStaged(paths.staged)))
         }
         guard Self.isStaged(paths.staged) else {
@@ -225,6 +228,9 @@ public final class KernelCacheMixer {
         }
 
         let payload = try Self.payload(of: input.kernelcache)
+        if case let .remote(builder) = location {
+            return try linkRemotely(base: base, paths: paths, payload: payload, builder: builder)
+        }
         let copy = try KernelCacheVolumeCopy(
             staged: paths.staged.appending(path: "volume"), kdk: base.kernel.kdk, pathLength: Self.buildRootLength(of: payload),
         )
@@ -246,6 +252,44 @@ public final class KernelCacheMixer {
         try storeMix(output, at: paths.mixed)
         log("  [kc] mixed kernelcache: \(output.count) bytes, cached at \(paths.mixed.path)")
         return output
+    }
+
+    /// Links the staged volume on the Mac `VPHONE_KMUTIL_SSH` names. Root there
+    /// links what it is sent, so this side needs no root: the stage is checked
+    /// for links outside it and sent as it is.
+    func linkRemotely(
+        base: KernelCacheBase, paths: (mixed: URL, staged: URL), payload: Data, builder: RemoteKernelCollectionBuilder,
+    ) throws -> Data {
+        let volume = paths.staged.appending(path: "volume")
+        try KernelCacheVolumeCopy.checkLinks(in: volume, kdk: base.kernel.kdk)
+        let work = paths.staged.appending(path: "link")
+        try? FileManager.default.removeItem(at: work)
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: work) }
+        let kmutilLog = work.appending(path: "kmutil.log")
+        defer {
+            if let text = try? Data(contentsOf: kmutilLog) {
+                try? storeMix(text, at: paths.mixed.deletingPathExtension().appendingPathExtension("kmutil.log"))
+            }
+        }
+        let identifiers = try base.kextIdentifiers()
+        var output = try builder.link(
+            staged: volume, kernel: "Library/Developer/KDKs/\(base.kernel.kdk)/System/Library/Kernels/kernel",
+            identifiers: identifiers, pathLength: Self.buildRootLength(of: payload), work: work, log: kmutilLog,
+        )
+        output = try finalize(output, original: payload, identifiers: identifiers, work: work)
+        try storeMix(output, at: paths.mixed)
+        log("  [kc] mixed kernelcache: \(output.count) bytes, cached at \(paths.mixed.path)")
+        return output
+    }
+
+    /// Whether `input` is linked by another Mac over ssh, which needs no root here.
+    public func linksRemotely(_ input: Input) throws -> Bool {
+        let (base, _) = try locations(for: input)
+        if case .remote = try KernelCollectionBuilder.location(for: base) {
+            return true
+        }
+        return false
     }
 
     // MARK: - Cache
@@ -276,6 +320,10 @@ public final class KernelCacheMixer {
         let relative = String(url.standardizedFileURL.path.dropFirst(cache.count + 1))
         let (directory, leaf) = try root.parent(of: relative, create: true)
         try directory.writeFile(leaf, contents: data, mode: 0o644, owner: user.map { ($0.uid, $0.gid) })
+        // Under sudo, so the user's later runs, which link over ssh, can store here too.
+        if geteuid() == 0 {
+            try VPhoneHostFilePermissions.makeAccessible(at: cacheDirectory)
+        }
     }
 
     public static func linkInstructions(staged: Bool) -> String {

@@ -48,6 +48,39 @@ struct KernelCacheMixerTests {
         #expect(try Self.recipes.donor(id: "watch7c_26.4_23T240").cloudOSSource == nil)
     }
 
+    @Test("A kernel-first base on a kernel-last Mac needs an ssh builder, and says how to name one")
+    func remoteBuilderSelection() throws {
+        let host = ProcessInfo.processInfo.operatingSystemVersion
+        let hostLayout = KernelCollectionBuilder.layout(forMacOS: host)
+        func base(_ layout: KernelCacheBase.BuilderLayout) throws -> KernelCacheBase {
+            let json = """
+            {"id": "t", "productVersion": "18.7", "symbols": "s", "kexts": "k", "builderLayout": "\(layout.rawValue)",
+             "kernel": {"file": "f", "sha256": "a", "decompressedSHA256": "b", "kdk": "KDK_18.7_22H42.kdk"}}
+            """
+            return try JSONDecoder().decode(KernelCacheBase.self, from: Data(json.utf8))
+        }
+        let other = try base(hostLayout == .kernelLast ? .kernelFirst : .kernelLast)
+        #expect {
+            try KernelCollectionBuilder.location(for: other, environment: [:])
+        } throws: { error in
+            "\(error)".contains(KernelCollectionBuilder.sshEnvironmentVariable)
+        }
+        let same = try base(hostLayout)
+        guard case .host = try KernelCollectionBuilder.location(for: same, environment: [:]) else {
+            Issue.record("a base of the host's layout links on the host")
+            return
+        }
+        #expect(KernelCollectionBuilder.layout(forMacOS: "15.6.1") == .kernelFirst)
+        #expect(KernelCollectionBuilder.layout(forMacOS: "26.4") == .kernelLast)
+    }
+
+    @Test("kmutil writes the collection beside the volume")
+    func kmutilArguments() {
+        let arguments = KernelCollectionBuilder.kmutilArguments(volume: "/tmp/x/bbb", kernel: "/tmp/x/bbb/k", identifiers: ["a", "b"])
+        #expect(arguments.suffix(2) == ["-B", "/../bbb.kc"])
+        #expect(arguments.contains("-R") && arguments.filter { $0 == "-b" }.count == 2)
+    }
+
     @Test("A kernelcache is matched by the SHA-256 of its container or of its payload, and nothing else")
     func matchesByHash() throws {
         let base = try #require(try Self.recipes.bases().first)

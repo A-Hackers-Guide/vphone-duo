@@ -26,6 +26,8 @@ By default that pipeline builds a [template](#templates) rather than the VM itse
 
 A cloudOS after the 26.4 beta has no vphone600 components, and the research board stands in ([Compatibility](compatibility.md)). Its kernelcache is rebuilt with the vphone600 virtualisation kexts, which needs an `ipsw` with `kernel extract --kdk` and root for the link. Run the whole creation as `sudo VPHONE_IPSW=/path/to/ipsw vphone-cli vm create ...`, or stage the mix as yourself after `fw prepare` with `VPHONE_IPSW=/path/to/ipsw vphone-cli fw kernelcache <vm>`, link it with `sudo vphone-cli fw kernelcache <vm>`, and continue with `fw patch` as usual.
 
+A kernel only boots in the layout Apple linked it with, and kmutil takes the layout from the Mac it runs on: macOS 26.4 and later link the iOS 26.4+ kernelcaches (kernel-last), macOS 15 and 26.0–26.3 the older ones (kernel-first). When this Mac has the other layout, another Mac or a macOS VM links the mix over ssh: set `VPHONE_KMUTIL_SSH=<user>@<host>` (and `VPHONE_KMUTIL_SSH_PASSWORD=<password>` without ssh keys and passwordless sudo there) for `fw kernelcache` or the creation. The staged volume is uploaded to that Mac's `/private/var/tmp`, linked there as root and removed; nothing on this Mac needs root for it. Remote Login must be on, and the user must be allowed to use sudo.
+
 The build also ships an arm64e GPU compiler plugin in the bundle. `fw prepare` copies it into the staged GPU bundle before firmware patching and installation.
 
 Success ends with `First boot: vphoned ping succeeded` and `JB VM created; vphoned connected`. **The verification VM is then stopped.** The ping proves the daemon answered over the host control socket during that boot; it does not leave a running VM behind.

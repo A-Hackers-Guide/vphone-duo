@@ -711,10 +711,22 @@ struct VPhoneFirmwareKernelcacheCommand: ParsableCommand {
             print("[+] The kernelcache mix is ready; `fw patch` takes it from the cache.")
             return
         }
-        guard !linkOnly else {
+        // Another Mac's kmutil (VPHONE_KMUTIL_SSH) links as root there.
+        let remote = try mixer.linksRemotely(input)
+        guard !linkOnly || remote else {
             throw ValidationError("Linking the kernelcache mix needs root. Run this command with sudo.")
         }
-        try mixer.stage(input, ipsw: ipsw)
-        print("[+] Staged. Link it with: sudo vphone-cli fw kernelcache \(name)")
+        if state == .missing {
+            guard !linkOnly else {
+                throw ValidationError("\(name)'s kernelcache mix is not staged. Stage it first: \(KernelCacheMixer.ipswEnvironmentVariable)=<ipsw> vphone-cli fw kernelcache \(name)")
+            }
+            try mixer.stage(input, ipsw: ipsw)
+        }
+        guard remote else {
+            print("[+] Staged. Link it with: sudo vphone-cli fw kernelcache \(name)")
+            return
+        }
+        try mixer.link(input)
+        print("[+] The kernelcache mix is ready; `fw patch` takes it from the cache.")
     }
 }
