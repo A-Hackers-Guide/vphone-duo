@@ -167,6 +167,10 @@
     dispatch_resume(self.timer);
     dispatch_resume(self.heartbeat);
     [self createService];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), self.queue, ^{
+        VPhoneOrientationSinkRetry();
+        [self publishStatus];
+    });
 }
 
 // MARK: - HIDVirtualEventServiceDelegate selectors
@@ -203,6 +207,7 @@
     if (service != self.service)
         return;
     if (type == 10) { // HIDVirtualServiceNotificationTypeEnumerated
+        VPhoneOrientationSinkRetry();
         self.enumerated = YES;
         self.lastError = nil;
         NSLog(@"[vphone-accelerometer] HID service enumerated: %llu", self.service.serviceID);
@@ -221,6 +226,9 @@
 __attribute__((constructor)) static void VPhoneAccelerometerStart(void) {
     if (strcmp(getprogname(), "SpringBoard") == 0) {
         VPhoneOrientationGateInstall();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            VPhoneOrientationGateInstall();
+        });
         return;
     }
     // Only backboardd creates the HID service; SpringBoard installs the seed
