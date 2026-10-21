@@ -3555,3 +3555,101 @@ the universal binary), and three patches are new:
 | `devicetree-cfw-watch_companion` | an iPhone guest's tree | `/product/watch-companion = 1`, added where the board copy removed a placeholder. vphone600's `syscfg/waco` has no syscfg value on a VM, so iBoot drops it and the phone pairs with no watch. |
 | `system-bluetoothd-cfw-btvc_le_connection` | `/System/Library/FeatureFlags/Domain/BluetoothFeatures.plist`, `cfw install`, iOS 26+ | `EnableBTVCLeConnection.Enabled = true`: bluetoothd's virtual LE controller may connect. Reverted from the `.bak` when turned off; blocked for tvOS. |
 | `filesystem-exp-btvc_le_connection` | the same file in the restore image (`minimal`, `watchos`) | The same flag, written before the seal. |
+
+## iOS 18 guests on the research board (2026-10-21)
+
+iOS 18.1 to 18.7.2 run on their own release's research board kernel, rebuilt
+with the vphone600 kexts of the public cloudOS 26.1 (23B78), which still ships
+vphone600 components. The userland comes from the iPhone XS family's IPSWs
+(iPhone11,2/4/6), the only ones carrying every 18.x release, 18.7.x included.
+Only `minimal` boots these kernels: `standard`'s kernel patches panic them early
+in `kmem_init` (not investigated).
+
+### The kernelcache
+
+`kernel-boot-vresearch101_kext_mix` with the bases `18.1_22B83` to
+`18.7.2_22H124` and the donor `vphone600_26.1_23B78`. Across versions an
+import cannot be bound by name, so every donor import was resolved by code
+identity, from 26.1 to 18.7.2 and from 18.7.2 to each release, checked against
+the Apple-symbolicated macOS 26.1 (25B5062e) and 15.7.3 (24G419) KDKs; both
+maps carry the names those targets have. The 26.1 map and the 18.x maps had
+given 60 donor imports a neighbour's name, consistently on both sides, so the
+research builds bound them correctly: the `IORegistryEntry` twins below, and
+54 `OSMetaClass`, `IORegistryEntry`, `IOService`, `IOUserClient`,
+`IOHIDDevice`, `IOHIDEventService` and `IOSCSIProtocolServices` virtuals
+(the SCSI task management run was three slots off). The recipes give them
+their real names. Every virtual one is proven by its vtable slot: the PAC
+discriminator a donor kext signs the slot with is the
+`ptrauth_string_discriminator` of the method's mangled name, the same slot in
+both KDKs carries it, and each of the eight kernelcaches holds a signed
+pointer with it to the renamed address. The `IORegistryEntry` twins also
+have code markers:
+
+| Function | Marker |
+| --- | --- |
+| `setLocation(const char *, plane)` | `OSSymbol::withCString`, then a virtual call with PAC diversifier 0x3025 |
+| `setName(const char *, plane)` | the same, diversifier 0x848a |
+| `setLocation(const OSSymbol *, plane)` | `plane + 0x30` (pathLocationKey), else `gIOLocationKey` |
+| `setName(const OSSymbol *, plane)` | `plane + 0x28` (pathNameKey), else `gIONameKey`, and a `kernel_debug_string` call |
+| `applyToChildren` / `applyToParents` | the same code but `ldr x1, [plane, #0x20]` (childKey) or `#0x18` (parentKey) |
+
+`setName(const OSSymbol *)` had carried an extraction placeholder
+(`_IOFreeDataSharable`, an unused KPI name of the 26.1 kernel) that no 18.x
+symbol set lists; with the real names every donor import is a name the base's
+own `com.apple.kpi.iokit` lists, and the symbol sets stay as Apple built them.
+One import had been bound wrongly in every 18.x map: the donor's
+`AppleEmbeddedHIDEventService::dispatchBiometricEvent` went to the base's
+`IOHIDEventService` version (15 vtable slots in AppleEmbeddedLightSensor and
+AppleSPU); in 18.7.2 the two are instruction-identical, and the recipes bind it
+to the base's own `AppleEmbeddedHIDEventService` override.
+18.5 to 18.7.2 take 18 donor kexts (the 16 of the 26.x recipes plus
+IISAudioIsolatedStreamECProxy and ExclavesAudioKext, which the 26.1
+AppleARMIISAudio needs); 18.1 to 18.3.1 take 15, without those three: 18.1
+lacks the tightbeam API they import, and its addresses in 18.2.1 and 18.3.1
+are not mapped reliably.
+
+The 18.x kernels are kernel-first. On macOS 26.4 and later the mix is linked
+on another Mac or macOS VM with an older kmutil over ssh (`VPHONE_KMUTIL_SSH`,
+`RemoteKernelCollectionBuilder`): the staged volume goes into a fresh
+directory of the remote `/private/var/tmp`, at a path as long as the base's
+build root, root links it there, and the result comes back. Linked with the
+kmutil of macOS 15.6.1, the 18.7.2 mix differs from the research build that
+booted only in the 15 rebound pointers and the symbol sets that build had
+extended.
+
+### The iPhone XS Max guest
+
+`VPhoneGuestDevice.iPhone11_6` (1242x2688 at 458 ppi, scale 3; iPhone11,4
+maps onto it) keeps the iPhone17,3 presentation of the converted tree, with
+two changes its userland needs. Its asset catalogs only carry 2436 and 2688
+artwork and its SpringBoard has no Dynamic Island, so
+`devicetree-cfw-artwork_device_subtype` writes 2688 and
+`devicetree-cfw-island_notch_location` removes `island-notch-location`
+instead of setting it; without them Hello and the wallpaper stay empty and the
+home gesture breaks.
+
+### Restore image
+
+| Patch | Target | Change |
+| --- | --- | --- |
+| `filesystem-boot-ios18_surface_compression` | the image's `/private/var/preferences/.GlobalPreferences.plist`, iOS 18 only | `CAEnableIOSurfaceCompression`, `CAEnableFramebufferCompression` and `CAEnableDeepFramebuffer` = false. iOS 18's AppleParavirtIOSurface maps only address format 0 and rejects the compressed surfaces CoreAnimation asks for ("invalid address format (3)"); backboardd retries its framebuffer allocation forever and the screen stays black. A backboardd restart comes up without the keys too; only a reboot shows the fix. |
+
+The GPU driver is the cloudOS's own, as for 26.x: 26.x drivers do not load on
+iOS 18 (`_OBJC_IVAR_$_IOGPUMetalHeap._device` is missing). cloudOS 18.7.2
+ships the 18.7 driver, so a driver now has to be of the cloudOS's release
+(major and minor version), not its exact version. The compiler plugin is the
+bundle's own, as for every guest.
+
+Touch: iOS 18 guests take every touch through vphoned; a touch that starts at
+an edge carries the digitizer edge flags (the edge swipe fix), so SpringBoard's
+home gesture works there too.
+
+Checked on 2026-10-21: `vm create --device iPhone11,6` with the XS family's
+18.7.2 (22H124) IPSW and cloudOS 18.7.2 (22H43) recovered the GPU driver in a
+temporary cloudOS restore, linked the mix over ssh with the kmutil of macOS
+15.6.1, restored, booted, and vphoned answered. Setup's Hello screen and the
+lock screen show their artwork, the bottom-edge swipe unlocks, and from
+Settings it returns to the home screen. 18.1 (22B83) on cloudOS 18.1, the
+oldest base and one of the three with 15 donor kexts, and 18.5 (22F76) on
+cloudOS 18.5 passed the same checks. The other four recipes resolve every
+donor import but have not been booted yet.
