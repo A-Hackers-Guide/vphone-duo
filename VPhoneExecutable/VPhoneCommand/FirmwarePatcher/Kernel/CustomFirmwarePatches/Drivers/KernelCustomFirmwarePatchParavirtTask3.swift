@@ -1,7 +1,7 @@
 // KernelCustomFirmwarePatchParavirtTask3.swift — CFW kernel patch: ask the host
 // for paravirtual GPU binary version 252 while the guest keeps the features of
 // the version it was built for, and fill each task's Task3 executable identity
-// before the host registers it. Both parts share one opt-in declaration.
+// before the host registers it. Both parts share one patch declaration.
 //
 // Background: the guest GPU kext (AppleParavirtGPUIOGPUFamily) negotiates a
 // binary version with ParavirtualizedGraphics at start-up, and the host derives

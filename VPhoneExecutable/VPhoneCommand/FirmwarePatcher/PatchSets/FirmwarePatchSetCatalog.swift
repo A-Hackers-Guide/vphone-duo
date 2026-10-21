@@ -61,7 +61,7 @@ public enum FirmwarePatchSetCatalog {
         Set(FirmwareKernelFridaPatchSet.manifest.patches.map(\.identifier))
             .union(hypervisorConcealmentPatches)
             .union(experimentalIdentityPatches)
-            .union([FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers, misTrustAuthPatch, FirmwareGuestSystemPatchSet.settingsRootRows, FirmwareGuestSystemPatchSet.settingsSoftwareUpdate, FirmwareGuestSystemPatchSet.tvTPRO, FirmwareGuestSystemPatchSet.tvOTAUserland, paravirtTask3Patch])
+            .union([FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers, misTrustAuthPatch, FirmwareGuestSystemPatchSet.settingsRootRows, FirmwareGuestSystemPatchSet.settingsSoftwareUpdate, FirmwareGuestSystemPatchSet.tvTPRO, FirmwareGuestSystemPatchSet.tvOTAUserland])
 
     /// ProMotion: the 120 Hz timing for the paravirtual display.
     ///
@@ -80,18 +80,21 @@ public enum FirmwarePatchSetCatalog {
 
     /// Paravirtual GPU Task3: keep the guest's features and supply each owning
     /// executable's cdhash so the host retains separate shader caches across
-    /// boots. Off unless a VM selects it. See
+    /// boots. On in `standard`; tvOS presets leave it off. Introduced as
+    /// `kernel-exp-paravirt_gpu_task3` in development bundles; existing VM
+    /// records migrate through ``renamedPatches``. See
     /// `Research/Guest/gpu_acceleration.md`.
-    public static let paravirtTask3Patch = "kernel-exp-paravirt_gpu_task3"
+    public static let paravirtTask3Patch = "kernel-cfw-paravirt_gpu_task3"
 
-    /// Identifiers a released bundle declared that a later one renamed, old to new.
+    /// Identifiers an installed bundle declared that a later one renamed, old to new.
     ///
     /// A VM's `PatchSelection.plist` and `PatchReceipt.plist` outlive the bundle
     /// that wrote them, and `fw patch` throws `unknownPatch` for an identifier
-    /// nothing declares. Only renames that reached a release are listed: one that
-    /// never left a development branch has no record to carry.
+    /// nothing declares. Include development bundles used on real VMs as well
+    /// as releases: their records need the same migration.
     public static let renamedPatches: [String: String] = [
         "kernel-exp-display_refresh_120hz": proMotionPatch,
+        "kernel-exp-paravirt_gpu_task3": paravirtTask3Patch,
     ]
 
     /// The identifiers this bundle declares for ones a VM recorded, in order, each
@@ -223,6 +226,7 @@ public enum FirmwarePatchSetCatalog {
     /// plain-arm64 HD cannot load it), debugserver, the environment hooks, and
     /// the iPhone 19 ARM64E_X1 boot path.
     public static let tvOSBlockedPatches: Set<String> = [
+        paravirtTask3Patch,
         FirmwareGuestSystemPatchSet.arm64eX1CacheBootstrap,
         "dyld-boot-iomfb_force_kern",
         "dyld-boot-iomfb_swapend",

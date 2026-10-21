@@ -46,8 +46,8 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
     /// writes what the reference records were taken from.
     public var applyParavirtUserClients = false
 
-    /// Paravirtual GPU binary version 252 (Task3). Opt-in; false here so a patcher
-    /// built directly writes what the reference records were taken from.
+    /// Paravirtual GPU binary version 252 (Task3). Set from the plan; `standard`
+    /// enables it. False here so direct patchers preserve the reference corpus.
     public var applyParavirtTask3 = false
 
     public func findAll() throws -> [PatchRecord] {
@@ -123,7 +123,7 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
             patchParavirtDisplayRefreshRate()
         }
 
-        // Opt-in: negotiate Task3 and identify the executable before registration.
+        // Negotiate Task3 and identify the executable before registration.
         if applyParavirtTask3 {
             guard patchParavirtTask3Version() else {
                 throw NSError(domain: "FirmwarePatcher.ParavirtTask3", code: 1, userInfo: [

@@ -562,9 +562,10 @@ the switch the identity write needs.
 
 Phase 2 extends the same opt-in declaration with `.identity_hook` and
 `.identity_code`. All four sites are discovered and encoded before any write;
-an unresolved site aborts a selected Task3 operation. It remains opt-in under
-`kernel-exp-paravirt_gpu_task3`; the runtime coverage below is one host/guest
-combination. Lychee explicitly enables it in its patch selection.
+an unresolved site aborts a selected Task3 operation. Initially opt-in under
+`kernel-exp-paravirt_gpu_task3`, it was tested with Lychee explicitly enabling
+it. Standard now enables it under `kernel-cfw-paravirt_gpu_task3`; see the
+preset promotion below. Runtime coverage is still one host/guest combination.
 
 The key is the owning executable's **20-byte code-signing cdhash**. It is neither
 a process name nor a PID, and it is obtained from the task recorded by the GPU
@@ -744,7 +745,7 @@ aliases, checkpoint failure, symlink rejection, concurrent launch exclusion and
 hard-linked lock rejection. Initial relocation validation passed twelve
 cache/permission tests and 61 targeted Task3, encoder and patch-selection tests,
 plus the `VPhone` workspace build and bundle admission. The original 50 GiB
-installer guard and shipped Task3 preset defaults are unchanged.
+installer guard and, at that point, shipped Task3 preset defaults were unchanged.
 
 All 14 existing Lychee `functions.list`/`functions.data` checksums matched the
 initial move. With relocation bundle `2.10.1-local.12d3a7da`, two full boot/shutdown
@@ -804,6 +805,35 @@ the preexisting FinanceKit failure; a brief diagnostic boot retrieved it and
 the VM was shut down again.
 Captures and build/test logs are preserved beside the earlier validation under
 `reset-validation`.
+
+#### Task3 enabled in Standard, 2026-10-20
+
+Standard now enables the complete Task3 patch as
+`kernel-cfw-paravirt_gpu_task3`, alongside the already enabled guest Metal cache
+reuse marker. The shipped Standard plist and built-in fallback agree; tvOS and
+tvOS 4K explicitly block Task3. The old experimental identifier maps to the new
+one when reading VM selections, plans and receipts, preserving saved opt-outs
+and recognizing kernels already installed by development bundles.
+
+New Standard creations apply both layers automatically. The resolved kernel
+patch is part of the template's boot-chain digest, so a template lacking Task3
+does not satisfy the new Standard key. Existing machines need their new Core
+Bundle bound, `cfw update-environment`, then `cfw update-kernel` while stopped.
+Launchpad exposes both updates through its helper. No restore or data erasure
+is involved. See `Documents/Guides/shader-cache.md` for the user workflow.
+
+This changes preset selection and record naming only; the four kernel writes
+and runtime coverage above are unchanged. The direct kernel patcher default
+remains false for reference-fixture callers; normal firmware pipelines set it
+from the resolved plan. Older hosts remain untested.
+
+Validation: 62 focused Task3, encoder, catalog and patch-model tests passed,
+including Standard enablement, migration of the old identifier, explicit
+blocking and tvOS exclusions. The complete `VPhone` bundle build and admission
+check passed. The finished bundle's read-only `fw patches Lychee --json` report
+recognized the existing Task3 kernel receipt as applied under the new name,
+with `inPreset: true`, `wanted: true` and `pending: false`. No guest rewrite or
+additional runtime boot was needed for this preset-only change.
 
 ## Heap Textures Have No CPU Layout
 

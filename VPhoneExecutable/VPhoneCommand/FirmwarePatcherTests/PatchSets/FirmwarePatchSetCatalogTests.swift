@@ -281,20 +281,52 @@ struct FirmwarePatchSetCatalogTests {
     }
 
     @Test
+    func `Standard enables persistent GPU caches while explicit blocks and tvOS stay off`() throws {
+        let patch = FirmwarePatchSetCatalog.paravirtTask3Patch
+        let guest = FirmwareGuestSystemPatchSet.metalCacheReuse
+        let standard = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.standardPreset,
+            patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("27.0.1"), cloudOS: VPhoneVersion("26.4"),
+        )
+        #expect(standard.isEnabled(patch))
+        #expect(standard.isEnabled(guest))
+        // Existing records use the experimental identifier. A saved opt-out
+        // must still win when the preset now turns the renamed patch on.
+        let blocked = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.standardPreset,
+            patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("27.0.1"), cloudOS: VPhoneVersion("26.4"),
+            blocked: Set(FirmwarePatchSetCatalog.currentIdentifiers(["kernel-exp-paravirt_gpu_task3"])),
+        )
+        #expect(!blocked.isEnabled(patch))
+        for preset in [FirmwarePatchSetCatalog.tvOSPreset, FirmwarePatchSetCatalog.tvOS4KPreset] {
+            let plan = try VPhonePatchPlan.resolve(
+                preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: VPhoneVersion("27.0"), cloudOS: VPhoneVersion("26.4"),
+            )
+            #expect(!plan.isEnabled(patch))
+            #expect(!plan.isEnabled(guest))
+        }
+    }
+
+    @Test
     func `A renamed patch maps to one the catalogue declares`() {
         let declared = Set(FirmwarePatchSetCatalog.allDeclarations.map(\.identifier))
         for (old, new) in FirmwarePatchSetCatalog.renamedPatches {
             #expect(!declared.contains(old), "\(old) is still declared")
             #expect(declared.contains(new), "\(old) maps to \(new), which nothing declares")
         }
-        // A record that named the old 120 Hz identifier, possibly beside the new
-        // one, reads as the new one, once, in place.
+        // Records using an old identifier, possibly beside its replacement,
+        // read as the new one, once, in place.
         #expect(
             FirmwarePatchSetCatalog.currentIdentifiers([
                 "kernel-exp-hv_vmm",
                 "kernel-exp-display_refresh_120hz",
                 FirmwarePatchSetCatalog.proMotionPatch,
-            ]) == ["kernel-exp-hv_vmm", FirmwarePatchSetCatalog.proMotionPatch],
+                "kernel-exp-paravirt_gpu_task3",
+                FirmwarePatchSetCatalog.paravirtTask3Patch,
+            ]) == ["kernel-exp-hv_vmm", FirmwarePatchSetCatalog.proMotionPatch, FirmwarePatchSetCatalog.paravirtTask3Patch],
         )
     }
 

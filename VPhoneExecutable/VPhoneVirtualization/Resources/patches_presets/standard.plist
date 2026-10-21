@@ -68,7 +68,6 @@
 		<key>Patches</key>
 		<array>
 			<string>kernel-exp-frida_thread_set_state_entitlement_flag</string>
-			<string>kernel-exp-paravirt_gpu_task3</string>
 			<string>kernel-exp-frida_vm_map_delete_immutable_code</string>
 			<string>kernel-exp-hv_vmm</string>
 			<string>dyld-exp-hv_vmm</string>
