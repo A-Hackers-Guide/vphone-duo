@@ -273,11 +273,59 @@ there also shoots with `-capturePhotoWithSettings:delegate:`: with the
 previous `libcamfix` the shutter saved nothing, with this one it saved the
 streamed frame, through the same callback sequence.
 
-Limit, on both: Camera.app video recording does not work. `libcamfix` has no
-movie path and the daemon never runs the graph, so the timer stays at
-00:00:00 and stopping saves no file. Until Camera.app is relaunched its
-engine then refuses photos too.
+Camera.app video recording did not work on either at this point; see
+[the next section](#cameraapp-video-recording-2026-10-22).
 
 Restarting vphoned (or replacing the shared frame file) leaves the host
 streaming into the old mapping: the host notices a dead connection only when
 a send fails. Restart the VM, then start streaming again.
+
+## Camera.app video recording (2026-10-22)
+
+Camera.app's VIDEO mode records with `-[AVCaptureMovieFileOutput
+startRecordingToOutputFileURL:recordingDelegate:]` into
+`DCIM/.MISC/Incoming/<id>.MOV` and stops with `-stopRecording`; its
+`CAMCaptureEngine` saves the file once the delegate gets
+`-captureOutput:didFinishRecordingToOutputFileAtURL:fromConnections:error:`.
+A vcam session's graph never runs, so the output never started: the timer
+stayed at 00:00:00, no file was written, and with the request still open the
+engine refused photos until Camera.app was relaunched.
+
+`CamFix/Movie/CamFixMovieRecording.m` takes both calls for a vcam-bound
+movie output and never calls the original:
+
+- A recorder on its own queue writes the shm frame at 30 Hz with
+  AVAssetWriter: H.264, 1280x720 (the frame as photos get it), in a
+  QuickTime movie at the requested URL, timed from the first frame.
+- After the first frame the delegate gets
+  `-captureOutput:didStartRecordingToOutputFileAtURL:fromConnections:`; after
+  `-stopRecording`, once the writer has finished, the didFinish callback
+  with no error (or with one if the writer failed or no frame arrived).
+- `-isRecording`, `-recordedDuration` and `-outputFileURL` answer for the
+  recorder while it runs.
+- When the session has an audio input the daemon records no sound either,
+  so an AVAudioEngine input tap records the microphone into an AAC track,
+  timed on the same uptime clock as the frames. The tap's buffer is copied
+  into a CMSampleBuffer on the tap's thread, since the engine reuses it.
+
+iOS 26.6.2's Camera.app lists VIDEO only when `-[CAMCaptureCapabilities
+isVideoSupported]` is set. `-initWithHostProcess:` fills the `_videoSupported`
+ivar behind it from `AVGestaltGetBoolAnswer(AVGQVideoCameraCapability)`,
+which is NO on a guest, and other CameraUI code reads the ivar directly. The
+hook sets the ivar after the initializer when the vcam device exists. iOS 27
+dropped the ivar: `-[CAMUserPreferences supportedCaptureModesForCapabilities:
+emulatingImagePicker:]` always adds photo and video, and
+`-isSupportedMode:withDevice:` answers both with the camera. The hook does not
+install there.
+
+Validation, with the host streaming its test pattern:
+
+| Guest | Result |
+| --- | --- |
+| `photo707`, iPhone17,3 27.0 | Timer counts; IMG_0013.MOV: H.264 1280x720 126 frames 4.13 s, AAC 44.1 kHz mono 4.12 s (mean -42 dB, the Mac's microphone); first and last frames differ; a photo right after the recording saves |
+| `cam26`, iPhone17,3 26.6.2 | VIDEO tab appears; timer counts; IMG_0003.MOV: H.264 1280x720 130 frames 4.29 s, no audio track (the iPhone 26.x guest's Camera session has no microphone input); a photo right after saves |
+
+No Camera, cameracaptured or assetsd crash reports on either. Not done: the
+movie is landscape with no rotation metadata, like the photos; pause/resume,
+slo-mo, time-lapse and cinematic modes; `-startRecordingMovieWithSettings:`
+(the moment-capture movie path), which Camera.app did not call here.

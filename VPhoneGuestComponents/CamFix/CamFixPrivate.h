@@ -67,6 +67,11 @@ CFX_HIDDEN BOOL cfx_delegate_registers_still_requests(id delegate);
 // full will/did/finish callback sequence for the settings' uniqueID.
 CFX_HIDDEN void cfx_drive_capture(id output, id delegate, id settings);
 
+// MARK: - movies (Movie/)
+
+CFX_HIDDEN void cfx_install_movie_recording_hooks(void);
+CFX_HIDDEN void cfx_install_video_mode_capability(void);
+
 // MARK: - preview (Preview/)
 
 CFX_HIDDEN BOOL cfx_preview_has_layers(void);

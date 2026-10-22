@@ -411,8 +411,19 @@
 > full callback sequence it waits for before saving, and starts the preview
 > scan for a client that skips `-startRunning`. Camera.app's shutter saves
 > photos again on 27 (issue #707) and on 26.6.2, which shoots the same way.
-> Video recording still does not work. Details and validation:
+> Camera.app video recording followed (see the next note). Details and validation:
 > [`Guest/virtual_camera_transport.md`](Guest/virtual_camera_transport.md#ios-27-the-camera-through-the-backings-provider-2026-10-22).
+
+> **Camera hook: Camera.app video recording (2026-10-22):** no new patch and
+> no new library; `libcamfix.dylib` changes behaviour only. For a vcam-bound
+> `AVCaptureMovieFileOutput` it writes the shm frames (and, when the session
+> has a microphone input, an AVAudioEngine microphone track) to the
+> requested movie with AVAssetWriter and sends the recording delegate its
+> start and finish callbacks, so Camera.app's VIDEO mode saves movies on 27.0
+> and 26.6.2. On 26.x it also sets `CAMCaptureCapabilities._videoSupported`,
+> which comes from `AVGQVideoCameraCapability` and is NO on a guest, so the
+> VIDEO tab appears. Details and validation:
+> [`Guest/virtual_camera_transport.md`](Guest/virtual_camera_transport.md#cameraapp-video-recording-2026-10-22).
 
 > **3D gyroscope core (2026-10-08; guest acceptance pending):**
 > `system-backboardd-cfw-gyroscope`, declared in the Guest System set and
