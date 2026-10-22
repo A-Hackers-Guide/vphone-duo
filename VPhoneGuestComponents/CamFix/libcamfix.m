@@ -63,6 +63,11 @@
  *     H.264 at the delivered size instead of 0x0.
  *     (Session/CamFixAssetWriterSettings.m)
  *
+ * 12. AVCaptureMovieFileOutput recording: the shm frames are written to the
+ *     requested movie file and the recording delegate gets its start and
+ *     finish callbacks, so Camera.app's VIDEO mode saves a movie.
+ *     (Movie/CamFixMovieRecording.m)
+ *
  * Frames come from the vphoned shared frame file through the shared data
  * plane (Frame/CamFixFrameSource.m). Diagnostics go to the shared camera
  * media directory, written by cfxlog.
@@ -98,6 +103,8 @@ static void cfx_install_all_hooks(void) {
     cfx_install_preview_layer_hooks();
     cfx_install_photo_representation_hooks();
     cfx_install_capturerequest_stubs();
+    cfx_install_movie_recording_hooks();
+    cfx_install_video_mode_capability();
     cfx_install_remote_queue_tap();
     // The 1 Hz preview layer scan starts with the first running vcam session
     // (Session/CamFixSessionGuards.m), not here: this hook also loads into
