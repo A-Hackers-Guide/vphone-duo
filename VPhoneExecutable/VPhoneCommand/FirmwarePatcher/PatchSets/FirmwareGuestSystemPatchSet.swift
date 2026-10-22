@@ -40,6 +40,7 @@ public enum FirmwareGuestSystemPatchSet {
     /// Replaces the restored System volume with an Apple TV 4K userland
     /// staged from its OTA. Research only: no IPSW exists for that device.
     public static let tvOTAUserland = "system-tv-exp-ota_userland"
+    public static let otaUserland = "system-exp-ota_userland"
 
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
 
@@ -64,6 +65,13 @@ public enum FirmwareGuestSystemPatchSet {
         name: "Guest System",
         summary: "Shared-cache policy gates, patched system daemons and the vphone guest payload",
         patches: [
+            VPhonePatchDeclaration(
+                identifier: otaUserland,
+                title: "Full OTA system update",
+                summary: "Experimental: replaces the System volume from a staged full OTA, retaining Data, xART, NVRAM and SEPStorage. Requires a stopped disk/SEP/NVRAM snapshot and a prepared target; installs the target kernelcache and TXM in the same transaction. Use fw ota to verify migration and roll back.",
+                target: .guestFile(path: "/"),
+                applicability: ios27,
+            ),
             VPhonePatchDeclaration(
                 identifier: tvTPRO,
                 title: "TV TPRO feature detection",

@@ -167,16 +167,26 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         prebootIMG4: Data,
         patchedKernelcache: Data,
     ) throws -> Data? {
+        try firmwareReplacingPayload(prebootIMG4: prebootIMG4, patchedComponent: patchedKernelcache, expectedFourcc: "krnl")
+    }
+
+    /// A Preboot component keeps its personalized IM4M and restore information;
+    /// only the matching, explicitly named payload type may be replaced.
+    public static func firmwareReplacingPayload(
+        prebootIMG4: Data,
+        patchedComponent: Data,
+        expectedFourcc: String
+    ) throws -> Data? {
         let container = try Container(prebootIMG4)
         guard container.isIMG4 else {
             throw PatcherError.invalidFormat("the Preboot kernelcache is a bare IM4P; expected an IMG4 with a manifest")
         }
-        let sourceIM4P = try Container(patchedKernelcache).im4pBytes
+        let sourceIM4P = try Container(patchedComponent).im4pBytes
         let targetFourcc = try IM4P(container.im4pBytes).fourcc
         let sourceFourcc = try IM4P(sourceIM4P).fourcc
-        guard targetFourcc == "krnl", sourceFourcc == "krnl" else {
+        guard targetFourcc == expectedFourcc, sourceFourcc == expectedFourcc else {
             throw PatcherError.invalidFormat(
-                "kernelcache fourcc mismatch: Preboot '\(targetFourcc)', source '\(sourceFourcc)' — expected 'krnl'",
+                "firmware fourcc mismatch: Preboot '\(targetFourcc)', source '\(sourceFourcc)' — expected '\(expectedFourcc)'",
             )
         }
         guard container.im4pBytes != sourceIM4P else { return nil }

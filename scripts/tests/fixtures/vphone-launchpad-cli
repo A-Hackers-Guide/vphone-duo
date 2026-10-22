@@ -1,0 +1,10 @@
+#!/bin/zsh
+set -euo pipefail
+print -r -- "$*" >> "$OTA_TEST_LOG"
+if [[ $1 == vm && $2 == list ]]; then
+  print -r -- '[{"name":"test","bundle":"test-bundle"}]'
+elif [[ $1 == exec && ${6:-} == ${OTA_TEST_FAIL_PHASE:-unused} ]]; then
+  exit 1
+else
+  print -r -- '{"status":0}'
+fi

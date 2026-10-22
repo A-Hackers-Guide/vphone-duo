@@ -180,7 +180,7 @@ struct VPhoneCustomFirmwareInstaller {
             .map { Set($0.patches) }
         // The kernel patches the restore or the last `cfw update-kernel` put in
         // this VM's kernelcache, which decide the shared region size below.
-        let receiptKernel = receipt?.parts[VPhoneVirtualMachinePatchReceipt.part(for: .firmware(.kernelcache))]
+        var receiptKernel = receipt?.parts[VPhoneVirtualMachinePatchReceipt.part(for: .firmware(.kernelcache))]
             .map { Set($0.patches) }
         let guestTargets = FirmwareGuestPatchResolution.guestTargetIdentifiers
         let effectiveEnabled = Set(plan?.enabledPatches ?? [])
@@ -202,9 +202,32 @@ struct VPhoneCustomFirmwareInstaller {
         let device = configuredGuestDevice(in: bundleDirectory) ?? guestDevice(of: restore)
         // Research: an Apple TV 4K userland staged from its OTA, which
         // `system-tv-exp-ota_userland` puts in place of the restored one.
-        let otaUserland = device.family == .appleTV && (try? bundleDirectory.isDirectory(VPhoneOTAArchive.userlandDirectoryName)) == true
+        let hasOTAUserland = (try? bundleDirectory.isDirectory(VPhoneOTAArchive.userlandDirectoryName)) == true
+        let isOTAUpdate = device.family != .appleTV && mode == .full && hasOTAUserland
+            && effectiveEnabled.contains(FirmwareGuestSystemPatchSet.otaUserland)
+        let otaUserland = (device.family == .appleTV || isOTAUpdate) && hasOTAUserland
             ? try bundleDirectory.directory(VPhoneOTAArchive.userlandDirectoryName)
             : nil
+        if isOTAUpdate {
+            guard let otaUserland, let restore, let plan else {
+                throw ValidationError("A full OTA update needs staged userland and a target firmware plan.")
+            }
+            try requireOTAUpdate(ota: otaUserland, restore: restore, plan: plan, device: device)
+            // System, kernel and TXM are published together on the same private
+            // clone. Never require a separately bootable half-updated disk.
+            receiptKernel = Set(plan.enabledPatches)
+            let snapshots = try bundleDirectory.directory(VPhoneMachineSnapshots.directoryName)
+            let saved = try snapshots.entries().contains { name in
+                guard (try? snapshots.isDirectory(name)) == true,
+                      let data = try? snapshots.readData("\(name)/Snapshot.plist"),
+                      let metadata = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+                      let files = metadata["Files"] as? [String] else { return false }
+                return ["Disk.img", "SEPStorage", "nvram.bin"].allSatisfy {
+                    files.contains($0) && (try? snapshots.isRegularFile("\(name)/\($0)")) == true
+                }
+            }
+            guard saved else { throw ValidationError("OTA update needs a stopped disk/SEP/NVRAM snapshot.") }
+        }
         if device.family == .appleTV {
             guard let plan else {
                 throw ValidationError("tvOS installation needs an explicit patch plan. Resolve a TV selection with `fw set-patches` and `fw patch` first.")
@@ -240,6 +263,9 @@ struct VPhoneCustomFirmwareInstaller {
         // and a failed install leaves the original untouched.
         let image: URL
         let cloned = try work.directory.clone(disk, to: "Disk.img")
+        if isOTAUpdate, !cloned {
+            throw ValidationError("The OTA update needs a private APFS disk clone; the original disk was left untouched.")
+        }
         if device.family == .appleTV {
             // A paired dyld edit must never fall back to mutating the live disk.
             // Its errors propagate below, so this clone is committed only after
@@ -366,6 +392,17 @@ struct VPhoneCustomFirmwareInstaller {
             // TV installs deliberately omit vphoned and its launchd backup.
             let wasInstalled = hasLaunchdBackup || (device.family == .appleTV && receiptGuest != nil)
             priorGuest = receiptGuest ?? (wasInstalled ? priorFallback : [])
+            if isOTAUpdate {
+                guard wasInstalled, let otaUserland else {
+                    throw ValidationError("An OTA update needs an installed guest and staged userland.")
+                }
+                // All original System bytes disappear. Old receipts and .bak files
+                // must not make the new cache skip patches shared with the old OS.
+                try replaceOTAUserland(system: systemRoot, ota: otaUserland, work: work)
+                guard let restore else { throw ValidationError("OTA target restore tree is missing.") }
+                try stageOTASystemApps(restore: restore, system: systemRoot, work: work, owner: callerUID)
+                priorGuest = []
+            }
             switch mode {
             case .kernelUpdate:
                 break // handled by runKernelUpdate, never reached here
@@ -385,7 +422,9 @@ struct VPhoneCustomFirmwareInstaller {
                     priorGuest: priorGuest,
                     kernelPatches: receiptKernel,
                     environmentOnly: false,
+                    strict: isOTAUpdate,
                 )
+                if isOTAUpdate { liveGuest.insert(FirmwareGuestSystemPatchSet.otaUserland) }
             case .environmentOnly:
                 // Evidence a full install ran: nothing to update over otherwise.
                 guard wasInstalled else {
@@ -429,6 +468,7 @@ struct VPhoneCustomFirmwareInstaller {
             includeIdentity: mode == .full,
             buildVersion: buildVersion,
             boardDeviceTree: boardDeviceTree,
+            otaRestore: isOTAUpdate ? restore : nil,
         ))
         // Selected patches this guest has nothing for, so the receipt does not
         // report them as missing forever: the board audio repair on an
@@ -459,7 +499,7 @@ struct VPhoneCustomFirmwareInstaller {
         systemMounted = false
         _ = try tool("/usr/sbin/diskutil", ["eject", baseDisk], quiet: true)
         diskAttached = false
-        if mode == .full {
+        if mode == .full, !isOTAUpdate {
             if cloned {
                 try VPhoneAPFSSnapshot.rename(imageAt: image)
             } else {
@@ -472,6 +512,12 @@ struct VPhoneCustomFirmwareInstaller {
             try work.directory.setOwner("Disk.img", uid: disk.owner, gid: disk.group)
             try work.directory.setMode("Disk.img", disk.mode & 0o777)
             try work.directory.rename("Disk.img", to: "Disk.img", in: bundleDirectory)
+        }
+        if isOTAUpdate {
+            recordKernelcacheReceipt(enabled: effectiveEnabled, in: bundleDirectory,
+                                     owner: invokingUser.map { ($0.uid, $0.gid) })
+            recordKernelcacheReceipt(enabled: effectiveEnabled, in: bundleDirectory,
+                                     owner: invokingUser.map { ($0.uid, $0.gid) }, component: .txm)
         }
         // A serial-only research selection can leave vphoned off. Its host
         // copy exists only after installVphoned staged it successfully.
@@ -770,18 +816,19 @@ struct VPhoneCustomFirmwareInstaller {
         enabled: Set<String>,
         in bundleDirectory: VPhoneConfinedDirectory,
         owner: (uid: uid_t, gid: gid_t)?,
+        component: VPhoneFirmwareComponent = .kernelcache,
     ) {
         let kernelPatches = FirmwarePatchSetCatalog.allDeclarations
-            .filter { $0.target == .firmware(.kernelcache) && enabled.contains($0.identifier) }
+            .filter { $0.target == .firmware(component) && enabled.contains($0.identifier) }
             .map(\.identifier)
         do {
             var receipt = (try? bundleDirectory.readData(VPhonePatchPresetStore.receiptFileName))
                 .flatMap { try? VPhoneVirtualMachinePatchReceipt.decode($0) }
                 ?? VPhoneVirtualMachinePatchReceipt()
             receipt.record(
-                VPhoneFirmwareComponent.kernelcache.rawValue,
+                component.rawValue,
                 patches: kernelPatches,
-                writer: "cfw update-kernel",
+                writer: component == .kernelcache ? "cfw update-kernel" : "cfw install (full OTA)",
                 bundleVersion: bundleVersion,
             )
             try bundleDirectory.writeFile(
@@ -1077,6 +1124,7 @@ struct VPhoneCustomFirmwareInstaller {
         priorGuest: Set<String>,
         kernelPatches: Set<String>?,
         environmentOnly: Bool,
+        strict: Bool = false,
     ) throws -> Set<String> {
         var live = Set<String>()
         var failures: [String] = []
@@ -1169,9 +1217,17 @@ struct VPhoneCustomFirmwareInstaller {
                 live.insert(identifier)
             }
         }
+        if priorGuest.contains(FirmwareGuestSystemPatchSet.otaUserland) {
+            // A checkbox cannot put a previous OS back. Only the stopped
+            // disk/SEP/NVRAM snapshot can reverse a completed system update.
+            live.insert(FirmwareGuestSystemPatchSet.otaUserland)
+            if !on(FirmwareGuestSystemPatchSet.otaUserland) {
+                print("  [!] full OTA System update is not reverted by deselection; restore the stopped machine snapshot to roll back")
+            }
+        }
 
         if let restore {
-            try installCryptexes(restore: restore, system: system, work: work, owner: owner)
+            try installCryptexes(restore: restore, system: system, work: work, owner: owner, replaceExisting: strict)
         }
         let version = try productVersion(system: system)
 
@@ -1624,6 +1680,9 @@ struct VPhoneCustomFirmwareInstaller {
 
         if !failures.isEmpty {
             print("[!] \(failures.count) guest patch(es) failed and were left in their prior state: \(Set(failures).sorted().joined(separator: ", "))")
+            if strict {
+                throw ValidationError("OTA compatibility patches failed; the private disk clone was discarded: \(Set(failures).sorted().joined(separator: ", "))")
+            }
         }
         return live
     }
@@ -1856,13 +1915,14 @@ struct VPhoneCustomFirmwareInstaller {
         system: VPhoneConfinedDirectory,
         work: WorkDirectory,
         owner: uid_t?,
+        replaceExisting: Bool = false,
     ) throws {
         let os = "System/Cryptexes/OS"
         let app = "System/Cryptexes/App"
         func populated(_ path: String) -> Bool {
             (try? system.directory(path).entries().isEmpty) == false
         }
-        if !(populated(os) && populated(app)) {
+        if replaceExisting || !(populated(os) && populated(app)) {
             let manifest = work.file("iPhone-BuildManifest.plist")
             try restore.readData("iPhone-BuildManifest.plist").write(to: manifest)
             guard case let .cryptex(paths) = try CustomFirmwareDaemons.filesystemLayout(buildManifest: manifest) else {
@@ -1930,6 +1990,55 @@ struct VPhoneCustomFirmwareInstaller {
             target: "../../../../System/Cryptexes/OS/System/DriverKit/System/Library/dyld",
             at: "System/DriverKit/System/Library/dyld",
         )
+    }
+
+    /// Full OTA chunks contain placeholders, not the removable apps retained
+    /// on encrypted Data. Stage target programs from the pinned IPSW's OS
+    /// image; vphoned reconciles only already-installed Apple apps after boot.
+    private func stageOTASystemApps(
+        restore: VPhoneConfinedDirectory, system: VPhoneConfinedDirectory,
+        work: WorkDirectory, owner: uid_t?
+    ) throws {
+        guard let manifest = try PropertyListSerialization.propertyList(
+            from: restore.readData("iPhone-BuildManifest.plist"), format: nil) as? [String: Any],
+              let identities = manifest["BuildIdentities"] as? [[String: Any]] else {
+            throw ValidationError("OTA target OS manifest is invalid.")
+        }
+        let updatePaths = identities.compactMap { identity -> String? in
+            guard (identity["Info"] as? [String: Any])?["RestoreBehavior"] as? String == "Update" else { return nil }
+            let os = (identity["Manifest"] as? [String: Any])?["OS"] as? [String: Any]
+            return (os?["Info"] as? [String: Any])?["Path"] as? String
+        }
+        let paths = Set(updatePaths)
+        guard paths.count == 1, let path = paths.first else {
+            throw ValidationError("OTA target has no unique OS image for system-app migration.")
+        }
+        let image = try stageCryptexImage(path, from: restore, as: "OTA-OS-source.dmg", work: work, owner: owner)
+        var plain = image
+        if try VPhoneRestoreOperations.isAEAEncrypted(image) {
+            plain = work.file("OTA-OS.dmg")
+            let key = try vphoneRunBlocking { try await VPhoneAEA.symmetricKey(of: image) }
+            try tool("/usr/bin/aea", ["decrypt", "-i", image.path, "-o", plain.path, "-key-value", key], quiet: true)
+        }
+        let mount = work.file("mnt-ota-apps")
+        _ = try work.directory.directory("mnt-ota-apps", create: true, mode: 0o700)
+        try attachCryptex(plain, at: mount)
+        var attached = true
+        defer { if attached { try? detachImage(at: mount) } }
+        // Scoped so the volume's directory descriptors close before detach.
+        do {
+            let root = try work.directory.mountedVolume("mnt-ota-apps")
+            let apps = try root.directory("private/var/staged_system_apps")
+            guard !(try apps.entries()).isEmpty else { throw ValidationError("Target OS has no staged system apps.") }
+            let destination = "usr/local/share/vphone-ota/apps"
+            try system.removeItem(destination)
+            try system.copyTree(from: apps, to: destination, owner: Self.guestOwner, clearSetID: false)
+            try system.writeFile("usr/local/share/vphone-ota/Upgrade.plist",
+                                 contents: system.readData(".vphone-ota-upgrade.plist"), mode: 0o644, owner: Self.guestOwner)
+        }
+        try detachImage(at: mount)
+        attached = false
+        print("  [+] OTA target system-app programs staged; encrypted Data was not mounted")
     }
 
     /// Open a manifest-named image inside the restore tree without following
@@ -2002,21 +2111,71 @@ struct VPhoneCustomFirmwareInstaller {
         }
     }
 
+    /// The staged OTA, the configured device and the patched target firmware
+    /// must all name the same 27.x build before System is replaced.
+    private func requireOTAUpdate(
+        ota: VPhoneConfinedDirectory,
+        restore: VPhoneConfinedDirectory,
+        plan: VPhoneVirtualMachinePatchPlan,
+        device: VPhoneGuestDevice
+    ) throws {
+        guard let metadata = try PropertyListSerialization.propertyList(from: ota.readData("Upgrade.plist"), format: nil) as? [String: String],
+              metadata["Device"] == device.productType,
+              metadata["Version"] == plan.iOSBaseVersion,
+              metadata["Version"]?.hasPrefix("27.") == true,
+              let target = try PropertyListSerialization.propertyList(from: restore.readData("iPhone-BuildManifest.plist"), format: nil) as? [String: Any],
+              metadata["Build"] == target["ProductBuildVersion"] as? String else {
+            throw ValidationError("The staged OTA, configured device and target IPSW/patch plan disagree. Run fw ota-stage with the matching full OTA.")
+        }
+        guard try restore.isRegularFile("kernelcache.research.vphone600") else {
+            throw ValidationError("The target has no patched kernelcache. Run fw patch before installing the OTA.")
+        }
+    }
+
+    /// Host-driven full OTA payload installation. The container, Data, User,
+    /// xART, SEPStorage, NVRAM and Preboot identity stay with this guest.
+    private func replaceOTAUserland(
+        system: VPhoneConfinedDirectory,
+        ota: VPhoneConfinedDirectory,
+        work: WorkDirectory
+    ) throws {
+        let metadata = try ota.readData("Upgrade.plist")
+        // The existing installer treats this as a per-machine preference.
+        // Carry it across System replacement; never reuse patched binaries or
+        // their backups from the previous OS.
+        let misfix = try system.isRegularFile("usr/lib/libmisfix.plist")
+            ? try system.readData("usr/lib/libmisfix.plist") : nil
+        try replaceTVUserland(system: system, ota: ota, work: work,
+                              identifier: FirmwareGuestSystemPatchSet.otaUserland)
+        guard let expected = try PropertyListSerialization.propertyList(from: metadata, format: nil) as? [String: String],
+              let actual = try PropertyListSerialization.propertyList(from: system.readData("System/Library/CoreServices/SystemVersion.plist"), format: nil) as? [String: Any],
+              expected["Build"] == actual["ProductBuildVersion"] as? String,
+              expected["Version"] == actual["ProductVersion"] as? String else {
+            throw ValidationError("The extracted OTA SystemVersion does not match the staged update. The private disk clone was discarded.")
+        }
+        if let misfix {
+            try system.writeFile("usr/lib/libmisfix.plist", contents: misfix, mode: 0o644, owner: Self.guestOwner)
+        }
+        try system.writeFile(".vphone-ota-upgrade.plist", contents: metadata, mode: 0o644, owner: Self.guestOwner)
+    }
+
     /// Research: put an Apple TV 4K userland in place of the restored Apple TV
     /// HD one. `ota` holds the OTA's raw `payloadv2/payload.NNN` chunks and
     /// `payload_chunks.txt`; each chunk is an Apple Archive, which `aa` extracts
     /// as root with the owners, modes, BSD flags and APFS compression the OTA
     /// records. The chunk list is kept on the volume so an environment update
-    /// does not extract the same userland again.
+    /// does not extract the same userland again. A full iOS OTA update reuses
+    /// this extraction under its own `identifier`, adding `links.txt`.
     private func replaceTVUserland(
         system: VPhoneConfinedDirectory,
         ota: VPhoneConfinedDirectory,
         work: WorkDirectory,
+        identifier: String = FirmwareGuestSystemPatchSet.tvOTAUserland,
     ) throws {
-        let identifier = FirmwareGuestSystemPatchSet.tvOTAUserland
         let marker = ".vphone-ota-userland"
         let chunkList = try ota.readData(VPhoneOTAArchive.chunkListName)
-        if try system.isRegularFile(marker), try system.readData(marker) == chunkList {
+        if identifier == FirmwareGuestSystemPatchSet.tvOTAUserland,
+           try system.isRegularFile(marker), try system.readData(marker) == chunkList {
             print("  [·] \(identifier): userland already in place")
             return
         }
@@ -2032,6 +2191,22 @@ struct VPhoneCustomFirmwareInstaller {
             try work.directory.removeItem(chunk)
             try ota.copyFile(from: chunk, to: chunk, in: work.directory)
         }
+        let linkList: Data?
+        if try ota.isRegularFile(VPhoneOTAArchive.hardLinkListName) {
+            try ota.copyFile(from: VPhoneOTAArchive.hardLinkListName,
+                             to: VPhoneOTAArchive.hardLinkListName, in: work.directory)
+            linkList = try work.directory.readData(VPhoneOTAArchive.hardLinkListName)
+        } else {
+            linkList = nil
+        }
+        if identifier == FirmwareGuestSystemPatchSet.otaUserland {
+            // Root extracts only pinned private copies. Reject traversal and
+            // any later member beneath an archive-created symlink first.
+            guard let linkList else {
+                throw ValidationError("The full OTA has no links.txt. Stage the complete OTA before installing.")
+            }
+            try VPhoneOTAArchive.validatePayloadPaths(chunks.map { work.file($0) }, hardLinks: linkList)
+        }
         print("  [*] \(identifier): replacing the System volume with \(chunks.count) OTA payload chunks")
         for entry in try system.entries() {
             _ = try system.removeItem(entry)
@@ -2040,6 +2215,11 @@ struct VPhoneCustomFirmwareInstaller {
         for chunk in chunks {
             _ = try tool("/usr/bin/aa", ["extract", "-d", root, "-i", work.file(chunk).path])
             try work.directory.removeItem(chunk)
+        }
+        if let linkList {
+            let count = try VPhoneOTAArchive.installHardLinks(linkList, in: system)
+            print("  [+] \(identifier): installed \(count) OTA hard links")
+            try work.directory.removeItem(VPhoneOTAArchive.hardLinkListName)
         }
         try system.writeFile(marker, contents: chunkList, mode: 0o644, owner: Self.guestOwner)
         print("  [+] \(identifier): userland extracted")
@@ -2269,6 +2449,7 @@ struct VPhoneCustomFirmwareInstaller {
         includeIdentity: Bool,
         buildVersion: String?,
         boardDeviceTree: URL?,
+        otaRestore: VPhoneConfinedDirectory? = nil,
     ) throws -> Set<String> {
         var live = Set<String>()
         // Whether a device-tree patch is enabled. A VM with no plan gets every
@@ -2321,7 +2502,7 @@ struct VPhoneCustomFirmwareInstaller {
         let mayRevertRepair = repairGroup.contains { !enabled($0.id) && priorGuest.contains($0.id) }
         let wantsBuild = (buildVersion.map { !$0.isEmpty } ?? false) && enabled(buildID)
         let touchesBuild = wantsBuild || priorGuest.contains(buildID)
-        guard rewriteIdentity || !repairsOn.isEmpty || mayRevertRepair || touchesBuild else { return live }
+        guard otaRestore != nil || rewriteIdentity || !repairsOn.isEmpty || mayRevertRepair || touchesBuild else { return live }
 
         guard
             let preboot = volumes.first(where: { ($0["Roles"] as? [String])?.contains("Preboot") == true }),
@@ -2348,6 +2529,50 @@ struct VPhoneCustomFirmwareInstaller {
             }
             guard candidates.count == 1, let deviceTree = candidates.first else {
                 throw ValidationError("Expected one device tree in the Preboot volume but found \(candidates.count). Restore the VM, then install CFW again.")
+            }
+
+            if let otaRestore {
+                /// Swap only the IM4P inside a personalized Preboot IMG4,
+                /// keeping its manifest, mode and owner.
+                func replacePayload(_ path: String, _ meta: stat, patched: Data, fourcc: String, label: String) throws {
+                    guard let updated = try CustomFirmwarePostRestoreDeviceTree.firmwareReplacingPayload(
+                        prebootIMG4: root.readData(path), patchedComponent: patched, expectedFourcc: fourcc
+                    ) else { return }
+                    let staged = work.file("\(fourcc).new")
+                    try updated.write(to: staged)
+                    try root.replaceFile(path, fromFileAt: staged, mode: meta.st_mode & 0o7777, owner: (meta.st_uid, meta.st_gid))
+                    print("  [+] OTA Preboot \(label) updated; personalized manifest retained")
+                }
+                let kernels = try root.entries().compactMap { name -> String? in
+                    let path = "\(name)/System/Library/Caches/com.apple.kernelcaches/kernelcache"
+                    return (try? root.isDirectory(name)) == true && (try? root.isRegularFile(path)) == true ? path : nil
+                }
+                guard kernels.count == 1, let kernelPath = kernels.first,
+                      let meta = try root.status(kernelPath), meta.st_mode & S_IFMT == S_IFREG else {
+                    throw ValidationError("OTA guest has no unique regular Preboot kernelcache.")
+                }
+                try replacePayload(kernelPath, meta, patched: otaRestore.readData("kernelcache.research.vphone600"),
+                                   fourcc: "krnl", label: "kernelcache")
+                // iOS 27 needs TXM's pre-check admission in addition to its
+                // kernel changes. Keep the original personalized container.
+                let component = "Ap,TrustedExecutionMonitor"
+                guard let manifest = try PropertyListSerialization.propertyList(from: otaRestore.readData("BuildManifest.plist"), format: nil) as? [String: Any],
+                      let identities = manifest["BuildIdentities"] as? [[String: Any]] else {
+                    throw ValidationError("OTA target has no boot manifest.")
+                }
+                let sources = Set(identities.compactMap { identity -> String? in
+                    let entry = (identity["Manifest"] as? [String: Any])?[component] as? [String: Any]
+                    return (entry?["Info"] as? [String: Any])?["Path"] as? String
+                })
+                guard sources.count == 1, let source = sources.first else {
+                    throw ValidationError("OTA target has no unique TXM component.")
+                }
+                let bootFolder = String(deviceTree.prefix { $0 != "/" })
+                let path = "\(bootFolder)/usr/standalone/firmware/FUD/\(component).img4"
+                guard let meta = try root.status(path), meta.st_mode & S_IFMT == S_IFREG else {
+                    throw ValidationError("OTA guest has no regular Preboot TXM.")
+                }
+                try replacePayload(path, meta, patched: otaRestore.readData(source), fourcc: "trxm", label: "TXM")
             }
 
             try buildDeviceTree(

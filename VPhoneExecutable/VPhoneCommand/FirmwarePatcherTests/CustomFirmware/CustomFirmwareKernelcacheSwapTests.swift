@@ -78,6 +78,25 @@ struct CustomFirmwareKernelcacheSwapTests {
     }
 
     @Test
+    func `a TXM update keeps its personalized manifest and rejects a wrong component`() throws {
+        let manifest = Data(repeating: 7, count: 96)
+        let old = try im4p("trxm", [1, 2, 3, 4])
+        let new = try im4p("trxm", [5, 6, 7, 8])
+        let preboot = img4(im4p: old, manifest: manifest)
+        let updated = try #require(try CustomFirmwarePostRestoreDeviceTree.firmwareReplacingPayload(
+            prebootIMG4: preboot, patchedComponent: new, expectedFourcc: "trxm"
+        ))
+        let children = try DERTestEncoder.children(of: updated)
+        #expect(children[1] == new)
+        #expect(children[2] == DERTestEncoder.element(tag: 0xA0, value: manifest))
+        #expect(throws: PatcherError.self) {
+            _ = try CustomFirmwarePostRestoreDeviceTree.firmwareReplacingPayload(
+                prebootIMG4: preboot, patchedComponent: im4p("krnl", [5]), expectedFourcc: "trxm"
+            )
+        }
+    }
+
+    @Test
     func `a bare IM4P target is refused`() throws {
         let bare = try im4p("krnl", [1, 2, 3, 4])
         #expect(throws: PatcherError.self) {

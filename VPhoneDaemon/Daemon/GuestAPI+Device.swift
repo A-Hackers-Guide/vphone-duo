@@ -96,6 +96,11 @@ extension GuestAPI {
             return try setRotationLock(locked)
         case "display.auto_lock":
             return GuestLockScreenIdle.describe()
+        case "display.auto_lock.set":
+            guard let seconds = (params["seconds"] as? NSNumber)?.intValue else {
+                throw GuestAPIError.invalidRequest("seconds must be an integer")
+            }
+            return try GuestLockScreenIdle.setAutoLockSeconds(seconds)
         case "screen.unlock":
             return try GuestScreenUnlock.unlock(
                 passcode: optionalString(params, "passcode"),
