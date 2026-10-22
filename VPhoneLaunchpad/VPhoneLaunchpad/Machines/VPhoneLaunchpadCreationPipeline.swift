@@ -2,6 +2,46 @@ import Darwin
 import Foundation
 import Observation
 
+// MARK: - Kernelcache Builder
+
+/// Another Mac, or a macOS VM, whose kmutil links an iOS 18 guest's
+/// kernel-first kernelcache mix: kmutil takes the layout from the macOS it runs
+/// on, and only macOS 15 and 26.0 to 26.3 link kernel-first. `fw kernelcache`
+/// reaches it over ssh (`VPHONE_KMUTIL_SSH`) and links as root there, so the
+/// helper links nothing. The password, for ssh and sudo, goes to `vphone-cli` in
+/// its environment only: never into an argument, a log or a file.
+nonisolated struct VPhoneLaunchpadKernelcacheBuilder: Sendable, Equatable {
+    static let destinationVariable = "VPHONE_KMUTIL_SSH"
+    static let passwordVariable = "VPHONE_KMUTIL_SSH_PASSWORD"
+
+    /// `user@host`.
+    var destination: String
+    /// Nil or empty with ssh keys and passwordless sudo.
+    var password: String?
+
+    var environment: [String: String] {
+        var environment = [Self.destinationVariable: destination]
+        if let password, !password.isEmpty {
+            environment[Self.passwordVariable] = password
+        }
+        return environment
+    }
+
+    /// Whether `destination` reads as `user@host`.
+    static func isValid(_ destination: String) -> Bool {
+        let parts = destination.split(separator: "@", omittingEmptySubsequences: false)
+        return parts.count == 2 && parts.allSatisfy { !$0.isEmpty && !$0.contains(where: \.isWhitespace) }
+            && !destination.hasPrefix("-")
+    }
+
+    /// Whether this Mac's kmutil links kernel-last (macOS 26.4 and later), so a
+    /// kernel-first mix needs a builder.
+    static var hostNeedsBuilder: Bool {
+        let host = ProcessInfo.processInfo.operatingSystemVersion
+        return host.majorVersion > 26 || host.majorVersion == 26 && host.minorVersion >= 4
+    }
+}
+
 /// `vm create`, one command at a time.
 ///
 /// `vphone-cli vm create` runs the same stages in one process and asks for
@@ -63,6 +103,9 @@ final class VPhoneLaunchpadCreationPipeline {
         /// release's own cloudOS (`fw kernelcache --ipsw`), whose link the helper
         /// runs as root. Nil for every other machine.
         var kernelcacheIPSW: String?
+        /// The Mac that links a kernel-first mix over ssh, for an iOS 18 guest
+        /// on a Mac whose kmutil links kernel-last; nil links here, as root.
+        var kernelcacheBuilder: VPhoneLaunchpadKernelcacheBuilder?
 
         var machine: VPhoneLaunchpadMachinePath {
             VPhoneLaunchpadMachinePath(libraryRoot: libraryRoot, name: name)
@@ -354,11 +397,14 @@ final class VPhoneLaunchpadCreationPipeline {
 
         func run(
             _ arguments: [String],
+            builder: VPhoneLaunchpadKernelcacheBuilder? = nil,
             onLine: @escaping @Sendable (String) -> Void = output,
             onProgress: (@Sendable (Double) -> Void)? = nil,
         ) async throws {
-            onLine("$ \(VPhoneLaunchpadCommandLine.display(arguments))")
-            try await commandLine.runChecked(arguments, onLine: onLine, onProgress: onProgress)
+            // The builder's destination is shown, its password is not.
+            let prefix = builder.map { "\(VPhoneLaunchpadKernelcacheBuilder.destinationVariable)=\($0.destination) " } ?? ""
+            onLine("$ \(prefix)\(VPhoneLaunchpadCommandLine.display(arguments))")
+            try await commandLine.runChecked(arguments, environment: builder?.environment ?? [:], onLine: onLine, onProgress: onProgress)
         }
 
         // For the template steps: a failure names the step and carries the
@@ -448,7 +494,11 @@ final class VPhoneLaunchpadCreationPipeline {
             // On the release's own cloudOS the kernelcache is mixed first: staged
             // here, as the user, with the chosen ipsw, and linked by the helper as
             // root, which runs no ipsw. `fw patch` takes the mix from the cache.
-            if let ipsw = options.kernelcacheIPSW {
+            // With an ssh builder, `fw kernelcache` links it on that Mac, and
+            // nothing here needs root for it.
+            if let ipsw = options.kernelcacheIPSW, let builder = options.kernelcacheBuilder {
+                try await run(["fw", "kernelcache", name, "--ipsw", ipsw] + library, builder: builder, onLine: tee)
+            } else if let ipsw = options.kernelcacheIPSW {
                 try await run(["fw", "kernelcache", name, "--ipsw", ipsw] + library, onLine: tee)
                 let status = try await helper.linkKernelcache(
                     bundleVersion: version,

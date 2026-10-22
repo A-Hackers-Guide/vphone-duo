@@ -50,9 +50,7 @@ struct FirmwareCatalogReportTests {
 
     @Test func `lists every curated guest`() {
         let report = VPhoneFirmwareCatalog.report
-        // Launchpad's list leaves out the CLI-only iPhone XS Max.
-        #expect(report.devices.map(\.productType) == VPhoneGuestDevice.known.map(\.productType).filter { $0 != "iPhone11,6" })
-        #expect(VPhoneFirmwareCatalog.report(includingCLIOnly: true).devices.map(\.productType) == VPhoneGuestDevice.known.map(\.productType))
+        #expect(report.devices.map(\.productType) == VPhoneGuestDevice.known.map(\.productType))
         #expect(report.devices.first?.pairings == report.pairings)
         for device in report.devices.dropFirst() {
             #expect(device.family == VPhoneGuestDevice.named(device.productType)?.family.rawValue)
@@ -150,7 +148,7 @@ struct FirmwareCatalogReportTests {
         #expect(VPhoneFirmwareCatalog.pairings(for: "iPhone18,1") != VPhoneFirmwareCatalog.pairings)
     }
 
-    @Test func `an i phone XS max pairs each iOS 18 release with its own research board cloud OS, for the CLI only`() {
+    @Test func `an i phone XS max pairs each iOS 18 release with its own research board cloud OS, linked kernel-first`() {
         let pairings = VPhoneFirmwareCatalog.pairings(for: "iPhone11,6")
         #expect(pairings.map(\.iosName) == ["iOS 18.1", "iOS 18.2.1", "iOS 18.3.1", "iOS 18.5", "iOS 18.6", "iOS 18.7", "iOS 18.7.2"])
         for p in pairings {
@@ -161,8 +159,9 @@ struct FirmwareCatalogReportTests {
             #expect(p.cloudosURL.contains("/private-cloud-compute/"))
         }
         #expect(VPhoneFirmwareCatalog.pairings(for: "iPhone11,4") == pairings)
-        #expect(!VPhoneFirmwareCatalog.report.devices.contains { $0.productType == "iPhone11,6" })
-        #expect(VPhoneFirmwareCatalog.report(includingCLIOnly: true).devices.contains { $0.productType == "iPhone11,6" })
+        let devices = VPhoneFirmwareCatalog.report.devices
+        #expect(devices.first { $0.productType == "iPhone11,6" }?.kernelcacheLayout == "kernel-first")
+        #expect(devices.filter { $0.kernelcacheLayout != nil }.map(\.productType) == ["iPhone11,6"])
     }
 
     @Test func `cellular i pad gets its wi fi model's pairings`() {

@@ -603,11 +603,6 @@ public enum VPhoneFirmwareCatalog {
     /// JSON-friendly projection of the catalog: each build with its recommended
     /// cloudOS, for the iPhone and then per guest device.
     public static var report: VPhoneFirmwareCatalogReport {
-        report(includingCLIOnly: false)
-    }
-
-    /// The catalog, with the devices only the CLI creates when `includingCLIOnly`.
-    public static func report(includingCLIOnly: Bool) -> VPhoneFirmwareCatalogReport {
         func entries(_ pairings: [VPhoneFirmwarePairing]) -> [VPhoneFirmwareCatalogReport.Entry] {
             pairings.map {
                 let ota = otaRelease(source: $0.iosURL)
@@ -628,10 +623,6 @@ public enum VPhoneFirmwareCatalog {
             device: device,
             pairings: entries(pairings),
             devices: VPhoneGuestDevice.known.compactMap { guest in
-                // The iOS 18 research board releases link kernel-first, over ssh
-                // on an older Mac from macOS 26.4 on, which Launchpad's root link
-                // does not: `vphone-cli fw catalog --device` lists them.
-                guard includingCLIOnly || guest.notchedArtworkSubtype == nil else { return nil }
                 let pairings = pairings(for: guest.productType)
                 guard !pairings.isEmpty else { return nil }
                 return .init(
@@ -639,6 +630,9 @@ public enum VPhoneFirmwareCatalog {
                     name: guest.productName,
                     family: guest.family.rawValue,
                     pairings: entries(pairings),
+                    // The iOS 18 research board kernels: from macOS 26.4 on, a
+                    // Mac running an older macOS links them over ssh.
+                    kernelcacheLayout: guest.notchedArtworkSubtype == nil ? nil : "kernel-first",
                 )
             },
         )
@@ -688,11 +682,16 @@ public struct VPhoneFirmwareCatalogReport: Codable, Equatable, Sendable {
         /// `iPhone`, `iPad` or `appleTV`.
         public let family: String
         public let pairings: [Entry]
-        public init(productType: String, name: String, family: String, pairings: [Entry]) {
+        /// `kernel-first` for a device whose every pairing boots a kernelcache
+        /// mix that only the kmutil of macOS 15 or 26.0 to 26.3 links
+        /// (`VPHONE_KMUTIL_SSH` from 26.4 on); absent for every other device.
+        public let kernelcacheLayout: String?
+        public init(productType: String, name: String, family: String, pairings: [Entry], kernelcacheLayout: String? = nil) {
             self.productType = productType
             self.name = name
             self.family = family
             self.pairings = pairings
+            self.kernelcacheLayout = kernelcacheLayout
         }
     }
 

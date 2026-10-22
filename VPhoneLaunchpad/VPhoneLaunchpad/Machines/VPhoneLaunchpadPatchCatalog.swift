@@ -297,6 +297,8 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
         case "AppleTV14,1": tvOS4KPreset
         case let type? where type.hasPrefix("AppleTV"): tvOSPreset
         case let type? where type.hasPrefix("Watch"): watchOSPreset
+        // The iOS 18 research board kernels boot no other preset.
+        case "iPhone11,6", "iPhone11,4": minimalPreset
         default: defaultPreset
         }
     }
