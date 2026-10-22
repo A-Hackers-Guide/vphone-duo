@@ -176,6 +176,10 @@ static BOOL cfx_session_isRunning_hook(id self, SEL _cmd) {
   BOOL real = ((Fn)cfx_orig_isRunning)(self, _cmd);
   if (cfx_session_is_for_vcam(self)) {
     cfx_track_vcam_session(self);
+    // A client that believes this and skips -startRunning (Camera.app on
+    // iOS 27) never reaches _setRunning:YES, which is what starts the scan
+    // for its preview layer otherwise.
+    cfx_start_scan_timer();
     if (cfx_isRunning_logged < 3) {
       cfxlog(@"[isRunning] real=%d -> forcing YES (session=%p)", real, self);
       cfx_isRunning_logged++;

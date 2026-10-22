@@ -123,7 +123,13 @@ void cfx_install_capturerequest_stubs(void) {
 
 // MARK: - drive the capture state machine
 
-static void cfx_drive_capture(id output, id delegate, id settings) {
+BOOL cfx_delegate_registers_still_requests(id delegate) {
+  // The getter cfx_drive_capture reads the registry through (KVC); the ivar
+  // behind it is __resultsQueueRegisteredStillImageRequests.
+  return [delegate respondsToSelector:NSSelectorFromString(@"_resultsQueueRegisteredStillImageRequests")];
+}
+
+void cfx_drive_capture(id output, id delegate, id settings) {
   // Extract uniqueID from AVMomentCaptureSettings.
   int64_t uid = 0;
   @try {

@@ -119,8 +119,9 @@ Even where it works, it appends one camera source and hands out its synthetic
 device only for its own device ID (`copyDeviceWithID:forClient:…`), never for
 `copyDeviceForPublishingWithID:` with `Default`. Nothing in it gives the vendor
 a create function or touches the backings provider, so switching the virtual
-camera on cannot bring the microphone back. The iOS 27 virtual camera is a
-separate open item.
+camera on cannot bring the microphone back. The iOS 27 virtual camera now goes
+the other way round: its backing is added to the provider this note builds
+([virtual camera on iOS 27](virtual_camera_transport.md#ios-27-the-camera-through-the-backings-provider-2026-10-22)).
 
 ## 5. The fix: a microphone-only provider
 
