@@ -28,6 +28,7 @@ struct OTAArchiveTests {
     private enum Entry {
         case file(String, Data)
         case directory(String)
+        case symlink(String, String)
         /// A top-level metadata entry: `yop` and an archive of `entries` in its blob.
         case segment(Character, [Entry])
     }
@@ -61,6 +62,11 @@ struct OTAArchiveTests {
             case let .directory(path):
                 header.append(field("TYP", ascii("D")))
                 header.append(.string(key: ArchiveHeader.FieldKey("PAT"), value: path))
+                blob = nil
+            case let .symlink(path, target):
+                header.append(field("TYP", ascii("L")))
+                header.append(.string(key: ArchiveHeader.FieldKey("PAT"), value: path))
+                header.append(.string(key: ArchiveHeader.FieldKey("LNK"), value: target))
                 blob = nil
             case let .segment(yop, inner):
                 header.append(field("TYP", ascii("M")))
@@ -173,6 +179,148 @@ struct OTAArchiveTests {
     }
 
     // MARK: - Staging
+
+    @Test func `hard-link lists preserve spaces and reject unsafe or ambiguous records`() throws {
+        let links = try VPhoneOTAArchive.parseHardLinks(Data("=System/source file\n+System/copy file\n+System/another\n".utf8))
+        #expect(links.count == 2)
+        #expect(links[0].source == "System/source file")
+        #expect(links[0].destination == "System/copy file")
+        for bad in ["+orphan\n", "=/outside\n+target\n", "=source\n+../outside\n",
+                    "=source\n+source\n", "=source\n+target\n+target\n", "?unsupported\n",
+                    "=source\n+dir//file\n", "=source\n+dir/./file\n", "=source\n+dir/\u{0}file\n"] {
+            #expect(throws: VPhoneOTAArchive.Error.self) {
+                try VPhoneOTAArchive.parseHardLinks(Data(bad.utf8))
+            }
+        }
+    }
+
+    @Test func `payload validation checks external hard links against the whole filesystem`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let chunk = root.appendingPathComponent("payload.000")
+        try encode([.directory("System"), .file("System/source", Data("resource".utf8)),
+                    .symlink("escape", "/private/tmp")], in: root).write(to: chunk)
+        try VPhoneOTAArchive.validatePayloadPaths([chunk], hardLinks: Data("=System/source\n+System/copy\n".utf8))
+        for list in ["=missing\n+System/copy\n", "=escape\n+System/copy\n",
+                     "=System/source\n+escape/outside\n", "=System/source\n+System/source/child\n",
+                     "=System/source\n+System/copy\n+System/copy/child\n"] {
+            #expect(throws: VPhoneOTAArchive.Error.self) {
+                try VPhoneOTAArchive.validatePayloadPaths([chunk], hardLinks: Data(list.utf8))
+            }
+        }
+    }
+
+    @Test func `hard-link installation shares the source inode and refuses symlink parents`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = try VPhoneConfinedDirectory(root: root.path)
+        _ = try directory.directory("System", create: true)
+        try directory.writeFile("System/source", contents: Data("resource".utf8), mode: 0o640)
+        let list = Data("=System/source\n+System/copy\n".utf8)
+        #expect(try VPhoneOTAArchive.installHardLinks(list, in: directory) == 1)
+        let source = try directory.openRegularFile("System/source")
+        #expect(try directory.refersTo("System/copy", file: source))
+        #expect(try directory.readData("System/copy") == Data("resource".utf8))
+        #expect(throws: VPhoneConfinedDirectoryError.self) {
+            try VPhoneOTAArchive.installHardLinks(list, in: directory)
+        }
+        try directory.createSymlink(target: "System", at: "alias")
+        for bad in ["=alias/source\n+System/other\n", "=System/source\n+alias/other\n"] {
+            #expect(throws: VPhoneConfinedDirectoryError.self) {
+                try VPhoneOTAArchive.installHardLinks(Data(bad.utf8), in: directory)
+            }
+        }
+        #expect(try directory.exists("System/other") == false)
+    }
+
+    @Test func `staging retains the separate hard-link manifest`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let links = Data("=System/source\n+System/copy\n".utf8)
+        let entries = try otaEntries(manifest: manifest()) + [
+            .segment("E", [.file("AssetData/payloadv2/links.txt", links)]),
+        ]
+        let ota = try makeOTA(in: root, entries)
+        _ = try stage(ota, in: root, key: keyText)
+        #expect(try Data(contentsOf: root.appendingPathComponent("vm/OTAUserland/links.txt")) == links)
+    }
+
+    @Test func `full iPad staging requires and validates the separate hard-link phase`() throws {
+        for includeLinks in [false, true] {
+            let root = try makeRoot()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let flash = root.appendingPathComponent("restore/Firmware/all_flash")
+            try FileManager.default.createDirectory(at: flash, withIntermediateDirectories: true)
+            _ = try vmFolder(root)
+            let manifest = try PropertyListSerialization.data(fromPropertyList: [
+                "ProductVersion": "27.0.1", "ProductBuildVersion": "24A446",
+                "SupportedProductTypes": ["iPad16,1"],
+            ], format: .xml, options: 0)
+            let info = try PropertyListSerialization.data(fromPropertyList: ["OSVersion": "27.0.1"], format: .xml, options: 0)
+            let payload = try encode([.directory("System"), .file("System/source", Data("resource".utf8))], in: root)
+            var members: [Entry] = [
+                .file("AssetData/Info.plist", info),
+                .file("AssetData/boot/BuildManifest.plist", manifest),
+                .file("AssetData/boot/Firmware/all_flash/DeviceTree.j410ap.im4p", Data("tree".utf8)),
+                .file("AssetData/payloadv2/payload.000", payload),
+                .file("AssetData/payloadv2/payload_chunks.txt", Data("0: 1000\n".utf8)),
+            ]
+            if includeLinks { members.append(.file("AssetData/payloadv2/links.txt", Data("=System/source\n+System/copy\n".utf8))) }
+            let ota = try makeOTA(in: root, [.segment("E", members)])
+            let device = try #require(VPhoneGuestDevice.named("iPad16,1"))
+            let userland = root.appendingPathComponent("vm/OTAUserland")
+            if includeLinks {
+                let staged = try VPhoneOTAArchive.stageUserland(from: ota, key: keyText, device: device,
+                    build: "24A446", deviceTreeDirectory: flash, userlandDirectory: userland, requireFullUpdate: true)
+                #expect(staged.build == "24A446")
+                #expect(FileManager.default.fileExists(atPath: userland.appendingPathComponent("links.txt").path))
+            } else {
+                #expect(throws: VPhoneOTAArchive.Error.self) {
+                    try VPhoneOTAArchive.stageUserland(from: ota, key: keyText, device: device,
+                        build: "24A446", deviceTreeDirectory: flash, userlandDirectory: userland, requireFullUpdate: true)
+                }
+                #expect(!FileManager.default.fileExists(atPath: userland.path))
+            }
+        }
+    }
+
+    @Test func `full updates reject prerequisite metadata before staging chunks`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        for value: Any in ["23G90", ["23G90"], 123] {
+            let info = try PropertyListSerialization.data(fromPropertyList: ["PrerequisiteBuild": value], format: .xml, options: 0)
+            #expect(throws: VPhoneOTAArchive.Error.self) {
+                try VPhoneOTAArchive.checkFullUpdateInfo(info, of: root.appendingPathComponent("delta.aea"))
+            }
+        }
+        let full = try PropertyListSerialization.data(fromPropertyList: ["OSVersion": "27.0.1"], format: .xml, options: 0)
+        try VPhoneOTAArchive.checkFullUpdateInfo(full, of: root.appendingPathComponent("full.aea"))
+        let nested = try PropertyListSerialization.data(fromPropertyList: ["MobileAssetProperties": ["PrerequisiteBuild": "23G90"]], format: .xml, options: 0)
+        #expect(throws: VPhoneOTAArchive.Error.self) {
+            try VPhoneOTAArchive.checkFullUpdateInfo(nested, of: root.appendingPathComponent("delta.aea"))
+        }
+    }
+
+    @Test func `payload validation rejects traversal and cross-chunk symlink descendants`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let a = root.appendingPathComponent("payload.000")
+        let b = root.appendingPathComponent("payload.001")
+        for path in ["../outside", "/outside", "System/../outside", "System//outside"] {
+            try encode([.file(path, Data())], in: root).write(to: a)
+            #expect(throws: VPhoneOTAArchive.Error.self) {
+                try VPhoneOTAArchive.validatePayloadPaths([a])
+            }
+        }
+        try encode([.symlink("escape", "/private/tmp")], in: root).write(to: a)
+        try encode([.file("escape/outside", Data())], in: root).write(to: b)
+        #expect(throws: VPhoneOTAArchive.Error.self) {
+            try VPhoneOTAArchive.validatePayloadPaths([a, b])
+        }
+        // A guest's absolute links are valid when extraction never follows them.
+        try encode([.directory(""), .directory("System"), .file("System/test", Data()), .symlink("var", "/private/var")], in: root).write(to: a)
+        try VPhoneOTAArchive.validatePayloadPaths([a])
+    }
 
     @Test func `an encrypted OTA stages its device tree, payload chunks and chunk list`() throws {
         let root = try makeRoot()

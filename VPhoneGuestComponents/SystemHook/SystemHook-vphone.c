@@ -41,7 +41,7 @@ static int vpIsCameraDaemon(const char *path) {
     return length >= sizeof(suffix) - 1 && strcmp(path + length - (sizeof(suffix) - 1), suffix) == 0;
 }
 
-static int vpIsGyroscopeDaemon(const char *path) {
+static int vpIsMotionDaemon(const char *path) {
     return vpPathHasSuffix(path, "/usr/libexec/backboardd");
 }
 
@@ -49,7 +49,7 @@ static int vpIsInjectionTarget(const char *path) {
     if (!path)
         return 0;
     const char *root = getenv("VPHONE_JB_ROOT");
-    return vpIsBootstrapPath(path, root) || vpIsAppPath(path) || vpIsCameraDaemon(path) || vpIsGyroscopeDaemon(path) ||
+    return vpIsBootstrapPath(path, root) || vpIsAppPath(path) || vpIsCameraDaemon(path) || vpIsMotionDaemon(path) ||
            (vpInBootstrap && path[0] != '/');
 }
 
@@ -162,6 +162,7 @@ static int vpExecve(const char *path, char *const argv[], char *const envp[]) {
 #define VP_CAMERA_DAEMON_HOOK "/usr/lib/libvcamcaptured.dylib"
 #define VP_CAMERA_APP_HOOK "/usr/lib/libcamfix.dylib"
 #define VP_GYROSCOPE_HOOK "/usr/lib/libvphonegyro.dylib"
+#define VP_ACCELEROMETER_HOOK "/usr/lib/libvphoneaccelerometer.dylib"
 #define VP_ATTITUDE_HOOK "/usr/lib/libvphoneattitude.dylib"
 #define VP_AVFOUNDATION "/System/Library/Frameworks/AVFoundation.framework/AVFoundation"
 // The haptics fix rides the same route and needs no loader of its own. See
@@ -231,7 +232,7 @@ __attribute__((constructor)) static void vpLogProcess(void) {
     vpInBootstrap = vpIsBootstrapPath(path, getenv("VPHONE_JB_ROOT"));
 
     // Every process loads this hook; only the ones it acts on are logged.
-    int fd = vpInXPCProxy || vpInBootstrap || vpIsAppPath(path) || vpIsCameraDaemon(path) || vpIsGyroscopeDaemon(path)
+    int fd = vpInXPCProxy || vpInBootstrap || vpIsAppPath(path) || vpIsCameraDaemon(path) || vpIsMotionDaemon(path)
                  ? vpOpenLog("vphone-systemhook.log")
                  : -1;
     if (fd >= 0) {
@@ -253,14 +254,17 @@ __attribute__((constructor)) static void vpLogProcess(void) {
         vpLoadLibrary("camera-hook", VP_CAMERA_DAEMON_HOOK);
         return;
     }
-    if (vpIsGyroscopeDaemon(path)) {
+    if (vpIsMotionDaemon(path)) {
         vpLoadLibrary("gyroscope-hook", VP_GYROSCOPE_HOOK);
+        vpLoadLibrary("accelerometer-hook", VP_ACCELEROMETER_HOOK);
         return;
     }
     // SpringBoard needs the haptics swizzle before UIKit first asks for an
     // engine, even though attitude simulation excludes this system UI app.
-    if (vpIsSpringBoard(path))
+    if (vpIsSpringBoard(path)) {
         vpLoadLibrary("haptics-fix", VP_HAPTICS_FIX);
+        vpLoadLibrary("accelerometer-hook", VP_ACCELEROMETER_HOOK);
+    }
     // Loaded before the app gate too: the swizzle must be in place before
     // Settings builds its follow-up section.
     if (vpIsPreferences(path))

@@ -1,5 +1,38 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **Experimental full OTA System update (2026-10-20):**
+> `system-exp-ota_userland` is off in Standard and the TV presets. For a stopped
+> iPhone/iPad guest with a snapshot and prepared target firmware, it replaces
+> System from a matching full OTA and reapplies the target Guest patches from
+> a fresh receipt state. Data/User volumes and SEPStorage are retained. The same
+> private disk clone receives the target kernelcache and TXM payloads under their existing IMG4
+> manifest; this reuses the existing declared TXM patches, adding no instruction
+> patch or fixed offset. The whole System/kernel/TXM transaction aborts on compatibility
+> patch failure. This is host-driven payload installation; Apple's UpdateBrain
+> protocol and application migration are not implied. See
+> [the implementation and validation record](Restore/data_preserving_full_ota.md).
+> **2026-10-21 correction:** full updates also stage, validate and install
+> `payloadv2/links.txt`. The 24A446 iPad OTA omits 24,835 duplicate paths from
+> its numbered chunks. Missing J410 media resources made audiomxd trap in
+> CFRetain(NULL), blocking migration through liveactivitiesd and locationd.
+> No new binary patch is used; the installer restores the OTA's own hard links
+> through confined parent descriptors and checks the resulting inode.
+> Corrected migration and the reference-machine clone subsequently booted with
+> retained data. The clone's protected app reopened its existing data offline
+> at 4/3/2 GB with service profile none. Separate explicit compatibility steps
+> preserved a legacy re-signed app container and synchronized 38 retained Apple
+> app programs from the target IPSW; these are not new binary patches.
+> **2026-10-21 orchestration:** `fw ota` now captures guest policies, takes one
+> disk/SEP/NVRAM checkpoint with separate host configuration/firmware backups,
+> prepares a pinned target, verifies real target migration, restores Auto-Lock
+> through Settings with effective-policy readback, and reapplies the saved service
+> profile. The installer stages target removable-app programs on System;
+> `ota.apps.apply` updates matching, already-installed Apple app programs at their
+> original container paths and quarantines old serialized placeholders. Legacy
+> third-party container signing is a preflight refusal, never an implicit repair.
+> This adds no instruction patches. Full application and performance equivalence
+> remain outside this result; see the runbook for current verification scope.
+
 > **iPhone19,2 / ARM64E_X1 compatibility (validated 2026-10-17):** the tested
 > pairing is iPhone 18 Pro 27.0.1 (24A446), V63AP, with cloudOS 26.4
 > (23E5207q). Cache discovery selects `dyld_shared_cache_arm64e_x1` and its
@@ -422,6 +455,32 @@
 > and dispatch are observable separately from CoreMotion app acceptance; the
 > platform capability gate and optional IMU match still require guest proof.
 > Reveal evidence and manual acceptance: `Research/Guest/virtual_gyroscope.md`.
+
+> **Gravity accelerometer (2026-10-20; iPadOS 26.6.2 guest verified):**
+> `system-backboardd-cfw-accelerometer` in Guest System, selected by both
+> presets on iOS 18+, installs `/usr/lib/libvphoneaccelerometer.dylib`.
+> SystemHook loads it into backboardd and SpringBoard. A built-in HID accelerometer
+> (page `0xff00`, usage `3`) supplies stationary gravity in g, with a monotonic
+> timestamp and sequence. `display.rotation` publishes the matching physical
+> pose through mobile preferences and a Darwin notification before its existing
+> orientation request. The provider keeps that pose across SpringBoard
+> relaunches; it streams while HID clients request a report interval and emits
+> one sample on enumeration/configuration changes. Raw HID alone was verified
+> insufficient on iPadOS 26.6.2: it enumerated but never gained a subscription,
+> and the language-change wedge remained. The provider also classifies its
+> stationary HID sample and posts it on BKOrientationManager's native queue,
+> replacing the missing hardware classification stage. SpringBoard recomputes
+> delivery and deferral after setup seeds the actual backlight state.
+> No kernel, DSC or system executable bytes change. Disabling the patch removes
+> its library; live environment synchronization never reinstalls an absent copy.
+> Replacing the library requires a reboot, without restarting backboardd during
+> environment installation. HID enumeration/dispatch alone do not establish
+> SpringBoard recovery; native sink delivery and interface readback are
+> separately observable. The isolated `gyro-regress` clone passed gravity-only
+> four-direction rotation, rotation lock/unlock and same-pose language-change
+> relaunch on `2.10.1-local.a8c22dce`, without a recovery respring/lock cycle.
+> Evidence and regression procedure:
+> `Research/Guest/springboard_orientation_stuck.md`.
 
 > **Device attitude (2026-10-08; guest acceptance pending):**
 > `system-apps-cfw-attitude` in Guest System is selected by both presets on
@@ -3314,3 +3373,20 @@ existing Keystone-checked encoders; the Task3 fixture test executes it for
 252, 246, 245, 233, 209 and a refusal. The persistent host shader cache is no
 longer required to launch: a VM that cannot prepare one logs a warning and
 boots without it.
+## Apply selected Preboot identity during guest updates (2026-10-21)
+
+`preboot-exp-devicetree_identity` was advertised as an `update-environment`
+guest patch but its installer call enabled identity only for full installs.
+Launchpad's Apply to Guest therefore completed with the identity still pending.
+Environment updates now run the existing identity rewrite when the current
+resolved plan selects it, using the installed tree without a restore directory.
+The patch bytes, presets, board-presenting guest guard, post-identity repair
+backup and existing off-state behavior are unchanged. This fixes the same
+delivery path for CLI updates, bundle changes and template guest-patch steps;
+other Preboot repairs already used it. It does not enable the eight firmware
+DeviceTree identity edits or establish that Apple will deliver Photos models.
+
+Validation on `upstream/main` `047642f8` (2.10.1): 77 existing tests in eight
+suites pass, covering guest device trees, patch resolution/catalogue/drift,
+board audio, microphone-array removal, iPhone product properties and haptics.
+The complete `VPhone` Debug build and bundle admission also pass.

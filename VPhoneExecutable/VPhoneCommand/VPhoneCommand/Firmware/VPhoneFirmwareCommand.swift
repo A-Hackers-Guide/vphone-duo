@@ -12,6 +12,9 @@ struct VPhoneFirmwareCommand: ParsableCommand {
         subcommands: [
             VPhoneFirmwareCatalogCommand.self,
             VPhoneFirmwareInspectCommand.self,
+            VPhoneFirmwareOTAStageCommand.self,
+            VPhoneFirmwareOTAPreflightCommand.self,
+            VPhoneFirmwareOTACommand.self,
             VPhoneFirmwarePrepareCommand.self,
             VPhoneFirmwarePatchCommand.self,
             VPhoneFirmwarePatchesCommand.self,

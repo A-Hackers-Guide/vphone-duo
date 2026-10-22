@@ -22,6 +22,11 @@ import VphonedNative
 extension GuestAPI {
     static func executeSystemApps(_ method: String, _ params: [String: Any]) throws -> [String: Any]? {
         switch method {
+        case "ota.apps.status":
+            return try updateOTASystemApps(apply: false)
+        case "ota.apps.apply":
+            try requireForce(params, "update retained Apple app programs from the installed OTA")
+            return try updateOTASystemApps(apply: true)
         case "apps.remove_system":
             guard let ids = try systemAppIDs(params) else {
                 throw GuestAPIError.invalidRequest("bundle_ids must list the apps to remove")
@@ -41,6 +46,129 @@ extension GuestAPI {
         default:
             return nil
         }
+    }
+
+    private static let otaAppsLock = NSLock()
+
+    /// Deliberately separate from apps.install/register: this owns no ordinary
+    /// app container. It accepts no caller-selected path or identifier and only
+    /// replaces matching Apple apps already registered in UUID containers.
+    private static func updateOTASystemApps(apply: Bool) throws -> [String: Any] {
+        otaAppsLock.lock()
+        defer { otaAppsLock.unlock() }
+        let fm = FileManager.default
+        let root = "/usr/local/share/vphone-ota"
+        let build = "24A446"
+        guard let data = fm.contents(atPath: root + "/Upgrade.plist"),
+              let metadata = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String],
+              metadata["Build"] == systemBuildVersion, metadata["Build"] == build else {
+            throw GuestAPIError.operationFailed("No matching installed OTA system-app payload.")
+        }
+        let apps = try listApps()["apps"] as? [[String: Any]] ?? []
+        let installed = Dictionary(apps.compactMap { app in (app["bundle_id"] as? String).map { ($0, app) } },
+                                   uniquingKeysWith: { first, _ in first })
+        /// A bundle's executable name, refused unless it is one plain component.
+        func executableName(_ info: [String: Any]) -> String? {
+            guard let name = info["CFBundleExecutable"] as? String,
+                  !name.isEmpty, !name.contains("/"), name != ".", name != ".." else { return nil }
+            return name
+        }
+        var rows: [[String: Any]] = []
+        for name in try fm.contentsOfDirectory(atPath: root + "/apps").sorted() where name.hasSuffix(".app") {
+            let source = root + "/apps/" + name
+            guard let info = NSDictionary(contentsOfFile: source + "/Info.plist") as? [String: Any],
+                  let id = info["CFBundleIdentifier"] as? String else {
+                throw GuestAPIError.operationFailed("Invalid staged Apple app: \(name)")
+            }
+            try GuestSystemAppPolicy.validateBundleID(id)
+            guard let bundlePath = installed[id]?["bundle_path"] as? String,
+                  let location = try? GuestSystemAppLocation(bundlePath: bundlePath) else { continue }
+            guard location.appDirectoryName == name, try bundleContainerExists(location) else {
+                throw GuestAPIError.operationFailed("Staged Apple app does not match its installed container: \(id)")
+            }
+            try checkBundleIdentifier(location, id)
+            guard let executable = executableName(info) else {
+                throw GuestAPIError.operationFailed("Invalid staged Apple executable: \(id)")
+            }
+            guard let liveInfo = NSDictionary(contentsOfFile: location.appPath + "/Info.plist") as? [String: Any],
+                  let liveExecutable = executableName(liveInfo) else {
+                throw GuestAPIError.operationFailed("Invalid installed Apple executable: \(id)")
+            }
+            // Info.plist first; mapped bytes compare stops at a length or
+            // first-byte difference instead of hashing both programs.
+            let matches = try NSDictionary(dictionary: liveInfo).isEqual(to: info)
+                && Data(contentsOf: URL(fileURLWithPath: source + "/" + executable), options: .mappedIfSafe)
+                == Data(contentsOf: URL(fileURLWithPath: location.appPath + "/" + liveExecutable), options: .mappedIfSafe)
+            var row: [String: Any] = ["bundle_id": id, "path": location.appPath, "current": matches]
+            if apply {
+                let stage = location.containerPath + "/.ota-" + build + "-" + name
+                if !matches {
+                    // Copy across System -> Data, keeping every independent
+                    // user-data/group container at its original path.
+                    if pathExists(stage) {
+                        throw GuestAPIError.operationFailed("OTA app staging remains at \(stage); inspect or roll back before retrying.")
+                    }
+                    let attributes = try fm.attributesOfItem(atPath: location.appPath)
+                    guard let owner = attributes[.ownerAccountID] as? NSNumber,
+                          let group = attributes[.groupOwnerAccountID] as? NSNumber else {
+                        throw GuestAPIError.operationFailed("Cannot read installed Apple app ownership.")
+                    }
+                    if let error = preservingCopy(source, to: stage) {
+                        throw GuestAPIError.operationFailed("Cannot stage \(id): \(error)")
+                    }
+                    // The staged image belongs to root; installed programs
+                    // keep their original _installd owner. Never follow links.
+                    let stagedURL = URL(fileURLWithPath: stage)
+                    let entries = fm.enumerator(at: stagedURL, includingPropertiesForKeys: nil)
+                    guard lchown(stage, owner.uint32Value, group.uint32Value) == 0 else {
+                        throw GuestAPIError.operationFailed("Cannot preserve Apple app ownership.")
+                    }
+                    while let url = entries?.nextObject() as? URL {
+                        guard lchown(url.path, owner.uint32Value, group.uint32Value) == 0 else {
+                            throw GuestAPIError.operationFailed("Cannot preserve ownership of \(url.path)")
+                        }
+                    }
+                    _ = try killApp(id, force: true)
+                    // Atomic exchange: a crash always leaves a complete .app
+                    // at the registered path. The old app remains at stage.
+                    guard renameatx_np(AT_FDCWD, stage, AT_FDCWD, location.appPath, UInt32(RENAME_SWAP)) == 0 else {
+                        throw GuestAPIError.operationFailed("Cannot publish target Apple app: \(String(cString: strerror(errno)))")
+                    }
+                    row["old_program"] = stage
+                }
+                // A 26.x SerializedPlaceholder can reinstall the old program
+                // later. Keep it as an inactive backup in the same container.
+                // Once that backup exists, a placeholder written afterwards
+                // describes the target program and stays where it is, so a
+                // repeated apply is a no-op.
+                let placeholder = location.containerPath + "/SerializedPlaceholder.ipa"
+                let oldPlaceholder = location.containerPath + "/.ota-" + build + "-SerializedPlaceholder.ipa"
+                var changed = !matches
+                if pathExists(placeholder), !pathExists(oldPlaceholder) {
+                    guard rename(placeholder, oldPlaceholder) == 0 else {
+                        throw GuestAPIError.operationFailed("Could not quarantine the old serialized placeholder for \(id).")
+                    }
+                    changed = true
+                }
+                func registered() throws -> Bool {
+                    try appRegistration(location.appPath)["registered"] as? Bool == true
+                }
+                if try changed || !registered() {
+                    var method: UnsafeMutablePointer<CChar>?
+                    if let error = vp_ls_register_system_app(location.appPath, location.containerPath, &method) {
+                        defer { free(error) }
+                        throw GuestAPIError.operationFailed(String(cString: error))
+                    }
+                    free(method)
+                    guard try registered() else {
+                        throw GuestAPIError.operationFailed("Updated Apple app is not registered: \(id)")
+                    }
+                }
+                row["current"] = true
+            }
+            rows.append(row)
+        }
+        return ["build": build, "apps": rows, "pending": rows.filter { $0["current"] as? Bool != true }.count]
     }
 
     /// `bundle_ids` in request order without repeats, or nil when absent.

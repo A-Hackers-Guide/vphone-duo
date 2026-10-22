@@ -6,6 +6,8 @@ import VphonedNative
 // MARK: - Device, Display, Audio, Network
 
 extension GuestAPI {
+    private static let rotationLock = NSLock()
+
     static func executeDevice(_ method: String, _ params: [String: Any]) throws -> [String: Any]? {
         switch method {
         case "device.info":
@@ -69,10 +71,22 @@ extension GuestAPI {
             }
             return brightnessState()
         case "display.rotation":
+            rotationLock.lock()
+            defer { rotationLock.unlock() }
             if let orientation = optionalString(params, "orientation") {
+                // Preserve the physical pose across SpringBoard relaunches.
+                // CoreMotion's app pose provider cannot feed this HID sink.
+                let accelerometer = vp_accelerometer_get()
+                if accelerometer["provider_running"] as? Bool == true {
+                    guard vp_accelerometer_set_orientation(orientation) else {
+                        throw GuestAPIError.operationFailed("Could not publish the accelerometer orientation")
+                    }
+                }
                 return try setRotation(orientation)
             }
-            return rotationInfo()
+            var rotation = rotationInfo()
+            rotation["accelerometer"] = vp_accelerometer_get()
+            return rotation
         case "display.orientation":
             return interfaceOrientation()
         case "display.rotation_lock":
@@ -82,6 +96,11 @@ extension GuestAPI {
             return try setRotationLock(locked)
         case "display.auto_lock":
             return GuestLockScreenIdle.describe()
+        case "display.auto_lock.set":
+            guard let seconds = (params["seconds"] as? NSNumber)?.intValue else {
+                throw GuestAPIError.invalidRequest("seconds must be an integer")
+            }
+            return try GuestLockScreenIdle.setAutoLockSeconds(seconds)
         case "screen.unlock":
             return try GuestScreenUnlock.unlock(
                 passcode: optionalString(params, "passcode"),

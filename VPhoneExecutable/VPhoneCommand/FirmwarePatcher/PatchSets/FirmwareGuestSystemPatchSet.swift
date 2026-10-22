@@ -24,6 +24,7 @@ public enum FirmwareGuestSystemPatchSet {
     public static let metalCacheReuse = "system-systemhook-cfw-metal_cache_reuse"
     public static let metalCacheReuseMarker = "/usr/lib/vphone-metal-cache-reuse"
     public static let gyroscope = "system-backboardd-cfw-gyroscope"
+    public static let accelerometer = "system-backboardd-cfw-accelerometer"
     public static let attitude = "system-apps-cfw-attitude"
     public static let arm64eX1DyldBootstrap = "system-dyld-boot-arm64e_x1_bootstrap"
     public static let arm64eX1CacheBootstrap = "dyld-boot-arm64e_x1_bootstrap"
@@ -41,6 +42,7 @@ public enum FirmwareGuestSystemPatchSet {
     /// Replaces the restored System volume with an Apple TV 4K userland
     /// staged from its OTA. Research only: no IPSW exists for that device.
     public static let tvOTAUserland = "system-tv-exp-ota_userland"
+    public static let otaUserland = "system-exp-ota_userland"
 
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
 
@@ -65,6 +67,13 @@ public enum FirmwareGuestSystemPatchSet {
         name: "Guest System",
         summary: "Shared-cache policy gates, patched system daemons and the vphone guest payload",
         patches: [
+            VPhonePatchDeclaration(
+                identifier: otaUserland,
+                title: "Full OTA system update",
+                summary: "Experimental: replaces the System volume from a staged full OTA, retaining Data, xART, NVRAM and SEPStorage. Requires a stopped disk/SEP/NVRAM snapshot and a prepared target; installs the target kernelcache and TXM in the same transaction. Use fw ota to verify migration and roll back.",
+                target: .guestFile(path: "/"),
+                applicability: ios27,
+            ),
             VPhonePatchDeclaration(
                 identifier: tvTPRO,
                 title: "TV TPRO feature detection",
@@ -336,6 +345,14 @@ public enum FirmwareGuestSystemPatchSet {
             ),
 
             // MARK: Motion
+
+            VPhonePatchDeclaration(
+                identifier: accelerometer,
+                title: "Virtual gravity accelerometer",
+                summary: "Installs libvphoneaccelerometer.dylib. Publishes a built-in HID gravity sensor and bridges its classified pose into backboardd's native device-orientation sink. In SpringBoard, recomputes orientation delivery and deferral after the real backlight seed. Follows display.rotation across relaunches; removing the library disables both after a reboot.",
+                target: .guestFile(path: "/usr/lib/libvphoneaccelerometer.dylib"),
+                applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 18, minor: 0)),
+            ),
 
             VPhonePatchDeclaration(
                 identifier: gyroscope,

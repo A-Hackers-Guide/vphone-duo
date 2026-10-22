@@ -13,6 +13,7 @@ tweak filter plists, and the GPU provenance note:
 | DeviceHub fix | `devicehubfix/libdevicehubfix.dylib` |
 | Device name pin | `devicename/libdevicename.dylib` |
 | Virtual gyroscope | `gyroscope/libvphonegyro.dylib` |
+| Gravity accelerometer | `accelerometer/libvphoneaccelerometer.dylib` |
 | Device attitude | `attitude/libvphoneattitude.dylib` |
 | Launchd hook | `launchhook/launchdhook-vphone.dylib` |
 | Process injection bridge | `systemhook/SystemHook-vphone.dylib` |
@@ -66,6 +67,20 @@ using vphoned's `motion.gyroscope.set/get/clear` configuration. A live update
 replaces installed copies only and requests a reboot without restarting the
 UI daemon. `make test-gyroscope` checks its configuration transport. Guest
 CoreMotion acceptance is still pending; see `Research/Guest/virtual_gyroscope.md`.
+
+`system-backboardd-cfw-accelerometer` installs a stationary gravity HID service
+in backboardd, selected independently of the gyro and app attitude providers.
+It matches the built-in accelerometer usage (`0xff00`, `3`), emits real
+accelerometer events on the requested report interval, and retains the device
+pose selected by `display.rotation` across SpringBoard relaunches. A native
+queue bridge supplies classified device orientation where the virtual board's
+motion stack never subscribes to raw HID samples. The same library recomputes
+SpringBoard's orientation gates after seeding the real backlight state. The read
+form of `display.rotation` includes its configuration and provider status.
+`make test-accelerometer` exercises gravity axes, the real HID event factory,
+subscription changes and stale service callbacks without registering a host
+sensor. See `Research/Guest/springboard_orientation_stuck.md` for evidence and
+the language-change regression boundary.
 
 `system-apps-cfw-attitude` installs `libvphoneattitude.dylib`, loaded by
 SystemHook into apps. It supplies a stationary Core Motion pose through

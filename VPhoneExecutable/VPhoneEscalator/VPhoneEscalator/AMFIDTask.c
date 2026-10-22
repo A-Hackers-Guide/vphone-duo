@@ -3,7 +3,9 @@
 #include "Escalator.h"
 
 #include <arpa/inet.h>
+#include <copyfile.h>
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <libproc.h>
 #include <objc/message.h>
 #include <ptrauth.h>
@@ -12,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -153,22 +156,75 @@ pid_t find_amfid(void) {
     return -1;
 }
 
-// amfid is launch-on-demand. Validating this binary — ad-hoc signed, so the
-// kernel has to ask — both starts it and makes it build the singleton.
-static void poke_amfid(const char *self_path) {
+// Run a binary to completion with its output discarded. Returns 0 on a clean
+// exit, -1 otherwise.
+static int spawn_quiet(const char *path, char *const argv[]) {
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    posix_spawn_file_actions_addopen(&fa, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
+    posix_spawn_file_actions_addopen(&fa, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
     pid_t child = 0;
-    char *const argv[] = {(char *)self_path, (char *)"--nop", NULL};
-    if (posix_spawn(&child, self_path, NULL, NULL, argv, NULL) == 0) {
-        int status = 0;
-        waitpid(child, &status, 0);
-    }
+    int rc = posix_spawn(&child, path, &fa, NULL, argv, NULL);
+    posix_spawn_file_actions_destroy(&fa);
+    if (rc != 0) return -1;
+    int status = 0;
+    if (waitpid(child, &status, 0) != child) return -1;
+    return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : -1;
+}
+
+// amfid is launch-on-demand, and the kernel consults it only to validate a
+// binary whose cdhash it has not already cached. Re-running this escalator
+// does nothing once its own cdhash is known: the kernel answers from its cache
+// and never wakes amfid. That is why spawning self with --nop started nothing
+// on a Mac where amfid had idle-exited (JETSAM_REASON_MEMORY_IDLE_EXIT).
+//
+// So present the kernel a binary it has never seen: copy this escalator to a
+// scratch path and re-sign the copy ad hoc with a random identifier, which
+// gives it a fresh cdhash. Validating that copy at exec forces the kernel to
+// ask amfid, which both starts amfid and makes it build its AMFIRequirements-
+// Manager singleton — the state the rest of this tool needs. The copy carries
+// no private entitlements (the escalator has none), so amfid validates it
+// normally; nothing is written into anyone's code.
+static void poke_amfid(const char *self_path) {
+    char copy_path[] = "/tmp/vphone-escalator-poke.XXXXXX";
+    int fd = mkstemp(copy_path);
+    if (fd < 0) return;
+    close(fd);
+
+    int done = 0;
+    if (copyfile(self_path, copy_path, NULL, COPYFILE_DATA) != 0 ||
+        chmod(copy_path, 0755) != 0)
+        goto cleanup;
+
+    // A random identifier makes the ad-hoc signature's cdhash one the kernel
+    // has not cached, both now and on later escalator runs.
+    char identifier[64];
+    snprintf(identifier, sizeof(identifier), "vphone-escalator-poke-%08x%08x",
+             arc4random(), arc4random());
+    char *const sign_argv[] = {(char *)"/usr/bin/codesign", (char *)"-f", (char *)"-s",
+                               (char *)"-",      (char *)"--identifier", identifier,
+                               copy_path,        NULL};
+    if (spawn_quiet("/usr/bin/codesign", sign_argv) != 0) goto cleanup;
+
+    char *const run_argv[] = {copy_path, (char *)"--nop", NULL};
+    spawn_quiet(copy_path, run_argv);
+    done = 1;
+
+cleanup:
+    (void)done;
+    unlink(copy_path);
 }
 
 int attach_amfid(const char *self_path) {
     g_amfid = find_amfid();
     if (g_amfid < 0) {
         poke_amfid(self_path);
-        g_amfid = find_amfid();
+        // The poke returns once the re-signed copy has exited, but launchd may
+        // take a moment to bring amfid up. Retry briefly before giving up.
+        for (int i = 0; i < 30 && g_amfid < 0; i++) {
+            usleep(100 * 1000);
+            g_amfid = find_amfid();
+        }
     }
     if (g_amfid < 0) {
         fprintf(stderr, "error: amfid is not running\n");

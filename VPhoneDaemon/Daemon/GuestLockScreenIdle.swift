@@ -28,6 +28,7 @@ enum GuestLockScreenIdle {
     /// then posts `changedNotification`; ManagedConfiguration's own clients
     /// re-read it on the same signal.
     private static let settingsPath = "/var/mobile/Library/UserConfigurationProfiles/EffectiveUserSettings.plist"
+    private static let userSettingsPath = "/var/mobile/Library/UserConfigurationProfiles/UserSettings.plist"
     private static let changedNotification = "com.apple.managedconfiguration.effectivesettingschanged"
     private static let domain = "com.apple.springboard"
     private static let key = "SBMinimumLockscreenIdleTime"
@@ -70,6 +71,27 @@ enum GuestLockScreenIdle {
             "never": autoLock.map { $0 >= never } ?? false,
             "lock_screen_minimum_seconds": minimum.map { $0 as Any } ?? NSNull(),
         ]
+    }
+
+    /// Update the managed UserSettings input through cfprefsd and let profiled
+    /// regenerate EffectiveUserSettings. Never edit the effective file itself.
+    static func setAutoLockSeconds(_ seconds: Int) throws -> [String: Any] {
+        guard seconds >= 0, seconds <= Int(Int32.max) else {
+            throw IcliError.failed("Auto-Lock seconds must be between 0 and Int32.max")
+        }
+        guard let data = FileManager.default.contents(atPath: userSettingsPath),
+              let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { throw IcliError.unavailable("UserSettings.plist is unavailable") }
+        var restricted = plist["restrictedValue"] as? [String: Any] ?? [:]
+        var setting = restricted["maxInactivity"] as? [String: Any] ?? [:]
+        setting["value"] = seconds
+        if setting["rangeMinimum"] == nil { setting["rangeMinimum"] = 120 }
+        restricted["maxInactivity"] = setting
+        _ = try writePreference(domain: userSettingsPath, key: "restrictedValue", value: .plist(restricted), notify: changedNotification)
+        apply(reason: "requested Auto-Lock \(seconds)s")
+        var result = describe()
+        result["requested_auto_lock_seconds"] = seconds
+        return result
     }
 
     private static func apply(reason: String) {
