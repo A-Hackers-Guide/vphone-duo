@@ -249,17 +249,35 @@ The daemon only parses the session configuration (`cameraCfgs.count=1`,
 the device, so preview and photos come from `libcamfix` in the client, as
 the hook was designed.
 
-### Validation (photo707)
+### Validation
 
-With a 1280x720 BGRA test frame written into the shared frame file (the file
-the host's camera server fills through vphoned), Camera.app showed the frame
-in its viewfinder, and each shutter press saved a 1280x720 JPEG of it to
-`DCIM/100APPLE` with the library thumbnail updated (three in a row). A
-third-party app got `vphone:vcam:0` from `+defaultDeviceWithMediaType:`, ran
-an `AVCaptureSession` and received a 24,635-byte photo from
-`AVCapturePhotoOutput`. No crash reports from Camera or cameracaptured.
+On `photo707` (iPhone17,3, 27.0 24A435):
 
-Not checked: frames streamed by the host's camera server (the menu has no
-automation; the file it writes is the one tested), Camera.app video
-recording, Voice Memos recording with the camera backing present, and an
-iOS 26 guest after the camfix changes (both camfix changes also load there).
+- With a 1280x720 BGRA test frame written into the shared frame file,
+  Camera.app showed the frame in its viewfinder, and each shutter press saved
+  a 1280x720 JPEG of it to `DCIM/100APPLE` with the library thumbnail
+  updated (three in a row).
+- With the host streaming its test pattern (Features -> Source: Test
+  Pattern -> Start Streaming), the viewfinder moved with the stream and the
+  shutter saved the streamed frame.
+- A third-party app got `vphone:vcam:0` from `+defaultDeviceWithMediaType:`,
+  ran an `AVCaptureSession` and received a 24,635-byte photo from
+  `AVCapturePhotoOutput`.
+- Voice Memos recorded and saved a 14 s memo with the camera backing in the
+  provider.
+- No crash reports from Camera, cameracaptured or Voice Memos.
+
+On `cam26` (iPhone17,3, 26.6.2 23G90), the source still goes into
+`_sSourceList` (`appended source — list 0 -> 1`; no provider line). Camera.app
+there also shoots with `-capturePhotoWithSettings:delegate:`: with the
+previous `libcamfix` the shutter saved nothing, with this one it saved the
+streamed frame, through the same callback sequence.
+
+Limit, on both: Camera.app video recording does not work. `libcamfix` has no
+movie path and the daemon never runs the graph, so the timer stays at
+00:00:00 and stopping saves no file. Until Camera.app is relaunched its
+engine then refuses photos too.
+
+Restarting vphoned (or replacing the shared frame file) leaves the host
+streaming into the old mapping: the host notices a dead connection only when
+a send fails. Restart the VM, then start streaming again.

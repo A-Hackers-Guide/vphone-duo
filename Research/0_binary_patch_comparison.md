@@ -410,7 +410,8 @@
 > `libcamfix` gives Camera.app's `-capturePhotoWithSettings:delegate:` the
 > full callback sequence it waits for before saving, and starts the preview
 > scan for a client that skips `-startRunning`. Camera.app's shutter saves
-> photos on 27 again (issue #707). Details and validation:
+> photos again on 27 (issue #707) and on 26.6.2, which shoots the same way.
+> Video recording still does not work. Details and validation:
 > [`Guest/virtual_camera_transport.md`](Guest/virtual_camera_transport.md#ios-27-the-camera-through-the-backings-provider-2026-10-22).
 
 > **3D gyroscope core (2026-10-08; guest acceptance pending):**
