@@ -24,6 +24,7 @@ extension GuestAPI {
             executeAudioLatency,
             executeGyroscope,
             executeAttitude,
+            executeHomePodDisplay,
         ]
         for area in areas {
             if let result = try area(method, params) {

@@ -7,6 +7,7 @@
 
 @testable import FirmwarePatcher
 import Foundation
+import Img4tool
 import Testing
 
 @Suite("iPad audio node from the board tree")
@@ -109,6 +110,68 @@ struct CustomFirmwareBoardAudioTests {
                 original.prefix(original.count - 4),
                 board: Self.tree(audio: Self.boardAudio),
             )
+        }
+    }
+}
+
+@Suite("HomePod donor top-cap metadata")
+struct HomePodDisplayMetadataTests {
+    private typealias Node = FlatDeviceTreeNode
+
+    // B520AP / AudioAccessory5,1 27.0 (24J361), captured from the physical
+    // display node. These bytes are evidence fixtures, not runtime defaults.
+    private static let donor: [String: Data] = [
+        "MDXCoords": Data(base64Encoded: "KE0AAACAAADXsgAAENgAAK/lAAAQ2AAA2LIAAACAAAApTQAA8CcAAFEaAADwJwAAyFoAAKCNAADYsgAAOKUAAGByAAAoTQAAAIAAAA==")!,
+        "MDYCoords": Data(base64Encoded: "ENgAAK/lAAAQ2AAA2LIAAACAAAApTQAA8CcAAFEaAADwJwAAKE0AAACAAADXsgAAOKUAANiyAACgjQAAyFoAAChNAABgcgAAAIAAAA==")!,
+        "MDRingCoords": Data(base64Encoded: "AgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAAAAAA==")!,
+        "MDBitDepth": Node.uint32(12),
+        "MDHWVersion": Node.uint32(3),
+    ]
+
+    private static func tree(_ properties: [String: Data]) -> Data {
+        Node("device-tree", children: [
+            Node("arm-io", children: [
+                Node("dockchannel-rtp", children: [
+                    Node("rtp-transport", children: [
+                        Node("display", properties.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }),
+                    ]),
+                ]),
+            ]),
+        ]).serialized
+    }
+
+    @Test func `extracts all nineteen LEDs in donor order from raw and IM4P trees`() throws {
+        let raw = Self.tree(Self.donor)
+        #expect(try DeviceTreePatcher.homePodDisplayProperties(from: raw) == Self.donor)
+        let im4p = try IM4P(fourcc: "dtre", description: "HomePod metadata test", payload: raw)
+        let extracted = try DeviceTreePatcher.homePodDisplayProperties(from: im4p.data)
+        #expect(extracted == Self.donor)
+        #expect(extracted["MDXCoords"]?.count == 19 * 4)
+    }
+
+    @Test func `requires the physical display node instead of inventing a layout`() {
+        #expect(throws: (any Error).self) {
+            try DeviceTreePatcher.homePodDisplayProperties(from: Node("device-tree").serialized)
+        }
+    }
+
+    @Test func `rejects truncated and incompatible donor properties`() {
+        for (name, replacement) in [
+            ("MDYCoords", Data([0])),
+            ("MDXCoords", Node.uint32(0x10001)),
+            ("MDBitDepth", Node.uint32(8)),
+            ("MDHWVersion", Node.uint32(4)),
+        ] {
+            var properties = Self.donor
+            properties[name] = replacement
+            #expect(throws: (any Error).self) {
+                try DeviceTreePatcher.homePodDisplayProperties(from: Self.tree(properties))
+            }
+        }
+        var incomplete = Self.donor
+        incomplete.removeValue(forKey: "MDRingCoords")
+        #expect(throws: (any Error).self) {
+            try DeviceTreePatcher.homePodDisplayProperties(from: Self.tree(incomplete))
         }
     }
 }

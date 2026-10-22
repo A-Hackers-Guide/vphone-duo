@@ -8,6 +8,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
     private var vm: VPhoneVirtualMachine?
     private var control: VPhoneGuestControl?
     private var windowController: VPhoneVirtualMachineWindowController?
+    private var homePodDisplayTask: Task<Void, Never>?
     private var menuController: VPhoneMenuController?
     private var fileWindowController: VPhoneFileWindowController?
     private var keychainWindowController: VPhoneKeychainWindowController?
@@ -114,7 +115,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         self.control = control
         if !command.dfu {
             control.unlocksAtStartup = vm.unlocksAtStartup
-            control.syncsGuestEnvironment = !options.isTVGuest
+            control.syncsGuestEnvironment = !options.isTVGuest && !options.isHomePodGuest
             control.syncsHostLocation = vm.syncsHostLocation
             control.guestDeviceName = Self.guestDeviceName(forConfig: options.configURL)
             startNetworkServices(vm: vm, control: control)
@@ -176,11 +177,44 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                     .standardizedFileURL
                     .resolvingSymlinksInPath()
                     .path,
+                homePodGuest: options.isHomePodGuest,
             )
             wc.captureView?.escapeIsBackGesture = !options.isPadGuest && !options.isTVGuest
             wc.captureView?.isTVGuest = options.isTVGuest
             wc.homeButtonHoldsInGuest = options.isTVGuest
             windowController = wc
+            if options.isHomePodGuest {
+                homePodDisplayTask = Task { [weak wc, weak control] in
+                    // One snapshot in flight, with no queue of stale animation
+                    // frames. A slow guest reduces the rate instead of lagging.
+                    while !Task.isCancelled {
+                        guard let wc, let control else { return }
+                        guard let window = wc.displayWindow, window.isVisible, !window.isMiniaturized else {
+                            try? await Task.sleep(for: .milliseconds(250))
+                            continue
+                        }
+                        if control.isConnected, control.guestCapabilities.contains("homepod_display") {
+                            do {
+                                let snapshot = try await control.homePodDisplaySnapshot()
+                                guard !Task.isCancelled else { return }
+                                if let snapshot {
+                                    wc.updateHomePodDisplay(geometry: snapshot.geometry, frame: snapshot.frame)
+                                } else {
+                                    wc.clearHomePodDisplay()
+                                    try? await Task.sleep(for: .seconds(1))
+                                }
+                            } catch {
+                                wc.clearHomePodDisplay()
+                                try? await Task.sleep(for: .seconds(1))
+                            }
+                        } else {
+                            wc.clearHomePodDisplay()
+                            try? await Task.sleep(for: .milliseconds(250))
+                        }
+                        try? await Task.sleep(for: .milliseconds(16))
+                    }
+                }
+            }
 
             let fileWC = VPhoneFileWindowController()
             fileWindowController = fileWC
@@ -469,6 +503,9 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func stopControlServices() {
+        homePodDisplayTask?.cancel()
+        homePodDisplayTask = nil
+        windowController?.clearHomePodDisplay()
         hostAutomationServer?.stop()
         portForwarder?.stop()
         apiProxy?.stop()

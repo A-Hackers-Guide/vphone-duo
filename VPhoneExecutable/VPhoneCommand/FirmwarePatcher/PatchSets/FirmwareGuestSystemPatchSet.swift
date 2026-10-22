@@ -319,6 +319,12 @@ public enum FirmwareGuestSystemPatchSet {
                 bootEssential: true,
             ),
             VPhonePatchDeclaration(
+                identifier: homePodTopCap,
+                title: "HomePod top cap",
+                summary: "Stages the donor MiniDisplay geometry for vphoned's virtual HomePod LED display and volume buttons, with a SoundBoard-only shim for its reserved HID class identity.",
+                target: .guestFile(path: homePodDisplayPath),
+            ),
+            VPhonePatchDeclaration(
                 identifier: "system-launchdaemons-boot-environment",
                 title: "Guest environment",
                 summary: """
@@ -571,6 +577,9 @@ public enum FirmwareGuestSystemPatchSet {
 
     /// The iPad audio node repair in the restored Preboot device tree, for an
     /// iPad VM patched before `fw patch` copied the board's node.
+    public static let homePodTopCap = "system-homepod-exp-top_cap"
+    public static let homePodDisplayPath = "/usr/share/vphone/HomePodDisplay.plist"
+
     public static let prebootBoardAudio = "preboot-cfw-devicetree_board_audio"
 
     /// The iPhone product description in the restored Preboot device tree,

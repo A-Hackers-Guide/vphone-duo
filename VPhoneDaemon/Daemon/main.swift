@@ -20,6 +20,7 @@ GuestMobileGestaltCache.dropIfStaleOnStartup()
 // Before audiomxd is asked for sound again; see the type for what it cannot cover.
 GuestVirtualAudioProduct.storeOnStartup()
 vp_vcam_start()
+GuestHomePodDisplay.startOnStartup()
 // Multi-finger injection is resolved here so the first pinch is not the call
 // that pays for `dlopen`; a base without the symbols logs and stays a no-op.
 _ = vp_hid_load()

@@ -12,6 +12,20 @@ import VPhonePatchKit
 
 @Suite("Guest patch resolution")
 struct FirmwareGuestPatchResolutionTests {
+    @Test func `only the HomePod preset selects the top cap and TV rejects explicit selection`() throws {
+        let identifier = FirmwareGuestSystemPatchSet.homePodTopCap
+        for preset in FirmwarePatchSetCatalog.builtInPresets {
+            let plan = try VPhonePatchPlan.resolve(
+                preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: VPhoneVersion("27.0"), cloudOS: VPhoneVersion("26.4"),
+            )
+            #expect(plan.isEnabled(identifier) == (preset.identifier == VPhonePatchPreset.homePodMiniIdentifier))
+        }
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [identifier]).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier]) == [identifier])
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true) == [identifier])
+    }
+
     @Test
     func `TV selection keeps vphoned and excludes iOS payloads and cache patches`() throws {
         let standard = try VPhonePatchPlan.resolve(

@@ -115,5 +115,113 @@ process lists and boot results); its console is
 `~/Library/Logs/vphone-launchpad/homepod-mini.log`.
 
 Audio output and microphone capture, Siri, AirPlay playback, activation and
-pairing with the Home app have not been validated. The host's diagnostic
-canvas does not establish a usable graphical HomePod interface.
+pairing with the Home app have not been validated. The top-cap UI described
+below replaces the diagnostic framebuffer for interactive HomePod windows.
+
+## Top-cap display
+
+The HomePod preset additionally selects `system-homepod-exp-top_cap`. On a
+stopped existing machine, `cfw update-environment` installs this device without
+a restore, recovering its metadata from the retained original board tree.
+Disabling the patch removes the configuration and adapter and restores the
+backed-up SoundBoard executable. Other presets leave this device off.
+
+The donor node `/arm-io/dockchannel-rtp/rtp-transport/display` supplies 19 RGB
+positions: twelve outer LEDs, six inner LEDs and one center LED, at 12-bit
+depth and hardware version 3. `MDXCoords` and `MDYCoords` are unsigned
+little-endian Q16.16 positions in the full cap's unit square; their unpopulated
+rim must not be stretched away. `MDRingCoords` contains integer ring indices.
+The installer retains these five raw properties in
+`/usr/share/vphone/HomePodDisplay.plist`; the host has no hardcoded LED layout.
+
+MiniDisplay matches consumer HID usage page 12, usage 1. Its report 2 is a
+packed 245-byte output report: one-byte report ID, eight-byte mach timestamp,
+then two 118-byte banks, each with two UInt16 icon words and nineteen RGB
+UInt16 triples. All multi-byte values are little endian. Bank 0 contains
+Siri/transient output, bank 1 the always-on layer; the volume icons use bank
+0's two words. Peppy expands the physical depth to a 16-bit wire range;
+RGB and icon words both scale by 65535, independently of the 12-bit tree value.
+Its initializer reads `kMDDisplayMaxBitDepth` (16) at 0x1a6a3787c, and
+`submitPixelBuffer` computes the shift from the physical depth at 0x1a69dbda8.
+HomePodDisplayService
+already applies brightness and gamma before submitting frames. The property
+named `MDDisplayBrightness` controls driver processing, not master intensity.
+
+These observations come from this IPSW's MiniDisplay and
+HomePodDisplayService shared-cache images, extracted with relocation and ObjC
+metadata repair. Their extracted SHA-256 values are respectively
+`26d787575f4292a496cae7f9e341ae53134a8b482d4d23c5c970ea65a5828157` and
+`a958fb05e8f2b4774a2542256bfe803a078f3574adf9cdad96a7468d56ce2354`.
+Reveal points are `MDInterfaceHID._readRegistryProperties` (0x1fb5f56b0),
+`displayCount` (0x1fb5f4160), `deviceAdded:` (0x1fb5f3f88),
+`MDFrame.initWithInterface:pixelInfo:` (0x1fb5f31b8),
+`HPDSLEDController._processBrightness:` (0x1a69d9cb0) and
+`Peppy.submitPixelBuffer` (0x1a69dba30). Analysis and runtime artifacts are
+under `.build/homepod-ui-research/`.
+
+vphoned publishes an `IOHIDUserDevice` with that metadata, receives the native
+output reports, and exposes the latest immutable snapshot through
+`homepod.display.state`. MiniDisplay tests the reserved `IOClass` property in
+both discovery and property reads. A guest probe confirmed that the virtual
+HID API accepts this descriptor but rejects an `IOClass` override; setting it
+after creation returns unsupported (`0xe00002c7`). The SoundBoard-only adapter
+therefore recognizes exactly `vphone-homepod-mini-display`, performs the normal
+retain/open/semaphore discovery sequence using ObjC runtime ivars, and supplies
+the MiniDisplay class identity for that device. Other devices and other property
+reads retain the original implementations. A failed frame submission on that
+virtual handle triggers immediate HID enumeration, throttled to once per second,
+and retries the original frame on a replacement device. This handles vphoned
+restarts; the native interface otherwise retains its stale handle indefinitely.
+The original `submitFrame:error:` (0x1fb5f2ff8) forwards `IOHIDDeviceSetReport`
+errors, and `_findDevice` returns early while `_device` is non-null. Recovery
+does not call `_findDevice`, whose absent-device wait can block for 30 seconds.
+Frame generation and native report submission remain Apple's. The adapter uses
+a signed load command in SoundBoard and
+preserves its original entitlements.
+
+The Mac window displays a circular diffuser, adding both guest light layers and
+clamping emitted intensity. Its diffuser, color response and layer composition
+are visual approximations; the exact optical/hardware composition is not
+established by the inspected userspace code. Delivery keeps one snapshot request
+in flight at up to 60 Hz, drops intermediate frames, blanks on connection loss,
+and pauses requests while minimized. No host animation substitutes for output.
+The accessible +/- controls send consumer volume HID down/up (0xE9/0xEA),
+including holds and immediate releases on focus loss. Quick taps last at least
+700 ms after the guest acknowledges key-down. Timing from the mouse event can
+collapse a tap's down/up into adjacent RPCs when input delivery is delayed.
+This preserves a usable consumer-key hold for instantaneous mouse/AX taps.
+The center touch surface has no
+input mapping yet and is excluded from accessibility/tab navigation.
+
+### Top-cap validation (2026-10-22)
+
+- The full `VPhone` bundle builds, passes its admission phase and passes
+  `codesign --verify --deep --strict`. Xcode MCP runs passed 39 selected
+  firmware/patch-selection tests and all eight `HomePodDisplayTests`.
+  `VPhoneDaemon/Tests/run-homepod-display-tests.sh` checks report boundaries,
+  both banks, icon channels and full 16-bit normalization. The guest-component
+  identity harness checks virtual-device discovery, ordinary property/error
+  forwarding, duplicate discovery, replacement after failure and retry throttling.
+- On HomePod Software 27.0 (24J361), SoundBoard submits native report 2 with
+  length 245, nineteen RGB entries per bank and zero rejected reports. The Mac
+  cap visibly follows its white volume HUD and independently lit +/- channels.
+  Held clicks change the guest's `Audio/Video` volume in both directions.
+  A trace of 1 ms mouse clicks confirmed paired RPCs with at least 700 ms
+  between key-down acknowledgement and key-up. Two such clicks per button
+  changed volume from 0.48 to 0.58 and back to 0.48. Initial individual presses
+  sometimes lit the HUD without changing volume despite valid input delivery;
+  the cause inside the guest has not been established. No host-side volume
+  setter substitutes for HID input. The native-button probe also verifies
+  paired transitions from standard button and accessibility actions.
+- Killing/restarting `com.vphone.vphoned` recreates the HID device. With the
+  recovery adapter installed, native reports resume without restarting
+  SoundBoard or the VM; an additional volume press produces another report.
+- A complete opt-out/update/boot cycle reported an unconfigured display,
+  removed SoundBoard's added load command, and preserved its original
+  entitlements byte for byte. Restoring the original HomePod preset and updating
+  the guest environment brought the display back. The saved patch selection
+  before and after that cycle is identical.
+
+Runtime artifacts for these checks are under `.build/homepod-ui-research/`.
+Siri activation and its multicolor animations remain unvalidated; report and
+renderer tests exercise RGB channels without claiming those services work.

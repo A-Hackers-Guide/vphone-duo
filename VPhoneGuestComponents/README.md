@@ -1,7 +1,7 @@
 # Sibling guest components
 
 `make -C VPhoneGuestComponents package` cross-compiles guest components with
-Xcode's iPhoneOS SDK. The archive contains signed arm64e binaries, two camera
+Xcode's iPhoneOS SDK (the HomePod adapter uses the tvOS SDK). The archive contains signed arm64e binaries, two camera
 tweak filter plists, and the GPU provenance note:
 
 | Component | Archive contents |
@@ -15,6 +15,7 @@ tweak filter plists, and the GPU provenance note:
 | Virtual gyroscope | `gyroscope/libvphonegyro.dylib` |
 | Gravity accelerometer | `accelerometer/libvphoneaccelerometer.dylib` |
 | Device attitude | `attitude/libvphoneattitude.dylib` |
+| HomePod display identity | `homepoddisplay/libvphonehomepoddisplay.dylib` |
 | Launchd hook | `launchhook/launchdhook-vphone.dylib` |
 | Process injection bridge | `systemhook/SystemHook-vphone.dylib` |
 | iOS 27 app registrar | `vpregister/vpregister` |

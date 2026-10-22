@@ -122,7 +122,7 @@ fi
 
 for name in vphoned vphoned-tvos launchdhook-vphone.dylib SystemHook-vphone.dylib libcamfix.dylib \
     libvcamcaptured.dylib libmisfix.dylib libhapticsfix.dylib libbatteryhealthfix.dylib libdevicehubfix.dylib libdevicename.dylib \
-    libprefsfix.dylib libsigninfix.dylib libvphonegyro.dylib libvphoneaccelerometer.dylib libvphoneattitude.dylib libAppleParavirtCompilerPluginIOGPUFamily.dylib; do
+    libprefsfix.dylib libsigninfix.dylib libvphonegyro.dylib libvphoneaccelerometer.dylib libvphoneattitude.dylib libvphonehomepoddisplay.dylib libAppleParavirtCompilerPluginIOGPUFamily.dylib; do
     require_signed_macho "$guest/$name"
 done
 for name in vphoned.plist libcamfix.plist libvcamcaptured.plist libmisfix.plist; do
@@ -176,7 +176,7 @@ while IFS= read -r file; do
         "$frameworks/"*)
             [[ "$platform" != IOS ]] || { print -u2 "iOS binary in Contents/Frameworks: ${file#$bundle/}"; exit 1; }
             ;;
-        "$guest/vphoned-tvos")
+        "$guest/vphoned-tvos"|"$guest/libvphonehomepoddisplay.dylib")
             # tvOS dyld refuses an iOS-platform daemon on an Apple TV guest.
             [[ "$platform" == TVOS ]] || { print -u2 "Non-tvOS binary: ${file#$bundle/}"; exit 1; }
             ;;

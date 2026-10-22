@@ -1,5 +1,29 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **HomePod top cap (2026-10-22).** `system-homepod-exp-top_cap` installs
+> `/usr/share/vphone/HomePodDisplay.plist`, extracted from the selected board's
+> `/arm-io/dockchannel-rtp/rtp-transport/display` node. It preserves the donor's
+> `MDXCoords`, `MDYCoords`, `MDRingCoords`, `MDBitDepth` and `MDHWVersion` payloads
+> for vphoned's virtual MiniDisplay HID device. Only `homepod-mini` selects it
+> by default; the installer rejects other guest families and missing or invalid
+> donor metadata. Both full installation and environment updates stage it through
+> confined descriptors; deselecting removes this added configuration and its
+> receipt entry. It also installs `libvphonehomepoddisplay.dylib` only into
+> SoundBoard through an `LC_LOAD_WEAK_DYLIB` in its backed-up executable, preserving
+> its entitlements and resealing its app bundle. launchd strips `DYLD_*`
+> environment variables from this platform process, so both the standalone
+> daemon plist and launchd cache are cleaned of the earlier environment route
+> while preserving their other keys and inserted libraries.
+> `IOHIDUserDevice` reserves `IOClass`;
+> the shim adapts MiniDisplay's discovery callback and class-identity query only
+> for the exact virtual display ID. On a failed submission it can replace that
+> virtual handle after vphoned restarts, retrying the same native frame and
+> throttling device enumeration to once per second. Other devices retain their
+> original failure behavior. LED reports still traverse the native HID device. Deselecting
+> restores the original SoundBoard executable from `.bak`, reseals the app,
+> and deletes the library. The VM retains its virtual hardware tree.
+> No instruction patch is added.
+
 > **HomePod mini (2026-10-22).** `AudioAccessory5,1` / B520 uses its own
 > HomePod Software 27.0 (24J361) monolithic arm64e TVOS IPSW with the cloudOS
 > 26.4 boot chain. The dedicated `homepod-mini` preset retains 27 compatibility

@@ -200,6 +200,9 @@ struct VPhoneCustomFirmwareInstaller {
             ? try restoreTree(in: bundleDirectory, path: bundlePath, owner: callerUID)
             : nil
         let device = configuredGuestDevice(in: bundleDirectory) ?? guestDevice(of: restore)
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodTopCap), device.family != .homePod {
+            throw ValidationError("The HomePod top-cap patch is supported only for a HomePod guest.")
+        }
         // Research: an Apple TV 4K userland staged from its OTA, which
         // `system-tv-exp-ota_userland` puts in place of the restored one.
         let hasOTAUserland = (try? bundleDirectory.isDirectory(VPhoneOTAArchive.userlandDirectoryName)) == true
@@ -259,6 +262,17 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
         try requireFreeSpace(at: [bundlePath, work.url.path])
+        let boardDeviceTree = try stageBoardDeviceTree(in: bundleDirectory, work: work, device: device)
+        let homePodDisplay: Data?
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodTopCap) {
+            guard let boardDeviceTree else {
+                throw ValidationError("HomePod top-cap emulation needs the original board device tree in FirmwareOriginals. Recover it from this VM's IPSW before updating the environment.")
+            }
+            let properties = try DeviceTreePatcher.homePodDisplayProperties(from: Data(contentsOf: boardDeviceTree))
+            homePodDisplay = try PropertyListSerialization.data(fromPropertyList: properties, format: .binary, options: 0)
+        } else {
+            homePodDisplay = nil
+        }
 
         // Work on an APFS clone of Disk.img in the private folder, then rename
         // it over the original: nothing is attached from the caller's folder,
@@ -420,6 +434,7 @@ struct VPhoneCustomFirmwareInstaller {
                     work: work,
                     owner: callerUID,
                     otaUserland: otaUserland,
+                    homePodDisplay: homePodDisplay,
                     plan: plan,
                     priorGuest: priorGuest,
                     kernelPatches: receiptKernel,
@@ -442,6 +457,7 @@ struct VPhoneCustomFirmwareInstaller {
                     work: work,
                     owner: nil,
                     otaUserland: otaUserland,
+                    homePodDisplay: homePodDisplay,
                     plan: plan,
                     priorGuest: priorGuest,
                     kernelPatches: receiptKernel,
@@ -456,7 +472,6 @@ struct VPhoneCustomFirmwareInstaller {
         // drops that cache at startup when it is older than the tree; see
         // VPhoneDaemon/Daemon/GuestMobileGestaltCache.swift.
         let buildVersion = plan?.parameters[FirmwareGuestSystemPatchSet.buildVersionParameter] ?? spoofBuild
-        let boardDeviceTree = try stageBoardDeviceTree(in: bundleDirectory, work: work, device: device)
         // An environment update has no restore tree to read the device from;
         // the VM's configuration says which board repair its tree takes.
         try liveGuest.formUnion(patchPreboot(
@@ -1121,6 +1136,7 @@ struct VPhoneCustomFirmwareInstaller {
         work: WorkDirectory,
         owner: uid_t?,
         otaUserland: VPhoneConfinedDirectory?,
+        homePodDisplay: Data?,
         plan: VPhoneVirtualMachinePatchPlan?,
         priorGuest: Set<String>,
         kernelPatches: Set<String>?,
@@ -1308,6 +1324,24 @@ struct VPhoneCustomFirmwareInstaller {
                 try installEnvironment(system: system, environmentOnly: environmentOnly)
                 live.insert("system-launchdaemons-boot-environment")
             }
+        }
+        // Geometry and its SoundBoard-only identity shim belong to one patch:
+        // the daemon still exchanges every LED frame through the native HID.
+        let topCap = FirmwareGuestSystemPatchSet.homePodTopCap
+        let topCapPath = String(FirmwareGuestSystemPatchSet.homePodDisplayPath.dropFirst())
+        if plan?.isEnabled(topCap) == true {
+            guard guestDevice.family == .homePod, let homePodDisplay else {
+                throw ValidationError("Selected HomePod top-cap emulation has no validated donor display geometry.")
+            }
+            _ = try system.directory("usr/share/vphone", create: true, mode: 0o755)
+            try system.writeFile(topCapPath, contents: homePodDisplay, mode: 0o644, owner: Self.guestOwner)
+            try updateHomePodSoundBoard(system: system, work: work, enabled: true)
+            live.insert(topCap)
+        } else {
+            if guestDevice.family == .homePod || priorGuest.contains(topCap) {
+                try updateHomePodSoundBoard(system: system, work: work, enabled: false)
+            }
+            try system.removeItem(topCapPath)
         }
         for (identifier, library) in [
             (FirmwareGuestSystemPatchSet.gyroscope, "libvphonegyro.dylib"),
@@ -2262,6 +2296,108 @@ struct VPhoneCustomFirmwareInstaller {
         print("  [+] GPU driver retargeted to tvOS")
     }
 
+    /// IOHIDUserDevice reserves IOClass. The shim supplies MiniDisplay's class
+    /// identity only for our physical ID, inside SoundBoard. Load it through
+    /// SoundBoard's Mach-O: launchd strips DYLD environment variables from this
+    /// platform process. Also remove this patch's earlier environment route.
+    private func updateHomePodSoundBoard(system: VPhoneConfinedDirectory, work: WorkDirectory, enabled: Bool) throws {
+        let daemon = "System/Library/LaunchDaemons/com.apple.SoundBoard.plist"
+        let cache = "System/Library/xpc/launchd.plist"
+        let library = "/usr/lib/libvphonehomepoddisplay.dylib"
+        let libraryPath = String(library.dropFirst())
+        let app = "System/Library/CoreServices/SoundBoard.app"
+        let executable = "\(app)/SoundBoard"
+
+        func read(_ path: String) throws -> (dictionary: [String: Any], format: PropertyListSerialization.PropertyListFormat) {
+            var format = PropertyListSerialization.PropertyListFormat.xml
+            guard let dictionary = try PropertyListSerialization.propertyList(
+                from: system.readData(path), options: [], format: &format,
+            ) as? [String: Any] else {
+                throw ValidationError("HomePod top cap needs a valid \(path).")
+            }
+            return (dictionary, format)
+        }
+
+        func rewrite(_ dictionary: [String: Any]) throws -> [String: Any] {
+            var updated = dictionary
+            guard updated["Label"] as? String == "com.apple.SoundBoard",
+                  (updated["ProgramArguments"] as? [String])?.first
+                    == "/System/Library/CoreServices/SoundBoard.app/SoundBoard"
+            else {
+                throw ValidationError("HomePod top cap refuses a daemon that is not SoundBoard.")
+            }
+            guard updated["EnvironmentVariables"] == nil || updated["EnvironmentVariables"] is [String: Any] else {
+                throw ValidationError("SoundBoard has invalid launchd EnvironmentVariables.")
+            }
+            var environment = updated["EnvironmentVariables"] as? [String: Any] ?? [:]
+            guard environment["DYLD_INSERT_LIBRARIES"] == nil || environment["DYLD_INSERT_LIBRARIES"] is String else {
+                throw ValidationError("SoundBoard has invalid DYLD_INSERT_LIBRARIES.")
+            }
+            let libraries = (environment["DYLD_INSERT_LIBRARIES"] as? String ?? "")
+                .split(separator: ":", omittingEmptySubsequences: true).map(String.init)
+                .filter { $0 != library }
+            if libraries.isEmpty {
+                environment.removeValue(forKey: "DYLD_INSERT_LIBRARIES")
+            } else {
+                environment["DYLD_INSERT_LIBRARIES"] = libraries.joined(separator: ":")
+            }
+            if environment.isEmpty {
+                updated.removeValue(forKey: "EnvironmentVariables")
+            } else {
+                updated["EnvironmentVariables"] = environment
+            }
+            return updated
+        }
+
+        // Validate the complete pair before writing either half. A missing
+        // cache entry is not a reason to silently install an inert shim.
+        guard try system.isRegularFile(daemon), try system.isRegularFile(cache) else {
+            if !enabled {
+                if try revertMachO(system: system, work: work, path: executable) {
+                    try sealGuestBundle(system: system, bundle: app, preserveEntitlements: true)
+                }
+                try system.removeItem(libraryPath)
+                return
+            }
+            throw ValidationError("HomePod top cap needs SoundBoard's launch daemon and launchd cache.")
+        }
+        let original = try read(daemon)
+        var cached = try read(cache)
+        let key = "/" + daemon
+        guard var entries = cached.dictionary["LaunchDaemons"] as? [String: Any],
+              let entry = entries[key] as? [String: Any]
+        else {
+            throw ValidationError("HomePod top cap cannot find SoundBoard in the launchd cache.")
+        }
+        let changedDaemon = try rewrite(original.dictionary)
+        entries[key] = try rewrite(entry)
+        cached.dictionary["LaunchDaemons"] = entries
+
+        if enabled {
+            let shim = try VPhoneGuestBinaries.resolve("libvphonehomepoddisplay.dylib")
+            try system.replaceFile(libraryPath, fromFileAt: shim, mode: 0o755, owner: Self.guestOwner)
+            try patchMachO(
+                system: system, work: work, path: executable,
+                preserveEntitlements: true, injectedDylibPath: library,
+            )
+            try sealGuestBundle(system: system, bundle: app, preserveEntitlements: true)
+        } else {
+            if try revertMachO(system: system, work: work, path: executable) {
+                try sealGuestBundle(system: system, bundle: app, preserveEntitlements: true)
+            }
+            try system.removeItem(libraryPath)
+        }
+        // This is an exact inverse of the prototype's environment insertion,
+        // keeping changes users made to other daemon keys in the meantime.
+        try system.writeFile(daemon, contents: PropertyListSerialization.data(
+            fromPropertyList: changedDaemon, format: original.format, options: 0,
+        ), mode: 0o644, owner: Self.guestOwner)
+        try system.removeItem("\(daemon).bak")
+        try system.writeFile(cache, contents: PropertyListSerialization.data(
+            fromPropertyList: cached.dictionary, format: cached.format, options: 0,
+        ), mode: 0o644, owner: Self.guestOwner)
+    }
+
     private func installVphoned(guestDevice: VPhoneGuestDevice, system: VPhoneConfinedDirectory, work: WorkDirectory) throws {
         // Install the same signed bytes that vm launch uses for auto-update.
         // Re-signing here changes the binary hash and forces an upload and
@@ -3080,12 +3216,12 @@ struct VPhoneCustomFirmwareInstaller {
     /// bundle whose seal no longer matches its contents. Ad hoc, like every
     /// other guest binary this pipeline writes; the identifier is kept so the
     /// plugin still answers to the name it always had.
-    private func sealGuestBundle(system: VPhoneConfinedDirectory, bundle: String) throws {
+    private func sealGuestBundle(system: VPhoneConfinedDirectory, bundle: String, preserveEntitlements: Bool = false) throws {
         // No --identifier: codesign keeps the one the bundle already carries.
-        _ = try tool("/usr/bin/codesign", [
-            "-f", "-s", "-", "--timestamp=none",
-            system.directory(bundle).path,
-        ])
+        var arguments = ["-f", "-s", "-", "--timestamp=none"]
+        if preserveEntitlements { arguments.append("--preserve-metadata=entitlements") }
+        arguments.append(try system.directory(bundle).path)
+        _ = try tool("/usr/bin/codesign", arguments)
     }
 
     /// Copy an optional guest binary into the work folder, or nil (with a

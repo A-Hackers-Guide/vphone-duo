@@ -178,7 +178,7 @@ struct FirmwarePatchSetCatalogTests {
     }
 
     @Test
-    func `Extended adds exactly the manual-only patches applicable to each base`() throws {
+    func `Extended adds the applicable manual patches except the HomePod-only device`() throws {
         for base in ["18.6.2", "26.4", "27.0", "27.1"] {
             let version = VPhoneVersion(base)
             let cloud = VPhoneVersion("26.4")
@@ -196,6 +196,7 @@ struct FirmwarePatchSetCatalogTests {
             )
             let applicableManual = Set(FirmwarePatchSetCatalog.allDeclarations.filter {
                 FirmwarePatchSetCatalog.manualOnlyPatches.contains($0.identifier)
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodTopCap
                     && $0.applicability.matches(iOSBase: version, cloudOS: cloud)
             }.map(\.identifier))
             #expect(experimental.enabled.subtracting(standard.enabled) == applicableManual)

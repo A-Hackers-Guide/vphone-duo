@@ -61,7 +61,7 @@ public enum FirmwarePatchSetCatalog {
         Set(FirmwareKernelFridaPatchSet.manifest.patches.map(\.identifier))
             .union(hypervisorConcealmentPatches)
             .union(experimentalIdentityPatches)
-            .union([FirmwareGuestSystemPatchSet.otaUserland])
+            .union([FirmwareGuestSystemPatchSet.otaUserland, FirmwareGuestSystemPatchSet.homePodTopCap])
             .union([FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers, misTrustAuthPatch, FirmwareGuestSystemPatchSet.settingsRootRows, FirmwareGuestSystemPatchSet.settingsSoftwareUpdate, FirmwareGuestSystemPatchSet.tvTPRO, FirmwareGuestSystemPatchSet.tvOTAUserland])
 
     /// ProMotion: the 120 Hz timing for the paravirtual display.
@@ -207,19 +207,19 @@ public enum FirmwarePatchSetCatalog {
         selection: .block(manualOnlyPatches),
     )
 
-    /// Everything the bundle declares, including the Frida relaxations, the
+    /// The general-purpose experimental patches, including the Frida relaxations, the
     /// hypervisor concealment and the iPhone17,3 identity. Each patch's own version
     /// gate still decides whether it lands.
     public static let experimentalPreset = VPhonePatchPreset(
         identifier: "experimental",
         title: "Experimental",
         summary: """
-        Every patch this bundle declares, including the Frida Stalker relaxations, \
+        The experimental patches, including the Frida Stalker relaxations, \
         the iPhone17,3 identity rewrites, and the hv_vmm_present concealment that a \
-        freshly restored 26.4 guest does not survive.
+        freshly restored 26.4 guest does not survive. The HomePod-only top cap is off.
         """,
         patchSets: bundledReferences,
-        selection: .all,
+        selection: .block([FirmwareGuestSystemPatchSet.homePodTopCap]),
     )
 
     /// The iOS payloads, hooks and shared-cache patches an Apple TV guest has no
@@ -321,10 +321,11 @@ public enum FirmwarePatchSetCatalog {
     public static let homePodMiniPreset = VPhonePatchPreset(
         identifier: VPhonePatchPreset.homePodMiniIdentifier,
         title: "HomePod mini",
-        summary: "Research: HomePod mini's own arm64e TVOS IPSW with vphoned, without Apple TV OTA replacement or iPhone display, camera and audio hooks.",
+        summary: "Research: HomePod mini's own arm64e TVOS IPSW with vphoned and its donor-driven top cap, without Apple TV OTA replacement or iPhone display, camera and audio hooks.",
         patchSets: bundledReferences,
         selection: .block(
-            manualOnlyPatches.union(tvOSBlockedPatches.subtracting(tvOS27UserlandPatches)),
+            manualOnlyPatches.subtracting([FirmwareGuestSystemPatchSet.homePodTopCap])
+                .union(tvOSBlockedPatches.subtracting(tvOS27UserlandPatches)),
         ),
     )
 

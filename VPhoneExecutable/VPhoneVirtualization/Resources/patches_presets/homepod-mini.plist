@@ -129,7 +129,7 @@
 		</array>
 	</dict>
 	<key>Summary</key>
-	<string>Research: HomePod mini's own arm64e TVOS IPSW with vphoned, without Apple TV OTA replacement or iPhone display, camera and audio hooks.</string>
+	<string>Research: HomePod mini's own arm64e TVOS IPSW with vphoned and its donor-driven top cap, without Apple TV OTA replacement or iPhone display, camera and audio hooks.</string>
 	<key>Title</key>
 	<string>HomePod mini</string>
 </dict>
