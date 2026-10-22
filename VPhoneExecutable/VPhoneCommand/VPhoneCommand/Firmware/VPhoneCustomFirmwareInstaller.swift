@@ -1677,6 +1677,18 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
 
+        // SystemHook sets FS_CACHE_REUSE_ON_REBOOT while this marker exists.
+        let metalCachePatch = FirmwareGuestSystemPatchSet.metalCacheReuse
+        let metalCacheMarker = String(FirmwareGuestSystemPatchSet.metalCacheReuseMarker.dropFirst())
+        isolate([metalCachePatch]) {
+            if on(metalCachePatch) {
+                try system.writeFile(metalCacheMarker, contents: Data("1\n".utf8), mode: 0o644, owner: Self.guestOwner)
+                live.insert(metalCachePatch)
+            } else {
+                try system.removeItem(metalCacheMarker)
+            }
+        }
+
         if !failures.isEmpty {
             print("[!] \(failures.count) guest patch(es) failed and were left in their prior state: \(Set(failures).sorted().joined(separator: ", "))")
             if strict {

@@ -52,6 +52,9 @@ Older stores may still hold `<version>-local` or `<version>-ci.<commit>`.
 
 ## Testing a VPhone.bundle build
 
+For the one-time kernel and guest update that enables persistent shader caches
+on an existing VM, see [Persistent shader caches](shader-cache.md).
+
 ```sh
 xcodebuild -workspace VPhone.xcworkspace -scheme VPhone \
   -configuration Debug -destination 'platform=macOS,arch=arm64' \

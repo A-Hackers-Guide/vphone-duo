@@ -184,10 +184,12 @@ time in the same boot.
 
 ### Why the cache misses
 
-Virtualization gives ParavirtualizedGraphics a cache directory per VM,
+By default, Virtualization gives ParavirtualizedGraphics a cache directory per VM,
 `$DARWIN_USER_CACHE_DIR/com.apple.paravirtualizedgraphics-<number>`, and each
 host GPU task keeps its Metal function cache in a `task-<key>` directory under
-it. `-[PGRemoteTask calculateCachePathAndExtension:taskRoot:]` picks the key:
+it. The vphone launcher now keeps a durable copy in the machine folder
+(see "Cache location and migration" below). The historical observations here
+predate that relocation. `-[PGRemoteTask calculateCachePathAndExtension:taskRoot:]` picks the key:
 
 - when the device's feature byte `0x36` is set, it reads 60 bytes of the guest's
   task root page and takes the 20 at offset `0x28`; if they are not all zero,
@@ -215,12 +217,623 @@ So this cannot be fixed by a guest firmware patch, which is the only thing
   giving the guest driver code to populate it would be new kext code — but it
   would still only matter if the host read it, which it does not.
 
+**Correction (2026-10-19):** the guest does switch that byte. It is
+supportsTask3, set by the binary version the guest kext negotiates, and a
+kernel patch can ask for it. See "The keyed host cache: binary version 252
+(Task3)" below. The rest of this paragraph predates that.
+
 Reaching the host cache would mean changing the host ParavirtualizedGraphics
 framework. That is Apple's code on the sealed system volume, and the shipped
 bundle runs only system libraries, so it is out of scope. The post-boot
 recompile is therefore a limitation of the host paravirtual GPU, not a guest
 patch we can write. (A per-app `MTLBinaryArchive` inside a guest app would
 persist that app's own pipelines, but that is an app change, not a VM one.)
+
+### Seeding the cache from the host (2026-10-18)
+
+The section above concluded that only Apple's framework could fix the misses.
+The cache is plain files in a user-owned directory, so a host process can write
+into it before a task opens it. That works. A seed is safe only when it holds
+what **the same guest process** compiled in an earlier boot. A seed that mixes
+entries from several processes hangs the guest GPU. The safe form works, but
+it buys little: about two points of on-time frames. So nothing ships.
+
+Measured on `Lychee` (iPhone, iOS 27.0.1, cloudOS 26.4 (23E5207q) driver,
+macOS 27.0.1 host, bundle 2.10.1).
+
+#### What the host checks on a hit
+
+`-[ParavirtualizedGraphicsGPUTask handshakeWithTaskRoot:…cachePath:cacheExtension:reply:]`
+in `com.apple.gpusw.ParavirtualizedGraphicsGPUTask` consumes the sandbox
+extension and calls `MTLSetShaderCachePath(cachePath)`. Without a path it sets
+`FS_CACHE_SIZE=0`. Everything after that is Metal's ordinary per-process
+function cache, `MTLCompilerFSCache` under `MultiLevelBinaryFSCache` in
+`Metal.framework`. PG adds no format and no check of its own.
+
+`MTLCompilerFSCache::getElementImpl(MTLUINT256_t, void**, size_t*)` looks up the
+key, requires the entry to be longer than 64 bytes, and compares the first 32
+bytes with `SHA-256` of the body and the next 32 with the key it asked for. A
+mismatch calls `invalidateCache()`, and a match returns the body. That is the
+whole check. Nothing on a hit names a process, a device or a driver. A
+well-formed entry is used as it is, whatever task wrote it.
+
+PG then builds the pipeline with
+`newComputePipelineStateWithDescriptor:options:0 reflection:nil error:`, after
+`setResourceIndex:` and `setForceResourceIndex:YES` from the guest's command.
+On failure it logs `Failed to create compute pipeline: …` to its host log.
+
+#### File layout
+
+- `com.apple.paravirtualizedgraphics-<ecid in decimal>/task-<random>/<arch>/functions.{list,data}`,
+  `<arch>` being `16777235_530` here. A task's directory goes away when its
+  process exits. The framework leaves a directory that no task owns where it
+  is: ten made by earlier experiments outlived many boots.
+- `functions.list`: a 32-byte constant header, then for each entry its fields
+  and its key, then 8 zero bytes. The first entry's fields are `u32` tag, `u64`
+  0, `u64` size, `u64` offset; the others' are `u64` 0, `u64` size, `u64`
+  offset. A key is 32 bytes and comes *after* its entry's fields.
+- `functions.data`: the entries, 8-byte aligned, padded to a multiple of 64 KiB.
+  An entry is `SHA-256(body)`, its own key, then the body. `size` counts all
+  three.
+- Bodies are of two kinds. A Mach-O (`feedfacf`) holds an AGX binary with
+  `__TEXT,__text` and `__GPU_METADATA`, `__GPU_LD_MD`, `__GPU_STATS_MD`,
+  and the rest. A blob starting `ef13c710` carries argument names
+  (`mvp_matrix`, `view_matrix`, `Params_t`…), which looks like reflection.
+  These are the "pairs" seen earlier. In the 656-entry task, 400 are Mach-O
+  and 256 are blobs.
+
+#### Why a mixed seed breaks
+
+The same key holds different bytes in different processes. Every
+cross-process difference found (44 shared keys over six tasks of one boot)
+falls in one of three places:
+
+- `__GPU_STATS_MD`: the compile time. Harmless.
+- One `u32` in `__GPU_LD_MD`, in the record `0x0c, 0x10, ID, 0, 0, len, name`
+  (the name being the AGX function's, such as `fca15dhmha4` or `eot`). In one
+  task the ID follows the order of compilation: entries 29 to 43 carry 29 to
+  43. Each binary therefore embeds a per-process compile counter.
+- One or two words in the reflection blobs (for example 121 against 123).
+
+Rewriting every Mach-O ID to `1000000 + n`, with the SHA-256 recomputed, did
+**not** stop the failure on its own. The ID is not the whole story, and what
+else ties an entry to its process was not pinned down.
+
+The failure itself, now with both logs:
+
+- Host (`log stream` for the GPU task and `MTLCompilerService`): every compile
+  in backboardd's task succeeds, and no `Failed to create compute pipeline`
+  is logged. `downsample_4_compute` is never sent to the compiler: it is a hit.
+- Guest (`logs.syslog` for backboardd, taken while Camera launches): within
+  about 2 s, backboardd's CoreAnimation command buffers end with
+  `Caused GPU Hang Error (00000003:kIOGPUCommandBufferCallbackErrorHang)`.
+  The GPU restarts, and only then does the next `newComputePipelineState…`
+  fail. That failure is the `Compilation failed` abort in
+  `CA::OGL::MetalContext::get_compute_pipeline` under
+  `BlurStateCompute::downsample_box_4`.
+
+So a hit is not rejected. It is *executed*, and the binary from another process
+hangs the GPU. The ddmin pair from earlier, list positions 34 and 35, turns out
+to be AGX's own blit kernel `blit_uber_buf_to_tex_uint`, not a CoreAnimation
+kernel. The oracle was also flaky. Neither result was worth chasing.
+
+#### Seeding a task with its own entries
+
+The first task the guest creates after start, about 7 s in, is backboardd's.
+That is its render server: a backboardd crash takes down that host task.
+`prefill` here fills only that task's directory, with the files the same task
+had at the end of the previous boot.
+
+| Seed for backboardd's task | Boot, unlock, launch Camera | Result |
+| --- | --- | --- |
+| Its own files from a previous cold boot | 3 runs | 0 restarts each |
+| The `boot1` union of every task | 2 runs | 14 and 393 restarts |
+| The `boot1` union with every ID rewritten | 1 run | 105 restarts |
+
+The full test then ran as three pairs: a cold boot, then a boot whose backboardd
+task was seeded with that cold boot's backboardd files. Each boot launched all
+eleven apps, Camera included. Compile CPU is the per-process delta of host
+`MTLCompilerService` CPU time across the workload.
+
+| Run | GPU restarts | New backboardd / cameracaptured crashes | Host compile CPU | Compiles, all (backboardd) |
+| --- | --- | --- | --- | --- |
+| cold 1 | 0 | 0 | 3.86 s | 640 (374) |
+| seeded 1 | 0 | 0 | 1.58 s | 270 (4) |
+| cold 2 | 0 | 0 | 3.76 s | 632 (373) |
+| seeded 2 | 0 | 0 | 1.58 s | 273 (7) |
+| cold 3 | 0 | 0 | 3.89 s | 640 (374) |
+| seeded 3 | 0 | 0 | 1.82 s | 313 (27) |
+
+These runs also reported frame pacing. Those numbers are void, for two
+reasons. They came from `AppUsage.lastSubmittedTime` of the host task's
+`AGXDeviceUserClient`, which was later seen not to move at all during
+animations. And the workload's `{"t":"home"}` is not a command
+(`unknown command: home`; the home button is `{"t":"key","name":"home"}`),
+so the apps opened on top of each other and the stores never held the
+go-home animation.
+
+Two more seeded runs went wrong because the harness picked a leftover union
+directory instead of backboardd's task. They gave 1010 restarts each, which
+confirms the mixed case once more.
+
+#### Where the first-use lag is
+
+The complaint, reproduced: after a boot, opening Settings and going home is
+choppy, and it smooths out after a few rounds. Frames here come from the guest:
+a launchd job polls QuartzCore's exported `CARenderServerGetFrameCounter(0)`
+every 0.5 ms and logs each change. Lychee renders at 60 Hz (gaps cluster at
+14–17 ms). "On time" is a gap of 20 ms or less. Each window is the 3 s after
+`apps.launch` of Settings (open) or the home key (close), five rounds, starting
+about 14 s after the VM is up.
+
+| Window | Cold A on time (bb compiles, Settings compiles) | Cold B | backboardd seeded from cold B |
+| --- | --- | --- | --- |
+| open1 | 69.8% (29, 23) | 68.3% (31, 20 in open2) | 75.6% (0, 15) |
+| close1 | **36.1%** (57) | **43.6%** (61) | **38.1%** (0) |
+| open2 | 76.1% (19) | 51.1% (20) | 81.6% (0) |
+| close2 | 80.0% (2) | 73.3% (1) | 74.4% (1) |
+| open3–5 | 83–86% | 78–87% | 80–86% |
+| close3–5 | 79–84% | 69–77% | 70–78% |
+
+Seeding backboardd's host task removed every **host** compile, and the first
+go-home was still as choppy (38%). There is a second compile stage, in the
+guest, and that is where the remaining first-use cost sits.
+
+#### The guest's own shader cache is thrown away at every boot
+
+Per round, on a cold boot (guest `processes.list` CPU at each window edge, host
+`proc_pid_rusage` of the VM service and the GPU tasks): the first go-home differs
+from later ones in one way only. The **guest's** `MTLCompilerService` takes
+0.41 s of CPU there (0.49 s in open1, 0.15 s in open2, then nothing), while
+SpringBoard and backboardd use the same CPU in every round. Host disk reads of
+`Disk.img` are negligible. Its log (`logs.syslog` for `MTLCompilerService`)
+shows the work is all for backboardd: over three rounds, 71
+`MTLSpecializeFunctionToArchive` requests (820 ms) and 90 `MTLBuildFunctions`
+(189 ms), on every boot.
+
+Why the guest compiles at all, and why it starts over at each boot:
+
+- CoreAnimation normally renders from precompiled pipelines in
+  `MTLBinaryArchive`s. On the paravirtual GPU, backboardd logs `Precompiled
+  pipelines disabled on unsupported hardware.`, so every pipeline is built at
+  run time, on its render thread.
+- backboardd does keep a Metal cache. `StartWindowServer` calls
+  `MTLSetShaderCachePath` with its system container's Caches
+  (`/private/var/containers/Data/System/<uuid>/Library/Caches`, holding
+  `functions.{list,data}` and `32023/libraries.*`). Within one boot it works: a
+  backboardd killed and relaunched compiles nothing.
+- Across a boot it does not. The cache key is constant: the driver's
+  `-[AppleParavirtDevice setupCompiler]` passes `cacheUUID` = SHA-256 of its
+  own build date, and Metal mixes in only its build stamp. But
+  `libCoreFSCache.dylib` writes `kern.bootsessionuuid` into the head of
+  `functions.list` (bytes 4–39, after the magic `45 36 27 18`). At open it
+  resets a cache stamped by another boot. Seen directly: the header went from
+  `96E73E64-…` to `30366BEF-…` with the boot session, and `functions.list`
+  from 19,372 bytes to 1,004. A clean `system.shutdown` changes nothing.
+  Every guest Metal cache follows the same rule, SpringBoard's and the apps'
+  (`/var/mobile/Library/Caches/<bundle id>/com.apple.metal`) included.
+- `libCoreFSCache` reads `FS_CACHE_REUSE_ON_REBOOT`. With it set, a cache from
+  another boot is kept. Verified without rebooting: write a foreign UUID into
+  the header and relaunch backboardd. Without the variable the cache resets
+  (19,260 to 5,932 bytes). With it set through `launchd.setenv`, nothing
+  changes (19,148 bytes, foreign header kept) and backboardd compiles 2
+  functions in the guest instead of 92.
+
+Effect on the first go-home, five Settings rounds after a backboardd relaunch
+with a foreign UUID in its cache (a stand-in for a boot):
+
+| Guest cache | Host cache for backboardd's new task | Runs | close1 on time | Guest compiles for backboardd |
+| --- | --- | --- | --- | --- |
+| reset (today) | cold | 3 | 50.9 / 50.0 / 51.9% | 92–93 |
+| reused | cold (about 120 host compiles) | 2 | 56.4 / 56.9% | 2–3 |
+| reused | seeded with its own files | 2 | 65.3 / 71.4% | 0–2 |
+
+Later go-homes run at about 78–83% on time in every mode, and no run had a GPU
+restart. Fixing both caches makes the first go-home better than any cold one,
+and it is the only combination that does. It is not yet as smooth as a warm
+one. Settings' own first open still compiles about 20 functions on the host.
+
+What setting the variable at boot takes:
+
+- iOS launchd ignores `/private/var/db/com.apple.xpc.launchd/config/system.plist`
+  `EnvironmentVariables` (tried: not applied, cache reset). `launchd.setenv`
+  lasts only until the next boot.
+- So the variable comes from SystemHook (`VPhoneGuestComponents/SystemHook`),
+  which is inserted into every spawn. Its constructor calls
+  `setenv("FS_CACHE_REUSE_ON_REBOOT", "1", 0)` first, before the xpcproxy,
+  `DISABLE_TWEAKS` and per-daemon early returns, and before any Metal code in
+  the process runs. It does so only while `/usr/lib/vphone-metal-cache-reuse`
+  exists. That marker is the patch `system-systemhook-cfw-metal_cache_reuse`
+  (Guest System set, on in `standard`, off for Apple TV): `cfw install` and
+  `cfw update-environment` write it when the patch is selected and remove it
+  when it is not. A SystemHook without the marker behaves as before.
+- The host half is the backboardd-only seed above, with the same caveat: it
+  relies on backboardd's task being the first one created. It is not part of
+  this patch.
+
+#### Real reboots with the patch (2026-10-19)
+
+`Lychee` again, now on a local 2.10.1 build with the patch. Each run is a real
+reboot: vphoned `system.shutdown`, then `vm start`, unlock, 10 s, then five
+Settings rounds measured as above (guest `CARenderServerGetFrameCounter`
+probe, 3 s windows, on time = gap of 20 ms or less). Guest compiles are the
+`Compilation SUCCESS (ParentProcessName=backboardd…` lines in `logs.syslog` for
+`MTLCompilerService` over the rounds. The header is bytes 4–39 of backboardd's
+`functions.list` in its system container. The host cache was cold in every
+run. GPU restarts are the `Trying to restart GPU` lines in that boot's
+`Lychee.log`.
+
+| Run | Bundle | Header after boot | `functions.list` before shutdown → after boot | backboardd guest compiles | GPU restarts | close1 on time | close2–5 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| base1 | 2.10.1 | new | 10,356 → 10,804 | 142 | 0 | 30.4% | 67–90% |
+| base2 | 2.10.1 | new | 19,372 → 10,692 | 146 | 0 | 31.7% | 66–86% |
+| new1 | patched | kept | 6,156 → 8,844 | 159 | 0 | 31.8% | 62–93% |
+| new2 | patched | kept | 19,204 → 19,316 | **0** | 0 | **43.9%** | 67–90% |
+| new3 | patched | kept | 19,316 → 19,316 | **0** | 0 | **37.3%** | 63–89% |
+
+- The cache now outlives a reboot: the header stays `8A5597B7-…` through three
+  boots and the file keeps its size, where every unpatched boot writes a new
+  boot UUID and starts again from about 10 KB.
+- new1 compiled as much as a cold boot because the boot before it was the
+  first with the variable and did no rounds, so its cache held 6 KB. From then
+  on (new2, new3) backboardd compiles nothing in the guest during the rounds,
+  and `MTLCompilerService` logs nothing at all.
+- The first go-home rises from about 31% to 37–44% on time. That is less than
+  the 51% → 56% the fake-boot stand-in predicted for the guest cache alone
+  (from a lower starting point here: a real boot has more going on in its first
+  minute than a relaunched backboardd). Later rounds are unchanged. The rest
+  of the first go-home is the host cache, which still recompiles at every boot.
+- Installing it here: Lychee had no restore tree for `cfw install`, and
+  `cfw update-environment` refused to run with less than 50 GiB free on the
+  volume (17 GiB). The new SystemHook reached the guest through vphoned's live
+  environment sync at `vm start`, and the marker was written with vphoned
+  `files.write`, i.e. the bytes the installer writes, not the installer itself.
+  The installer step is unchanged code in the same shape as the persona-lookup
+  marker next to it, and is not exercised by this run.
+
+#### Verdict
+
+- Per-process host seeding is safe in every run made: eleven with Camera or the
+  Settings loop, three of them with all eleven apps.
+- Neither cache alone fixes the first-use lag. The guest's Metal cache, reset at
+  every boot through `kern.bootsessionuuid`, is half of it. The host's per-task
+  cache, emptied with every task, is the other half. With both kept, the first
+  go-home goes from about 51% to 65–71% on time.
+- The guest half is an environment variable that Apple's own library honours,
+  and it reaches every process. It ships as
+  `system-systemhook-cfw-metal_cache_reuse`. On real reboots it keeps the
+  guest cache and removes every guest compile, taking the first go-home from
+  about 31% to 37–44%. The host half rests on the first-task assumption
+  described above and does not ship.
+
+
+The tools for these runs were scratch code outside the repo: a cache dumper, an
+ID rewriter, the guest frame-counter job (C, built with `xcrun -sdk iphoneos
+clang`) and zsh drivers. The method to repeat: watch the guest log for `Trying
+to restart GPU` and capture backboardd's syslog while Camera launches. A result
+without the restart count is worthless, and so is one that stops before Camera.
+
+#### The keyed host cache: binary version 252 (Task3), 2026-10-19
+
+The host half can be fixed the way Apple designed it: a task cache named after
+the guest process, which therefore persists, instead of one named at random.
+
+Where the feature byte comes from. `-[_PGDevice setBinaryVersion:]` fills the
+host's `APVFeatures` from the version the guest kext asks for
+(`getAPVFeaturesForVersion`, a ladder reached through a jump table for versions
+200–252). Field names from the ivar's type encoding in the GPU task binary:
+
+| Offset | Field | First version |
+| --- | --- | --- |
+| `0x33` | supportsMultipleDisplays | 245 |
+| `0x34` | supportsDisplayBrightnessCaps | 250 |
+| `0x35` | supportsHDRContentHeadroom | 251 |
+| `0x36` | supportsTask3 | 252 |
+
+The host logs the request: `Guest requested binary version: 245, setting
+binary version to: 245` for the cloudOS 26.4 kext.
+
+What 250–252 change on the host (macOS 27.0.1), from every read of those bytes:
+`0x34` only in `-[_PGDisplayNub testUpdateBrightnessCaps:]`; `0x35` nowhere
+found; `0x36` only in `calculateCachePathAndExtension:`. The GPU task process
+reads its copy of the struct in one place, the handshake, and only
+supportsArgumentBuffers. The version itself (`_binaryVersion`, `+0x4e0`) is
+read only for MMIO readback and suspend/resume.
+
+The guest side, in AppleParavirtGPUIOGPUFamily (cloudOS 26.4):
+
+- `setupVersion` writes its version to device register `+0x34`, reads back what
+  the host granted, and builds its own feature table from it. That table stops
+  at 245, so a granted 252 is invalid to the guest and it steps back down.
+  Nothing else in the kext reads the stored version (`+0x51c`).
+- Each task's root page is a fresh 16 KiB buffer. The kext writes a 40-byte
+  header (`0x00`–`0x27`; the word at `+4` is 2), and bytes `0x28`–`0x3b`, the
+  ones Task3 reads as the key, stay zero.
+
+Phase 1, `kernel-exp-paravirt_gpu_task3`: the request becomes 252 and the
+guest's features are computed from its original 245. Verified on `Lychee`
+(installed with `cfw update-kernel`): the host logs `Guest requested binary
+version: 252, setting binary version to: 252`, 0 GPU restarts, Settings opens
+and closes normally, and task directories still have 20-character random names,
+because the key bytes are zero. On its own it changes nothing visible; it is
+the switch the identity write needs.
+
+#### Task3 executable identity implementation, 2026-10-20
+
+Phase 2 extends the same opt-in declaration with `.identity_hook` and
+`.identity_code`. All four sites are discovered and encoded before any write;
+an unresolved site aborts a selected Task3 operation. Initially opt-in under
+`kernel-exp-paravirt_gpu_task3`, it was tested with Lychee explicitly enabling
+it. Standard now enables it under `kernel-cfw-paravirt_gpu_task3`; see the
+preset promotion below. Runtime coverage is still one host/guest combination.
+
+The key is the owning executable's **20-byte code-signing cdhash**. It is neither
+a process name nor a PID, and it is obtained from the task recorded by the GPU
+task's superclass, rather than `current_proc()`. Concurrent tasks for the same
+executable intentionally share an identity; different executable builds have
+different identities. A missing proc or cdhash leaves twenty zero bytes, which
+retains the host's ephemeral fallback. No host cache files are mixed or copied.
+
+Reveal procedure (cloudOS 26.4 `kernelcache.research.vphone600`, XNU
+12377.100.591.502.1, UUID `784F88D3-2AF5-3D4A-AB00-365607646E44`):
+
+1. Anchor the GPU task initializer with `Failed to create Page Table Lock`.
+   Its root header tail has stores at offsets 8, 16, 20, 28 and 36; hook the
+   descriptor load immediately after that tail, before descriptor preparation
+   and host task registration. Observed initializer `0xfffffe0007ec6b54`, hook
+   `0xfffffe0007ec6e18`, root pointer x8, self x19, displaced
+   `ldr x0,[x19,#0x228]`. The allocation is a fresh 16 KiB page, although its
+   header view is 40 bytes; the host separately reads 60 bytes for Task3. The
+   matcher follows the sized allocation's saved return into the same descriptor
+   ivar and requires at least 60 bytes of backing storage.
+2. Follow the initializer's superclass vtable call, checking that it receives
+   the original x2 task argument. In `IOGPUTask::init` at
+   `0xfffffe00085df244`, the task is retained and stored at self+0x28. Derive
+   this displacement from the store of the saved incoming task argument; it
+   is not an assumed IOGPU or XNU structure layout.
+3. Anchor `flow_divert_get_app_data` with `(%u): failed to get the cdhash`.
+   The call whose null result reaches that log, followed by the 20-byte CDHASH
+   TLV append, identifies `cs_get_cdhash` at `0xfffffe0009199c4c`. Its body
+   matches `bsd/kern/kern_cs.c`: CS_SIGNED test, authenticated text-vnode load,
+   `ubc_cs_blob_get`, null check, pointer to the blob's cdhash. It returns a
+   pointer, not a copied hash.
+4. That same caller's `proc_task` sequence reveals the `proc_struct_size`
+   global (`0xfffffe00096f94b0` in this image). Find the inverse getter through
+   references to that global: subtract it from incoming task, validate the
+   proc zone, test `TF_HASPROC` (0x00800000), return proc or null. This is
+   `get_bsdtask_info` at `0xfffffe0008d7f140`, matching
+   `osfmk/kern/bsd_kern.c`. It is a leaf without a PAC prologue, so a generic
+   preceding-PAC function finder is unsuitable for this helper.
+
+The trampoline clears the key, saves x0–x18 and LR in a 160-byte aligned stack
+frame, calls both helpers with null checks, copies exactly five 32-bit words to
+root+0x28, restores registers and SP, replays the descriptor load and resumes.
+The original next block does not consume incoming NZCV before its virtual
+descriptor call. No original header bytes are changed. Kernel addresses above
+are research observations only; the patch uses Capstone operands, in-image
+xrefs and decoded kernelcache rebases, without these addresses or offsets.
+
+REA/Hopper evidence: task initializer
+`ev_97a491f7966123b66da8c5af9fa362bff268001ed04d1852c8d29f0131e0852e`,
+flow-divert caller
+`ev_bf9605f45f5e2ee44e2ec3ffad5da9c09169a458c131844a3a8f566c681865fb`,
+cdhash getter
+`ev_ca619a3011ec225a768642db3ad6537ef2258616da2141359e3dcb838d46b707`.
+Kernel collection SHA-256
+`86895a2eebeb7fcfb68bcd60f2d7e685687faea07ee31166fb58c872b38e0d92`.
+The symbol database's linked JSON dumps are absent in this checkout; no
+external symbol dump is required by the implementation. Hopper merged some
+neighboring functions; bounded Capstone disassembly established actual entry
+points. Static evidence establishes code behavior, not runtime cache reuse.
+
+Validation procedure: encoder parity against Keystone 0.9.2 and Capstone,
+fixture discovery and no-write failure tests, trampoline execution with
+deliberately clobbered volatile registers, then install with `cfw update-kernel`.
+On Lychee, verify version 252, persistent 40-hex task keys across full reboots,
+per-program separation, Settings animation rounds, Camera, host/guest compiler
+activity and the per-boot `Trying to restart GPU` count. Performance conclusions
+require those runtime checks; warm-state animation limits above still apply.
+
+Local validation: 61 targeted tests across encoder, catalogue, version,
+selection, declaration, plan, gate and Task3 suites passed. The final Task3 pass
+also tests both missing anchors and confirms that no Task3 bytes are emitted.
+The complete `VPhone` bundle build and bundle admission passed. After macOS
+administrator authorization, `cfw update-kernel Lychee` installed all four
+Task3 sites, with no undeclared patch records. The temporary lowered free-space
+check was used only by the installation test bundle on this volume (31 GiB
+free), then restored to 50 GiB in source. Runtime tests use the separately
+installed final bundle `2.10.1-local.e2defa6e`, which retains the 50 GiB check.
+
+Runtime method: macOS 27.0.1 host, iOS 27.0.1 (24A446) guest with cloudOS
+26.4 (23E5207q) driver, five CPUs, 8 GiB RAM, existing guest cache-reuse marker
+enabled. Start with an empty host ECID cache, perform five Settings open/home
+rounds (three-second pauses), launch Camera for ten seconds, shut down the
+guest, and start a fresh VM process. No host files are seeded or copied. Each
+boot logs negotiated version 252. Host compiler counts select only
+`ParentProcessName=com_apple_gpusw_Paravirtualized_*`; fixed display conversion
+work in the Virtualization process and unrelated host programs are excluded.
+The guest compiler capture lasts 55 seconds around the application tests;
+host capture includes boot through shutdown. Both compile counters count log
+events, not unique shaders.
+
+Two identities independently checked against guest binaries with
+`codesign -d --verbose=4`:
+
+| Executable | cdhash and retained host directory suffix |
+| --- | --- |
+| backboardd | `e5543fa5f8667c6cb0d0da787f1b029a9ee3350d` |
+| SpringBoard | `73c64934fd90e09f461a339f84dad665f0669885` |
+
+Preferences itself did not create a directory matching its executable hash in
+these runs; CoreAnimation work is performed by the rendering servers. Nine
+distinct `task-<40 hex>` directories survived the first shutdown and were
+reused on the next boot. Host GPU task process IDs change between boots, so
+this is disk persistence rather than retained task-service memory.
+
+| Full boot | Retained keys | Host GPU compiles, whole run | Host GPU compiles, Settings rounds | Guest compiles, 55 s | GPU restarts | First home on time | Home rounds 2–5 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 01, empty host cache | 9 | 631 | 121 | 64 | 0 | 44.4% | 61–72% |
+| 02, reused | same 9 | 17 | 5 | 11 | 0 | 61.8% | 66–74% |
+| 03, reused | same 9 | 12 | **0** | 22 | 0 | 59.2% | 63–72% |
+
+Camera reached the foreground and returned home in all three runs. The
+backboardd host `functions.list` grew from 31,404 to 32,692 to 34,036 bytes as
+additional variants were learned. SpringBoard's stayed at 4,412 bytes. Guest
+compiles were attributed to backboardd and include Camera and late work;
+remaining variants still compile, so neither counter is promised to reach zero
+for an arbitrary workload. The eight fixed host display conversion compiles
+per run are outside these task caches.
+
+Frame figures use the guest `CARenderServerGetFrameCounter` probe, aligned to
+host command windows at probe launch, and count observed inter-sample gaps
+between zero and one second as on time when at most 20 ms. They include pauses
+inside each open/home command window, are not animation FPS, and are only a
+small repeated-workload comparison on this machine. The cold host run already
+had the guest cache-reuse change; this is not an unpatched-versus-patched A/B.
+The host compilation reduction and key retention directly establish cache
+reuse. The frame gaps do not establish visible animation stutter: the probe
+does not separate animation frames from idle intervals or command pauses.
+The user reports smooth warmed animations. Quantifying visible hitches would
+require an animation-specific measurement; these samples cannot settle that.
+
+No new crash reports appeared during the first two application-test windows.
+The third produced a Passbook widget `SIGTRAP`: `_assertionFailure` →
+`swift_unexpectedError` → FinanceKit+7,719,608. Its fault, frames and image UUIDs
+match an existing October 18 report, predating this identity patch. No new
+backboardd or cameracaptured crash appeared. A fourth full boot then launched
+Notes, Calendar, Reminders, Settings, Safari, News, Podcasts, Tips, Music,
+Camera and Contacts, returning home between launches. All eleven foreground
+checks passed, with zero GPU restarts and no new crash reports during the
+application-test window. Lychee was shut down normally afterward. The temporary
+installation bundle with the lowered disk check was removed from Launchpad.
+Raw runtime captures and the Swift report driver are local scratch artifacts under
+`/tmp/vphone-shader-cache-hopper/`, not shipped components.
+
+#### Cache location and migration, 2026-10-20
+
+The durable host cache now lives at `<machine>/ShaderCache`. For Lychee this is
+`/Users/arbifox/.vphone/machines/Lychee/ShaderCache`. Guest Metal caches remain
+inside the guest filesystem in `Disk.img`; this change relocates the host
+ParavirtualizedGraphics cache only.
+
+An initial symlink experiment preserved every file checksum but failed runtime
+validation: the Virtualization service logged sandbox metadata denials for the
+redirected path, and GPU task compilation rose to 1,525 events without updating
+the relocated files. Symlinks are therefore not the shipped storage design.
+
+Before creating the VM, `VPhoneShaderCache.prepare` uses the machine ECID and
+the invoking user's Darwin cache directory to locate Apple's required working
+directory, `com.apple.paravirtualizedgraphics-<decimal ECID>`. On first use it
+copies an existing unmanaged directory intact into `ShaderCache`. It seeds a real
+working directory from that durable snapshot before each boot. The VM delegate
+checkpoints the working copy at guest shutdown; the parent CLI checkpoints
+again after vphone-vm exits, including device teardown writes. A `.host-ecid`
+file inside the snapshot lets the unentitled CLI find only that ECID's working
+directory, without a private Virtualization API or arbitrary stored host path.
+
+Each transfer copies to a sibling staging directory, then replaces the entire
+destination. Independently warmed `functions.list`/`functions.data` files are
+never merged. Failed copies leave the prior snapshot intact. Permissions use
+the shared host-file walker without following symlinks. Both roots must be real
+directories. The local experimental alias was removed during validation;
+production setup rejects aliases. An ECID lock stays held for the entire VM
+session so concurrent launches cannot replace an active working cache.
+
+Tests cover paired file preservation, checkpointing, repeated setup, a renamed
+machine, host cache eviction/reseeding, whole-snapshot replacement, foreign
+aliases, checkpoint failure, symlink rejection, concurrent launch exclusion and
+hard-linked lock rejection. Initial relocation validation passed twelve
+cache/permission tests and 61 targeted Task3, encoder and patch-selection tests,
+plus the `VPhone` workspace build and bundle admission. The original 50 GiB
+installer guard and, at that point, shipped Task3 preset defaults were unchanged.
+
+All 14 existing Lychee `functions.list`/`functions.data` checksums matched the
+initial move. With relocation bundle `2.10.1-local.12d3a7da`, two full boot/shutdown
+cycles each passed five Settings rounds and Camera's foreground check. Each
+recorded zero host GPU task compiles, zero guest compiles during the 55-second
+collection, eight fixed host display compiles, eleven retained executable keys
+and zero GPU resets. After the first shutdown, the framework working directory
+was moved aside; the second boot restored it exclusively from the machine
+snapshot and retained all eleven keys. After each shutdown, all 14 paired file
+checksums matched between the working and durable trees. Neither run logged a
+checkpoint error.
+
+The first application-test window produced no new crash report. The second
+produced one Passbook widget SIGTRAP: its exception and first eight fault frames
+exactly match the previously documented FinanceKit assertion failure. A brief
+third boot retrieved that report; Lychee was shut down afterward. These are
+cache-location health checks, not animation smoothness benchmarks.
+The durable snapshot is current after shutdown; changes made during a running
+session reside in Apple's working directory until checkpointed. Killing both
+VM and CLI can lose that session's new entries.
+
+The unfinished Claude handoff and its probe directory are preserved outside
+the checkout at `/Users/arbifox/.vphone/research/shader-cache-2026-10-20/`.
+They are research artifacts, not bundle inputs or proposed PR files.
+The `validation` subdirectory holds the relocation run captures, compilation
+report, checksum manifests and build/test logs.
+
+Deletion semantics correction: the first implementation imported the surviving
+working copy whenever `ShaderCache` was missing, so deleting the durable folder
+could silently restore the warmed host cache. A `.host-ecid` marker in the
+working copy now distinguishes a managed cache from a first-use import. When
+`ShaderCache` is missing and the working copy is managed, preparation starts
+with an empty snapshot and replaces the working copy. Checkpointing also
+respects a missing machine snapshot instead of recreating it at shutdown.
+To regenerate the host cache, stop the VM, delete `<machine>/ShaderCache`,
+then start the VM with the corrected bundle. Deleting it while the VM is
+running does not evict shaders already loaded into memory; the reset takes
+effect at the next boot. Guest Metal caches inside `Disk.img` are a separate
+layer and are not cleared by this host-only reset.
+
+The correction passes fourteen cache/permission tests, including deleting the
+machine snapshot while the VM session is active and deleting it between boots.
+The full bundle build and admission pass. In bundle
+`2.10.1-local.ee7a374e`, the original machine snapshot was moved to an external
+research backup while leaving Apple's managed working copy intact. The next
+boot began with only `.host-ecid` in the machine snapshot and regenerated its
+host caches: 607 GPU task compile events overall, 129 during five Settings
+rounds. The following boot retained all seven newly generated task keys and
+recorded seven GPU task compile events overall, one during Settings. Both had
+zero guest compiles in the 55-second collection, eight fixed display compiles,
+successful Settings/Camera foreground checks and zero GPU resets. All ten
+paired cache file checksums matched after the second shutdown. The reset clears
+the host layer; it does not promise visible lag or a fully cold guest layer.
+The reset test window had no new crash reports. The warm window had one
+Passbook widget report with the same exception and first eight fault frames as
+the preexisting FinanceKit failure; a brief diagnostic boot retrieved it and
+the VM was shut down again.
+Captures and build/test logs are preserved beside the earlier validation under
+`reset-validation`.
+
+#### Task3 enabled in Standard, 2026-10-20
+
+Standard now enables the complete Task3 patch as
+`kernel-cfw-paravirt_gpu_task3`, alongside the already enabled guest Metal cache
+reuse marker. The shipped Standard plist and built-in fallback agree; tvOS and
+tvOS 4K explicitly block Task3. The old experimental identifier maps to the new
+one when reading VM selections, plans and receipts, preserving saved opt-outs
+and recognizing kernels already installed by development bundles.
+
+New Standard creations apply both layers automatically. The resolved kernel
+patch is part of the template's boot-chain digest, so a template lacking Task3
+does not satisfy the new Standard key. Existing machines need their new Core
+Bundle bound, `cfw update-environment`, then `cfw update-kernel` while stopped.
+Launchpad exposes both updates through its helper. No restore or data erasure
+is involved. See `Documents/Guides/shader-cache.md` for the user workflow.
+
+This changes preset selection and record naming only; the four kernel writes
+and runtime coverage above are unchanged. The direct kernel patcher default
+remains false for reference-fixture callers; normal firmware pipelines set it
+from the resolved plan. Older hosts remain untested.
+
+Validation: 62 focused Task3, encoder, catalog and patch-model tests passed,
+including Standard enablement, migration of the old identifier, explicit
+blocking and tvOS exclusions. The complete `VPhone` bundle build and admission
+check passed. The finished bundle's read-only `fw patches Lychee --json` report
+recognized the existing Task3 kernel receipt as applied under the new name,
+with `inPreset: true`, `wanted: true` and `pending: false`. No guest rewrite or
+additional runtime boot was needed for this preset-only change.
 
 ## Heap Textures Have No CPU Layout
 

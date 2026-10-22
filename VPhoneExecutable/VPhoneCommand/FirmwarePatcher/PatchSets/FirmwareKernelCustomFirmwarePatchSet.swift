@@ -317,6 +317,23 @@ public enum FirmwareKernelCustomFirmwarePatchSet {
                 """,
                 target: .firmware(.kernelcache),
             ),
+
+            // MARK: Paravirtual GPU
+
+            VPhonePatchDeclaration(
+                identifier: FirmwarePatchSetCatalog.paravirtTask3Patch,
+                title: "GPU Task3 shader cache",
+                summary: """
+                The guest GPU driver asks the host for binary version 252 \
+                (Task3) while keeping its own features, and writes the owning \
+                executable's code-signing hash into each task root. The host \
+                retains a separate shader cache for each executable across boots.
+                """,
+                target: .firmware(.kernelcache),
+                // The task initializer and owning-task anchors differ on the
+                // cloudOS 26.1–26.3 kernels; discovery fails there.
+                applicability: VPhonePatchApplicability(cloudOS: .release(major: 26, minor: 4)),
+            ),
         ],
         requires: ["vphone.kernel.base"],
         provides: ["vphone.kernel.cfw"],

@@ -15,6 +15,7 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
     let syncsHostLocation: Bool
     /// ECID hex string resolved from machineIdentifier (e.g. "0x0012345678ABCDEF").
     let ecidHex: String?
+    private nonisolated let shaderCache: VPhoneShaderCache.Session?
     /// Read handle for VM serial output.
     private var serialOutputReadHandle: FileHandle?
     private var serialInputSource: DispatchSourceRead?
@@ -50,6 +51,7 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
     }
 
     private struct DeviceIdentity {
+        let ecid: UInt64
         let cpidHex: String
         let ecidHex: String
         let udid: String
@@ -102,8 +104,19 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
 
         if let identity = Self.resolveDeviceIdentity(machineIdentifier: machineIdentifier) {
             ecidHex = identity.ecidHex
-            print("[vphone] ECID: \(ecidHex!)")
+            print("[vphone] ECID: \(identity.ecidHex)")
             print("[vphone] Predicted UDID: \(identity.udid)")
+            // The cache only saves recompiling; a VM that cannot keep one boots without it.
+            do {
+                let shaderCache = try VPhoneShaderCache.prepare(
+                    machineDirectory: options.configURL.deletingLastPathComponent(), ecid: identity.ecid,
+                )
+                self.shaderCache = shaderCache
+                print("[vphone] Shader cache: \(shaderCache.cacheURL.path)")
+            } catch {
+                shaderCache = nil
+                print("[vphone] Warning: shader cache not kept for this run: \(error.localizedDescription)")
+            }
             let outputURL = options.configURL.deletingLastPathComponent().appendingPathComponent(
                 "udid-prediction.txt",
             )
@@ -116,6 +129,7 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
             }
         } else {
             ecidHex = nil
+            shaderCache = nil
             print("[vphone] Warning: failed to resolve ECID from machineIdentifier")
         }
 
@@ -320,6 +334,7 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
 
     /// Cancel serial forwarding before another VM takes the same host stdin.
     func stopHostDevices() {
+        finishShaderCache()
         serialInputSource?.cancel()
         serialInputSource = nil
         serialOutputReadHandle?.readabilityHandler = nil
@@ -360,7 +375,7 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         let cpidHex = String(format: "%08X", VPhoneHardware.udidChipID)
         let ecidHex = String(format: "%016llX", ecidValue)
         let udid = "\(cpidHex)-\(ecidHex)"
-        return DeviceIdentity(cpidHex: cpidHex, ecidHex: ecidHex, udid: udid)
+        return DeviceIdentity(ecid: ecidValue, cpidHex: cpidHex, ecidHex: ecidHex, udid: udid)
     }
 
     private static func writeUDIDPrediction(identity: DeviceIdentity, to outputURL: URL) throws {
@@ -504,13 +519,21 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
     // MARK: - Delegate
 
     nonisolated func guestDidStop(_: VZVirtualMachine) {
+        finishShaderCache()
         print("[vphone] Guest stopped")
         exit(EXIT_SUCCESS)
     }
 
     nonisolated func virtualMachine(_: VZVirtualMachine, didStopWithError error: Error) {
+        finishShaderCache()
         print("[vphone] Stopped with error: \(error)")
         exit(EXIT_FAILURE)
+    }
+
+    private nonisolated func finishShaderCache() {
+        guard let shaderCache else { return }
+        do { try shaderCache.checkpoint() }
+        catch { print("[vphone] Cannot save shader cache: \(error)") }
     }
 
     nonisolated func virtualMachine(

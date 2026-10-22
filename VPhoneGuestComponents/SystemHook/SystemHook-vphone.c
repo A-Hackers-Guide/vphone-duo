@@ -217,6 +217,13 @@ static void vpLoadLibrary(const char *kind, const char *library) {
 
 // xpcproxy needs this bridge because launchd only spawns the proxy, not its target.
 __attribute__((constructor)) static void vpLogProcess(void) {
+    // Request cross-boot reuse at constructor entry: libCoreFSCache normally
+    // invalidates Metal caches when the boot session changes. Preserve an
+    // explicit environment setting. See Research/Guest/gpu_acceleration.md.
+    if (access("/usr/lib/vphone-metal-cache-reuse", F_OK) == 0) {
+        setenv("FS_CACHE_REUSE_ON_REBOOT", "1", 0);
+    }
+
     char path[PATH_MAX];
     uint32_t length = sizeof(path);
     if (_NSGetExecutablePath(path, &length) != 0)

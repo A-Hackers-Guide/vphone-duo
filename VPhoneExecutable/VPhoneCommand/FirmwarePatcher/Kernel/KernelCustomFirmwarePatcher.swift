@@ -46,6 +46,10 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
     /// writes what the reference records were taken from.
     public var applyParavirtUserClients = false
 
+    /// Paravirtual GPU binary version 252 (Task3). Set from the plan; `standard`
+    /// enables it. False here so direct patchers preserve the reference corpus.
+    public var applyParavirtTask3 = false
+
     public func findAll() throws -> [PatchRecord] {
         parseMachO()
         buildADRPIndex()
@@ -117,6 +121,15 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
         // fixed 60 Hz mode, unless the VM blocked it.
         if applyProMotion {
             patchParavirtDisplayRefreshRate()
+        }
+
+        // Negotiate Task3 and identify the executable before registration.
+        if applyParavirtTask3 {
+            guard patchParavirtTask3Version() else {
+                throw NSError(domain: "FirmwarePatcher.ParavirtTask3", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "Cannot resolve the complete Task3 shader-cache patch; kernel was not installed",
+                ])
+            }
         }
 
         // Group C
