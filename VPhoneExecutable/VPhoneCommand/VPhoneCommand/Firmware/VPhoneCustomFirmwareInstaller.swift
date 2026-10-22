@@ -447,10 +447,8 @@ struct VPhoneCustomFirmwareInstaller {
                 )
             }
         }
-        // The Preboot identity patches go with the boot chain and belong to a
-        // full install only. The device tree repairs are the exception: a VM
-        // restored before the board audio repair or the haptics removal has no
-        // other way to get them, since `fw patch` does not run again.
+        // The selected Preboot identity can also reach an installed guest through
+        // an environment update, using its installed tree without a restore.
         // A guest that has booted keeps the MobileGestalt answers it cached from
         // the old tree on its Data volume, which the host cannot reach. vphoned
         // drops that cache at startup when it is older than the tree; see
@@ -465,7 +463,8 @@ struct VPhoneCustomFirmwareInstaller {
             plan: plan,
             priorGuest: priorGuest,
             guestDevice: device,
-            includeIdentity: mode == .full,
+            includeIdentity: mode == .full
+                || plan?.isEnabled(FirmwareGuestIdentityPatchSet.prebootDeviceTreeIdentity) == true,
             buildVersion: buildVersion,
             boardDeviceTree: boardDeviceTree,
             otaRestore: isOTAUpdate ? restore : nil,
@@ -2414,8 +2413,8 @@ struct VPhoneCustomFirmwareInstaller {
         return VPhoneGuestDevice.detect(buildManifest: manifest) ?? .default
     }
 
-    /// `includeIdentity` is false for an environment update, which carries only
-    /// the device tree repairs: the board repair, which needs `boardDeviceTree`
+    /// `includeIdentity` also enables an environment update's selected identity.
+    /// The device tree repairs include the board repair, which needs `boardDeviceTree`
     /// (a board-presenting guest's audio node, an iPhone17,3's product
     /// description), the haptics removal and the microphone-array repair.
     /// `boardDeviceTree` is the guest's own board tree (`DeviceTree.<board>.im4p`),
@@ -2432,8 +2431,8 @@ struct VPhoneCustomFirmwareInstaller {
     ///  - full install: restore that backup to a clean base, apply identity,
     ///    re-take the backup from the post-identity bytes, then apply the
     ///    enabled repairs;
-    ///  - environment update (no identity step): restore the backup, apply the
-    ///    enabled repairs.
+    ///  - environment update: restore the backup, apply identity when selected,
+    ///    then apply the enabled repairs.
     ///
     /// A backup is taken only when the base is known clean — a backup already
     /// existed, or no repair was live before. A tree repaired before backups
@@ -2470,8 +2469,8 @@ struct VPhoneCustomFirmwareInstaller {
                 }
             }
         } else if priorGuest.contains(identity) {
-            // An environment update does not touch the identity rewrite; if the
-            // last install wrote it, it is still live.
+            // With identity off, an environment update preserves the installed
+            // identity: the repair backup is already post-identity.
             live.insert(identity)
         }
 
@@ -2633,7 +2632,7 @@ struct VPhoneCustomFirmwareInstaller {
         let staged = work.file(folder).appendingPathComponent("devicetree.img4")
         try (hadRepairBackup ? root.readData(backup) : currentBytes).write(to: staged)
 
-        // Identity first (full install only), so the post-identity snapshot and
+        // Identity first when selected, so the post-identity snapshot and
         // a later repair revert never undo it.
         if rewriteIdentity {
             try patch("patch-post-restore-dt", [staged.path])
