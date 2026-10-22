@@ -15,9 +15,9 @@ struct VPhoneLaunchpadSlimmingSections: View {
     /// IPSWs, which the list cannot be matched against.
     var templateAvailable: Bool?
     @Binding var slimming: VPhoneLaunchpadSlimming
-    /// An Apple TV is restored on its own and not slimmed: templates and
+    /// Apple TV and HomePod are restored on their own and not slimmed: templates and
     /// slimming drive iOS Setup Assistant and its apps.
-    var forAppleTV = false
+    var requiresStandaloneRestore = false
     @State private var choosesApps = false
 
     var body: some View {
@@ -27,10 +27,10 @@ struct VPhoneLaunchpadSlimmingSections: View {
         case .slimming:
             Section {
                 Toggle("Slim System", isOn: $slimming.slim)
-                    .disabled(forAppleTV)
+                    .disabled(requiresStandaloneRestore)
             } footer: {
-                if forAppleTV {
-                    Text("An Apple TV keeps every file, service and app.")
+                if requiresStandaloneRestore {
+                    Text("Apple TV and HomePod keep every file, service and app.")
                         .foregroundStyle(.secondary)
                 } else if !usesTemplate, slimming.slim {
                     Text("Without a template the machine is slimmed on its own, with a setup boot of its own. Setup Assistant is skipped.")
@@ -45,13 +45,13 @@ struct VPhoneLaunchpadSlimmingSections: View {
     private var templateSection: some View {
         Section {
             Toggle("Use Template", isOn: $usesTemplate)
-                .disabled(forAppleTV)
+                .disabled(requiresStandaloneRestore)
         } header: {
             Text("Template")
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
-                if forAppleTV {
-                    Text("An Apple TV is restored on its own, with keys of its own. Templates are made for iPhone and iPad.")
+                if requiresStandaloneRestore {
+                    Text("Apple TV and HomePod are restored on their own, with keys of their own. Templates are made for iPhone and iPad.")
                 } else {
                     if templateAvailable == false {
                         Text("No template is available for this firmware. Turning this on saves a sample of the machine in the template library.")
@@ -92,7 +92,7 @@ struct VPhoneLaunchpadSlimmingSections: View {
                 }
             }
         }
-        .disabled(!slimming.slim)
+        .disabled(requiresStandaloneRestore || !slimming.slim)
     }
 
     private var trimNote: String {
@@ -139,7 +139,7 @@ struct VPhoneLaunchpadSlimmingSections: View {
             }
             .foregroundStyle(.secondary)
         }
-        .disabled(!slimming.slim)
+        .disabled(requiresStandaloneRestore || !slimming.slim)
     }
 
     private var appsPopover: some View {

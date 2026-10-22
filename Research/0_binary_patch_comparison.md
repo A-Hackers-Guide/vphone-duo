@@ -1,5 +1,15 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **HomePod mini (2026-10-22).** `AudioAccessory5,1` / B520 uses its own
+> HomePod Software 27.0 (24J361) monolithic arm64e TVOS IPSW with the cloudOS
+> 26.4 boot chain. The dedicated `homepod-mini` preset retains 27 compatibility
+> and vphoned, blocks the Apple TV OTA swap, HD TPRO workaround and iPhone
+> GPU/audio/environment hooks. New `devicetree-cfw-homepod_product` copies
+> concrete `horseman`, `siri-hub` and app architecture capabilities from B520's
+> donor tree only into its installed identity. No new kernel instruction patch.
+> See [HomePod mini support](Firmware/homepod_mini_support.md) for evidence,
+> validation status and limitations.
+
 > **Experimental full OTA System update (2026-10-20):**
 > `system-exp-ota_userland` is off in Standard and the TV presets. For a stopped
 > iPhone/iPad guest with a snapshot and prepared target firmware, it replaces

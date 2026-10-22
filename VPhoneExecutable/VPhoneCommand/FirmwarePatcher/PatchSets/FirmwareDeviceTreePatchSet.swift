@@ -215,6 +215,12 @@ public enum FirmwareDeviceTreePatchSet {
                 "Takes the audio node from the iPad's tree, so its acoustic ID names tunings the iPad image ships.",
             ),
 
+            property(
+                "devicetree-cfw-homepod_product",
+                "HomePod product capabilities",
+                "Copies the HomePod mini's horseman, siri-hub and app architecture properties from its own board tree, so MobileGestalt recognizes an audio accessory. Other boards and the restore tree are unchanged.",
+            ),
+
             // MARK: TV Guest
 
             property(

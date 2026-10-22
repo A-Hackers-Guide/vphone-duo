@@ -171,6 +171,27 @@ struct BoardDeviceTreeTests {
         #expect(VPhoneBoardDeviceTree.find(miniFirmware, in: [root]) == nil)
     }
 
+    @Test func `HomePod mini recovers its B520 board tree from its own IPSW`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let firmware = VPhoneBoardDeviceTree.Firmware(device: .audioAccessory5_1, version: "27.0", build: "24J361")
+        let archive = try makeIPSW(
+            "AudioAccessory5,1_27.0_24J361_Restore.ipsw",
+            in: root,
+            version: "27.0",
+            build: "24J361",
+            productTypes: ["AudioAccessory5,1"],
+            boards: ["b520ap"],
+        )
+        #expect(VPhoneBoardDeviceTree.firmware(
+            treeName: "iPhoneOS_AudioAccessory5,1_27.0_24J361_Restore", device: .audioAccessory5_1,
+        ) == firmware)
+        let source = try #require(VPhoneBoardDeviceTree.find(firmware, in: [root]))
+        #expect(source.archive == archive)
+        #expect(source.member == "Firmware/all_flash/DeviceTree.b520ap.im4p")
+        #expect(source.contents == Data("tree b520ap".utf8))
+    }
+
     @Test func `the library's own ipsws folder is searched after the shared cache`() {
         let vm = URL(fileURLWithPath: "/Volumes/Lab/vphone/machines/ipad", isDirectory: true)
         let directories = VPhoneBoardDeviceTree.searchDirectories(forVirtualMachineAt: vm)

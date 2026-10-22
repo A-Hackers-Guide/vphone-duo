@@ -172,6 +172,29 @@ struct DeviceTreeGuestDeviceTests {
               appArchitecture: .string("app-macho-architecture", "arm64"))
     }
 
+    /// B520 declares its accessory capabilities through concrete properties;
+    /// its artwork values are syscfg placeholders, not a TV panel identity.
+    /// Its app architecture remains "arm64" even though 27.0's dyld is arm64e.
+    static func homePodBoard(model: String = "AudioAccessory5,1", placeholderCapabilities: Bool = false) -> Node {
+        let root = board(model: model, unique: "B520AP", disablesStageManager: false)
+        return Node(properties: root.properties, children: [Node(properties: [
+            .string("name", "product"),
+            .placeholder("artwork-device-idiom", "ardi"),
+            .placeholder("artwork-device-subtype", "ards"),
+            .placeholder("artwork-scale-factor", "arsf"),
+            .string("product-name", "HomePod mini"),
+            .string("fdr-product-type", model),
+            .string("sub-product-type", model),
+            .string("unique-model", "B520AP"),
+            placeholderCapabilities ? .placeholder("horseman", "hrsm")
+                : .integer("horseman", 1),
+            placeholderCapabilities ? .placeholder("siri-hub", "shub")
+                : Property(name: "siri-hub", flags: 0, value: Data()),
+            placeholderCapabilities ? .placeholder("app-macho-architecture", "arch")
+                : .string("app-macho-architecture", "arm64"),
+        ], children: [])])
+    }
+
     // MARK: - Reading the result
 
     /// `node -> property -> (flags, value)` for the two levels the fixture has.
@@ -285,6 +308,69 @@ struct DeviceTreeGuestDeviceTests {
     }
 
     // MARK: - Tests
+
+    @Test func `HomePod installed identity copies accessory capabilities and removes placeholder artwork`() throws {
+        let patcher = DeviceTreePatcher(
+            data: Self.tree.serialized(), verbose: false, device: .audioAccessory5_1,
+            role: .installed, sourceTree: Self.homePodBoard().serialized(),
+        )
+        let records = try patcher.findAll()
+        let installed = Self.read(patcher.patchedData)
+        let product = try #require(installed["device-tree/product"])
+        #expect(Self.string(installed["device-tree"]?["model"]) == "AudioAccessory5,1")
+        #expect(Self.string(installed["device-tree"]?["target-sub-type"]) == "B520AP")
+        #expect(Self.string(product["product-name"]) == "HomePod mini")
+        for name in ["artwork-device-idiom", "artwork-device-subtype", "artwork-scale-factor"] {
+            #expect(product[name] == nil, "\(name) must not retain a syscfg placeholder")
+        }
+        #expect(Self.integer(product["horseman"]) == 1)
+        #expect(product["horseman"]?.0 == 0)
+        let hub = try #require(product["siri-hub"])
+        #expect(hub.0 == 0 && hub.1.isEmpty)
+        #expect(Self.string(product["app-macho-architecture"]) == "arm64")
+        #expect(product["app-macho-architecture"]?.0 == 0)
+        #expect(records.filter { $0.patchID == DeviceTreePatcher.homePodProductPatch }.count == 3)
+        #expect(!records.contains { $0.patchID == DeviceTreePatcher.tvAppArchitecturePatch })
+        // Restore sees the same virtual board and product as before HomePod support.
+        let restore = DeviceTreePatcher(
+            data: Self.tree.serialized(), verbose: false, device: .audioAccessory5_1,
+            role: .restore, sourceTree: Self.homePodBoard().serialized(),
+        )
+        let baseline = DeviceTreePatcher(
+            data: Self.tree.serialized(), verbose: false, device: .appleTV5_3,
+            role: .restore, sourceTree: Self.tvBoard().serialized(),
+        )
+        let restoreRecords = try restore.findAll()
+        _ = try baseline.findAll()
+        #expect(restore.patchedData == baseline.patchedData)
+        #expect(!restoreRecords.contains { $0.patchID == DeviceTreePatcher.homePodProductPatch })
+    }
+
+    @Test func `HomePod capability patch is declared and its gate leaves capabilities untouched`() throws {
+        let identifier = DeviceTreePatcher.homePodProductPatch
+        let declared = Set(FirmwareDeviceTreePatchSet.manifest.patches.map(\.identifier))
+        #expect(declared.contains(identifier))
+        let patcher = DeviceTreePatcher(
+            data: Self.tree.serialized(), verbose: false, device: .audioAccessory5_1,
+            role: .installed, sourceTree: Self.homePodBoard().serialized(),
+        )
+        patcher.gate = VPhonePatchGate(declared: declared, enabled: declared.subtracting([identifier]))
+        let records = try patcher.findAll()
+        let product = try #require(Self.read(patcher.patchedData)["device-tree/product"])
+        for name in ["horseman", "siri-hub", "app-macho-architecture"] {
+            #expect(product[name] == nil)
+        }
+        #expect(!records.contains { $0.patchID == identifier })
+    }
+
+    @Test func `HomePod capabilities require the inspected model and concrete donor values`() throws {
+        for donor in [Self.homePodBoard(model: "AudioAccessory6,1"), Self.homePodBoard(placeholderCapabilities: true)] {
+            let installed = try Self.patch(device: .audioAccessory5_1, role: .installed, board: donor)
+            for name in ["horseman", "siri-hub", "app-macho-architecture"] {
+                #expect(installed["device-tree/product"]?[name] == nil)
+            }
+        }
+    }
 
     @Test func `a TV installed tree takes its donor app architecture while restore keeps the virtual board`() throws {
         let (installedData, records) = try Self.patched(Self.tree.serialized(), as: .appleTV)

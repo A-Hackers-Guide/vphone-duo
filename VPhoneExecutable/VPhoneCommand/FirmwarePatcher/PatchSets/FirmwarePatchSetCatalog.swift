@@ -315,6 +315,20 @@ public enum FirmwarePatchSetCatalog {
         ),
     )
 
+    /// HomePod mini uses its own monolithic arm64e TVOS IPSW. Keep the 27
+    /// kernel compatibility patches, but never swap in an Apple TV OTA or
+    /// install the iPhone GPU/audio environment on this headless accessory.
+    public static let homePodMiniPreset = VPhonePatchPreset(
+        identifier: VPhonePatchPreset.homePodMiniIdentifier,
+        title: "HomePod mini",
+        summary: "Research: HomePod mini's own arm64e TVOS IPSW with vphoned, without Apple TV OTA replacement or iPhone display, camera and audio hooks.",
+        patchSets: bundledReferences,
+        selection: .block(
+            manualOnlyPatches.union(tvOSBlockedPatches.subtracting(tvOS27UserlandPatches)),
+        ),
+    )
+
     /// The presets the bundle ships.
-    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, experimentalPreset, tvOSPreset, tvOS4KPreset]
+
+    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, experimentalPreset, tvOSPreset, tvOS4KPreset, homePodMiniPreset]
 }

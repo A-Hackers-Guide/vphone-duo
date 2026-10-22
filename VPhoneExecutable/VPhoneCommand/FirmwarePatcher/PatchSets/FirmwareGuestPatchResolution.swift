@@ -47,6 +47,16 @@ public enum FirmwareGuestPatchResolution {
         return enabled.intersection(guestTargetIdentifiers).subtracting(admitted).sorted()
     }
 
+    /// HomePod has its own arm64e IPSW. Sharing TVOS does not admit the
+    /// Apple TV OTA swap, GPU injection, or plain-arm64 dyld workarounds.
+    public static let homePodSupportedGuestPatches = tvSupportedGuestPatches
+        .subtracting([FirmwareGuestSystemPatchSet.tvTPRO])
+        .union(FirmwarePatchSetCatalog.tvOS27UserlandPatches)
+
+    public static func unvalidatedHomePodGuestPatches(enabled: Set<String>) -> [String] {
+        enabled.intersection(guestTargetIdentifiers).subtracting(homePodSupportedGuestPatches).sorted()
+    }
+
     /// Every bundled-set patch whose bytes the guest half of an install writes —
     /// the dyld shared cache, a guest Mach-O, its entitlements, a guest file, or
     /// the Preboot device tree. The complement is the boot chain, which `fw

@@ -8,10 +8,10 @@
 	<string>VPhone</string>
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>2.11.0</string>
 	<key>CFBundleVersion</key>
 	<string>43</string>
-	<key>CFBundleShortVersionString</key>
-	<string>2.10.1</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Shares this Mac's microphone with the virtual iPhone so apps running inside it can record.</string>
 </dict>

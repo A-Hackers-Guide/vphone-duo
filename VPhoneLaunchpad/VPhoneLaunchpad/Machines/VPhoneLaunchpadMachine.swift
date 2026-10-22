@@ -150,9 +150,13 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
         guestProductType?.hasPrefix("AppleTV") == true
     }
 
-    /// The guest OS's name: iPadOS on an iPad, tvOS on an Apple TV.
+    var isHomePod: Bool {
+        guestProductType?.hasPrefix("AudioAccessory") == true
+    }
+
+    /// The guest OS's name.
     var osName: String {
-        isAppleTV ? "tvOS" : isPad ? "iPadOS" : "iOS"
+        isHomePod ? "HomePod Software" : isAppleTV ? "tvOS" : isPad ? "iPadOS" : "iOS"
     }
 
     /// config.plist's `guestProductType`, else the product type in the name
@@ -168,7 +172,7 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
         let originals = folder.appendingPathComponent("FirmwareOriginals", isDirectory: true)
         let names = (try? FileManager.default.contentsOfDirectory(atPath: originals.path)) ?? []
         for name in names.sorted() where name.hasSuffix("_Restore") {
-            if let type = name.split(separator: "_").first(where: { $0.wholeMatch(of: /(iPhone|iPad|AppleTV)\d+,\d+/) != nil }) {
+            if let type = name.split(separator: "_").first(where: { $0.wholeMatch(of: /(iPhone|iPad|AppleTV|AudioAccessory)\d+,\d+/) != nil }) {
                 return String(type)
             }
         }
@@ -258,7 +262,7 @@ nonisolated struct VPhoneLaunchpadFirmwareCatalog: Decodable, Sendable {
         /// The product type `fw prepare --device` takes.
         let productType: String
         let name: String
-        /// `iPhone`, `iPad` or `appleTV`.
+        /// `iPhone`, `iPad`, `appleTV` or `homePod`.
         let family: String
         let pairings: [Pairing]
 
@@ -274,9 +278,18 @@ nonisolated struct VPhoneLaunchpadFirmwareCatalog: Decodable, Sendable {
             family == "appleTV"
         }
 
+        var isHomePod: Bool {
+            family == "homePod"
+        }
+
+        /// HomePod and Apple TV do not use iOS templates or slimming.
+        var requiresStandaloneRestore: Bool {
+            isAppleTV || isHomePod
+        }
+
         /// The system its IPSWs install.
         var osName: String {
-            isAppleTV ? "tvOS" : isPad ? "iPadOS" : "iOS"
+            isHomePod ? "HomePod Software" : isAppleTV ? "tvOS" : isPad ? "iPadOS" : "iOS"
         }
 
         /// The name with its product type, `iPhone 16 (iPhone17,3)`: Launchpad

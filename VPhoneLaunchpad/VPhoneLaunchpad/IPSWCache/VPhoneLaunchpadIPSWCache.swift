@@ -151,7 +151,7 @@ nonisolated enum VPhoneLaunchpadIPSWCache {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: originals.path)) ?? []
         // `fw prepare`'s restore tree: `iPhone17,3_…_Restore`, or for an iPad
         // `iPhoneOS_iPad16,1_…_Restore`.
-        for name in names.sorted() where name.hasPrefix("iPhone") && name.hasSuffix("_Restore") {
+        for name in names.sorted() where name.hasSuffix("_Restore") {
             if let type = VPhoneLaunchpadIPSW(fileName: name)?.productTypes.first {
                 return type
             }

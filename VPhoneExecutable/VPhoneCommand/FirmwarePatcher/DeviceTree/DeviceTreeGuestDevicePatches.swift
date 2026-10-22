@@ -62,6 +62,7 @@ extension DeviceTreePatcher {
     static let iPadIdentityPatch = "devicetree-cfw-ipad_identity"
     static let iPadAudioPatch = "devicetree-cfw-ipad_audio"
     static let tvAppArchitecturePatch = "devicetree-cfw-tv_app_architecture"
+    static let homePodProductPatch = "devicetree-cfw-homepod_product"
     static let hapticsPatch = "devicetree-cfw-product_haptics_node"
     static let microphoneArrayPatch = "devicetree-cfw-product_audio_microphone_array"
 
@@ -172,7 +173,21 @@ extension DeviceTreePatcher {
                                    action: .set(architecture), patchID: tvAppArchitecturePatch))
         }
 
+        // B520's accessory identity is independent of its artwork idiom,
+        // which is a syscfg placeholder rather than "tv". HomePod services
+        // query these capabilities through MobileGestalt.
+        if let model = value(source, "model"),
+           String(decoding: model.prefix { $0 != 0 }, as: UTF8.self) == "AudioAccessory5,1"
+        {
+            for name in ["horseman", "siri-hub", "app-macho-architecture"] {
+                let action: GuestEdit.Action = value(sourceProduct, name).map { .set($0) } ?? .remove
+                edits.append(GuestEdit(nodePath: product, property: name,
+                                       action: action, patchID: homePodProductPatch))
+            }
+        }
+
         for (name, patchID) in copiedProductProperties {
+
             let action: GuestEdit.Action = value(sourceProduct, name).map { .set($0) } ?? .remove
             edits.append(GuestEdit(nodePath: product, property: name, action: action, patchID: patchID))
         }

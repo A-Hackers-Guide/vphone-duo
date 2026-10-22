@@ -88,6 +88,28 @@ struct FirmwareCatalogReportTests {
         #expect(tv.name == "Apple TV HD")
     }
 
+    @Test func `HomePod mini pairs its native 27 IPSW with cloudOS without an OTA base`() throws {
+        let pairings = VPhoneFirmwareCatalog.pairings(for: "AudioAccessory5,1")
+        #expect(pairings.count == 1)
+        let pairing = try #require(pairings.first)
+        #expect(pairing.device == "AudioAccessory5,1")
+        #expect(pairing.iosName == "HomePod Software 27.0")
+        #expect(pairing.iosURL == "https://updates.cdn-apple.com/2026SFallFCS/a595a3b2-2c42-470a-9417-a705aaafa05c/AudioAccessory5,1_27.0_24J361_Restore.ipsw")
+        #expect(pairing.cloudosName == "cloudOS 26.4")
+        #expect(pairing.cloudosURL == VPhoneFirmwareCatalog.cloud264)
+        #expect(VPhoneGuestDevice.audioAccessory5_1.restoreBase == nil)
+        #expect(VPhoneFirmwareCatalog.otaRelease(source: pairing.iosURL) == nil)
+        #expect(VPhoneFirmwareCatalog.otaRelease(for: "AudioAccessory5,1", build: "24J361") == nil)
+        #expect(VPhoneFirmwareCatalog.pairings(for: "AudioAccessory1,1").isEmpty)
+
+        let device = try #require(VPhoneFirmwareCatalog.report.devices.first { $0.productType == "AudioAccessory5,1" })
+        #expect(device.family == "homePod" && device.name == "HomePod mini")
+        let entry = try #require(device.pairings.first)
+        #expect(entry.ios.name == pairing.iosName && entry.ios.url == pairing.iosURL)
+        #expect(entry.ios.build == nil && entry.ios.files == nil)
+        #expect(entry.recommendedCloudOS.url == VPhoneFirmwareCatalog.cloud264)
+    }
+
     @Test func `i pad pairings come from an IPSW that covers the device`() {
         for guest in VPhoneGuestDevice.known where guest.isPad {
             let pairings = VPhoneFirmwareCatalog.pairings(for: guest.productType)

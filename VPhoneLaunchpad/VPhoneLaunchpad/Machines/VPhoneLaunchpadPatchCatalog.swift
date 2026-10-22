@@ -284,9 +284,13 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
     /// the OTA, with the paravirtual GPU driver.
     static let tvOS4KPreset = "tvos-4k"
 
+    /// The HomePod mini's arm64e userland has a preset of its own.
+    static let homePodMiniPreset = "homepod-mini"
+
     /// The preset a new machine of `productType` starts from.
     static func defaultPreset(forDevice productType: String?) -> String {
         switch productType {
+        case "AudioAccessory5,1": homePodMiniPreset
         case "AppleTV14,1": tvOS4KPreset
         case let type? where type.hasPrefix("AppleTV"): tvOSPreset
         default: defaultPreset

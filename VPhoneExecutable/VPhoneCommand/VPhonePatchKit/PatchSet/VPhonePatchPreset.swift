@@ -82,6 +82,9 @@ public struct VPhonePatchPreset: Sendable, Hashable, Codable, Identifiable {
     /// userland taken from the device's OTA.
     public static let tvOS4KIdentifier = "tvos-4k"
 
+    /// HomePod mini's own arm64e TVOS IPSW, without an OTA userland swap.
+    public static let homePodMiniIdentifier = "homepod-mini"
+
     /// Whether this is the preset a VM gets by default.
     public var isStandard: Bool {
         identifier == Self.standardIdentifier

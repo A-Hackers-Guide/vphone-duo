@@ -557,6 +557,30 @@ struct IPSWCacheTests {
         }
     }
 
+    @Test func `HomePod mini pairs with cloudOS without admitting other audio accessories`() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let homePod = try ipsw(in: root, "homepod-mini", productTypes: ["AudioAccessory5,1"], deviceClasses: ["B520AP"])
+        let cloud = try ipsw(in: root, "cloud", productTypes: ["iProd99,1"], deviceClasses: ["vresearch101ap", "vphone600ap"])
+        let other = try ipsw(in: root, "homepod", productTypes: ["AudioAccessory1,1"], deviceClasses: ["b238ap"])
+
+        try VPhoneIPSWCache.checkPair(iPhone: homePod, cloudOS: cloud)
+        #expect(VPhoneIPSWCache.guestDevice(for: homePod) == .audioAccessory5_1)
+        #expect(homePod.deviceClasses == ["b520ap"])
+        #expect(VPhoneIPSWCache.guestProductTypes.contains("AudioAccessory5,1"))
+        #expect {
+            try VPhoneIPSWCache.checkPair(iPhone: other, cloudOS: cloud)
+        } throws: { error in
+            if case .notIPhoneSource? = error as? VPhoneIPSWCache.Error { true } else { false }
+        }
+        #expect {
+            try VPhoneIPSWCache.checkPair(iPhone: cloud, cloudOS: homePod)
+        } throws: { error in
+            if case .swappedSources? = error as? VPhoneIPSWCache.Error { true } else { false }
+        }
+    }
+
     @Test func `an iPad IPSW the guest device list knows pairs with cloudOS`() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

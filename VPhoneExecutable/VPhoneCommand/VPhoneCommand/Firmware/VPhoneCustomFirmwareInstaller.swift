@@ -228,14 +228,16 @@ struct VPhoneCustomFirmwareInstaller {
             }
             guard saved else { throw ValidationError("OTA update needs a stopped disk/SEP/NVRAM snapshot.") }
         }
-        if device.family == .appleTV {
+        if device.usesTVOS {
             guard let plan else {
                 throw ValidationError("tvOS installation needs an explicit patch plan. Resolve a TV selection with `fw set-patches` and `fw patch` first.")
             }
-            let unvalidated = FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(
-                enabled: Set(plan.enabledPatches),
-                arm64eUserland: !device.hasPlainArm64Userland,
-            )
+            let unvalidated = device.family == .homePod
+                ? FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: Set(plan.enabledPatches))
+                : FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(
+                    enabled: Set(plan.enabledPatches),
+                    arm64eUserland: !device.hasPlainArm64Userland,
+                )
             guard unvalidated.isEmpty else {
                 throw ValidationError("These guest patches have not been validated for tvOS. Block them with `fw set-patches` before installation: \(unvalidated.joined(separator: ", "))")
             }
@@ -266,7 +268,7 @@ struct VPhoneCustomFirmwareInstaller {
         if isOTAUpdate, !cloned {
             throw ValidationError("The OTA update needs a private APFS disk clone; the original disk was left untouched.")
         }
-        if device.family == .appleTV {
+        if device.usesTVOS {
             // A paired dyld edit must never fall back to mutating the live disk.
             // Its errors propagate below, so this clone is committed only after
             // the whole install succeeds.
@@ -390,7 +392,7 @@ struct VPhoneCustomFirmwareInstaller {
             // its prior set is empty whatever a stale plan might say.
             let hasLaunchdBackup = (try? systemRoot.exists("System/Library/xpc/launchd.plist.bak")) ?? false
             // TV installs deliberately omit vphoned and its launchd backup.
-            let wasInstalled = hasLaunchdBackup || (device.family == .appleTV && receiptGuest != nil)
+            let wasInstalled = hasLaunchdBackup || (device.usesTVOS && receiptGuest != nil)
             priorGuest = receiptGuest ?? (wasInstalled ? priorFallback : [])
             if isOTAUpdate {
                 guard wasInstalled, let otaUserland else {
@@ -482,7 +484,7 @@ struct VPhoneCustomFirmwareInstaller {
         if device.family != .iPhone {
             notApplicableGuest.insert(FirmwareGuestSystemPatchSet.prebootIPhoneProduct)
         }
-        if device.family != .appleTV {
+        if !device.usesTVOS {
             notApplicableGuest.insert(FirmwareGuestSystemPatchSet.tvTPRO)
         }
         if buildVersion?.isEmpty ?? true {
@@ -1256,7 +1258,7 @@ struct VPhoneCustomFirmwareInstaller {
         //    27.x base.
         // The selected TV donor has a native arm64 cache. Keep its directory
         // intact; cryptex symlinks would point into images it does not ship.
-        let cacheRelative = guestDevice.family == .appleTV
+        let cacheRelative = guestDevice.usesTVOS
             ? "System/Library/Caches/com.apple.dyld"
             : "System/Cryptexes/OS/System/Library/Caches/com.apple.dyld"
         let cacheArchitecture = guestDevice.hasPlainArm64Userland ? "arm64" : "arm64e"
@@ -1471,7 +1473,7 @@ struct VPhoneCustomFirmwareInstaller {
             isolate(["system-extensions-boot-gpu_bundle"]) {
                 if let restore {
                     try installGPUBundle(restore: restore, system: system, owner: owner)
-                    if guestDevice.family == .appleTV {
+                    if guestDevice.usesTVOS {
                         try retargetGPUBundleToTVOS(system: system, work: work)
                     }
                     gpuBundleReinstalled = true

@@ -135,7 +135,7 @@ struct FirmwarePatchSetCatalogTests {
                     // Nothing a shipped iOS preset does should drop a boot-essential
                     // patch: these are the combinations we claim boot. The tvOS
                     // presets drop exactly the iOS ones an Apple TV has no port of.
-                    let tvPresets = [VPhonePatchPreset.tvOSIdentifier, VPhonePatchPreset.tvOS4KIdentifier]
+                    let tvPresets = [VPhonePatchPreset.tvOSIdentifier, VPhonePatchPreset.tvOS4KIdentifier, VPhonePatchPreset.homePodMiniIdentifier]
                     let expected = tvPresets.contains(preset.identifier)
                         ? Set(plan.droppedBootEssentials).isSubset(of: FirmwarePatchSetCatalog.tvOSBlockedPatches)
                         : plan.droppedBootEssentials.isEmpty
@@ -310,7 +310,7 @@ struct FirmwarePatchSetCatalogTests {
             )
             #expect(!plan.isEnabled(patch))
         }
-        for preset in [FirmwarePatchSetCatalog.tvOSPreset, FirmwarePatchSetCatalog.tvOS4KPreset] {
+        for preset in [FirmwarePatchSetCatalog.tvOSPreset, FirmwarePatchSetCatalog.tvOS4KPreset, FirmwarePatchSetCatalog.homePodMiniPreset] {
             let plan = try VPhonePatchPlan.resolve(
                 preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
                 iOSBase: VPhoneVersion("27.0"), cloudOS: VPhoneVersion("26.4"),

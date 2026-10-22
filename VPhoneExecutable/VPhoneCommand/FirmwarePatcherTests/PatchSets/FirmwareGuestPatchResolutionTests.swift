@@ -119,6 +119,63 @@ struct FirmwareGuestPatchResolutionTests {
     }
 
     @Test
+    func `HomePod rejects explicit TV payloads while admitting its daemon and 27 compatibility patches`() {
+        let supported: Set<String> = [
+            "system-vphoned-boot-install",
+            "system-launchd_cache_loader-boot-unsecure_cache_gate",
+            "system-seputil-boot-gigalocker_uuid",
+            "system-gigalocker-boot-rename",
+        ]
+        let rejected: Set<String> = [
+            "system-extensions-boot-gpu_bundle",
+            FirmwareGuestSystemPatchSet.tvOTAUserland,
+            FirmwareGuestSystemPatchSet.tvTPRO,
+            "system-launchdaemons-boot-environment",
+            "dyld-cfw-camera",
+        ]
+        let admitted = supported.union(FirmwarePatchSetCatalog.tvOS27UserlandPatches)
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: admitted).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: admitted.union(rejected)) == rejected.sorted())
+        // The TV arm64e guard admits GPU/OTA selection; HomePod's own guard
+        // must keep rejecting those even though its userland is also arm64e.
+        let tvPayloads: Set<String> = ["system-extensions-boot-gpu_bundle", FirmwareGuestSystemPatchSet.tvOTAUserland]
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: tvPayloads, arm64eUserland: true).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: tvPayloads) == tvPayloads.sorted())
+        #expect(FirmwareGuestPatchResolution.homePodSupportedGuestPatches.isDisjoint(with: rejected))
+    }
+
+    @Test
+    func `HomePod mini uses its own arm64e image with 27 compatibility and no TV OTA or display payload`() throws {
+        let excluded: Set<String> = [
+            "system-extensions-boot-gpu_bundle",
+            FirmwareGuestSystemPatchSet.tvOTAUserland,
+            FirmwareGuestSystemPatchSet.tvTPRO,
+            FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers,
+            FirmwareGuestSystemPatchSet.paravirtGPUIndexOffset,
+            "system-launchdaemons-boot-environment",
+            "dyld-cfw-camera",
+        ]
+        #expect(FirmwarePatchSetCatalog.homePodMiniPreset.identifier == VPhonePatchPreset.homePodMiniIdentifier)
+        for base in ["26.4", "27.0"] {
+            let plan = try VPhonePatchPlan.resolve(
+                preset: FirmwarePatchSetCatalog.homePodMiniPreset,
+                patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4"),
+            )
+            #expect(plan.enabled.isDisjoint(with: excluded))
+            #expect(plan.isEnabled("system-vphoned-boot-install"))
+            #expect(plan.isEnabled("system-launchd_cache_loader-boot-unsecure_cache_gate"))
+            #expect(plan.isEnabled("devicetree-cfw-homepod_product"))
+            #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: plan.enabled).isEmpty)
+            if base == "27.0" {
+                #expect(plan.enabled.isSuperset(of: FirmwarePatchSetCatalog.tvOS27UserlandPatches))
+            } else {
+                #expect(plan.enabled.isDisjoint(with: FirmwarePatchSetCatalog.tvOS27UserlandPatches))
+            }
+        }
+    }
+
+    @Test
     func `TV TPRO patches apply to every tvOS 26 userland on the 26.4 kernel`() throws {
         let tv: Set = [FirmwareGuestSystemPatchSet.tvTPRO, FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers]
         for build in ["26.4", "26.6"] {

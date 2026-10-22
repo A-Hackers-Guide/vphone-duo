@@ -270,7 +270,7 @@ public enum FirmwareManifest {
         device: VPhoneGuestDevice,
         restoreDir: URL,
     ) throws -> PlistDict {
-        guard device.family == .appleTV else { return identity }
+        guard device.usesTVOS else { return identity }
         guard var manifest = identity["Manifest"] as? PlistDict else {
             throw ManifestError.missingKey("Manifest in the hybrid build identity")
         }

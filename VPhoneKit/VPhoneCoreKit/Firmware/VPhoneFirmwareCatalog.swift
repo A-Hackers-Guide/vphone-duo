@@ -430,7 +430,16 @@ public enum VPhoneFirmwareCatalog {
         ]),
     ]
 
-    /// Full OTAs of devices without an IPSW, oldest first. Each has a
+    /// HomePod mini's native IPSW. The boot chain still comes from cloudOS;
+    /// this is a research pairing, not a claim about Siri or Home pairing.
+    static let homePodReleases: [(devices: [String], releases: [(version: String, url: String)])] = [
+        (devices: ["AudioAccessory5,1"], releases: [
+            ("27.0", "https://updates.cdn-apple.com/2026SFallFCS/a595a3b2-2c42-470a-9417-a705aaafa05c/AudioAccessory5,1_27.0_24J361_Restore.ipsw"),
+        ]),
+    ]
+
+    /// Full OTAs of devices without an IPSW, oldest first.
+    /// Each has a
     /// `tvReleases` entry of its `baseVersion` for its `restoreBase`. The keys
     /// are AppleDB's.
     public static let otaReleases: [VPhoneOTARelease] = [
@@ -470,7 +479,7 @@ public enum VPhoneFirmwareCatalog {
     /// The URL of the base device's IPSW `release` is restored over.
     public static func restoreBaseURL(for release: VPhoneOTARelease) -> String? {
         guard let base = VPhoneGuestDevice.named(release.productType)?.restoreBase else { return nil }
-        let releases = (iPhoneReleases + iPadReleases + tvReleases).first { $0.devices.contains(base.productType) }?.releases
+        let releases = (iPhoneReleases + iPadReleases + tvReleases + homePodReleases).first { $0.devices.contains(base.productType) }?.releases
         return releases?.first { $0.version == release.baseVersion }?.url
     }
 
@@ -486,7 +495,7 @@ public enum VPhoneFirmwareCatalog {
         guard let guest = VPhoneGuestDevice.named(device) else { return [] }
         guard guest.presentsBoard else { return pairings }
         let restored = guest.restoreBase ?? guest
-        var releases = (iPhoneReleases + iPadReleases + tvReleases).first { $0.devices.contains(restored.productType) }?.releases ?? []
+        var releases = (iPhoneReleases + iPadReleases + tvReleases + homePodReleases).first { $0.devices.contains(restored.productType) }?.releases ?? []
         if restored != guest {
             releases = otaReleases.filter { $0.productType == guest.productType }.compactMap { ota in
                 guard let base = releases.first(where: { $0.version == ota.baseVersion }) else { return nil }
@@ -494,7 +503,7 @@ public enum VPhoneFirmwareCatalog {
             }
         }
         return releases.map { release in
-            let cloudOS = guest.family == .appleTV
+            let cloudOS = guest.usesTVOS
                 ? VPhoneCloudOSOption(name: "cloudOS 26.4", url: cloud264)
                 : recommendedCloudOS(forVersion: release.version)
             return VPhoneFirmwarePairing(

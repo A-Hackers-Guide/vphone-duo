@@ -554,7 +554,9 @@ struct VPhoneLaunchpadControlCommands {
 
         var iphone = request.option("iphone-source")
         var cloudOS = request.option("cloudos-source")
-        let device = request.option("device")
+        let device = request.option("device") ?? iphone.flatMap { source in
+            VPhoneLaunchpadIPSW.productType(forSource: source)
+        }
         if iphone == nil || cloudOS == nil {
             let result = try await commandLine.run(["fw", "catalog", "--json"], recordInHistory: false)
             guard result.succeeded, let data = result.jsonData else {
@@ -587,20 +589,20 @@ struct VPhoneLaunchpadControlCommands {
             }
             return value
         }
-        // An Apple TV is restored on its own with the tvOS preset: templates
+        // Apple TV and HomePod restore on their own: templates
         // and slimming drive iOS Setup Assistant and its apps.
-        let isAppleTV = device?.hasPrefix("AppleTV") == true
+        let requiresStandaloneRestore = device?.hasPrefix("AppleTV") == true || device?.hasPrefix("AudioAccessory") == true
         let (patches, guestPatches) = try await Self.patches(
             request,
             commandLine: commandLine,
             defaultPreset: VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: device),
             emit: emit,
         )
-        let usesTemplate = !request.flag("no-template") && !isAppleTV
+        let usesTemplate = !request.flag("no-template") && !requiresStandaloneRestore
         let slimming: VPhoneLaunchpadSlimming
-        if isAppleTV {
+        if requiresStandaloneRestore {
             if !Self.slimmingSwitches(request).isEmpty {
-                throw VPhoneLaunchpadError("An Apple TV is created without a template; the slimming switches do not apply.")
+                throw VPhoneLaunchpadError("Apple TV and HomePod are created without a template; the slimming switches do not apply.")
             }
             var off = VPhoneLaunchpadSlimming()
             off.slim = false
