@@ -85,6 +85,12 @@ static void vcc_probe_contract(void *source) {
 // MARK: - _sSourceList manipulation
 
 void vcc_install_synthetic(void) {
+  // iOS 27 has no source list to append to; the backing went into the
+  // provider when the daemon first asked for it (VCamProviderSource.m).
+  if (vcc_provider_publishes_sources()) {
+    vcc_log(@"  source list: the backings provider publishes the camera here");
+    return;
+  }
   vcc_image_t img;
   int rc = vcc_image_resolve(&img, "FigCaptureSourceServerStart");
   if (rc != 0) {

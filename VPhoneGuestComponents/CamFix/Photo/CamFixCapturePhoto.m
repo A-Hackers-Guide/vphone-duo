@@ -71,6 +71,20 @@ static void cfx_capturePhoto_hook(id self, SEL _cmd, id settings, id delegate) {
   }
   __strong id retainedSelf = self;
   __strong id retainedDelegate = delegate;
+  // Camera.app on iOS 27 takes its photos here rather than through the
+  // moment-capture trio. Its CAMCaptureEngine matches the photo to the
+  // request it registered for the settings' uniqueID and saves it only once
+  // every callback for that request has arrived, so it gets the same full
+  // sequence the moment-capture commit drives.
+  if (cfx_delegate_registers_still_requests(delegate)) {
+    __strong id retainedSettings = settings;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      @autoreleasepool {
+        cfx_drive_capture(retainedSelf, retainedDelegate, retainedSettings);
+      }
+    });
+    return;
+  }
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
     @autoreleasepool {
       cfx_deliver_capturePhoto(retainedSelf, retainedDelegate);

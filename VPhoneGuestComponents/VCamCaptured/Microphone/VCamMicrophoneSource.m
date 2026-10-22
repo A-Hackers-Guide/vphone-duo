@@ -20,9 +20,13 @@
 // so the plist is the first shipped product's that describes a microphone.
 // A provider the daemon did build is
 // returned unchanged. See Research/Guest/ios27_capture_microphone_source.md.
+//
+// On iOS 27 the provider built here also carries the virtual camera's
+// backing, added once when it is made (Synthetic/VCamProviderSource.m).
 
 #include "VCamCapturedPrivate.h"
 #include "VCamImage.h"
+#include "VCamSynthetic.h"
 
 // FigCaptureGetModelSpecificName(void) -> CFStringRef (not retained)
 typedef CFStringRef (*VccModelNameFn)(void);
@@ -152,6 +156,7 @@ static id vcc_shared_provider_hook(id self, SEL _cmd) {
     if (!vcc_mic_provider && !vcc_mic_provider_failed) {
       vcc_mic_provider = vcc_build_mic_provider(self);
       vcc_mic_provider_failed = (vcc_mic_provider == nil);
+      vcc_provider_add_synthetic_camera(vcc_mic_provider);
     }
     if (vcc_mic_provider && !vcc_mic_provider_served) {
       vcc_mic_provider_served = YES;

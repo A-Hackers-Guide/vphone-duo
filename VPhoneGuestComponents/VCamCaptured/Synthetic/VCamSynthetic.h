@@ -21,6 +21,15 @@ extern NSString *const kVccSynthStreamID;
 // and formats), or nil when a required class or key is missing.
 id vcc_build_backing(void);
 
+// YES where the daemon publishes its sources from the backings provider
+// (iOS 27) rather than from `_sSourceList` (iOS 26.x).
+BOOL vcc_provider_publishes_sources(void);
+
+// Adds the synthetic backing to a FigCaptureSourceBackingsProvider's
+// backings, so the source manager made from it publishes the camera. Does
+// nothing where the daemon still publishes from `_sSourceList`.
+void vcc_provider_add_synthetic_camera(id provider);
+
 // VccSynthDevice, registered on first use; Nil until then or on failure.
 extern Class vcc_synth_device_class;
 

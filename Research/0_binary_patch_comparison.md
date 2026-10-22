@@ -435,6 +435,18 @@
 > format with device exposure values. Details and validation:
 > [`Guest/virtual_camera_transport.md`](Guest/virtual_camera_transport.md#front-camera-clients-and-data-output-frames-2026-10-10).
 
+> **Camera hook: the virtual camera on iOS 27 (2026-10-22):** no new patch
+> and no new library; `libvcamcaptured.dylib` and `libcamfix.dylib` change
+> behaviour only. iOS 27 has no `_sSourceList`, so `libvcamcaptured` adds
+> the synthetic backing to the `FigCaptureSourceBackingsProvider` its
+> microphone hook builds, which `FigCaptureSourceManager` publishes from.
+> `libcamfix` gives Camera.app's `-capturePhotoWithSettings:delegate:` the
+> full callback sequence it waits for before saving, and starts the preview
+> scan for a client that skips `-startRunning`. Camera.app's shutter saves
+> photos again on 27 (issue #707) and on 26.6.2, which shoots the same way.
+> Video recording still does not work. Details and validation:
+> [`Guest/virtual_camera_transport.md`](Guest/virtual_camera_transport.md#ios-27-the-camera-through-the-backings-provider-2026-10-22).
+
 > **3D gyroscope core (2026-10-08; guest acceptance pending):**
 > `system-backboardd-cfw-gyroscope`, declared in the Guest System set and
 > selected by both presets on iOS 18+, installs `/usr/lib/libvphonegyro.dylib`.
