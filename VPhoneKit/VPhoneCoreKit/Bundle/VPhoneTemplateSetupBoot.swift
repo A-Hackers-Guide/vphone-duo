@@ -876,11 +876,18 @@ public final class VPhoneTemplateSetupBoot {
             log("  service profile none")
             return
         }
-        let applied = try call(
-            "services.profile.apply",
-            ["profile": plan.serviceProfile, "groups": plan.serviceGroups, "force": true],
-            deadline: end,
-        )
+        let params: [String: Any] = ["profile": plan.serviceProfile, "groups": plan.serviceGroups, "force": true]
+        var applied = try call("services.profile.apply", params, deadline: end)
+        // launchd can refuse a disable this early in the boot and take it a
+        // moment later: "disable requires root (launchd status 1)" for
+        // com.apple.seserviced on iOS 26.5 and com.apple.fitnesscoachingd on
+        // iPadOS 27.0.1 (2026-10-23). The apply records only what it changed,
+        // so applying again redoes just the rest.
+        for wait in [5.0, 15.0] where !Self.failures(applied).isEmpty && clock.now().addingTimeInterval(wait) < end {
+            log("  retrying the service profile in \(Int(wait)) s: \(Self.failures(applied).joined(separator: "; "))")
+            clock.sleep(wait)
+            applied = try call("services.profile.apply", params, deadline: end)
+        }
         try requireApplied(applied)
         guard applied["profile"] as? String == plan.serviceProfile else {
             throw StepError("services.profile.apply answered profile \(applied["profile"] ?? "nil"), not \(plan.serviceProfile)")
@@ -916,11 +923,16 @@ public final class VPhoneTemplateSetupBoot {
     }
 
     private func requireApplied(_ result: [String: Any]) throws {
-        let failed = (result["failed"] as? [[String: Any]] ?? []).map { row in
-            "\(row["label"] as? String ?? "?") (\(row["action"] as? String ?? "?"): \(row["error"] as? String ?? "?"))"
-        }
+        let failed = Self.failures(result)
         guard failed.isEmpty else {
             throw StepError("services.profile.apply could not change \(failed.joined(separator: "; "))")
+        }
+    }
+
+    /// The services an apply could not change, as `label (action: error)`.
+    static func failures(_ result: [String: Any]) -> [String] {
+        (result["failed"] as? [[String: Any]] ?? []).map { row in
+            "\(row["label"] as? String ?? "?") (\(row["action"] as? String ?? "?"): \(row["error"] as? String ?? "?"))"
         }
     }
 
