@@ -21,7 +21,7 @@ public struct FirmwarePatchWorkspace {
         guard mode & 0o077 == 0 || mode & 0o1777 == 0o1777 else {
             throw PatcherError.invalidFormat("The firmware work parent must be private or sticky.")
         }
-        source = try VPhoneConfinedDirectory.pin(absolutePath: machine.standardizedFileURL.path)
+        source = try VPhoneConfinedDirectory.pin(absolutePath: machine.path)
         let user = VPhoneInvokingUser.current
         owner = (user?.uid ?? getuid(), user?.gid ?? getgid())
         guard try source.metadata().st_uid == owner.uid else {

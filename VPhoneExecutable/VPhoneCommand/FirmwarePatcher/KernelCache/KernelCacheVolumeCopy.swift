@@ -41,7 +41,7 @@ struct KernelCacheVolumeCopy {
         kernel = volume.appending(path: "Library/Developer/KDKs/\(kdk)/System/Library/Kernels/kernel")
         do {
             // Refuses a symbolic link anywhere on the way to the stage.
-            let source = try VPhoneConfinedDirectory.pin(absolutePath: staged.standardizedFileURL.path)
+            let source = try VPhoneConfinedDirectory.pin(absolutePath: staged.path)
             let owner = try source.metadata().st_uid
             guard owner == 0 || owner == VPhoneInvokingUser.current?.uid else {
                 throw PatcherError.invalidFormat("the staged kernelcache volume belongs to user \(owner), not to the invoking user")
