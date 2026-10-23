@@ -115,7 +115,7 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
         // The merged image was shrunk to its minimum size. With a remap,
         // apfs_sealvolume copies the whole fsroot tree first and fails with
         // ENOSPC (exit 65) in the space that is left.
-        try growImage(dmg: unencryptedImage, by: 2 << 30)
+        try growImage(dmg: unencryptedImage, by: Self.sealHeadroom)
         let (digestDbPath, rootHashPath) = try createDigestAndHash(
             filesystem: unencryptedImage,
             mtree: mtreePath,
