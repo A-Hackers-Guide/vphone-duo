@@ -366,16 +366,30 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
     ))
     var restoreImageOnly = false
 
+    @Option(name: .customLong("work-parent"), help: ArgumentHelp("Private firmware work directory", visibility: .hidden))
+    var workParent = "/private/var/tmp"
+
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
         let bundle = try lib.library.bundle(named: name)
-        defer {
-            try? VPhoneHostFilePermissions.makeAccessible(at: bundle.url)
+        if geteuid() == 0 {
+            let workspace = try FirmwarePatchWorkspace(machine: bundle.url, workParent: workParent)
+            defer {
+                do { try workspace.remove() }
+                catch { fputs("warning: firmware work files remain at \(workspace.root.path): \(error)\n", stderr) }
+            }
+            try patch(directory: workspace.machine, name: name)
+            try workspace.publish()
+        } else {
+            try patch(directory: bundle.url, name: name)
+            try VPhoneHostFilePermissions.makeAccessible(at: bundle.url)
         }
+    }
 
+    private func patch(directory: URL, name: String) throws {
         // An explicit --preset wins and is remembered, so `cfw install` and a
         // later re-patch agree without the flag being repeated.
-        var selection = VPhonePatchPresetStore.selection(forVM: bundle.url)
+        var selection = VPhonePatchPresetStore.selection(forVM: directory)
         if let preset {
             selection.presetIdentifier = preset
         }
@@ -396,10 +410,20 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
         if mergesRestoreImage, geteuid() != 0 {
             throw ValidationError("The \(selection.presetIdentifier) preset rebuilds the system image, which needs root. Run this command with sudo.")
         }
+        if mergesRestoreImage {
+            // Never execute the caller's staged seal tool as root. Fetch it
+            // again from Apple's CDN into this run's private snapshot.
+            let restore = try FirmwarePipeline(vmDirectory: directory).findRestoreDirectory()
+            let tools = restore.appendingPathComponent(".tools", isDirectory: true)
+            try VPhoneFirmwareSealToolCommand.stage(
+                version: try CryptexFilesystemPatcher(buildManiest: Data(), restoreDir: restore).getProductVersion(),
+                into: tools,
+            )
+        }
         // A research board kernelcache is mixed beforehand (`fw kernelcache`),
         // since linking it needs root; root builds it here if need be.
         if geteuid() != 0, !selection.blockedPatches.contains(FirmwareResearchBoardPatchSet.kernelMix),
-           let input = try FirmwarePipeline(vmDirectory: bundle.url, variant: .jb).researchBoardKernelcache()
+           let input = try FirmwarePipeline(vmDirectory: directory, variant: .jb).researchBoardKernelcache()
         {
             let state = try KernelCacheMixer(recipes: .locate()).state(for: input)
             if state != .mixed {
@@ -408,7 +432,7 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
         }
 
         let pipeline = FirmwarePipeline(
-            vmDirectory: bundle.url,
+            vmDirectory: directory,
             variant: .jb,
             verbose: !quiet,
             noBinpack: true,
@@ -419,7 +443,7 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
         let records = try pipeline.patchAll()
 
         if let plan = pipeline.resolvedPlan {
-            try VPhonePatchPresetStore.write(selection, forVM: bundle.url)
+            try VPhonePatchPresetStore.write(selection, forVM: directory)
             try VPhonePatchPresetStore.write(
                 VPhoneVirtualMachinePatchPlan(
                     plan: plan,
@@ -427,11 +451,10 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
                     cloudOS: pipeline.cloudOSProductVersion,
                     notApplicablePatches: pipeline.notApplicablePatches,
                 ),
-                forVM: bundle.url,
+                forVM: directory,
             )
         }
 
-        try VPhoneHostFilePermissions.makeAccessible(at: bundle.url)
         print("[fw patch] applied \(records.count) CFW patches"
             + " (preset \(selection.presetIdentifier))")
     }

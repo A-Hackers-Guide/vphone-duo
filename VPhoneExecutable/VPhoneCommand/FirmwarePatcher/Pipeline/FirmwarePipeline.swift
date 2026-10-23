@@ -482,6 +482,7 @@ public final class FirmwarePipeline {
     /// external sets included, without a restore tree to patch.
     public func resolvePlan(iOSBase: VPhoneVersion?, cloudOS: VPhoneVersion?) throws -> VPhonePatchPlan? {
         guard let preset else { return nil }
+        try Self.validateExecutionPrivilege(preset: preset, effectiveUID: geteuid())
 
         var available = patchSets
         for reference in preset.patchSets {
@@ -521,6 +522,17 @@ public final class FirmwarePipeline {
                 + plan.droppedBootEssentials.joined(separator: ", "))
         }
         return plan
+    }
+
+    /// A user preset is data, but an external patch set loads native code.
+    /// Privileged runs must reject it before inspecting or loading any bundle.
+    static func validateExecutionPrivilege(preset: VPhonePatchPreset, effectiveUID: uid_t) throws {
+        guard effectiveUID == 0 else { return }
+        for reference in preset.patchSets {
+            if case .external = reference {
+                throw PatcherError.invalidFormat("External patch sets cannot run as root. Use only bundled patch sets for privileged firmware operations.")
+            }
+        }
     }
 
     /// Whether `componentName` should still produce at least one patch record.

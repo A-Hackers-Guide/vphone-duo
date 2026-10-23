@@ -18,6 +18,43 @@ import Testing
 
 @Suite("Cryptex file operations")
 struct CryptexFileOpsTests {
+    @Test("Guest file edits reject symlink parents and leaves")
+    func guestEditsStayInsideImage() throws {
+        let root = try makeScratch().resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let image = root.appending(path: "image")
+        let outside = root.appending(path: "outside")
+        try FileManager.default.createDirectory(at: image, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let file = outside.appending(path: "payload")
+        try Data("unchanged".utf8).write(to: file)
+        let patcher = makePatcher(root)
+        try FileManager.default.createSymbolicLink(at: image.appending(path: "parent"), withDestinationURL: outside)
+        #expect(throws: (any Error).self) {
+            try patcher.editGuestFile("parent/payload", targetMount: image.path, mode: 0o644) { _ in Issue.record("Followed a guest symlink") }
+        }
+        try FileManager.default.createSymbolicLink(at: image.appending(path: "leaf"), withDestinationURL: file)
+        #expect(throws: (any Error).self) {
+            try patcher.editGuestFile("leaf", targetMount: image.path, mode: 0o644) { _ in Issue.record("Followed a guest symlink") }
+        }
+        #expect(try String(contentsOf: file, encoding: .utf8) == "unchanged")
+    }
+
+    @Test("Cryptex copying keeps symlinks as links")
+    func cryptexCopyDoesNotFollowLinks() throws {
+        let root = try makeScratch().resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appending(path: "source")
+        let destination = root.appending(path: "destination")
+        try FileManager.default.createDirectory(at: source.appending(path: "folder"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try Data("file".utf8).write(to: source.appending(path: "folder/file"))
+        try FileManager.default.createSymbolicLink(atPath: source.appending(path: "link").path, withDestinationPath: "folder/file")
+        try makePatcher(root).copyImageContents(source: source, destination: destination)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: destination.appending(path: "link").path) == "folder/file")
+        #expect(try String(contentsOf: destination.appending(path: "folder/file"), encoding: .utf8) == "file")
+    }
+
     /// A patcher is only needed for the methods; nothing here reads a manifest.
     private func makePatcher(_ scratch: URL) -> CryptexFilesystemPatcher {
         CryptexFilesystemPatcher(buildManiest: Data(), restoreDir: scratch, verbose: false)

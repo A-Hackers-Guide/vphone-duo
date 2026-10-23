@@ -166,6 +166,9 @@ public final class KernelCacheMixer {
     public func stage(_ input: Input, ipsw ipswPath: String? = nil) throws {
         let (base, paths) = try locations(for: input)
         guard !FileManager.default.fileExists(atPath: paths.mixed.path), !Self.isStaged(paths.staged) else { return }
+        guard geteuid() != 0 else {
+            throw PatcherError.invalidFormat("Stage the kernelcache as your user first with `VPHONE_IPSW=<ipsw> vphone-cli fw kernelcache <vm>`, then run `sudo vphone-cli fw kernelcache <vm> --link-only`. External extraction tools never run as root.")
+        }
         let location = try KernelCollectionBuilder.location(for: base)
         let donors = try base.donors.map { try recipes.donor(id: $0) }
         let ipsw = try Self.ipsw(ipswPath)
@@ -260,6 +263,9 @@ public final class KernelCacheMixer {
     func linkRemotely(
         base: KernelCacheBase, paths: (mixed: URL, staged: URL), payload: Data, builder: RemoteKernelCollectionBuilder,
     ) throws -> Data {
+        guard geteuid() != 0 else {
+            throw PatcherError.invalidFormat("Remote linking does not need local root. Run `vphone-cli fw kernelcache <vm>` as your user with VPHONE_KMUTIL_SSH set, then run the privileged firmware step.")
+        }
         let volume = paths.staged.appending(path: "volume")
         try KernelCacheVolumeCopy.checkLinks(in: volume, kdk: base.kernel.kdk)
         let work = paths.staged.appending(path: "link")
@@ -330,7 +336,7 @@ public final class KernelCacheMixer {
         let link = "sudo vphone-cli fw kernelcache <vm>"
         return staged
             ? "the kernelcache mix is staged; linking it needs root (kmutil only reads kexts owned by root). Run `\(link)`, or this command with sudo."
-            : "the kernelcache mix is not built yet. Stage it with `\(ipswEnvironmentVariable)=<ipsw> vphone-cli fw kernelcache <vm>`, then link it with `\(link)`, or run this command as `sudo \(ipswEnvironmentVariable)=<ipsw> vphone-cli ...`."
+            : "the kernelcache mix is not built yet. Stage it as your user with `\(ipswEnvironmentVariable)=<ipsw> vphone-cli fw kernelcache <vm>`, then link it with `\(link) --link-only`."
     }
 
     // MARK: - Steps

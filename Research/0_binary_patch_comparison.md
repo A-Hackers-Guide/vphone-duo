@@ -3807,3 +3807,27 @@ Settings it returns to the home screen. 18.1 (22B83) on cloudOS 18.1, the
 oldest base and one of the three with 15 donor kexts, and 18.5 (22F76) on
 cloudOS 18.5 passed the same checks. The other four recipes resolve every
 donor import but have not been booted yet.
+
+### 2026-10-23 — Integrating the minimal, research-board, watch and iOS 18 presets
+
+The combined PR stack retains its declared patch sets and version gates. The
+integration adds host-side confinement without changing instruction matching or
+replacement bytes. Privileged `fw patch` clones only firmware inputs into a
+private directory, rejects links and foreign-owned inputs, and publishes regular
+files back through the pinned machine directory. Disk.img is never copied or
+rewritten by this step. Guest image mounts also live below the private work tree;
+guest file edits use descriptor-relative reads and atomic replacement.
+
+External patch sets are refused before any native plugin is loaded as root.
+Kernel extraction runs as the invoking user; root only links a staged private
+copy. The root restore-image step ignores user seal-tool overrides and downloads
+the matching tool again from an Apple HTTPS restore CDN into its private tree,
+rather than executing the user-writable staged copy. This requires network access
+for privileged resealing. The advanced kernel extraction tool remains a firmware
+preparation/build tool, not a dependency for starting an already prepared guest.
+
+Validation covers malicious input/guest symlinks, snapshot publication, large SSH
+stderr/stdin streams, legacy fixed-address NAT reporting, patch catalog and recipe
+consistency, plus full bundle/Launchpad builds. Firmware fixture tests still
+require the separately held reference IPSWs; a build or synthetic test is not a
+claim that every newly supported OS has been restored and booted on this host.

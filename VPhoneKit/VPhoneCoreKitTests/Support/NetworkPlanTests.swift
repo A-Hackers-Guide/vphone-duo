@@ -405,7 +405,7 @@ struct NetworkPlanTests {
     @Test func `a NAT attachment can drop its isolation`() throws {
         let nat = VZNATNetworkDeviceAttachment()
         #expect(nat.responds(to: NSSelectorFromString("_setInterfaceIsolationEnabled:")))
-        VPhoneNetworking.setInterfaceIsolation(false, of: nat)
+        try VPhoneNetworking.setInterfaceIsolation(false, of: nat)
         let device = try VPhoneNetworking.makeNetworkDevice(VPhoneNetworking.plan(.default, host: host))
         #expect(device.configuration?.attachment is VZNATNetworkDeviceAttachment)
     }

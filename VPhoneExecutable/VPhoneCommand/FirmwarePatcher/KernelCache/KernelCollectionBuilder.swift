@@ -214,46 +214,7 @@ struct RemoteKernelCollectionBuilder {
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
         process.environment = environment
-        let stdout = Pipe()
-        var outputHandle: FileHandle?
-        var logHandle: FileHandle?
-        if let log {
-            if !FileManager.default.fileExists(atPath: log.path) {
-                FileManager.default.createFile(atPath: log.path, contents: nil)
-            }
-            let handle = try FileHandle(forWritingTo: log)
-            try handle.seekToEnd()
-            logHandle = handle
-            process.standardOutput = handle
-            process.standardError = handle
-        } else if let output {
-            FileManager.default.createFile(atPath: output.path, contents: nil)
-            let handle = try FileHandle(forWritingTo: output)
-            outputHandle = handle
-            process.standardOutput = handle
-        } else {
-            process.standardOutput = stdout
-        }
-        let stderr = Pipe()
-        if log == nil {
-            process.standardError = stderr
-        }
-        let stdin = Pipe()
-        switch input {
-        case .none: process.standardInput = FileHandle.nullDevice
-        case let .file(url): process.standardInput = try FileHandle(forReadingFrom: url)
-        case .data: process.standardInput = stdin
-        }
-        try process.run()
-        if case let .data(data) = input {
-            stdin.fileHandleForWriting.write(data)
-            try? stdin.fileHandleForWriting.close()
-        }
-        let collected = output == nil && log == nil ? stdout.fileHandleForReading.readDataToEndOfFile() : Data()
-        let errors = log == nil ? stderr.fileHandleForReading.readDataToEndOfFile() : Data()
-        process.waitUntilExit()
-        try? outputHandle?.close()
-        try? logHandle?.close()
+        let (collected, errors) = try Self.capture(process, input: input, output: output, log: log)
         guard process.terminationStatus == 0 else {
             var detail = String(decoding: errors, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             if let log, let text = try? String(contentsOf: log, encoding: .utf8) {
@@ -264,14 +225,76 @@ struct RemoteKernelCollectionBuilder {
         return collected
     }
 
-    /// A private directory holding a script that prints the password from the
-    /// environment, so the password never appears in an argument or a file.
-    static func askpassScript() throws -> URL {
-        var template = Array("/private/var/tmp/vphone-askpass.XXXXXX".utf8CString)
-        guard let made = mkdtemp(&template) else {
+    /// Keep stderr and stdin in private files. Reading two pipes sequentially
+    /// can deadlock when ssh fills stderr before it closes stdout; feeding a
+    /// large stdin before draining stdout has the same problem.
+    static func capture(_ process: Process, input: Input = .none, output: URL? = nil, log: URL? = nil) throws -> (Data, Data) {
+        let scratch = try privateDirectory()
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let stdout = Pipe()
+        var handles: [FileHandle] = []
+        defer { for handle in handles { try? handle.close() } }
+        let errorFile = scratch.appending(path: "stderr")
+        FileManager.default.createFile(atPath: errorFile.path, contents: nil)
+        if let log {
+            if !FileManager.default.fileExists(atPath: log.path) {
+                FileManager.default.createFile(atPath: log.path, contents: nil)
+            }
+            let handle = try FileHandle(forWritingTo: log)
+            try handle.seekToEnd()
+            handles.append(handle)
+            process.standardOutput = handle
+            process.standardError = handle
+        } else {
+            let errors = try FileHandle(forWritingTo: errorFile)
+            handles.append(errors)
+            process.standardError = errors
+            if let output {
+                FileManager.default.createFile(atPath: output.path, contents: nil)
+                let handle = try FileHandle(forWritingTo: output)
+                handles.append(handle)
+                process.standardOutput = handle
+            } else {
+                process.standardOutput = stdout
+            }
+        }
+        switch input {
+        case .none:
+            process.standardInput = FileHandle.nullDevice
+        case let .file(url):
+            let handle = try FileHandle(forReadingFrom: url)
+            handles.append(handle)
+            process.standardInput = handle
+        case let .data(data):
+            let url = scratch.appending(path: "stdin")
+            try data.write(to: url)
+            let handle = try FileHandle(forReadingFrom: url)
+            handles.append(handle)
+            process.standardInput = handle
+            // Keep the data available through the descriptor only.
+            try FileManager.default.removeItem(at: url)
+        }
+        try process.run()
+        let collected = output == nil && log == nil ? stdout.fileHandleForReading.readDataToEndOfFile() : Data()
+        process.waitUntilExit()
+        return (collected, log == nil ? try Data(contentsOf: errorFile) : Data())
+    }
+
+    private static func privateDirectory() throws -> URL {
+        var template = Array("/private/var/tmp/vphone-ssh.XXXXXX".utf8CString)
+        let path = template.withUnsafeMutableBufferPointer { buffer in
+            mkdtemp(buffer.baseAddress!).map { String(cString: $0) }
+        }
+        guard let path else {
             throw PatcherError.invalidFormat("could not create a private directory for ssh: \(String(cString: strerror(errno)))")
         }
-        let directory = URL(fileURLWithPath: String(cString: made), isDirectory: true)
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
+
+    /// A private directory holding a script that prints the password from the
+    /// environment, so the script and command arguments contain no password.
+    static func askpassScript() throws -> URL {
+        let directory = try privateDirectory()
         let script = directory.appending(path: "askpass")
         try Data("#!/bin/sh\nprintf '%s\\n' \"$VPHONE_KMUTIL_SSH_ASKPASS_SECRET\"\n".utf8).write(to: script)
         try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o700)], ofItemAtPath: script.path)

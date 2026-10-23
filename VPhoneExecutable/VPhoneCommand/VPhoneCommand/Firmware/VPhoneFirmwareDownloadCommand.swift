@@ -82,6 +82,11 @@ struct VPhoneFirmwareSealToolCommand: ParsableCommand {
     /// there. `fw prepare` stages it into the restore tree for the restore
     /// image patches, which seal the merged system with it.
     static func stage(version: String, into output: URL) throws {
+        guard !version.isEmpty, version.count < 32,
+              version.split(separator: ".", omittingEmptySubsequences: false).allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) })
+        else {
+            throw ValidationError("Invalid OS version for the seal tool.")
+        }
         let destination = output.appendingPathComponent("apfs_sealvolume_\(version)")
         if FileManager.default.fileExists(atPath: destination.path) {
             print("apfs_sealvolume_\(version) already present")
@@ -123,6 +128,14 @@ struct VPhoneFirmwareSealToolCommand: ParsableCommand {
     /// ramdisk out of its IPSW without downloading the IPSW.
     private static func fetchRamdisk(version: String, in output: URL) async throws -> URL {
         let release = try await VPhoneFirmwareIndex.sealToolRelease(forOSVersion: version)
+        // The catalog supplies discovery metadata, not executable trust.
+        // A privileged seal tool must come directly from Apple's restore CDN.
+        let appleHosts = ["updates.cdn-apple.com", "updates-http.cdn-apple.com", "appldnld.apple.com", "swcdn.apple.com"]
+        guard release.url.scheme == "https", appleHosts.contains(release.url.host ?? ""),
+              release.url.user == nil, release.url.password == nil
+        else {
+            throw ValidationError("The seal tool restore image must come from Apple's HTTPS CDN.")
+        }
         print("  macOS \(release.version) (\(release.build))")
 
         let zip = try await VPhoneRemoteZip.open(release.url)

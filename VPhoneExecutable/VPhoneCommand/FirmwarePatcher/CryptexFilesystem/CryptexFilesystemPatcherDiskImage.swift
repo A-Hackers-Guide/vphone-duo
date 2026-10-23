@@ -5,61 +5,21 @@
 // copyfile-based volume copy used to merge a cryptex into the target volume.
 
 import Foundation
+import VPhoneCoreKit
 
 extension CryptexFilesystemPatcher {
     func copyImageContents(source: URL, destination: URL) throws {
-        // Copy everything from source volume root into destination volume root.
-        let sourceRoot = source.appendingPathComponent("", isDirectory: true)
-        let sourcePath = sourceRoot.path
-        let destinationRoot = destination.appendingPathComponent("", isDirectory: true)
-
-        // We delete the files first as we want to replace symlinks with actual files.
-        let keys: [URLResourceKey] = [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey]
-        guard let enumerator = FileManager.default.enumerator(at: sourceRoot, includingPropertiesForKeys: keys) else {
-            throw FirmwareManifest.ManifestError.fileNotFound(
-                "\(sourceRoot.path). Check that the image is still mounted, then try again.",
-            )
-        }
-        for case let fileURL as URL in enumerator {
-            guard fileURL.path.hasPrefix(sourcePath) else { continue }
-
-            let values = try fileURL.resourceValues(forKeys: Set(keys))
-            var suffix = String(fileURL.path.dropFirst(sourcePath.count))
-            if suffix.hasPrefix("/") {
-                suffix.removeFirst()
-            }
-
-            let destinationPath = destinationRoot.appendingPathComponent(suffix)
-            guard let ok = try? destinationPath.checkResourceIsReachable(), ok else {
-                // try FileManager.default.copyItem(at: fileURL, to: destinationPath)
-                let result = copyfile(
-                    fileURL.path,
-                    destinationPath.path,
-                    nil,
-                    copyfile_flags_t(COPYFILE_SECURITY | COPYFILE_DATA),
-                )
-                if result < 0 {
-                    print("Unable to copy \(destinationPath.path). Check permissions and free space, then try again.")
-                }
-                continue
-            }
-
-            let vals = try destinationPath.resourceValues(forKeys: Set(keys))
-            if values.isDirectory != vals.isDirectory ||
-                values.isRegularFile != vals.isRegularFile ||
-                values.isSymbolicLink != vals.isSymbolicLink
-            {
-                try FileManager.default.removeItem(at: destinationPath)
-                // try FileManager.default.copyItem(at: fileURL, to: destinationPath)
-                let result = copyfile(
-                    fileURL.path,
-                    destinationPath.path,
-                    nil,
-                    copyfile_flags_t(COPYFILE_SECURITY | COPYFILE_DATA),
-                )
-                if result < 0 {
-                    print("Unable to copy \(destinationPath.path). Check permissions and free space, then try again.")
-                }
+        let input = try VPhoneConfinedDirectory.pin(absolutePath: source.path)
+        let output = try VPhoneConfinedDirectory.pin(absolutePath: destination.path)
+        // The caller just created the empty destination. Preserve guest links
+        // without following them and refuse special files.
+        for name in try input.entries() {
+            if try input.isDirectory(name) {
+                try output.copyTree(from: input.directory(name), to: name)
+            } else if let link = try input.readLink(name) {
+                try output.createSymlink(target: link, at: name)
+            } else {
+                try input.copyFile(from: name, to: name, in: output)
             }
         }
     }
@@ -174,25 +134,24 @@ extension CryptexFilesystemPatcher {
     /// ("mtree: cannot generate the XML dictionary"). Deleting the directory on
     /// the mounted volume also stops fseventsd writing it again for this mount.
     func removeHostEventLog(mount: String) throws {
-        let log = URL(fileURLWithPath: mount).appending(path: ".fseventsd")
-        if FileManager.default.fileExists(atPath: log.path) {
-            try FileManager.default.removeItem(at: log)
-        }
+        let directory = try VPhoneConfinedDirectory.pin(absolutePath: mount)
+        try directory.removeItem(".fseventsd")
     }
 
     /// attachImage returns the device and mount point
     func attachImage(path: URL, readonly: Bool = false, forceRW: Bool = false) throws -> (String, String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
+        let mountPoint = try createTmpDir().appending(path: "volume")
         process.arguments = if readonly {
             [
-                "image", "attach",
+                "image", "attach", "-mountPoint", mountPoint.path, "-nobrowse",
                 "-readOnly",
                 path.path,
             ]
         } else {
             [
-                "image", "attach",
+                "image", "attach", "-mountPoint", mountPoint.path, "-nobrowse",
                 path.path,
             ]
         }
@@ -202,9 +161,8 @@ extension CryptexFilesystemPatcher {
         process.standardError = pipe
 
         try process.run()
-        process.waitUntilExit()
-
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
         guard process.terminationStatus == 0 else {
             let output = String(data: data, encoding: .utf8) ?? ""
             detachReportedImage(in: output)

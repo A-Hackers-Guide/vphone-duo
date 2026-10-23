@@ -19,7 +19,7 @@ extension FirmwarePipeline {
 
     /// Find the `*Restore*` subdirectory inside the VM directory.
     /// Mirrors Python `find_restore_dir`.
-    func findRestoreDirectory() throws -> URL {
+    public func findRestoreDirectory() throws -> URL {
         let fm = FileManager.default
         let contents = try fm.contentsOfDirectory(
             at: vmDirectory,

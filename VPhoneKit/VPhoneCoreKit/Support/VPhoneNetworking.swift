@@ -7,6 +7,7 @@ import Virtualization
 public enum VPhoneNetworkingError: Error, Equatable {
     /// hostOnly has no native Virtualization.framework attachment.
     case hostOnlyUnsupported
+    case peerNATUnsupported
     /// A bridge interface was requested but no such interface exists on the host.
     case bridgeInterfaceNotFound(requested: String, available: [String])
     /// bridged mode was selected but the host exposes no bridgeable interfaces.
@@ -47,6 +48,8 @@ extension VPhoneNetworkingError: CustomStringConvertible, LocalizedError {
         switch self {
         case .hostOnlyUnsupported:
             "Network mode 'hostOnly' is not supported. Use nat, bridged, tunnel, or none."
+        case .peerNATUnsupported:
+            "This macOS cannot let NAT machines reach each other. Set --nat-peers off and use an address on the isolated NAT network, or use bridged networking."
         case let .bridgeInterfaceNotFound(requested, available):
             "Bridge interface '\(requested)' not found. Available: \(available.isEmpty ? "none" : available.joined(separator: ", "))."
         case .noBridgeInterfaces:
@@ -830,12 +833,12 @@ public enum VPhoneNetworking {
     /// Virtualization has no public switch for it. A VM with isolation off
     /// shares the bridge with the others without its private flag, so they
     /// reach each other directly (Bonjour included). A Virtualization without
-    /// the private setter leaves the guest isolated.
-    static func setInterfaceIsolation(_ enabled: Bool, of attachment: VZNATNetworkDeviceAttachment) {
+    /// the private setter cannot realize the peer network; fail before boot
+    /// rather than use the isolated network with the peer network's addresses.
+    static func setInterfaceIsolation(_ enabled: Bool, of attachment: VZNATNetworkDeviceAttachment) throws {
         let selector = NSSelectorFromString("_setInterfaceIsolationEnabled:")
         guard attachment.responds(to: selector), let method = class_getInstanceMethod(type(of: attachment), selector) else {
-            fputs("warning: this Virtualization cannot let NAT machines reach each other; the guest stays isolated\n", stderr)
-            return
+            throw VPhoneNetworkingError.peerNATUnsupported
         }
         typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
         unsafeBitCast(method_getImplementation(method), to: Setter.self)(attachment, selector, enabled)
@@ -860,7 +863,7 @@ public enum VPhoneNetworking {
         case .sharedNAT:
             let nat = VZNATNetworkDeviceAttachment()
             if plan.reachesPeers {
-                setInterfaceIsolation(false, of: nat)
+                try setInterfaceIsolation(false, of: nat)
             }
             attachment = nat
         case let .tunnel(configuration):

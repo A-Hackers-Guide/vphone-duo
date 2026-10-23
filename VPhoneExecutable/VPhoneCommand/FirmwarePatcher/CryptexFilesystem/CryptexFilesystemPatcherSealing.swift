@@ -5,6 +5,7 @@
 // produced by apfs_sealvolume, and the Ap,SystemVolumeCanonicalMetadata container.
 
 import Foundation
+import VPhoneCoreKit
 import Img4tool
 
 extension CryptexFilesystemPatcher {
@@ -55,8 +56,9 @@ extension CryptexFilesystemPatcher {
     private func identifyApfsSealvolume() throws -> URL {
         let iosVersion = try getProductVersion()
         // The optional filesystem merge reads a seal tool staged inside the VM.
-        let sealDir = ProcessInfo.processInfo.environment["VPHONE_SEAL_DIR"].map { URL(fileURLWithPath: $0) }
-            ?? restoreDir.appendingPathComponent(".tools")
+        let sealDir = geteuid() == 0 ? restoreDir.appendingPathComponent(".tools")
+            : ProcessInfo.processInfo.environment["VPHONE_SEAL_DIR"].map { URL(fileURLWithPath: $0) }
+                ?? restoreDir.appendingPathComponent(".tools")
         let path = sealDir.appendingPathComponent("apfs_sealvolume_\(iosVersion)")
         guard FileManager.default.fileExists(atPath: path.path) else {
             throw FirmwareManifest.ManifestError.fileNotFound(path.path)
@@ -169,16 +171,22 @@ extension CryptexFilesystemPatcher {
         defer { try? detachImage(deviceNode: device) }
 
         let removedPaths = [
-            "/private/var/MobileAsset/PreinstalledAssets",
-            "/private/var/MobileAsset/PreinstalledAssetsV2",
-            "/private/var/staged_system_apps",
+            "private/var/MobileAsset/PreinstalledAssets",
+            "private/var/MobileAsset/PreinstalledAssetsV2",
+            "private/var/staged_system_apps",
         ]
         try removeHostEventLog(mount: mount)
+        let directory = try VPhoneConfinedDirectory.pin(absolutePath: mount)
         var didEdit = false
         for path in removedPaths {
-            if FileManager.default.fileExists(atPath: mount.appending(path)) {
-                try FileManager.default.removeItem(atPath: mount.appending(path))
-                didEdit = true
+            do {
+                if try directory.exists(path) {
+                    try directory.removeItem(path)
+                    didEdit = true
+                }
+            } catch VPhoneConfinedDirectoryError.missing {
+                // Some guest families have no MobileAsset directory at all.
+                continue
             }
         }
         return didEdit

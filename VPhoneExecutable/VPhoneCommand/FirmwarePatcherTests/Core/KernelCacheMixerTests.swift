@@ -2,11 +2,77 @@
 import Foundation
 import Testing
 import VPhonePatchKit
+import VPhoneCoreKit
 
 /// The shipped kernelcache recipes, and the steps of the mix that need no
 /// root, kmutil or ipsw.
 @Suite("Kernelcache mix")
 struct KernelCacheMixerTests {
+    @Test("SSH drains large stderr while preserving binary stdout and stdin")
+    func largeSSHStreams() throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "/bin/dd if=/dev/zero bs=65536 count=32 >&2 2>/dev/null; /bin/cat"]
+        let input = Data((0 ..< 262144).map { UInt8($0 % 256) })
+        let (output, errors) = try RemoteKernelCollectionBuilder.capture(process, input: .data(input))
+        #expect(process.terminationStatus == 0)
+        #expect(output == input)
+        #expect(errors.count == 2 * 1024 * 1024)
+    }
+
+    @Test("SSH upload leaves the caller's input file intact")
+    func sshInputFile() throws {
+        let input = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: input) }
+        let data = Data("archive input".utf8)
+        try data.write(to: input)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/cat")
+        let (output, _) = try RemoteKernelCollectionBuilder.capture(process, input: .file(input))
+        #expect(output == data)
+        #expect(try Data(contentsOf: input) == data)
+    }
+
+    @Test("Root refuses an external patch set before loading its code")
+    func externalSetPrivilege() throws {
+        let preset = VPhonePatchPreset(identifier: "external", title: "External", patchSets: [
+            .external(identifier: "test", path: "/does-not-exist.vphonepatchset"),
+        ])
+        #expect(throws: PatcherError.self) {
+            try FirmwarePipeline.validateExecutionPrivilege(preset: preset, effectiveUID: 0)
+        }
+        try FirmwarePipeline.validateExecutionPrivilege(preset: preset, effectiveUID: 501)
+    }
+
+    @Test("Firmware snapshot excludes disks and untrusted tools, and publication replaces links")
+    func confinedFirmwareSnapshot() throws {
+        let base = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString).resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: base) }
+        let vm = base.appending(path: "vm")
+        let restore = vm.appending(path: "Test_Restore")
+        try FileManager.default.createDirectory(at: restore.appending(path: ".tools"), withIntermediateDirectories: true)
+        try Data("untrusted".utf8).write(to: restore.appending(path: ".tools/tool"))
+        try Data("disk".utf8).write(to: vm.appending(path: "Disk.img"))
+        let component = restore.appending(path: "component")
+        try Data("original".utf8).write(to: component)
+        let work = try FirmwarePatchWorkspace(machine: vm, workParent: base.path)
+        defer { try? work.remove() }
+        #expect(!FileManager.default.fileExists(atPath: work.machine.appending(path: "Disk.img").path))
+        #expect(!FileManager.default.fileExists(atPath: work.machine.appending(path: "Test_Restore/.tools").path))
+        let outside = base.appending(path: "outside")
+        try Data("outside".utf8).write(to: outside)
+        try FileManager.default.removeItem(at: component)
+        try FileManager.default.createSymbolicLink(at: component, withDestinationURL: outside)
+        try Data("patched".utf8).write(to: work.machine.appending(path: "Test_Restore/component"))
+        try work.publish()
+        #expect(try String(contentsOf: component, encoding: .utf8) == "patched")
+        #expect(try String(contentsOf: outside, encoding: .utf8) == "outside")
+        try FileManager.default.removeItem(at: component)
+        try FileManager.default.createSymbolicLink(at: component, withDestinationURL: outside)
+        #expect(throws: (any Error).self) { try FirmwarePatchWorkspace(machine: vm, workParent: base.path) }
+    }
+
     static let repoRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
         .deletingLastPathComponent()

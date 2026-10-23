@@ -32,47 +32,34 @@ extension CryptexFilesystemPatcher {
     }
 
     func patchLaunchdCacheLoader(targetMount: String) throws {
-        let target = URL(filePath: targetMount)
-        let launchdCacheLoaderPath = target.appending(path: "/usr/libexec/launchd_cache_loader")
-        try thinToArm64e(launchdCacheLoaderPath)
-        // Patched in place with no `.bak` to restore from, so this is the call
-        // site that needs the port's idempotence. No re-attestation: the sign
-        // below replaces the whole signature anyway.
-        try CustomFirmwareCacheLoaderPatcher.patch(fileAt: launchdCacheLoaderPath)
-        try setMode(0o755, at: launchdCacheLoaderPath)
+        try editGuestFile("usr/libexec/launchd_cache_loader", targetMount: targetMount, mode: 0o755) { file in
+            try thinToArm64e(file)
+            // Patched in place with no `.bak` to restore from, so this is the call
+            // site that needs the port's idempotence. No re-attestation: the sign
+            // below replaces the whole signature anyway.
+            try CustomFirmwareCacheLoaderPatcher.patch(fileAt: file)
+            try setMode(0o755, at: file)
 
-        try VPhoneSigner.sign(
-            fileAt: launchdCacheLoaderPath,
-            options: guestSigningOptions(
-                identifier: "com.apple.launchd_cache_loader",
-            ),
-        )
+            try VPhoneSigner.sign(
+                fileAt: file,
+                options: guestSigningOptions(
+                    identifier: "com.apple.launchd_cache_loader",
+                ),
+            )
+        }
     }
 
     func injectLaunchDaemons(targetMount: String) throws {
-        let target = URL(filePath: targetMount)
-        let tmpDir = try createTmpDir()
-        let launchdPath = tmpDir.appending(path: "launchd.plist")
-        let launchdOgPath = target.appending(path: "/System/Library/xpc/launchd.plist")
-        try FileManager.default.moveItem(at: launchdOgPath, to: launchdPath)
-
-        let vphonedLaunchdPlist = resources.guestResources.appendingPathComponent("vphoned.plist")
-        try FileManager.default.copyItem(
-            at: vphonedLaunchdPlist,
-            to: target.appending(path: "System/Library/LaunchDaemons/vphoned.plist"),
-        )
-        try chownRecursively(uid: 0, gid: 0, at: target.appending(path: "System/Library/LaunchDaemons/vphoned.plist"))
-        try CustomFirmwareDaemons.injectDaemon(into: launchdPath, name: "vphoned", from: vphonedLaunchdPlist)
+        let target = try VPhoneConfinedDirectory.pin(absolutePath: targetMount)
+        let source = resources.guestResources.appendingPathComponent("vphoned.plist")
+        try target.replaceFile("System/Library/LaunchDaemons/vphoned.plist", fromFileAt: source, mode: 0o644, owner: (0, 0))
+        try editGuestFile("System/Library/xpc/launchd.plist", targetMount: targetMount, mode: 0o644) { file in
+            try CustomFirmwareDaemons.injectDaemon(into: file, name: "vphoned", from: source)
+        }
         print("  [+] Injected vphoned")
-        try FileManager.default.moveItem(at: launchdPath, to: launchdOgPath)
-        try setMode(0o644, at: launchdOgPath)
-        // Back as the system has it: the move went through a temporary
-        // directory on the host, which left the host's group on it.
-        try chownRecursively(uid: 0, gid: 0, at: launchdOgPath)
     }
 
     func addVphoned(targetMount: String) throws {
-        let target = URL(filePath: targetMount)
         // The signed payload in the bundle is read-only, so stage it in a
         // writable temp directory before copying it into the mounted guest.
         let buildDir = try createTmpDir()
@@ -81,11 +68,8 @@ extension CryptexFilesystemPatcher {
         try stageVphoned(to: vphonedBin)
         defer { try? FileManager.default.removeItem(at: vphonedBin) }
 
-        let targetBin = target.appending(path: "/usr/bin/vphoned")
-        try FileManager.default.copyItem(at: vphonedBin, to: targetBin)
-        try setMode(0o755, at: targetBin)
-        // The bundle's copy belongs to whoever built it.
-        try chownRecursively(uid: 0, gid: 0, at: targetBin)
+        let confined = try VPhoneConfinedDirectory.pin(absolutePath: targetMount)
+        try confined.replaceFile("usr/bin/vphoned", fromFileAt: vphonedBin, mode: 0o755, owner: (0, 0))
     }
 
     /// Copy in the prebuilt guest daemon.
@@ -109,10 +93,11 @@ extension CryptexFilesystemPatcher {
                 "PCC GPU driver is missing: \(staged.path). Re-run fw prepare with the PCC IPSW.",
             )
         }
-        if FileManager.default.fileExists(atPath: bundle.path) {
-            try FileManager.default.removeItem(at: bundle)
-        }
-        try FileManager.default.copyItem(at: staged, to: bundle)
+        let confined = try VPhoneConfinedDirectory.pin(absolutePath: targetMount)
+        let relative = "System/Library/Extensions/AppleParavirtGPUMetalIOGPUFamily.bundle"
+        try confined.removeItem(relative)
+        let source = try VPhoneConfinedDirectory.pin(absolutePath: staged.path)
+        try confined.copyTree(from: source, to: relative, owner: (0, 0))
         // Clean AppleDouble files if the host copy created any.
         try deleteAppleDoubleFiles(under: bundle)
         if guestFamily == .watch {
@@ -158,11 +143,11 @@ extension CryptexFilesystemPatcher {
     /// any-user file. The restore copies the image's /private/var into the
     /// data volume, so the preferences are written there.
     func addCoreAnimationDefaults(targetMount: String) throws {
-        let directory = URL(filePath: targetMount).appending(path: "private/var/preferences")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let plist = directory.appending(path: ".GlobalPreferences.plist")
+        let target = try VPhoneConfinedDirectory.pin(absolutePath: targetMount)
+        let directory = try target.directory("private/var/preferences", create: true)
+        let plist = ".GlobalPreferences.plist"
         var preferences: [String: Any] = [:]
-        if let data = try? Data(contentsOf: plist),
+        if let data = try? directory.readData(plist),
            let existing = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
         {
             preferences = existing
@@ -170,9 +155,8 @@ extension CryptexFilesystemPatcher {
         for key in ["CAEnableIOSurfaceCompression", "CAEnableFramebufferCompression", "CAEnableDeepFramebuffer"] {
             preferences[key] = false
         }
-        try PropertyListSerialization.data(fromPropertyList: preferences, format: .binary, options: 0).write(to: plist)
-        try chownRecursively(uid: 0, gid: 0, at: plist)
-        try setMode(0o644, at: plist)
+        let data = try PropertyListSerialization.data(fromPropertyList: preferences, format: .binary, options: 0)
+        try directory.writeFile(plist, contents: data, mode: 0o644, owner: (0, 0))
     }
 
     /// The driver and its compiler plugin are built for iOS, and dyld refuses a
@@ -203,29 +187,37 @@ extension CryptexFilesystemPatcher {
     }
 
     func patchMobileActivation(targetMount: String) throws {
-        let target = URL(filePath: targetMount)
-        let mobileActivationdPath = target.appending(path: "/usr/libexec/mobileactivationd")
-        try thinToArm64e(mobileActivationdPath)
-        // `resign: false` because the sign below replaces the signature, and
-        // re-attesting would refuse an unsigned input the Python accepted.
-        try CustomFirmwareMobileActivation.patch(fileAt: mobileActivationdPath, resign: false)
-        try setMode(0o755, at: mobileActivationdPath)
+        try editGuestFile("usr/libexec/mobileactivationd", targetMount: targetMount, mode: 0o755) { file in
+            try thinToArm64e(file)
+            // `resign: false` because the sign below replaces the signature, and
+            // re-attesting would refuse an unsigned input the Python accepted.
+            try CustomFirmwareMobileActivation.patch(fileAt: file, resign: false)
+            try setMode(0o755, at: file)
 
-        try VPhoneSigner.sign(
-            fileAt: mobileActivationdPath,
-            options: guestSigningOptions(),
-        )
+            try VPhoneSigner.sign(
+                fileAt: file,
+                options: guestSigningOptions(),
+            )
+        }
     }
 
     func addDyldSymlinks(targetMount: String) throws {
-        let target = URL(filePath: targetMount)
-        try createSymlink(
-            at: target.appending(path: "/System/Library/Caches/com.apple.dyld"),
-            to: "../../../System/Cryptexes/OS/System/Library/Caches/com.apple.dyld",
-        )
-        try createSymlink(
-            at: target.appending(path: "/System/DriverKit/System/Library/dyld"),
-            to: "../../../../System/Cryptexes/OS/System/DriverKit/System/Library/dyld",
-        )
+        let target = try VPhoneConfinedDirectory.pin(absolutePath: targetMount)
+        try target.createSymlink(target: "../../../System/Cryptexes/OS/System/Library/Caches/com.apple.dyld",
+                                 at: "System/Library/Caches/com.apple.dyld")
+        try target.createSymlink(target: "../../../../System/Cryptexes/OS/System/DriverKit/System/Library/dyld",
+                                 at: "System/DriverKit/System/Library/dyld")
     }
+
+    /// Path-based patchers only see this private copy. Guest symlinks cannot
+    /// redirect their reads or writes into the host filesystem.
+    func editGuestFile(_ relative: String, targetMount: String, mode: mode_t, edit: (URL) throws -> Void) throws {
+        let target = try VPhoneConfinedDirectory.pin(absolutePath: targetMount)
+        let data = try target.readData(relative)
+        let file = try createTmpDir().appending(path: "payload")
+        try data.write(to: file)
+        try edit(file)
+        try target.replaceFile(relative, fromFileAt: file, mode: mode, owner: (0, 0))
+    }
+
 }

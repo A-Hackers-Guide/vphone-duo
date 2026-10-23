@@ -194,9 +194,9 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
                 try patchLaunchdCacheLoader(targetMount: targetMount)
             }
             if gate.isEnabled(FirmwareRestoreImagePatchSet.virtualBluetooth) {
-                try CustomFirmwareBluetoothVirtualController.patch(
-                    at: URL(filePath: targetMount).appending(path: CustomFirmwareBluetoothVirtualController.relativePath),
-                )
+                try editGuestFile(CustomFirmwareBluetoothVirtualController.relativePath, targetMount: targetMount, mode: 0o644) { file in
+                    try CustomFirmwareBluetoothVirtualController.patch(at: file)
+                }
                 print("  [+] \(CustomFirmwareBluetoothVirtualController.feature) on")
             }
             try removeHostEventLog(mount: targetMount)
@@ -234,11 +234,11 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
         let (osDevice, osMount) = try attachImage(path: osPath, readonly: true)
         defer { try? detachImage(deviceNode: osDevice) }
 
-        let destination = URL(filePath: targetMount)
-            .appending(path: appOS ? "/System/Cryptexes/App" : "/System/Cryptexes/OS")
-        try FileManager.default.removeItem(at: destination)
-        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
-        try copyImageContents(source: URL(filePath: osMount), destination: destination)
+        let target = try VPhoneConfinedDirectory.pin(absolutePath: targetMount)
+        let relative = appOS ? "System/Cryptexes/App" : "System/Cryptexes/OS"
+        try target.removeItem(relative)
+        try target.directory(relative, create: true)
+        try copyImageContents(source: URL(filePath: osMount), destination: URL(filePath: targetMount).appending(path: relative))
     }
 
     func createTmpDir() throws -> URL {

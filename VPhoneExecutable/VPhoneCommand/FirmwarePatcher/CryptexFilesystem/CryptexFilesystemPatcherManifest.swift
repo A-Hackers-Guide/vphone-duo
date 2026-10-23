@@ -100,7 +100,7 @@ extension CryptexFilesystemPatcher {
     /// The iOS version of the system being merged, which picks the seal tool.
     /// The hybrid `BuildManifest.plist` carries the cloudOS version; the
     /// iPhone's own manifest, which `fw prepare` keeps beside it, the iOS one.
-    func getProductVersion() throws -> String {
+    public func getProductVersion() throws -> String {
         let data = try Data(contentsOf: restoreDir.appending(path: "iPhone-BuildManifest.plist"))
         let root = try parsePlist(data: data)
         guard let productVersion = root["ProductVersion"] as? String else {
@@ -118,7 +118,8 @@ extension CryptexFilesystemPatcher {
     func getComponentPath(component: String, buildManifest: PlistDict) throws -> String {
         let comp = try getChildPlistDict(parent: buildManifest, key: component)
         let info = try getChildPlistDict(parent: comp, key: "Info")
-        guard let path = info["Path"] as? String else {
+        guard let path = info["Path"] as? String,
+              CustomFirmwareDaemons.isPlainRelativePath(path) else {
             throw FirmwareManifest.ManifestError.missingKey("component path")
         }
         return path
