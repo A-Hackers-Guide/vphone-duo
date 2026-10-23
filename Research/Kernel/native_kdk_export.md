@@ -1,10 +1,10 @@
-# Native KDK Mach-O export
+# Native KDK extraction
 
-`KDKImageExport` converts one kernel-collection fileset image into a standalone
-ARM64 Mach-O, given the recovered references and extra symbols. This is the
-writer stage of the native KDK extraction work. `KernelCacheMixer` still calls
-the external `ipsw` extractor; reference recovery, symbol synthesis, KDK plist
-and pseudo-extension generation are subsequent stages.
+`KDKExtraction` reconstructs a KDK directly from a decompressed kernel
+collection: it recovers references, synthesizes cross-image symbols, writes
+standalone Mach-Os with `KDKImageExport`, and recreates bundle plists and KPI
+pseudo-extensions. `KernelCacheMixer` uses this native implementation and
+in-process gzip decompression. It does not execute an external `ipsw`.
 
 The current contract is stripped collections with address-only synthetic binds.
 Passing `addressOnlyBinds: false` fails explicitly. Original-symbol C++ alias/PAC
@@ -42,7 +42,8 @@ its scratch state and produce the same bytes.
 ## Reference and evidence
 
 The port follows the MIT-licensed `File.Export` in go-macho PR #94. Its license
-is retained in `FirmwarePatcher/KernelCache/KDK/LICENSE`. The external reference
+is retained in `FirmwarePatcher/KernelCache/KDK/LICENSE` and packaged as
+`Contents/Resources/Licenses/native-kdk-MIT.txt`. The external reference
 build uses these pinned mpass99 commits, not the released upstream `ipsw`:
 
 | Repository | Commit |
@@ -57,8 +58,12 @@ On 2026-10-23 the writer reproduced **all 264 reference exports byte for byte**:
 `kernelcache.release.vresearch101`, including both kernels. The comparison
 feeds the identical references/symbols/base/bind mode into Swift and Go. It does
 not use the reference output to construct Swift output. This proves the writer
-for these inputs; it does not validate the future native reference finder or a
-rebuilt collection's boot behavior.
+for these inputs; a separate native recovery test now reconstructs all inputs
+from the collections and checks reference sets, symbol arrays and final bytes.
+Both collections match all 264 images with zero unresolved imports. Full KDK
+tree tests also match 313 donor files and 263 research files: executable bytes
+are identical, while plist fields and values are equal (XML formatting is not
+part of the contract). No new kmutil link or VM boot was performed.
 
 Corpus source: cached cloudOS 26.4 beta IPSW
 `c0ecdb4b310cf5239ab2b248dd3098eec297dc5aa3bbe6ad-b80d96a0b616.ipsw`.
@@ -115,7 +120,10 @@ xcodebuild -workspace VPhone.xcworkspace -scheme FirmwarePatcherTests \
   -configuration Debug -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath /tmp/native-kdk-build \
   -only-testing:FirmwarePatcherTests/KDKImageExportTests \
-  -only-testing:FirmwarePatcherTests/KDKExportFixtureTests test
+  -only-testing:FirmwarePatcherTests/KDKExportFixtureTests \
+  -only-testing:FirmwarePatcherTests/KDKRecoveryTests \
+  -only-testing:FirmwarePatcherTests/KDKRecoveryFlowTests \
+  -only-testing:FirmwarePatcherTests/KDKExtractionTests test
 ```
 
 Xcode strips the `TEST_RUNNER_` prefix for the test process. To narrow a failure,
@@ -124,10 +132,11 @@ exports, one per collection. A mismatch reports the first byte offset and saves
 `swift-<corpus>-<entryID>` in the corpus root. The default test run skips the
 external corpus rather than silently treating absent firmware as success.
 
-The focused validation on 2026-10-23 passed 13 test functions across the KDK
-and ARM64 encoder suites, including all 264 external exports. A full scheme run
-also executed the new tests successfully but reported 134 issues among 696
-tests: existing suites require missing `ipsws/ref_extract` DSC/Mach-O fixtures
+The final native integration validation on 2026-10-23 passed **86 tests in 12
+suites**, including the mixer's shipped gzip symbol-map path, all native
+recovery/export/tree comparisons and the patch-set contract suites. The
+writer-stage validation also passed the ARM64 encoder suite. Its full scheme
+run reported 134 issues among 696 tests: existing suites require missing `ipsws/ref_extract` DSC/Mach-O fixtures
 and `ipsws/patch_refactor_input` payloads in this new worktree. The main
 checkout's DSC directory is empty and the patch-refactor inputs are absent too.
 That run is recorded as failed, not as a clean full-suite validation.
@@ -183,10 +192,36 @@ inputs, so writer parity does not depend on re-running symbol synthesis.
    symbols and indirect symbols, and truncate the obsolete original tail.
    Symbol records are local/defined/undefined; strings are defined/undefined/local.
 
-## Next integration step
+## Native recovery and integration
 
-Recover references and synthesize symbols natively, then feed this writer and
-reuse the unchanged byte-parity test boundary. Add KDK bundle metadata and KPI
-pseudo-extensions before switching `KernelCacheMixer`. Keep `--ipsw` accepted
-as a no-op within the existing 2.12 series; removing it requires the planned
-2.13 compatibility bump and raised Launchpad `minimumBundleComponents`.
+`KDKRecovery` decodes collection pointer chains, LC_FUNCTION_STARTS, ADRP and
+cross-section branches, unwind image offsets, static-if/copyio deltas and EH
+frame references. OFF12 recovery follows register copies, conditional paths,
+jump tables and outlined helpers. Leaf callees that clobber a tracked register
+end the path; outlined ADRPs can hand their value back to callers. Foreign
+noreturn analysis prevents a call to a terminating function from inventing
+consumers in the next block. The pinned reference's query order and failed
+jump-table-reader behavior are preserved for reproducibility.
+
+`KDKLinkSymbols` applies transitive dependency visibility to kernel KPI names,
+keeps duplicate known KEXT names local, reserves vtable/metaclass and alias
+names, and supplies every KEXT's `_kmod_info`. Production extraction refuses
+unresolved imports. Metadata paths are constrained to the newly created KDK;
+partial exports are removed on failure and the final directory is published
+only after success. Host artifacts use the repository's 0777 permission rule.
+
+`KernelCacheMixer` revision 4 keys the mix and donor extraction on
+`KDKExtraction.revision`, so pre-native cache entries are rebuilt. It records
+`extractor.version` instead of the external executable hash. Staging remains
+unprivileged; root only links a staged volume through the existing descriptor
+based copy. `checkMixable` reports missing staging before a root pipeline starts.
+
+`fw kernelcache --ipsw <path>` and the Swift `stage(ipsw:)` argument are accepted
+but ignored throughout 2.12.x. `VPHONE_IPSW` is not read. The legacy Launchpad
+UI still exposes its ipsw selector and can pass the path; Core ignores it.
+Removing that UI and the compatibility argument across both products belongs
+to the planned 2.13 transition with its `minimumBundleComponents` update.
+
+Validation covers the two pinned 26.4 beta collections. Other recipe generations
+and a fresh native-extraction -> kmutil -> guest boot remain separate acceptance
+gates; old boot evidence is not evidence of this new extraction path.

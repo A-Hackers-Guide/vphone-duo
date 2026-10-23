@@ -41,7 +41,7 @@ public enum FirmwareResearchBoardPatchSet {
             VPhonePatchDeclaration(
                 identifier: kernelMix,
                 title: "Virtualisation kexts",
-                summary: "Rebuilds the research board's kernelcache with the paravirtual GPU, touch, audio and other iPhone virtualisation kexts of the 26.4 beta vphone600 kernelcache, from a recipe for that release. Needs root and an ipsw with `kernel extract --kdk` (VPHONE_IPSW).",
+                summary: "Rebuilds the research board's kernelcache with the paravirtual GPU, touch, audio and other iPhone virtualisation kexts of the 26.4 beta vphone600 kernelcache, from a recipe for that release. Extracts the KDK natively; linking it with kmutil needs root.",
                 target: .firmware(.kernelcache),
                 bootEssential: true,
             ),

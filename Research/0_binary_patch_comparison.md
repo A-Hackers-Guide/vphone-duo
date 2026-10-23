@@ -3806,7 +3806,7 @@ it finds the recipe in `Contents/Resources/kernelcache_recipes` by SHA-256, then
 
 1. extracts the donor, the vphone600 kernelcache of the 26.4 beta (23E5207q,
    read once from its cloudOS IPSW), and the base into KDKs with
-   `ipsw kernel extract --kdk --symbols`, naming the stripped symbols from the
+   the native `KDKExtraction` pipeline, naming the stripped symbols from the
    recipe's maps;
 2. keeps the recipe's bundle list: the base without its research-board-only
    kexts, plus the donor kexts that link against the base kernel;
@@ -3824,7 +3824,7 @@ the new layout) and saves the preset's kernel patches into it
 in `FirmwareOriginals`. Mixes are cached in `~/.vphone/kernelcache/mix`, keyed
 by the kernelcaches, the maps and bundle list and the builder layout.
 
-Only the link needs root, and root runs no `ipsw`. `fw kernelcache <vm>` stages
+Only the link needs root; native extraction runs as the invoking user. `fw kernelcache <vm>` stages
 the mix as the user (both extractions and the volume) and links it under sudo:
 root copies the staged volume into a fresh root-only directory, walking it by
 descriptor, refusing every symbolic link but the KDK's pointer to the volume's
@@ -3837,12 +3837,18 @@ Apple linked the base in, read from the base's own prelink info, so a mix no
 longer depends on where it is built. The 26.6 mix then has the segment layout
 of the hand-built research mix that booted.
 
-Requirements: an `ipsw` with `kernel extract --kdk`, named by `VPHONE_IPSW`
-(vphone-cli does not ship it); root; and for every base here (26.4–26.7, all
+Requirements: root for linking; and for every base here (26.4–26.7, all
 `kernel-last`) the kmutil of macOS 26.4 or later. `fw prepare` now pairs a
 cloudOS without vphone600ap and refuses one whose kernelcache no recipe covers.
 `cfw update-kernel` refuses on a mixed kernel, whose originals are the research
 board's.
+
+Native extraction checked on 2026-10-23: all 264 fileset images of the 26.4
+beta vphone600 and vresearch101 collections match the pinned reference in
+recovered references, synthesized symbols and exported bytes. The full KDK
+trees match 313/263 files, with plist values compared semantically. See
+[native KDK extraction](Kernel/native_kdk_export.md). This replaces the external
+extractor only; no new kmutil link or guest boot was performed for this change.
 
 Checked on 2026-10-19: a `minimal` VM of iOS 26.6 on cloudOS 26.6 (23G71) restores
 and boots, and vphoned answers. Checked on 2026-10-20 with the standard preset:

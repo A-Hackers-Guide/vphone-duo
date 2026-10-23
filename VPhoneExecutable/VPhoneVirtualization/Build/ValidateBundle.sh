@@ -116,6 +116,10 @@ for manifest in "$resources/kernelcache_recipes/bases/"*/manifest.json; do
         }
     done
 done
+[[ -s "$resources/Licenses/native-kdk-MIT.txt" ]] || {
+    print -u2 "Missing native KDK extraction licence"
+    exit 1
+}
 # New machines copy this ROM. Without it vm new would fail, and OpenAVB is
 # distributed only with its licences. The ROM window is 512 KiB.
 for name in OpenAVB.bin LICENSE APSL-2.0.txt; do

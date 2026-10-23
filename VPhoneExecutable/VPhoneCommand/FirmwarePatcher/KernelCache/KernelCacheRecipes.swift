@@ -18,7 +18,7 @@ public struct KernelCacheFile: Decodable, Sendable {
     public let sha256: String
     /// SHA-256 of the decompressed kernel collection.
     public let decompressedSHA256: String
-    /// The KDK `ipsw kernel extract --kdk` makes of it.
+    /// The KDK the native extractor makes of it.
     public let kdk: String
 
     func matches(sha: String) -> Bool {
