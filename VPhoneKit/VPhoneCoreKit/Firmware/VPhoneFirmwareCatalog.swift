@@ -341,6 +341,10 @@ public enum VPhoneFirmwareCatalog {
         (devices: ["iPhone19,2"], releases: [
             ("27.0.1", "https://updates.cdn-apple.com/2026FallFCS/8cd333d4-1025-4e89-99a2-1373d2b5bfcb/iPhone19,2_27.0.1_24A446_Restore.ipsw"),
         ]),
+        // Initial single-display bring-up; see Research/Guest/iphone_duo_bringup.md.
+        (devices: ["iPhone19,4"], releases: [
+            ("27.1", "https://updates.cdn-apple.com/2026FallFCS/3f41a447-d8a6-48ae-83ae-056a64f57fd4/iPhone19,4_27.1_24A94425_Restore.ipsw"),
+        ]),
     ]
 
     /// iPadOS releases, one entry per iPad IPSW, oldest first. Each IPSW also

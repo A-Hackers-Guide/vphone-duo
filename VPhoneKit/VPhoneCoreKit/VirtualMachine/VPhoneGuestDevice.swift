@@ -124,6 +124,10 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     /// iPhone 18 Pro (V63AP): 1206x2622, 402x874 points.
     public static let iPhone19_2 = iPhone("iPhone19,2", "v63ap", "iPhone 18 Pro", width: 1206, height: 2622)
 
+    /// iPhone Duo (V68AP), using only its outer display for initial bring-up.
+    /// The inner display and hinge are not represented by the VM's single panel.
+    public static let iPhone19_4 = iPhone("iPhone19,4", "v68ap", "iPhone Duo", width: 1398, height: 2034)
+
     /// iPhone XS Max: 1242x2688 at 458 ppi, 414x896 points. Its IPSW carries the
     /// iOS 18 releases after 18.6, which the iPhone 16 never got; the research
     /// board's own iOS 18 kernel boots it (the 18.x kernelcache recipes, `minimal`
@@ -226,7 +230,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         iPhone17_3,
         iPhone17_4, iPhone17_1, iPhone17_2, iPhone17_5,
         iPhone18_3, iPhone18_4, iPhone18_1, iPhone18_2, iPhone18_5,
-        iPhone19_2,
+        iPhone19_2, iPhone19_4,
         iPhone11_6,
         iPad16_1,
         iPad15_7,

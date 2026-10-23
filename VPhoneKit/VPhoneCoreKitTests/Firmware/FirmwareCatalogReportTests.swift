@@ -132,10 +132,11 @@ struct FirmwareCatalogReportTests {
             let firstRelease = switch guest.productType {
             case "iPhone18,5": "iOS 26.3.1"
             case "iPhone19,2": "iOS 27.0.1"
+            case "iPhone19,4": "iOS 27.1"
             default: "iOS 26.0"
             }
             #expect(pairings.map(\.iosName).first == firstRelease)
-            #expect(pairings.map(\.iosName).last == "iOS 27.0.1")
+            #expect(pairings.map(\.iosName).last == (guest.productType == "iPhone19,4" ? "iOS 27.1" : "iOS 27.0.1"))
             for p in pairings {
                 #expect(p.device == guest.productType)
                 #expect(p.iosURL.hasPrefix("https://updates.cdn-apple.com/"))

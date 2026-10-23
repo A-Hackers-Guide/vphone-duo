@@ -164,4 +164,19 @@ struct GuestDeviceTests {
         #expect(decoded.guestDevice == device)
         #expect(decoded.screenConfig == .init(width: 1206, height: 2622, pixelsPerInch: 460, scale: 3.0))
     }
+
+    @Test
+    func `iPhone Duo preserves its V68 identity and outer display in the VM`() throws {
+        let device = try #require(VPhoneGuestDevice.detect(buildManifest: ["SupportedProductTypes": ["iPhone19,4"]]))
+        #expect(device == .iPhone19_4)
+        #expect(device.boardDeviceTreePath == "Firmware/all_flash/DeviceTree.v68ap.im4p")
+        let manifest = VPhoneVirtualMachineManifest.newVM().updating(guestDevice: device)
+        let decoded = try PropertyListDecoder().decode(
+            VPhoneVirtualMachineManifest.self,
+            from: PropertyListEncoder().encode(manifest),
+        )
+        #expect(decoded.guestProductType == "iPhone19,4")
+        #expect(decoded.guestDevice == device)
+        #expect(decoded.screenConfig == .init(width: 1398, height: 2034, pixelsPerInch: 460, scale: 3.0))
+    }
 }

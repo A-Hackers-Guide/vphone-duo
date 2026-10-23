@@ -1,5 +1,17 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **iPhone Duo bring-up (2026-10-23, first boot fails):**
+> `iPhone19,4` / V68AP, iOS 27.1 (24A94425), is registered with one outer
+> display and paired with cloudOS 26.4 (23E5207q). Its device tree reports
+> `arm64e.x1`. This exercises the existing standard iOS 27 / ARM64E_X1 patch
+> selection on a new userland; it introduces no new instruction patch or
+> preset. Restore and CFW install completed, but setup and a windowed boot
+> panic with PID 1 SIGILL. Installed dyld still uses CSSC instructions that
+> this Mac lacks and current X1 lowering does not cover; exact fault-site
+> attribution remains unverified. Four optional VirtualAudio patches also
+> failed. Neither successful boot nor dual-display/hinge support is established. See
+> [inputs, evidence and boot results](Guest/iphone_duo_bringup.md).
+
 > **Experimental full OTA System update (2026-10-20):**
 > `system-exp-ota_userland` is off in Standard and the TV presets. For a stopped
 > iPhone/iPad guest with a snapshot and prepared target firmware, it replaces
