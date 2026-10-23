@@ -67,8 +67,21 @@ public struct VPhoneOTARelease: Sendable, Equatable {
     /// same as `version` while the base still gets releases; a later OTA goes
     /// over the base's last one, since only the userland is taken from it.
     public let baseVersion: String
+    /// The oldest macOS whose libcompression unpacks the payload: the 27
+    /// releases compress their chunks with LZRAVEN (`pbzm`), which macOS 27
+    /// added. Nil when every supported host unpacks it.
+    public let minimumHostMacOS: Int?
 
-    public init(productType: String, version: String, build: String, url: String, size: Int64, key: String? = nil, baseVersion: String? = nil) {
+    public init(
+        productType: String,
+        version: String,
+        build: String,
+        url: String,
+        size: Int64,
+        key: String? = nil,
+        baseVersion: String? = nil,
+        minimumHostMacOS: Int? = nil,
+    ) {
         self.productType = productType
         self.version = version
         self.build = build
@@ -76,6 +89,29 @@ public struct VPhoneOTARelease: Sendable, Equatable {
         self.size = size
         self.key = key
         self.baseVersion = baseVersion ?? version
+        self.minimumHostMacOS = minimumHostMacOS
+    }
+
+    /// The major version of the macOS this process runs on.
+    public static var hostMacOS: Int {
+        ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+    }
+
+    /// Whether a Mac running `hostMacOS` unpacks the payload.
+    public func unpacks(onMacOS hostMacOS: Int = Self.hostMacOS) -> Bool {
+        minimumHostMacOS.map { hostMacOS >= $0 } ?? true
+    }
+
+    /// Refuses this OTA on a Mac that cannot unpack it, before anything is
+    /// downloaded or restored for it.
+    public func checkHost() throws {
+        guard let minimumHostMacOS, !unpacks() else { return }
+        let name = VPhoneGuestDevice.named(productType)?.family.osName ?? productType
+        let host = ProcessInfo.processInfo.operatingSystemVersion
+        throw VPhoneOTAHostError(
+            message: "\(name) \(version) (\(build)) compresses its userland with LZRAVEN, which macOS \(minimumHostMacOS) and later unpack; "
+                + "this Mac runs macOS \(host.majorVersion).\(host.minorVersion). Choose an earlier release, or create this machine on macOS \(minimumHostMacOS) or later.",
+        )
     }
 
     /// The IPSW cache's folder for OTAs.
@@ -84,6 +120,14 @@ public struct VPhoneOTARelease: Sendable, Equatable {
     /// The name the IPSW cache keeps it under, in its `ota` folder.
     public var fileName: String {
         "\(productType)_\(version)_\(build)_OTA.\(URL(string: url)?.pathExtension.lowercased() == "zip" ? "zip" : "aea")"
+    }
+}
+
+/// An OTA this Mac cannot unpack.
+public struct VPhoneOTAHostError: Error, LocalizedError {
+    public let message: String
+    public var errorDescription: String? {
+        message
     }
 }
 
@@ -514,7 +558,7 @@ public enum VPhoneFirmwareCatalog {
             key: "zm99NLG9ucGRIqHjpHC5BVHS3v55gz7bBmVfeizDMv0=",
         ),
         // tvOS 27 dropped the Apple TV HD, so the 27 userland goes over its
-        // last IPSW.
+        // last IPSW. Its chunks are LZRAVEN, which only macOS 27 unpacks.
         .init(
             productType: "AppleTV14,1",
             version: "27.0",
@@ -523,10 +567,12 @@ public enum VPhoneFirmwareCatalog {
             size: 4_831_838_208,
             key: "L3wZrfSYx2pFDbJSYtEteNDspB26qBv0lxLlkWrKTYk=",
             baseVersion: "26.6",
+            minimumHostMacOS: 27,
         ),
         // HomePod's newer software ships as a full ZIP OTA. Keep its own
         // 27.0 restore IPSW as the base; the OTA supplies only the userland
         // and board tree, while the boot chain remains cloudOS 26.4.
+        // Its chunks are LZRAVEN, which only macOS 27 unpacks.
         .init(
             productType: "AudioAccessory5,1",
             version: "27.2",
@@ -534,6 +580,7 @@ public enum VPhoneFirmwareCatalog {
             url: "https://updates.cdn-apple.com/2026FallFCS/b191c01c-8e6e-4b74-8b84-015131f696b8/com_apple_MobileAsset_SoftwareUpdate/861a9e7426795ddb3eac86cd0b089e5bf7939258.zip",
             size: 3_051_441_612,
             baseVersion: "27.0",
+            minimumHostMacOS: 27,
         ),
     ]
 
@@ -565,8 +612,10 @@ public enum VPhoneFirmwareCatalog {
     /// device without an IPSW gets one per OTA for it, named for the OTA: the
     /// base's IPSW when the OTA is of the same version, else the OTA itself,
     /// which `fw prepare` restores over its base's IPSW; an unknown device
-    /// gets none.
-    public static func pairings(for device: String) -> [VPhoneFirmwarePairing] {
+    /// gets none. An OTA a Mac running `hostMacOS` cannot unpack is left out,
+    /// so the newest pairing, which a creation without sources takes, is one
+    /// this Mac can build.
+    public static func pairings(for device: String, hostMacOS: Int = VPhoneOTARelease.hostMacOS) -> [VPhoneFirmwarePairing] {
         guard let guest = VPhoneGuestDevice.named(device) else { return [] }
         if guest.notchedArtworkSubtype != nil {
             return iOS18ResearchBoardReleases.map { release in
@@ -581,14 +630,15 @@ public enum VPhoneFirmwareCatalog {
         }
         guard guest.presentsBoard else { return pairings }
         let restored = guest.restoreBase ?? guest
+        let otas = otaReleases.filter { $0.productType == guest.productType && $0.unpacks(onMacOS: hostMacOS) }
         var releases = (iPhoneReleases + iPadReleases + tvReleases + homePodReleases + watchReleases).first { $0.devices.contains(restored.productType) }?.releases ?? []
         if restored != guest {
-            releases = otaReleases.filter { $0.productType == guest.productType }.compactMap { ota in
+            releases = otas.compactMap { ota in
                 guard let base = releases.first(where: { $0.version == ota.baseVersion }) else { return nil }
                 return (version: ota.version, url: ota.version == base.version ? base.url : ota.url)
             }
         } else if guest.family == .homePod {
-            releases += otaReleases.filter { $0.productType == guest.productType }.compactMap { ota in
+            releases += otas.compactMap { ota in
                 guard restoreBaseURL(for: ota) != nil else { return nil }
                 return (version: ota.version, url: ota.url)
             }
@@ -631,8 +681,14 @@ public enum VPhoneFirmwareCatalog {
     }
 
     /// JSON-friendly projection of the catalog: each build with its recommended
-    /// cloudOS, for the iPhone and then per guest device.
+    /// cloudOS, for the iPhone and then per guest device, as this Mac can build
+    /// them.
     public static var report: VPhoneFirmwareCatalogReport {
+        report(hostMacOS: VPhoneOTARelease.hostMacOS)
+    }
+
+    /// The report for a Mac running `hostMacOS`.
+    public static func report(hostMacOS: Int) -> VPhoneFirmwareCatalogReport {
         func entries(_ pairings: [VPhoneFirmwarePairing]) -> [VPhoneFirmwareCatalogReport.Entry] {
             pairings.map {
                 let ota = otaRelease(source: $0.iosURL)
@@ -653,7 +709,7 @@ public enum VPhoneFirmwareCatalog {
             device: device,
             pairings: entries(pairings),
             devices: VPhoneGuestDevice.known.compactMap { guest in
-                let pairings = pairings(for: guest.productType)
+                let pairings = pairings(for: guest.productType, hostMacOS: hostMacOS)
                 guard !pairings.isEmpty else { return nil }
                 return .init(
                     productType: guest.productType,

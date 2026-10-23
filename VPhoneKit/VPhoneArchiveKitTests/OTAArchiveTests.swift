@@ -234,6 +234,26 @@ struct OTAArchiveTests {
         #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("outside").path))
     }
 
+    @Test func `an LZRAVEN payload is refused before macOS 27, by name`() throws {
+        let chunk = URL(fileURLWithPath: "/tmp/payload.000")
+        let lzraven = Data("pbzm".utf8) + Data(repeating: 0, count: 4)
+        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 27 {
+            let error = try #require(throws: VPhoneOTAArchive.Error.self) {
+                try VPhoneOTAArchive.checkCompression(lzraven, of: chunk)
+            }
+            guard case .needsNewerMacOS(chunk, minimum: 27) = error else {
+                Issue.record("\(error)")
+                return
+            }
+            #expect(error.localizedDescription.contains("LZRAVEN"))
+            #expect(!error.localizedDescription.contains("Download the OTA again"))
+        } else {
+            try VPhoneOTAArchive.checkCompression(lzraven, of: chunk)
+        }
+        // Every other pbz compression is AppleArchive's on any supported host.
+        try VPhoneOTAArchive.checkCompression(Data("pbzx".utf8), of: chunk)
+    }
+
     @Test func `ZIP duplicate metadata is refused`() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
