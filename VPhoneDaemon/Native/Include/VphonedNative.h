@@ -15,6 +15,16 @@ int vp_native_process_mode(void);
 int vp_native_run_proxy(void);
 int vp_native_watch_proxy(void);
 void vp_vcam_start(void);
+/// Publish the HomePod MiniDisplay HID device when firmware has its geometry.
+/// The device and its callback queue live for the worker process lifetime.
+void vp_homepod_display_start(void);
+bool vp_homepod_display_is_configured(void);
+/// Latest guest-written MiniDisplay frame and geometry, malloc-owned JSON.
+char *vp_homepod_display_copy_json(void);
+/// SoundBoardServices debug controls, available only on HomePod firmware.
+bool vp_homepod_debug_available(void);
+/// Validated operation result or error, returned as malloc-owned JSON.
+char *vp_homepod_debug_copy_json(const char *operation, const char *arguments_json);
 
 /// Load the IOKit digitizer symbols used for multi-finger injection. Idempotent,
 /// safe to call more than once; returns false (injection then stays a no-op)

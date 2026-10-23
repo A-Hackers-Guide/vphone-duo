@@ -33,6 +33,8 @@ struct VPhoneLaunchpadNewMachineView: View {
     @State private var pairing: String?
     @State private var usesCustomSources = false
     @State private var iphoneSource = ""
+    @State private var customGuestProductType: String?
+    @State private var inspectedCustomSource: String?
     @State private var cloudOSSource = ""
     /// Run the release on its own cloudOS, where the research board stands in
     /// for vphone600 and the kernelcache is mixed (`fw kernelcache`).
@@ -226,6 +228,7 @@ struct VPhoneLaunchpadNewMachineView: View {
 
     private var canCreate: Bool {
         nameProblem == nil && advancedProblem == nil && sources != nil && bundleVersion != nil
+            && (!usesCustomSources || inspectedCustomSource == iphoneSource)
             && (!rebuildsKernelcache || hasKernelcacheIPSW) && kernelcacheBuilderProblem == nil
     }
 
@@ -253,17 +256,31 @@ struct VPhoneLaunchpadNewMachineView: View {
         .task(id: bundleVersion) { await loadCatalog() }
         .task(id: bundleVersion) { await loadPatchCatalog() }
         .task { await loadDownloaded() }
+        .task(id: usesCustomSources ? iphoneSource : "") {
+            let source = iphoneSource
+            let type = await Task.detached {
+                VPhoneLaunchpadIPSW.productType(forSource: source)
+            }.value
+            guard !Task.isCancelled, usesCustomSources, source == iphoneSource else { return }
+            let previous = customGuestProductType
+            customGuestProductType = type
+            applyGuestDefaults(previousProductType: previous)
+            inspectedCustomSource = source
+        }
+        .onChange(of: usesCustomSources) { previous, _ in
+            applyGuestDefaults(previousProductType: previous ? customGuestProductType : selectedGuest?.productType)
+        }
         .task { await model.machines.refreshTemplates() }
         // Off when there is no template to clone; it can still be turned on
         // to build one.
         .onChange(of: templateAvailable, initial: true) {
-            if let templateAvailable, !isAppleTVGuest, !patches.customisesRestoredSystem {
+            if let templateAvailable, !requiresStandaloneRestore, !patches.customisesRestoredSystem {
                 usesTemplate = templateAvailable
             }
         }
         // The Minimal preset is restored on its own and not slimmed.
         .onChange(of: patches.customisesRestoredSystem) { _, restored in
-            guard !isAppleTVGuest else { return }
+            guard !requiresStandaloneRestore else { return }
             if restored {
                 usesTemplate = false
                 slimming.slim = false
@@ -310,9 +327,9 @@ struct VPhoneLaunchpadNewMachineView: View {
                         hardwarePage
                         advancedSections(.hardware)
                     case .template:
-                        VPhoneLaunchpadSlimmingSections(part: .template, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, forAppleTV: isAppleTVGuest, forRestoredSystem: patches.customisesRestoredSystem)
+                        VPhoneLaunchpadSlimmingSections(part: .template, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, requiresStandaloneRestore: requiresStandaloneRestore, forRestoredSystem: patches.customisesRestoredSystem)
                     case .slimming:
-                        VPhoneLaunchpadSlimmingSections(part: .slimming, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, forAppleTV: isAppleTVGuest, forRestoredSystem: patches.customisesRestoredSystem)
+                        VPhoneLaunchpadSlimmingSections(part: .slimming, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, requiresStandaloneRestore: requiresStandaloneRestore, forRestoredSystem: patches.customisesRestoredSystem)
                     case .firmware:
                         bundleSection
                         firmwareSourceSection
@@ -448,7 +465,7 @@ struct VPhoneLaunchpadNewMachineView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             } else {
-                Text("Choose an iPhone IPSW and a cloudOS IPSW in Advanced Options.").foregroundStyle(.red)
+                Text("Choose a guest IPSW and a cloudOS IPSW in Advanced Options.").foregroundStyle(.red)
             }
         } else if let own = ownCloudOS {
             Text(hasKernelcacheIPSW
@@ -640,7 +657,7 @@ struct VPhoneLaunchpadNewMachineView: View {
             Toggle("Use Specified Firmware", isOn: $usesCustomSources)
 
             if usesCustomSources {
-                sourceField("iPhone IPSW", $iphoneSource)
+                sourceField("Guest IPSW", $iphoneSource)
                 sourceField("cloudOS IPSW", $cloudOSSource)
             } else if let pairing = selectedPairing, let own = pairing.matchingCloudOS {
                 Picker("cloudOS", selection: $usesOwnCloudOS) {
@@ -802,36 +819,39 @@ struct VPhoneLaunchpadNewMachineView: View {
 
     /// Select a guest device and its newest release.
     private func choose(_ productType: String?) {
-        let hadOwnPreset = hasOwnPresetGuest
-        let wasGuest = guest
+        let previous = guestProductType
         guest = productType
         pairing = selectedGuest?.defaultPairing?.id
-        // Each Apple TV and Apple Watch starts from a preset of its own.
-        guard hasOwnPresetGuest != hadOwnPreset || hasOwnPresetGuest && wasGuest != productType else { return }
-        // An Apple TV or Apple Watch guest is restored on its own with a
-        // preset of its own: templates and slimming drive iOS Setup Assistant
-        // and its apps.
+        applyGuestDefaults(previousProductType: previous)
+    }
+
+    /// Custom IPSWs carry the guest identity in their manifest or file name.
+    private var guestProductType: String? {
+        usesCustomSources ? customGuestProductType : selectedGuest?.productType
+    }
+
+    /// Apple TV and HomePod are restored without iOS templates or slimming.
+    private var requiresStandaloneRestore: Bool {
+        guestProductType?.hasPrefix("AppleTV") == true || guestProductType?.hasPrefix("AudioAccessory") == true
+    }
+
+    private func applyGuestDefaults(previousProductType: String?) {
+        let previousPreset = VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: previousProductType)
+        let nextPreset = VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: guestProductType)
+        let hadOwnPreset = previousPreset != VPhoneLaunchpadPatchSelection.defaultPreset
+        let hasOwnPreset = nextPreset != VPhoneLaunchpadPatchSelection.defaultPreset
+        // Preserve custom iPhone/iPad patch and template settings when
+        // switching between guests that share the iOS creation workflow.
+        guard hadOwnPreset != hasOwnPreset
+            || hasOwnPreset && previousProductType != guestProductType else { return }
         patches = VPhoneLaunchpadPatchSelection()
-        if hasOwnPresetGuest {
-            patches.preset = VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: productType)
-            usesTemplate = false
+        patches.preset = VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: guestProductType)
+        usesTemplate = hasOwnPreset ? false : templateAvailable ?? true
+        slimming = VPhoneLaunchpadSlimming()
+        if hasOwnPreset {
             slimming.slim = false
-        } else {
-            usesTemplate = templateAvailable ?? true
-            slimming = VPhoneLaunchpadSlimming()
         }
         Task { await loadPatchCatalog() }
-    }
-
-    /// An Apple TV from the catalog, which is built without a template.
-    private var isAppleTVGuest: Bool {
-        !usesCustomSources && selectedGuest?.isAppleTV == true
-    }
-
-    /// An Apple TV, Apple Watch or iOS 18 guest from the catalog: each has a
-    /// preset of its own.
-    private var hasOwnPresetGuest: Bool {
-        !usesCustomSources && (selectedGuest?.isAppleTV == true || selectedGuest?.isWatch == true || linksKernelFirst)
     }
 
     /// Read again whenever the preset or the version changes: `inPreset`, which
@@ -879,10 +899,9 @@ struct VPhoneLaunchpadNewMachineView: View {
             bundleVersion: bundleVersion,
             iphoneSource: iphone,
             cloudOSSource: cloudOS,
-            // An iPad IPSW often covers two sizes; name the one chosen. An
-            // Apple TV, Apple Watch or iOS 18 guest is named too, so the
-            // restore tree and log say which.
-            device: usesCustomSources ? nil : selectedGuest.flatMap { $0.isPad || $0.isAppleTV || $0.isWatch || $0.linksKernelFirst ? $0.productType : nil },
+            // An iPad IPSW often covers two sizes; name the one chosen.
+            // Apple TV and HomePod are named too, so the restore tree identifies them.
+            device: guestProductType,
             cpuCount: cpu,
             memoryMB: memoryMB,
             diskSizeGB: diskSizeGB,

@@ -19,6 +19,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         case iPhone
         case iPad
         case appleTV
+        case homePod
         case watch
 
         public var osName: String {
@@ -26,8 +27,15 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
             case .iPhone: "iOS"
             case .iPad: "iPadOS"
             case .appleTV: "tvOS"
+            case .homePod: "HomePod Software"
             case .watch: "watchOS"
             }
+        }
+
+        /// Apple TV and HomePod share the tvOS executable platform and
+        /// filesystem layout. Their user interfaces and device idioms differ.
+        public var usesTVOS: Bool {
+            self == .appleTV || self == .homePod
         }
     }
 
@@ -38,7 +46,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     public let deviceClass: String
     /// The marketing name, for logs and prompts.
     public let productName: String
-    /// The guest display: a device panel, or a provisional virtual TV canvas.
+    /// The guest display: a device panel, or a provisional virtual canvas.
     public let screen: VPhoneVirtualMachineManifest.ScreenConfig
 
     public init(
@@ -57,6 +65,10 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
 
     public var isPad: Bool {
         family == .iPad
+    }
+
+    public var usesTVOS: Bool {
+        family.usesTVOS
     }
 
     /// Whether the guest boots a device tree of its own that presents this
@@ -199,6 +211,17 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         screen: .init(width: 3840, height: 2160, pixelsPerInch: 144, scale: 2.0),
     )
 
+    /// HomePod mini (B520AP). It has no physical display; this small virtual
+    /// canvas satisfies the VM graphics configuration and is not a panel
+    /// specification or a promise of a graphical HomePod interface.
+    public static let audioAccessory5_1 = VPhoneGuestDevice(
+        family: .homePod,
+        productType: "AudioAccessory5,1",
+        deviceClass: "b520ap",
+        productName: "HomePod mini",
+        screen: .init(width: 320, height: 320, pixelsPerInch: 72, scale: 1.0),
+    )
+
     /// Apple Watch Series 11 (GPS), 46 mm: 416x496 at 330 ppi, 208x248 points.
     /// The research board's kernel boots it with the watchOS kexts of its IPSW
     /// (the `watch` kernelcache recipe); N227b's device tree supplies the watch
@@ -212,7 +235,8 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     )
 
     /// Whether the guest's userland is plain arm64 rather than arm64e: only
-    /// the Apple TV HD's. It has no paravirtual GPU driver to load, and its
+    /// the Apple TV HD's. HomePod mini 27.0 ships arm64e dyld and launchd.
+    /// The Apple TV HD has no paravirtual GPU driver to load, and its
     /// dyld needs the TV TPRO patches.
     public var hasPlainArm64Userland: Bool {
         self == .appleTV5_3
@@ -238,6 +262,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         iPad16_3, iPad16_5,
         iPad17_1, iPad17_3,
         appleTV5_3, appleTV14_1,
+        audioAccessory5_1,
         watch7_18,
     ]
 
@@ -274,7 +299,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     public func restoreTreeName(version: String, build: String) -> String {
         switch family {
         case .iPhone: "\(productType)_\(version)_\(build)_Restore"
-        case .iPad, .appleTV, .watch: "iPhoneOS_\(productType)_\(version)_\(build)_Restore"
+        case .iPad, .appleTV, .homePod, .watch: "iPhoneOS_\(productType)_\(version)_\(build)_Restore"
         }
     }
 

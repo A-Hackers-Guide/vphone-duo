@@ -1,6 +1,7 @@
 import ArgumentParser
 import FirmwarePatcher
 import Foundation
+import VPhoneArchiveKit
 import VPhoneCoreKit
 import VPhonePatchKit
 
@@ -54,7 +55,7 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
     ))
     var device: String?
     @Option(help: ArgumentHelp(
-        "Full OTA (.aea) URL or local path for a device Apple ships no IPSW for (AppleTV14,1) (default: the catalog's OTA of the IPSW's build)",
+        "Full OTA (.aea or .zip) URL or local path for an OTA userland guest, including Apple TV 4K and HomePod mini (default: the catalog's OTA when required)",
         valueName: "ota",
     ))
     var otaSource: String?
@@ -87,8 +88,26 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
     @Flag(name: .customShort("v"), help: "Increase verbosity: -v tool detail, -vv guest serial, -vvv internal trace")
     var verboseCount: Int
 
-    private var isAppleTV: Bool {
-        VPhoneGuestDevice.named(device)?.family == .appleTV
+    /// A local donor can identify the guest even when --device is omitted.
+    /// Validation reads it once; explicit device selection always takes precedence.
+    private var inferredProductType: String?
+
+    private var selectedGuest: VPhoneGuestDevice? {
+        VPhoneGuestDevice.named(device ?? inferredProductType)
+    }
+
+    private var selectedDevice: String? {
+        device ?? inferredProductType
+    }
+
+    private var ipswCacheDirectory: URL {
+        ipswCache.map {
+            URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true)
+        } ?? VPhoneResources.ipswCacheDirectory()
+    }
+
+    private var usesTVOS: Bool {
+        selectedGuest?.usesTVOS == true
     }
 
     /// A preset that customises the system before the restore (`minimal`): the
@@ -104,9 +123,11 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
     /// Apple Watch takes the watch preset, an iPhone XS Max `minimal`: its iOS 18
     /// research board kernel boots no other.
     private var defaultPreset: String {
-        switch VPhoneGuestDevice.named(device) {
+        switch selectedGuest {
         case let guest? where guest.family == .appleTV:
             guest.restoreBase == nil ? VPhonePatchPreset.tvOSIdentifier : VPhonePatchPreset.tvOS4KIdentifier
+        case let guest? where guest.family == .homePod:
+            VPhonePatchPreset.homePodMiniIdentifier
         case let guest? where guest.family == .watch:
             VPhonePatchPreset.watchOSIdentifier
         case let guest? where guest.notchedArtworkSubtype != nil:
@@ -116,23 +137,34 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         }
     }
 
-    func validate() throws {
+    mutating func validate() throws {
+        // Named templates reject firmware options below and need no IPSW read.
+        // localArchive also recognizes an existing cached remote source without
+        // downloading or changing the cache.
+        if template == nil, device == nil, let iphoneSource,
+           let archive = try VPhoneIPSWCache.localArchive(iphoneSource, in: ipswCacheDirectory)
+        {
+            inferredProductType = VPhoneIPSWCache.guestDevice(for: archive)?.productType
+        }
+
         if template != nil, noTemplate {
             throw ValidationError("--template and --no-template exclude each other.")
         }
         if noTemplate, try !slimming.request.isEmpty {
             throw ValidationError("The slimming switches shape a template; --no-template builds the VM without one.")
         }
-        if otaSource != nil || otaKey != nil, VPhoneGuestDevice.named(device)?.restoreBase == nil {
-            throw ValidationError("--ota-source and --ota-key are for a device Apple ships no IPSW for, such as --device AppleTV14,1.")
+        if otaSource != nil || otaKey != nil,
+           VPhoneGuestDevice.named(device)?.restoreBase == nil,
+           VPhoneGuestDevice.named(device)?.family != .homePod {
+            throw ValidationError("--ota-source and --ota-key require an OTA userland device, such as --device AppleTV14,1 or AudioAccessory5,1.")
         }
-        if isAppleTV {
+        if usesTVOS {
             // Templates and their setup boot drive iOS Setup Assistant and its apps.
             if template != nil {
-                throw ValidationError("An Apple TV guest is built without a template; --template cannot be used.")
+                throw ValidationError("A tvOS or HomePod guest is built without a template; --template cannot be used.")
             }
             if try !slimming.request.isEmpty {
-                throw ValidationError("An Apple TV guest is built without a template; the slimming switches do not apply.")
+                throw ValidationError("A tvOS or HomePod guest is built without a template; the slimming switches do not apply.")
             }
         }
         if customisesRestoredSystem {
@@ -167,7 +199,7 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         let unlocks = try unlockAtStartup.map { try VPhoneVirtualMachineConfigCommand.parseSwitch($0, option: "--unlock-at-startup") }
         let templateUse: VPhoneVirtualMachineCreator.TemplateUse = if let template {
             .identifier(template)
-        } else if noTemplate || isAppleTV || customisesRestoredSystem {
+        } else if noTemplate || usesTVOS || customisesRestoredSystem {
             .none
         } else {
             .automatic
@@ -187,7 +219,7 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         if templateUse == .none || templateUse == .automatic {
             // Prompt for any firmware component not supplied on the command line,
             // from the guest device's builds.
-            sources = try VPhoneFirmwareSourceSelection.resolve(iphone: iphoneSource, cloudos: cloudosSource, device: device)
+            sources = try VPhoneFirmwareSourceSelection.resolve(iphone: iphoneSource, cloudos: cloudosSource, device: selectedDevice)
             guard sources.iphoneSource != nil, sources.cloudosSource != nil else {
                 throw ValidationError("Specify both --iphone-source and --cloudos-source when running without a terminal.")
             }
@@ -202,10 +234,8 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
             iphoneSource: sources.iphoneSource,
             cloudosSource: sources.cloudosSource,
             gpuDriverBundle: gpuDriverBundle.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) },
-            ipswCacheDirectory: ipswCache.map {
-                URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true)
-            } ?? VPhoneResources.ipswCacheDirectory(),
-            device: device,
+            ipswCacheDirectory: ipswCacheDirectory,
+            device: selectedDevice,
             otaSource: otaSource,
             otaKey: otaKey,
             patchPreset: preset ?? defaultPreset,

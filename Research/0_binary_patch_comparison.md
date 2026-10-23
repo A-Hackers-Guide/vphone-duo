@@ -1,5 +1,211 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **HomePod integration with upstream main (2026-10-23).**
+> Merged upstream `d14231a4` into the HomePod branch, retaining upstream's
+> 2.12 compatibility contract, Apple Watch, research-board and sealed restore
+> image workflows alongside HomePod's donor inference, OTA userland and audio
+> routing. The `homepod-mini` shipped preset now names the research-board set
+> and blocks the new manual Frida relaxations and iOS Bluetooth-controller
+> patch, matching its built-in definition. HomePod's original global product
+> token, 48 kHz audio-only routing and Sound Glow policies are unchanged.
+> Validation: full VPhone bundle (including admission checks) and Launchpad
+> builds passed; 683 CoreKit, 170 selected patch/pipeline and 105 archive tests
+> passed. The CoreKit throughput threshold needed one isolated retry after
+> failing during the full parallel run. Two research-board firmware comparison
+> tests skipped without their optional fixtures. HomePod display, setup,
+> welcome, Siri and Sound Glow native harnesses and Launchpad machine/cache,
+> compatibility, template and control harnesses passed. No bundle was installed
+> and no live VM behavior was retested for this merge.
+
+> **HomePod 27.2 OTA and native Sound Glow (2026-10-23, live verified).**
+> The 27.0 donor lacks the artwork/color extraction and native media animation
+> cases introduced in 27.2. `system-homepod-exp-ota_userland` stages the full
+> Apple HomePod mini OTA over the same device's 27.0 IPSW, retaining its restore
+> identity and cloudOS boot chain, as the Apple TV OTA pairing does.
+> `system-homepod-exp-sound_glow` injects the existing guest adapter into
+> NowPlayingCap and generates `/usr/share/vphone/HomePodSoundGlow.plist`.
+> Its narrow native `AccessorySettingProvider.mediaUI` getter selects value 1;
+> Apple's artwork service, color extractor and CAPAnimationEffect.media remain
+> responsible for rendering. Opt-out restores the original app and removes the
+> policy. Both declarations are HomePod-only, require 27.2 or later, and are
+> selected by default only by `homepod-mini`. Original product identity and
+> existing audio/Siri behavior are retained. Local validation and native
+> evidence are recorded in [Sound Glow](Firmware/homepod_sound_glow.md).
+> Live 27.2 boot and clear Music/AirPlay audio are verified. Initial playback
+> exposed an unresolved own-device endpoint in the native artwork request.
+> A scoped request adapter selects MediaRemote's local destination only for
+> that own-device UID; native request/response and artwork processing remain
+> intact. Remote requests and opt-out pass through. The routing correction,
+> artwork processing succeed live in 24K120. Purple and yellow album artwork
+> produce distinct native animated colors; pause fades to idle and resume works.
+> A follow-up to the existing Siri speech patch uses a mixable, ducking auxiliary
+> session with notify-on-deactivation after the live interruption test made
+> Music abandon the receiver. The owner confirmed full speech while Music stayed
+> on HomePod; native frames handed off to Siri and returned to colored music.
+> Successful installation now records the actual mounted HomePod SystemVersion
+> after disk commit, preserving cloudOS and variant. Preparing an OTA alone does
+> not promote the host label; full-install command/creator variant recording
+> retains HomePod identity. Restore-info tests cover this merge.
+> Opt-out removes the policy and injected load command and restores white native
+> playback. Re-enable plus cold boot restores audible music and colored native
+> animation, confirmed by the owner and changing valid RGB reports. Final live
+> bundle: `2.11.0-local.8e60e757`; original 27.0 VM and default bundle preserved.
+
+> **HomePod Siri speech policy (2026-10-23, live speech verified).**
+> New optional `system-homepod-exp-siri_speech` generates
+> `/usr/share/vphone/HomePodSiriSpeech.plist` with `Enabled=true`, restricted to
+> 27.x HomePod guests and selected by default only in `homepod-mini`. Installation
+> requires vphoned, the top-cap adapter and virtio sound; welcome additionally
+> requires this speech policy. Opt-out removes only the selected policy.
+> The native branch supports an output-only auxiliary AVAudioSession ID carried
+> on a normal type 13 SVXSystemEvent, allowing SoundBoard's existing Siri lifecycle
+> and completion to handle speech without entering physical recording setup.
+> The candidate repair is scoped to the existing SoundBoard adapter; global
+> product identity, audio route and microphone capability flags remain intact.
+> Live `siriSay:` speaks the full exact welcome sentence. SiriHeadlessService
+> reports synthesis success, sirittsd records playback start/finish, SoundBoard
+> returns to idle and deactivates the auxiliary session. Colorful native frames
+> advance during speech and return to black afterward.
+> See [welcome and speech policy](Firmware/homepod_welcome.md).
+
+> **HomePod welcome policy (2026-10-23, live sequence verified).**
+> New optional `system-homepod-exp-welcome` is restricted to 27.x and admitted
+> only for HomePod guests. Only `homepod-mini` selects it by default. The guest
+> installer checks that vphoned, the HomePod top cap, local setup completion and
+> virtio sound and native Siri speech are selected, then generates
+> `/usr/share/vphone/HomePodWelcome.plist` with `Enabled=true`. Opt-out removes
+> only that policy; once-only Data state remains owned by the guest runtime.
+> The coordinator runs in SoundBoard's existing injected HomePod adapter, using
+> native tone completion, a coordinated Identify activity and Siri finalization
+> after boot readiness. A durable guest-identity claim prevents replay across
+> restarts and updates while allowing each template clone its own welcome.
+> The owner confirms tone, exact speech and both animations on automatic boot.
+> Logs establish TonePlaying, ToneFinished, SpeechRequested and SpeechFinalized.
+> Live inspection caught Identify remaining active: cleanup must call the
+> coordinated `setLocalSessionActive:NO`, which invokes the subclass cleanup;
+> calling `endLocalSessionActivity` alone does not relinquish ownership. The
+> regression mock now preserves that native distinction. Final installed bundle
+> `2.11.0-local.3f1d474e` passes the complete sequence on a fresh-identity clone,
+> returning to an empty activity stack. The original claim/status stay byte
+> identical after update, cold boot and SoundBoard restart with no replay.
+> Direct Siri speech, native animated frames and ordinary tone 1 still pass
+> afterward, including the owner's audible and return-to-idle confirmation.
+> See [welcome policy and native behavior](Firmware/homepod_welcome.md).
+
+> **HomePod welcome pre-live ABI audit (2026-10-23).**
+> Direct 24J361 donor-cache metadata establishes UInt32 tone playback
+> (`SBUITonePlaybackManager play:completion:`, `v28@0:8I16@?20`). The candidate's
+> initial UInt64 mock and guard agreed with each other but would reject the real
+> guest method. Both are corrected, with an independent donor-signature fixture
+> and rejection coverage for the old shape. Native Siri state/selector analysis
+> also confirms a presenting-state activity path separate from microphone audio
+> activation; live animation, metering and audibility remain pending.
+
+> **HomePod audio-only identity correction (2026-10-22, live validation).**
+> An A/B boot of the same installed bundle, changing only the validated donor
+> product token back to its prior virtual value, restores the native red replay;
+> restoring the donor token blacks the same fixture. The donor identity enables
+> HomePodDisplayService's physical gamma path, which requires absent brightness
+> hardware. Audio now selects native B520 route **4** through VirtualAudio's own
+> `ProductIDOverride`, stored by vphoned and set in-process by the HAL plugin.
+> The boot-tree HomePod capability patch retains the original VM product token.
+> `preboot-homepod-exp-audio_product` is now blocked in every preset; its existing
+> inverse restores previously installed guests from the shared Preboot backup.
+> The old repair remains declared for explicit research and reversible migration.
+> No display workaround or new instruction patch. All 88 focused Xcode firmware
+> tests, four audio transport harnesses, the unchanged display adapter harness,
+> the full bundle build and strict signature verification pass. Installed
+> `2.11.0-local.40cd1d45` restores the exact original Preboot tree; MobileGestalt
+> retains the virtual product enum while VirtualAudio uses route 4. The owner
+> confirms clear tones. LED replay and native identify output work across two
+> cold boots; the second playback run has zero starvation/drops in all cycles.
+
+> **HomePod audio port (2026-10-22, live routing validation).**
+> New `preboot-homepod-exp-audio_product` restores the donor's exact 20-byte
+> `/product/product-id` in Preboot through the existing reversible repair
+> composition; new HomePod boot trees receive it too. MobileGestalt then resolves
+> HomePod mini's native VirtualAudio product 4 instead of the VM's unknown 0.
+> `homepod-mini` selects the shared virtio-snd HAL driver, retargeted/resealed
+> for tvOS, publishing its output as the native `PuffinOutput` endpoint. It does
+> not apply the iPhone 8010 override or VirtualAudio instruction/tuning patches.
+> Other presets keep the new identity repair off and TV excludes the driver.
+> First live run proves native product 4, B520 tuning selection and driver load;
+> routing requires the HomePod-only raw UInt32 `mode/glob/0` custom property.
+> The driver advertises this through `cust`, retains the native `defa`/`raww`/
+> `tphn`/`meas` mode and reports changes. Corrected build `61d08ba5` routes to
+> `PuffinOutput`; six playback cycles have zero starvation/drop counters.
+> Final build `b284734a` plays ordinary-session test tones on the Mac's selected
+> Studio Display speakers; the owner confirms clear tones.
+> Live silence traced to B520 speaker DSP buffer overruns at 44.1 kHz.
+> HomePod output now advertises only its 48 kHz wire rate; forcing a 48 kHz
+> session removes the errors and produces nonzero PCM in a scoped host tap.
+> iPhone/iPad retain their alternate-rate support.
+> No new instruction patch. See [native evidence and validation](Guest/homepod_audio.md).
+
+> **HomePod setup completion and controls (2026-10-22, live validation).**
+> New `system-homepod-exp-setup_bypass` is HomePod-only, restricted to 27.x,
+> and selected only by `homepod-mini`. It installs the System marker
+> `/usr/share/vphone/HomePodSetup.plist`. A short-lived mobile helper journals
+> `SetupDone` and `SetupFinishedAllSteps` in `com.apple.purplebuddy`, synchronizes
+> them, and calls the donor's `BYSetupAssistantPrepareLaunchSentinel` before
+> checking the native needs-setup and initial-run APIs. The sentinel is a
+> per-user POSIX semaphore, not a filesystem flag. Removing the marker restores
+> exactly the original two keys, including absent values; the inverse survives
+> until native restoration succeeds. The helper remains installed for rollback
+> even if vphoned is deselected. This completes local setup state; it does not
+> provision an Apple Account or HomeKit home. **Live late-start correction:**
+> an already-running HPSetup retains assistant/voice-trigger assertions even
+> after SoundBoard receives completion and runs post-setup initialization.
+> Native preparation publishes fresh completion; after verification, the helper
+> replays the donor's exported notification only for an existing sentinel and
+> gracefully stops only mobile's exact
+> `/Applications/HPSetup.app/HPSetup`, rechecking identity immediately before
+> SIGTERM. It observes disappearance before reporting success; failures retain
+> the inverse for retry. No SIGKILL, arbitrary process verb or new entitlement.
+> Opt-out does not terminate processes. No new instruction patch.
+> vphoned also exposes all 29 `SBSDebugInterface` methods through a fixed,
+> ABI-checked catalog using `com.apple.debuginfo.soundboard`; the HomePod-only
+> Controls section includes native animation/phase choices and typed button and
+> LED replay adapters. The host top cap now uses runtime-compiled Metal 4 optics
+> with a macOS 15 Metal compatibility path. GPU tests and 35 Xcode catalog and
+> selection tests pass. Final bundle `2.11.0-local.26745ac8` passed live late
+> completion (one native init), fresh/repeated boot, and native Metal display
+> presentation/reconnection. Opt-out restored absent keys and setup behavior.
+> See [implementation, live evidence, and service boundaries](Firmware/homepod_soundboard_controls.md).
+
+> **HomePod top cap (2026-10-22).** `system-homepod-exp-top_cap` installs
+> `/usr/share/vphone/HomePodDisplay.plist`, extracted from the selected board's
+> `/arm-io/dockchannel-rtp/rtp-transport/display` node. It preserves the donor's
+> `MDXCoords`, `MDYCoords`, `MDRingCoords`, `MDBitDepth` and `MDHWVersion` payloads
+> for vphoned's virtual MiniDisplay HID device. Only `homepod-mini` selects it
+> by default; the installer rejects other guest families and missing or invalid
+> donor metadata. Both full installation and environment updates stage it through
+> confined descriptors; deselecting removes this added configuration and its
+> receipt entry. It also installs `libvphonehomepoddisplay.dylib` only into
+> SoundBoard through an `LC_LOAD_WEAK_DYLIB` in its backed-up executable, preserving
+> its entitlements and resealing its app bundle. launchd strips `DYLD_*`
+> environment variables from this platform process, so both the standalone
+> daemon plist and launchd cache are cleaned of the earlier environment route
+> while preserving their other keys and inserted libraries.
+> `IOHIDUserDevice` reserves `IOClass`;
+> the shim adapts MiniDisplay's discovery callback and class-identity query only
+> for the exact virtual display ID. On a failed submission it can replace that
+> virtual handle after vphoned restarts, retrying the same native frame and
+> throttling device enumeration to once per second. Other devices retain their
+> original failure behavior. LED reports still traverse the native HID device. Deselecting
+> restores the original SoundBoard executable from `.bak`, reseals the app,
+> and deletes the library. The VM retains its virtual hardware tree.
+> No instruction patch is added.
+
+> **HomePod mini (2026-10-22).** `AudioAccessory5,1` / B520 uses its own
+> HomePod Software 27.0 (24J361) monolithic arm64e TVOS IPSW with the cloudOS
+> 26.4 boot chain. The dedicated `homepod-mini` preset retains 27 compatibility
+> and vphoned, blocks the Apple TV OTA swap, HD TPRO workaround and iPhone
+> GPU/audio/environment hooks. New `devicetree-cfw-homepod_product` copies
+> concrete `horseman`, `siri-hub` and app architecture capabilities from B520's
+> donor tree only into its installed identity. No new kernel instruction patch.
+> See [HomePod mini support](Firmware/homepod_mini_support.md) for evidence,
+> validation status and limitations.
 > **iPhone Duo bring-up (2026-10-23, first boot fails):**
 > `iPhone19,4` / V68AP, iOS 27.1 (24A94425), is registered with one outer
 > display and paired with cloudOS 26.4 (23E5207q). Its device tree reports

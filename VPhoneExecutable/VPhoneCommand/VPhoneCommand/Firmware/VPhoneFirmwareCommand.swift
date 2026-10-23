@@ -244,7 +244,7 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
     ))
     var device: String?
     @Option(help: ArgumentHelp(
-        "Full OTA (.aea) URL or local path for a device Apple ships no IPSW for (AppleTV14,1), restored over its base's IPSW of the same build (default: the catalog's OTA of that build)",
+        "Full OTA (.aea or .zip) URL or local path for an OTA userland guest, including Apple TV 4K and HomePod mini (default: the catalog's OTA when required)",
         valueName: "ota",
     ))
     var otaSource: String?
@@ -268,8 +268,10 @@ struct VPhoneFirmwarePrepareCommand: ParsableCommand {
         if let device, VPhoneGuestDevice.named(device) == nil {
             throw ValidationError("vphone runs \(VPhoneGuestDevice.known.map(\.productType).joined(separator: ", ")) guests, not \(device).")
         }
-        if otaSource != nil || otaKey != nil, VPhoneGuestDevice.named(device)?.restoreBase == nil {
-            throw ValidationError("--ota-source and --ota-key are for a device Apple ships no IPSW for, such as --device AppleTV14,1.")
+        if otaSource != nil || otaKey != nil,
+           VPhoneGuestDevice.named(device)?.restoreBase == nil,
+           VPhoneGuestDevice.named(device)?.family != .homePod {
+            throw ValidationError("--ota-source and --ota-key require an OTA userland device, such as --device AppleTV14,1 or AudioAccessory5,1.")
         }
         guard (1 ... 16).contains(downloadConnections) else {
             throw ValidationError("--download-connections takes 1 to 16, not \(downloadConnections).")

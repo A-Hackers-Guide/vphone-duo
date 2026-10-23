@@ -33,7 +33,11 @@ struct MachineProductTypeTests {
         let tv = root.appendingPathComponent("tv-01", isDirectory: true)
         try manager.createDirectory(at: tv.appendingPathComponent("FirmwareOriginals/iPhoneOS_AppleTV5,3_26.6_23L773_Restore"), withIntermediateDirectories: true)
         expect(VPhoneLaunchpadMachine.guestProductType(in: tv) == "AppleTV5,3", "Apple TV restore tree")
+        let homePod = root.appendingPathComponent("homepod-mini", isDirectory: true)
+        try manager.createDirectory(at: homePod.appendingPathComponent("FirmwareOriginals/AudioAccessory5,1_27.0_24J361_Restore"), withIntermediateDirectories: true)
+        expect(VPhoneLaunchpadMachine.guestProductType(in: homePod) == "AudioAccessory5,1", "HomePod restore tree")
         expect(VPhoneLaunchpadMachine.guestProductType(in: root.appendingPathComponent("missing")) == nil, "nothing to read")
+
 
         // restore-info.json's device is the restore identity's, not the guest's.
         let json = #"""
@@ -48,7 +52,14 @@ struct MachineProductTypeTests {
         machine.guestProductType = VPhoneLaunchpadMachine.guestProductType(in: tv)
         expect(machine.isAppleTV && !machine.isPad && machine.osName == "tvOS", "Apple TV guest")
 
+        machine.guestProductType = VPhoneLaunchpadMachine.guestProductType(in: homePod)
+        expect(machine.isHomePod && !machine.isAppleTV && !machine.isPad && machine.osName == "HomePod Software", "HomePod guest")
+        let homePodDevice = VPhoneLaunchpadFirmwareCatalog.Device(productType: "AudioAccessory5,1", name: "HomePod mini", family: "homePod", pairings: [])
+        expect(homePodDevice.isHomePod && !homePodDevice.isAppleTV && homePodDevice.requiresStandaloneRestore, "HomePod catalog family")
+        expect(homePodDevice.osName == "HomePod Software", "HomePod catalog OS label")
+
         // An OTA pairing's build comes from the bundle; an IPSW's from its name.
+
         let catalog = #"""
         {"device":"iPhone17,3","pairings":[],"devices":[{"productType":"AppleTV14,1","name":"Apple TV 4K (3rd generation)","family":"appleTV","pairings":[
          {"ios":{"name":"tvOS 26.6","url":"https://example.com/AppleTV5,3_26.6_23L773_Restore.ipsw"},"recommendedCloudOS":{"name":"cloudOS 26.4","url":"https://example.com/c"}},

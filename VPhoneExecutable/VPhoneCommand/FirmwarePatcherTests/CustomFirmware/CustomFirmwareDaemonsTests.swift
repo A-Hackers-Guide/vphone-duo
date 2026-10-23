@@ -250,12 +250,14 @@ struct CustomFirmwareDaemonsTests {
                 "Manifest": entries,
             ] as PlistDict]]
         }
-        try CustomFirmwareDaemons.savePlist(manifest(entries: entries), to: url)
-        #expect(try CustomFirmwareDaemons.filesystemLayout(buildManifest: url) == .monolithic)
+        for products in [["AppleTV5,3"], ["AudioAccessory5,1"]] {
+            try CustomFirmwareDaemons.savePlist(manifest(products: products, entries: entries), to: url)
+            #expect(try CustomFirmwareDaemons.filesystemLayout(buildManifest: url) == .monolithic)
+        }
 
         // Broken iPhone firmware and an uninspected TV board must not gain a
         // fallback merely because the expected cryptex entries are missing.
-        for products in [["iPhone17,3"], ["AppleTV11,1"], []] {
+        for products in [["iPhone17,3"], ["AppleTV11,1"], ["AudioAccessory1,1"], ["AudioAccessory6,1"], ["AudioAccessory5,1", "AudioAccessory6,1"], []] {
             try CustomFirmwareDaemons.savePlist(manifest(products: products, entries: entries), to: url)
             #expect(throws: CustomFirmwareDaemons.DaemonError.self) {
                 try CustomFirmwareDaemons.filesystemLayout(buildManifest: url)
@@ -263,14 +265,18 @@ struct CustomFirmwareDaemonsTests {
         }
         var partial = entries
         partial["Cryptex1,SystemOS"] = ["Info": ["Path": "SystemOS.dmg"]] as PlistDict
-        try CustomFirmwareDaemons.savePlist(manifest(entries: partial), to: url)
-        #expect(throws: CustomFirmwareDaemons.DaemonError.self) {
-            try CustomFirmwareDaemons.filesystemLayout(buildManifest: url)
+        for products in [["AppleTV5,3"], ["AudioAccessory5,1"]] {
+            try CustomFirmwareDaemons.savePlist(manifest(products: products, entries: partial), to: url)
+            #expect(throws: CustomFirmwareDaemons.DaemonError.self) {
+                try CustomFirmwareDaemons.filesystemLayout(buildManifest: url)
+            }
         }
         entries.removeValue(forKey: "SystemVolume")
-        try CustomFirmwareDaemons.savePlist(manifest(entries: entries), to: url)
-        #expect(throws: CustomFirmwareDaemons.DaemonError.self) {
-            try CustomFirmwareDaemons.filesystemLayout(buildManifest: url)
+        for products in [["AppleTV5,3"], ["AudioAccessory5,1"]] {
+            try CustomFirmwareDaemons.savePlist(manifest(products: products, entries: entries), to: url)
+            #expect(throws: CustomFirmwareDaemons.DaemonError.self) {
+                try CustomFirmwareDaemons.filesystemLayout(buildManifest: url)
+            }
         }
     }
 
@@ -279,13 +285,20 @@ struct CustomFirmwareDaemonsTests {
         let directory = try CustomFirmwareDaemonsFixtures.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appending(path: "BuildManifest.plist")
-        for (platform, osPath) in [("iphoneos", "OS.dmg"), ("appletvos", "../OS.dmg"), ("appletvos", "/OS.dmg")] {
+        for (product, platform, osPath) in [
+            ("AppleTV5,3", "iphoneos", "OS.dmg"),
+            ("AppleTV5,3", "appletvos", "../OS.dmg"),
+            ("AppleTV5,3", "appletvos", "/OS.dmg"),
+            ("AudioAccessory5,1", "iphoneos", "OS.dmg"),
+            ("AudioAccessory5,1", "appletvos", "../OS.dmg"),
+            ("AudioAccessory5,1", "appletvos", "/OS.dmg"),
+        ] {
             var entries: PlistDict = [:]
             for component in ["OS", "SystemVolume", "StaticTrustCache", "Ap,SystemVolumeCanonicalMetadata"] {
                 entries[component] = ["Info": ["Path": component == "OS" ? osPath : "Firmware/image"]] as PlistDict
             }
             try CustomFirmwareDaemons.savePlist([
-                "SupportedProductTypes": ["AppleTV5,3"],
+                "SupportedProductTypes": [product],
                 "BuildIdentities": [["Ap,SDKPlatform": platform, "Info": ["RestoreBehavior": "Erase"], "Manifest": entries] as PlistDict],
             ], to: url)
             #expect(throws: CustomFirmwareDaemons.DaemonError.self) {

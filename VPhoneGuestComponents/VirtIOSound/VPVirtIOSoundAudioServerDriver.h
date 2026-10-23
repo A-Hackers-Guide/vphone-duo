@@ -119,6 +119,7 @@ static const ASDStreamDirection ASDStreamDirectionInput = kAudioObjectPropertySc
 - (void)halInitializeWithPluginHost:(AudioServerPlugInHostRef)host;
 - (void)addAudioDevice:(id)device;
 - (NSArray *)audioDevices;
+- (void)changedProperty:(const AudioObjectPropertyAddress *)address forObject:(ASDObject *)object;
 @end
 
 /// Signatures from the macOS plugin's block type encodings.
@@ -224,8 +225,8 @@ typedef int (^ASDIOBlock)(
                      inScope:(UInt32)scope
                   withPlugin:(ASDPlugin *)plugin
             andObjectClassID:(UInt32)classID;
-@property (nonatomic, readonly, getter=booleanValue) BOOL booleanValue;
-- (void)setValue:(UInt32)value;
+@property (nonatomic, readonly) BOOL value;
+- (void)setValue:(BOOL)value;
 /// As `changeDecibelValue:` above, for a set of the control's value.
 - (BOOL)changeValue:(BOOL)value;
 @end
@@ -246,7 +247,7 @@ typedef int (^ASDIOBlock)(
                       withPlugin:(ASDPlugin *)plugin
                  andObjectClassID:(UInt32)classID;
 - (void)addValue:(ASDSelectorValue *)value;
-- (void)setSelectedValues:(NSArray<ASDSelectorValue *> *)values;
+- (BOOL)setSelectedValues:(NSArray<ASDSelectorValue *> *)values;
 @end
 
 @interface ASDAudioDevice (Controls)
@@ -254,7 +255,7 @@ typedef int (^ASDIOBlock)(
 @end
 
 @interface ASDStreamFormat : NSObject <NSCopying>
-- (instancetype)initWithAudioStreamBasicDescription:(AudioStreamBasicDescription)description;
+- (instancetype)initWithAudioStreamBasicDescription:(const AudioStreamBasicDescription *)description;
 @property (nonatomic) double sampleRate;
 @property (nonatomic) double minimumSampleRate;
 @property (nonatomic) double maximumSampleRate;
@@ -270,7 +271,7 @@ typedef int (^ASDIOBlock)(
 @property (copy, nonatomic) ASDIOBlock writeMixBlock;
 /// Sent to every stream when the device's nominal sample rate changed; the
 /// default implementation reconciles the physical format with the new rate.
-- (void)deviceChangedToSamplingRate:(double)rate;
+- (BOOL)deviceChangedToSamplingRate:(double)rate;
 - (void)startStream;
 - (void)stopStream;
 @end

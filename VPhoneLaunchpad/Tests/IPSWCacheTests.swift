@@ -44,6 +44,13 @@ struct IPSWCacheTests {
         expect(tv?.kind == .appleTV && tv?.title == "tvOS 26.4 (23L243)", "TV title")
         expect(VPhoneLaunchpadIPSWRows.kindLabel(.appleTV) == "Apple TV", "TV family label")
 
+        let homePod = VPhoneLaunchpadIPSW(fileName: "AudioAccessory5,1_27.0_24J361_Restore.ipsw")
+        expect(homePod?.productTypes == ["AudioAccessory5,1"], "HomePod mini product type")
+        expect(homePod?.kind == .homePod && homePod?.title == "HomePod Software 27.0 (24J361)", "HomePod title")
+        expect(VPhoneLaunchpadIPSWRows.kindLabel(.homePod) == "HomePod", "HomePod family label")
+        expect(VPhoneLaunchpadIPSW.productType(forSource: "/tmp/AudioAccessory5,1_27.0_24J361_Restore.ipsw") == "AudioAccessory5,1", "custom HomePod source name")
+        expect(VPhoneLaunchpadIPSW.productType(forSource: "https://example.com/AudioAccessory5,1_27.0_24J361_Restore.ipsw") == "AudioAccessory5,1", "remote HomePod source name")
+
         let cachedPad = VPhoneLaunchpadIPSW(fileName: "iPad16_1_iPad16_2_26.6.2_23G90_Restore-0123456789ab.ipsw")
         expect(cachedPad?.productTypes == ["iPad16,1", "iPad16,2"], "\(String(describing: cachedPad?.productTypes))")
 
@@ -122,6 +129,18 @@ struct IPSWCacheTests {
         try zip64Archive(member: "BuildManifest.plist", contents: manifestData(iPhone)).write(to: zip64)
         let facts = try VPhoneLaunchpadIPSW.read(zip64)
         expect(facts.kind == .iPhone && facts.productTypes == ["iPhone17,3"] && facts.build == "23G90", "ZIP64 manifest")
+
+        // A local source can be renamed; its manifest determines its family.
+        let homePod = root.appendingPathComponent("renamed-homepod.ipsw")
+        try zip64Archive(member: "BuildManifest.plist", contents: manifestData([
+            "ProductVersion": "27.0", "ProductBuildVersion": "24J361",
+            "SupportedProductTypes": ["AudioAccessory5,1"],
+            "BuildIdentities": [["Info": ["DeviceClass": "b520ap"]]],
+        ])).write(to: homePod)
+        let homePodFacts = try VPhoneLaunchpadIPSW.read(homePod)
+        expect(homePodFacts.kind == .homePod, "HomePod manifest kind")
+        expect(VPhoneLaunchpadIPSW.productType(forSource: homePod.path) == "AudioAccessory5,1", "renamed local HomePod source")
+        expect(VPhoneLaunchpadIPSW.productType(forSource: homePod.absoluteString) == "AudioAccessory5,1", "HomePod file URL source")
 
         let notZip = root.appendingPathComponent("broken.ipsw")
         try Data(repeating: 0, count: 4096).write(to: notZip)
@@ -206,6 +225,10 @@ struct IPSWCacheTests {
         expect((["diskImage": "Disk.img"] as NSDictionary).write(to: phone.appendingPathComponent("config.plist"), atomically: true), "config.plist")
         expect(VPhoneLaunchpadIPSWCache.guestProductType(in: pad) == "iPad16,1", "config product type")
         expect(VPhoneLaunchpadIPSWCache.guestProductType(in: phone) == "iPhone17,3", "FirmwareOriginals product type")
+        let homePod = root.appendingPathComponent("machines/homepod-mini", isDirectory: true)
+        try manager.createDirectory(at: homePod.appendingPathComponent("FirmwareOriginals/AudioAccessory5,1_27.0_24J361_Restore", isDirectory: true), withIntermediateDirectories: true)
+        expect(VPhoneLaunchpadIPSWCache.guestProductType(in: homePod) == "AudioAccessory5,1", "HomePod restore tree product type")
+
 
         let scan = try await VPhoneLaunchpadIPSWCache.scan(libraryRoots: [library], machineFolders: [pad, phone])
         expect(scan.ipsws.count == 2 && scan.cacheDirectories.count == 2, "\(scan.ipsws.map(\.name))")

@@ -107,9 +107,9 @@ public struct VPhoneResources: Sendable {
         vphoned(for: .iPhone)
     }
 
-    /// The vphoned a guest of this family runs. Apple TV and Apple Watch take
-    /// the same arm64 daemon marked as a tvOS or watchOS executable: their
-    /// dyld refuses to load its system libraries into an iOS-platform process.
+    /// The vphoned a guest of this family runs. Apple TV and HomePod use
+    /// a tvOS executable, Apple Watch a watchOS executable: their dyld refuses
+    /// to load system libraries into an iOS-platform process.
     public func vphoned(for family: VPhoneGuestDevice.Family) -> URL {
         let name = Self.vphonedName(for: family)
         let bundled = guestResources.appendingPathComponent(name)
@@ -122,7 +122,7 @@ public struct VPhoneResources: Sendable {
 
     public static func vphonedName(for family: VPhoneGuestDevice.Family) -> String {
         switch family {
-        case .appleTV: "vphoned-tvos"
+        case .appleTV, .homePod: "vphoned-tvos"
         case .watch: "vphoned-watchos"
         case .iPhone, .iPad: "vphoned"
         }

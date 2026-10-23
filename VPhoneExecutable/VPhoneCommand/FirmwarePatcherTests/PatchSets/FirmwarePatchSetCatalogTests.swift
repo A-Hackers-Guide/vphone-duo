@@ -135,7 +135,7 @@ struct FirmwarePatchSetCatalogTests {
                     // Nothing a shipped iOS preset does should drop a boot-essential
                     // patch: these are the combinations we claim boot. The tvOS
                     // presets drop exactly the iOS ones an Apple TV has no port of.
-                    let tvPresets = [VPhonePatchPreset.tvOSIdentifier, VPhonePatchPreset.tvOS4KIdentifier]
+                    let tvPresets = [VPhonePatchPreset.tvOSIdentifier, VPhonePatchPreset.tvOS4KIdentifier, VPhonePatchPreset.homePodMiniIdentifier]
                     // `minimal` drops every boot chain patch but iBEC's and LLB's:
                     // its system is customised before the restore instead.
                     let restoreImagePresets = [VPhonePatchPreset.minimalIdentifier, VPhonePatchPreset.watchOSIdentifier]
@@ -217,8 +217,8 @@ struct FirmwarePatchSetCatalogTests {
     }
 
     @Test
-    func `Extended adds exactly the manual-only patches applicable to each base`() throws {
-        for base in ["18.6.2", "26.4", "27.0", "27.1"] {
+    func `Extended adds the applicable manual patches except the HomePod-only device`() throws {
+        for base in ["18.6.2", "26.4", "27.0", "27.1", "27.2"] {
             let version = VPhoneVersion(base)
             let cloud = VPhoneVersion("26.4")
             let standard = try VPhonePatchPlan.resolve(
@@ -235,6 +235,13 @@ struct FirmwarePatchSetCatalogTests {
             )
             let applicableManual = Set(FirmwarePatchSetCatalog.allDeclarations.filter {
                 FirmwarePatchSetCatalog.manualOnlyPatches.contains($0.identifier)
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodTopCap
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodSetupBypass
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodWelcome
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodSiriSpeech
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodAudioProduct
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodOTAUserland
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodSoundGlow
                     && $0.applicability.matches(iOSBase: version, cloudOS: cloud)
             }.map(\.identifier))
             #expect(experimental.enabled.subtracting(standard.enabled) == applicableManual)
@@ -349,7 +356,7 @@ struct FirmwarePatchSetCatalogTests {
             )
             #expect(!plan.isEnabled(patch))
         }
-        for preset in [FirmwarePatchSetCatalog.tvOSPreset, FirmwarePatchSetCatalog.tvOS4KPreset] {
+        for preset in [FirmwarePatchSetCatalog.tvOSPreset, FirmwarePatchSetCatalog.tvOS4KPreset, FirmwarePatchSetCatalog.homePodMiniPreset] {
             let plan = try VPhonePatchPlan.resolve(
                 preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
                 iOSBase: VPhoneVersion("27.0"), cloudOS: VPhoneVersion("26.4"),

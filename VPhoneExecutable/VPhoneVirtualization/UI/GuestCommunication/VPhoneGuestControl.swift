@@ -58,6 +58,7 @@ final class VPhoneGuestControl {
     @ObservationIgnored private var orderedInput: Task<Void, Never>?
     @ObservationIgnored private var orderedLocation: Task<Void, Never>?
     @ObservationIgnored private var locationGeneration: UInt64 = 0
+    @ObservationIgnored var isHomePodGuest = false
     private(set) var isConnected = false
     private(set) var guestCapabilities: [String] = []
     private(set) var guestIPAddress: String?
@@ -301,16 +302,36 @@ final class VPhoneGuestControl {
         sendHID(page: page, usage: usage, down: true)
     }
 
-    func sendHIDUp(page: UInt32, usage: UInt32) {
-        sendHID(page: page, usage: usage, down: false)
+    func sendHIDUp(page: UInt32, usage: UInt32, minimumHold: Duration = .zero) {
+        sendHID(page: page, usage: usage, down: false, minimumHold: minimumHold)
     }
 
-    private func sendHID(page: UInt32, usage: UInt32, down: Bool?) {
+    @ObservationIgnored private var heldHIDKeys: [UInt64: ContinuousClock.Instant] = [:]
+
+    private func sendHID(page: UInt32, usage: UInt32, down: Bool?, minimumHold: Duration = .zero) {
         var params: [String: Any] = ["page": page, "usage": usage]
         if let down {
             params["down"] = down
         }
-        enqueueInput("input.hid", params: params)
+        let key = UInt64(page) << 32 | UInt64(usage)
+        let previous = orderedInput
+        orderedInput = Task {
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            if down == false, minimumHold > .zero, let began = heldHIDKeys[key] {
+                // Preserve a tap's duration even when the guest or transport
+                // delays key-down. Timing in the view can collapse both events
+                // into consecutive RPCs after the input queue catches up.
+                let remaining = minimumHold - began.duration(to: .now)
+                if remaining > .zero { try? await Task.sleep(for: remaining) }
+            }
+            guard !Task.isCancelled else { return }
+            do {
+                _ = try await call("input.hid", params: params)
+                if down == true { heldHIDKeys[key] = .now }
+                else { heldHIDKeys.removeValue(forKey: key) }
+            } catch { print("[control] input.hid: \(error)") }
+        }
     }
 
     /// `edge` is the screen edge the touch started at, in `_VZTouch` swipeAim
@@ -630,10 +651,10 @@ final class VPhoneGuestControl {
     /// `call`, with vphoned's refusal kept whole as `GuestRPCFailure`: `code`,
     /// `message` and whatever the command adds (`results`, `reason`, `errno`,
     /// `retryable` …).
-    private func rpc(_ method: String, params: [String: Any]) async throws -> [String: Any] {
+    private func rpc(_ method: String, params: [String: Any], limits: VPhoneHTTPLimits = .rpc) async throws -> [String: Any] {
         let object: [String: Any] = ["id": UUID().uuidString, "method": method, "params": params]
         let body = try JSONSerialization.data(withJSONObject: object)
-        let response = try await http(method: "POST", path: "/v1/rpc", body: body)
+        let response = try await http(method: "POST", path: "/v1/rpc", body: body, limits: limits)
         guard let envelope = try JSONSerialization.jsonObject(with: response.body) as? [String: Any]
         else { throw ControlError.protocolError("invalid JSON response") }
         if let error = envelope["error"] as? [String: Any] {
@@ -642,6 +663,32 @@ final class VPhoneGuestControl {
         guard response.status == 200, let result = envelope["result"] as? [String: Any]
         else { throw ControlError.protocolError("missing result (HTTP \(response.status))") }
         return result
+    }
+
+    /// A latest-frame read has a short deadline: loss of the guest must blank
+    /// the cap instead of leaving a frozen animation lit for an RPC timeout.
+    func homePodDisplaySnapshot() async throws -> (geometry: VPhoneHomePodDisplayGeometry, frame: VPhoneHomePodDisplayFrame)? {
+        let state = try await rpc("homepod.display.state", params: [:], limits: .homePodDisplay)
+        guard state["available"] as? Bool == true else { return nil }
+        guard let geometry = state["geometry"] as? [String: Any],
+              let x = geometry["x"] as? [Double], let y = geometry["y"] as? [Double],
+              let rings = geometry["rings"] as? [UInt32],
+              let bitDepth = state["bit_depth"] as? Int,
+              let version = state["hardware_version"] as? UInt32,
+              let displays = state["displays"] as? [[String: Any]], !displays.isEmpty,
+              let plus = state["plus"] as? Double, let minus = state["minus"] as? Double,
+              let generation = state["generation"] as? UInt64
+        else { throw ControlError.protocolError("invalid HomePod display snapshot") }
+        let layout = try VPhoneHomePodDisplayGeometry(xCoordinates: x, yCoordinates: y, rings: rings, bitDepth: bitDepth, hardwareVersion: version)
+        let banks = try displays.map { display -> [[Double]] in
+            guard let pixels = display["pixels"] as? [[Double]] else {
+                throw ControlError.protocolError("missing HomePod LED bank")
+            }
+            return pixels
+        }
+        let frame = try VPhoneHomePodDisplayFrame(banks: banks, plusBrightness: plus, minusBrightness: minus, generation: generation)
+        guard frame.matches(layout) else { throw ControlError.protocolError("HomePod display frame does not match its geometry") }
+        return (layout, frame)
     }
 
     func listFiles(path: String) async throws -> [[String: Any]] {
@@ -1015,6 +1062,7 @@ private struct VPhoneHTTPLimits: Sendable {
     /// JSON, RPC and clipboard responses. A guest operation may run up to the
     /// 120 s read timeout before it answers, so the deadline sits above it.
     static let rpc = VPhoneHTTPLimits(maxBodyLength: 64 * 1024 * 1024, deadline: .seconds(180))
+    static let homePodDisplay = VPhoneHTTPLimits(maxBodyLength: 64 * 1024, deadline: .seconds(1))
     /// File downloads: the response body is the file.
     static let download = VPhoneHTTPLimits(maxBodyLength: 2_147_483_647, deadline: .seconds(30 * 60))
     /// Uploads: the request body is large, the response is a small JSON reply.

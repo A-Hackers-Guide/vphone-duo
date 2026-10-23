@@ -43,6 +43,9 @@ public enum FirmwareGuestSystemPatchSet {
     /// Replaces the restored System volume with an Apple TV 4K userland
     /// staged from its OTA. Research only: no IPSW exists for that device.
     public static let tvOTAUserland = "system-tv-exp-ota_userland"
+    public static let homePodOTAUserland = "system-homepod-exp-ota_userland"
+    public static let homePodSoundGlow = "system-homepod-exp-sound_glow"
+    public static let homePodSoundGlowPath = "/usr/share/vphone/HomePodSoundGlow.plist"
     public static let otaUserland = "system-exp-ota_userland"
 
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
@@ -68,6 +71,20 @@ public enum FirmwareGuestSystemPatchSet {
         name: "Guest System",
         summary: "Shared-cache policy gates, patched system daemons and the vphone guest payload",
         patches: [
+            VPhonePatchDeclaration(
+                identifier: homePodOTAUserland,
+                title: "HomePod userland from OTA",
+                summary: "Research: replaces the restored HomePod mini System volume with its full 27.2 or later OTA, retaining the HomePod restore identity and cloudOS boot chain. The staged payload is verified before installation.",
+                target: .guestFile(path: "/"),
+                applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 27, minor: 2)),
+            ),
+            VPhonePatchDeclaration(
+                identifier: homePodSoundGlow,
+                title: "HomePod Sound Glow",
+                summary: "Enables the native HomePod 27.2 media display through a process-local accessory setting adapter. Requires vphoned and the donor-driven HomePod top cap; keeps the original product token.",
+                target: .guestFile(path: "/usr/share/vphone/HomePodSoundGlow.plist"),
+                applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 27, minor: 2)),
+            ),
             VPhonePatchDeclaration(
                 identifier: otaUserland,
                 title: "Full OTA system update",
@@ -327,6 +344,33 @@ public enum FirmwareGuestSystemPatchSet {
                 bootEssential: true,
             ),
             VPhonePatchDeclaration(
+                identifier: homePodTopCap,
+                title: "HomePod top cap",
+                summary: "Stages the donor MiniDisplay geometry for vphoned's virtual HomePod LED display and volume buttons, with a SoundBoard-only shim for its reserved HID class identity.",
+                target: .guestFile(path: homePodDisplayPath),
+            ),
+            VPhonePatchDeclaration(
+                identifier: homePodSetupBypass,
+                title: "HomePod setup completion",
+                summary: "Completes the donor's local AudioAccessory setup state as mobile, prepares SetupAssistant's native launch sentinel and lets SoundBoard initialize its post-setup services. Turning it off restores the prior completion flags at the next boot. Does not provision accounts, activation or a HomeKit home.",
+                target: .guestFile(path: homePodSetupPath),
+                applicability: VPhonePatchApplicability(iOSBase: .major(27)),
+            ),
+            VPhonePatchDeclaration(
+                identifier: homePodSiriSpeech,
+                title: "HomePod native Siri speech",
+                summary: "Enables the HomePod guest's output-only auxiliary audio session on native Siri speech events, using the existing SoundBoard adapter. Requires vphoned, the HomePod top cap and virtio sound. Turning it off removes only this policy. The native branch is verified; repair playback remains pending runtime validation.",
+                target: .guestFile(path: homePodSiriSpeechPath),
+                applicability: VPhonePatchApplicability(iOSBase: .major(27)),
+            ),
+            VPhonePatchDeclaration(
+                identifier: homePodWelcome,
+                title: "HomePod first-boot welcome",
+                summary: "Enables a guest-owned, one-time welcome after HomePod setup, display and audio services become ready. Requires vphoned, the HomePod top cap, local setup completion, virtio sound and native Siri speech. Turning it off removes the policy and preserves the guest's once-only state. Native welcome playback remains pending runtime validation.",
+                target: .guestFile(path: homePodWelcomePath),
+                applicability: VPhonePatchApplicability(iOSBase: .major(27)),
+            ),
+            VPhonePatchDeclaration(
                 identifier: "system-launchdaemons-boot-environment",
                 title: "Guest environment",
                 summary: """
@@ -488,6 +532,13 @@ public enum FirmwareGuestSystemPatchSet {
                 target: .prebootDeviceTree,
             ),
             VPhonePatchDeclaration(
+                identifier: homePodAudioProduct,
+                title: "HomePod donor product identity (experimental)",
+                summary: "Copies the donor's product-id into Preboot, changing MobileGestalt identity system-wide. Off in every preset: audio uses VirtualAudio's local product override instead. Retained for explicit research and to restore the shared Preboot backup when disabled after an earlier install.",
+                target: .prebootDeviceTree,
+                applicability: VPhonePatchApplicability(iOSBase: .major(27)),
+            ),
+            VPhonePatchDeclaration(
                 identifier: prebootIPhoneProduct,
                 title: "iPhone product description",
                 summary: """
@@ -579,7 +630,17 @@ public enum FirmwareGuestSystemPatchSet {
 
     /// The iPad audio node repair in the restored Preboot device tree, for an
     /// iPad VM patched before `fw patch` copied the board's node.
+    public static let homePodTopCap = "system-homepod-exp-top_cap"
+    public static let homePodDisplayPath = "/usr/share/vphone/HomePodDisplay.plist"
+    public static let homePodSetupBypass = "system-homepod-exp-setup_bypass"
+    public static let homePodSetupPath = "/usr/share/vphone/HomePodSetup.plist"
+    public static let homePodWelcome = "system-homepod-exp-welcome"
+    public static let homePodWelcomePath = "/usr/share/vphone/HomePodWelcome.plist"
+    public static let homePodSiriSpeech = "system-homepod-exp-siri_speech"
+    public static let homePodSiriSpeechPath = "/usr/share/vphone/HomePodSiriSpeech.plist"
+
     public static let prebootBoardAudio = "preboot-cfw-devicetree_board_audio"
+    public static let homePodAudioProduct = "preboot-homepod-exp-audio_product"
 
     /// The iPhone product description in the restored Preboot device tree,
     /// taken from the iPhone's own tree: see `DeviceTreePatcher.presentPhoneProduct`.

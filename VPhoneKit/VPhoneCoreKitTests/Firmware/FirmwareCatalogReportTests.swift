@@ -79,16 +79,17 @@ struct FirmwareCatalogReportTests {
         #expect(ota.version == "26.6")
         #expect(ota.url.hasPrefix("https://updates.cdn-apple.com/") && ota.url.hasSuffix(".aea"))
         #expect(ota.size == 4_764_729_344)
-        #expect(Data(base64Encoded: ota.key)?.count == 32)
+        #expect(Data(base64Encoded: try #require(ota.key))?.count == 32)
         #expect(ota.fileName == "AppleTV14,1_26.6_23L773_OTA.aea")
         #expect(VPhoneFirmwareCatalog.otaRelease(for: "AppleTV14,1", build: "23L760") == nil)
         #expect(VPhoneFirmwareCatalog.otaRelease(for: "AppleTV5,3", build: "23L773") == nil)
         // Every OTA has a base release to be restored over.
         for release in VPhoneFirmwareCatalog.otaReleases {
-            let base = try #require(VPhoneGuestDevice.named(release.productType)?.restoreBase)
+            let guest = try #require(VPhoneGuestDevice.named(release.productType))
+            let base = guest.restoreBase ?? guest
             #expect(VPhoneFirmwareCatalog.pairings(for: base.productType).contains { $0.iosName.hasSuffix(" \(release.baseVersion)") })
             #expect(VPhoneFirmwareCatalog.restoreBaseURL(for: release) != nil)
-            #expect(Data(base64Encoded: release.key)?.count == 32)
+            if let key = release.key { #expect(Data(base64Encoded: key)?.count == 32) }
         }
     }
 
@@ -106,6 +107,42 @@ struct FirmwareCatalogReportTests {
         let tv = try #require(VPhoneFirmwareCatalog.report.devices.first { $0.productType == "AppleTV5,3" })
         #expect(tv.family == "appleTV")
         #expect(tv.name == "Apple TV HD")
+    }
+
+    @Test func `HomePod mini pairs its native 27 IPSW with cloudOS without an OTA base`() throws {
+        let pairings = VPhoneFirmwareCatalog.pairings(for: "AudioAccessory5,1")
+        #expect(pairings.count == 2)
+        let pairing = try #require(pairings.first)
+        #expect(pairing.device == "AudioAccessory5,1")
+        #expect(pairing.iosName == "HomePod Software 27.0")
+        #expect(pairing.iosURL == "https://updates.cdn-apple.com/2026SFallFCS/a595a3b2-2c42-470a-9417-a705aaafa05c/AudioAccessory5,1_27.0_24J361_Restore.ipsw")
+        #expect(pairing.cloudosName == "cloudOS 26.4")
+        #expect(pairing.cloudosURL == VPhoneFirmwareCatalog.cloud264)
+        #expect(VPhoneGuestDevice.audioAccessory5_1.restoreBase == nil)
+        #expect(VPhoneFirmwareCatalog.otaRelease(source: pairing.iosURL) == nil)
+        #expect(VPhoneFirmwareCatalog.otaRelease(for: "AudioAccessory5,1", build: "24J361") == nil)
+        #expect(VPhoneFirmwareCatalog.pairings(for: "AudioAccessory1,1").isEmpty)
+
+        let device = try #require(VPhoneFirmwareCatalog.report.devices.first { $0.productType == "AudioAccessory5,1" })
+        #expect(device.family == "homePod" && device.name == "HomePod mini")
+        let entry = try #require(device.pairings.first)
+        #expect(entry.ios.name == pairing.iosName && entry.ios.url == pairing.iosURL)
+        #expect(entry.ios.build == nil && entry.ios.files == nil)
+        #expect(entry.recommendedCloudOS.url == VPhoneFirmwareCatalog.cloud264)
+    }
+
+    @Test func `HomePod 27 point 2 takes its full ZIP OTA over its own 27 IPSW`() throws {
+        let release = try #require(VPhoneFirmwareCatalog.otaRelease(for: "AudioAccessory5,1", build: "24K120"))
+        #expect(release.version == "27.2" && release.baseVersion == "27.0")
+        #expect(release.key == nil && release.size == 3_051_441_612)
+        #expect(release.fileName == "AudioAccessory5,1_27.2_24K120_OTA.zip")
+        let pairings = VPhoneFirmwareCatalog.pairings(for: release.productType)
+        #expect(VPhoneFirmwareCatalog.restoreBaseURL(for: release) == pairings[0].iosURL)
+        #expect(pairings[1].iosURL == release.url)
+        #expect(VPhoneFirmwareCatalog.otaRelease(source: "/cache/ota/\(release.fileName)") == release)
+        let device = try #require(VPhoneFirmwareCatalog.report.devices.first { $0.productType == release.productType })
+        #expect(device.pairings[1].ios.build == "24K120")
+        #expect(device.pairings[1].ios.files == ["ota/\(release.fileName)", (pairings[0].iosURL as NSString).lastPathComponent])
     }
 
     @Test func `i pad pairings come from an IPSW that covers the device`() {

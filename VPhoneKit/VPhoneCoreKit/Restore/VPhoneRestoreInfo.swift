@@ -82,17 +82,20 @@ public struct VPhoneRestoreInfo: Codable, Equatable, Sendable {
     }
 
     /// Set `variant` (and its device) on the bundle's restore-info.json, keeping
-    /// the recorded versions. nil if no versions exist yet to preserve.
+    /// the recorded versions unless the completed installer supplies an actual
+    /// mounted System identity. nil if no versions exist yet to preserve.
     @discardableResult
-    public static func recordVariant(_ variant: String, toBundle bundle: VPhoneBundle) throws
+    public static func recordVariant(_ variant: String, toBundle bundle: VPhoneBundle,
+                                     installedUserland: OSVersion? = nil) throws
         -> VPhoneRestoreInfo?
     {
         guard let base = load(fromBundle: bundle) else { return nil }
         let merged = VPhoneRestoreInfo(
-            ios: base.ios,
+            ios: installedUserland ?? base.ios,
             cloudOS: base.cloudOS,
             variant: variant,
-            device: device(forVariant: variant),
+            device: bundle.manifest.guestDevice.family == .homePod
+                ? bundle.manifest.guestProductType : device(forVariant: variant),
         )
         try merged.write(toBundle: bundle)
         return merged

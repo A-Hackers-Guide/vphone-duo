@@ -1,6 +1,69 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Apple TV" : {
+      "localizations" : {
+        "en" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV"}},
+        "ja" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV"}},
+        "ko" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV"}},
+        "vi" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV"}},
+        "zh-Hans" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV"}}
+      }
+    },
+    "HomePod" : {
+      "localizations" : {
+        "en" : {"stringUnit" : {"state" : "translated", "value" : "HomePod"}},
+        "ja" : {"stringUnit" : {"state" : "translated", "value" : "HomePod"}},
+        "ko" : {"stringUnit" : {"state" : "translated", "value" : "HomePod"}},
+        "vi" : {"stringUnit" : {"state" : "translated", "value" : "HomePod"}},
+        "zh-Hans" : {"stringUnit" : {"state" : "translated", "value" : "HomePod"}}
+      }
+    },
+    "HomePod Software" : {
+      "localizations" : {
+        "en" : {"stringUnit" : {"state" : "translated", "value" : "HomePod Software"}},
+        "ja" : {"stringUnit" : {"state" : "translated", "value" : "HomePod ソフトウェア"}},
+        "ko" : {"stringUnit" : {"state" : "translated", "value" : "HomePod 소프트웨어"}},
+        "vi" : {"stringUnit" : {"state" : "translated", "value" : "Phần mềm HomePod"}},
+        "zh-Hans" : {"stringUnit" : {"state" : "translated", "value" : "HomePod 软件"}}
+      }
+    },
+    "Guest IPSW" : {
+      "localizations" : {
+        "en" : {"stringUnit" : {"state" : "translated", "value" : "Guest IPSW"}},
+        "ja" : {"stringUnit" : {"state" : "translated", "value" : "ゲスト IPSW"}},
+        "ko" : {"stringUnit" : {"state" : "translated", "value" : "게스트 IPSW"}},
+        "vi" : {"stringUnit" : {"state" : "translated", "value" : "IPSW máy khách"}},
+        "zh-Hans" : {"stringUnit" : {"state" : "translated", "value" : "客户机 IPSW"}}
+      }
+    },
+    "Choose a guest IPSW and a cloudOS IPSW in Advanced Options." : {
+      "localizations" : {
+        "en" : {"stringUnit" : {"state" : "translated", "value" : "Choose a guest IPSW and a cloudOS IPSW in Advanced Options."}},
+        "ja" : {"stringUnit" : {"state" : "translated", "value" : "詳細オプションでゲスト IPSW と cloudOS IPSW を選択してください。"}},
+        "ko" : {"stringUnit" : {"state" : "translated", "value" : "고급 옵션에서 게스트 IPSW와 cloudOS IPSW를 선택하세요."}},
+        "vi" : {"stringUnit" : {"state" : "translated", "value" : "Chọn IPSW máy khách và IPSW cloudOS trong Tùy chọn nâng cao."}},
+        "zh-Hans" : {"stringUnit" : {"state" : "translated", "value" : "在高级选项中选择客户机 IPSW 和 cloudOS IPSW。"}}
+      }
+    },
+    "Apple TV and HomePod are restored on their own, with keys of their own. Templates are made for iPhone and iPad." : {
+      "localizations" : {
+        "en" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV and HomePod are restored on their own,  with keys of their own. Templates are made for iPhone and iPad."}},
+        "ja" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV と HomePod は独自のキーで個別に復元されます。テンプレートは iPhone と iPad 用です。"}},
+        "ko" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV와 HomePod는 자체 키로 개별 복원됩니다. 템플릿은 iPhone과 iPad용입니다."}},
+        "vi" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV và HomePod được khôi phục riêng,  với khóa của riêng chúng. Mẫu dành cho iPhone và iPad."}},
+        "zh-Hans" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV 和 HomePod 单独恢复，使用各自的密钥。模板只用于 iPhone 和 iPad。"}}
+      }
+    },
+    "Apple TV and HomePod keep every file, service and app." : {
+      "localizations" : {
+        "en" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV and HomePod keep every file,  service and app."}},
+        "ja" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV と HomePod はすべてのファイル、サービス、App を保持します。"}},
+        "ko" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV와 HomePod는 모든 파일,  서비스,  앱을 유지합니다."}},
+        "vi" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV và HomePod giữ lại mọi tệp,  dịch vụ và ứng dụng."}},
+        "zh-Hans" : {"stringUnit" : {"state" : "translated", "value" : "Apple TV 和 HomePod 会保留所有文件、服务和 App。"}}
+      }
+    },
     "An Apple TV is restored on its own, with keys of its own. Templates are made for iPhone and iPad." : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "An Apple TV is restored on its own, with keys of its own. Templates are made for iPhone and iPad." } },

@@ -512,6 +512,31 @@ struct VPhoneCustomFirmwarePatchBoardAudioCommand: ParsableCommand {
     }
 }
 
+// MARK: - patch-dt-homepod-audio-product
+
+struct VPhoneCustomFirmwarePatchHomePodAudioProductCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-dt-homepod-audio-product",
+        abstract: "Give a HomePod mini device tree its donor's native audio product identity",
+        discussion: "Copies only the concrete 20-byte /product/product-id from the HomePod mini's own DeviceTree IM4P. Refuses other models, placeholders and malformed values; preserves the installed IMG4 manifest, restore info and compression.",
+    )
+
+    @Argument(help: "Path to devicetree.img4 or devicetree.im4p", transform: URL.init(fileURLWithPath:))
+    var deviceTree: URL
+
+    @Argument(help: "Path to the HomePod mini's DeviceTree.<board>.im4p", transform: URL.init(fileURLWithPath:))
+    var board: URL
+
+    @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
+    var dryRun = false
+
+    func run() throws {
+        try CustomFirmwarePostRestoreDeviceTree.presentHomePodAudioProduct(
+            at: deviceTree, board: board, dryRun: dryRun, verbose: true,
+        )
+    }
+}
+
 // MARK: - patch-dt-iphone-product
 
 struct VPhoneCustomFirmwarePatchIPhoneProductCommand: ParsableCommand {

@@ -47,6 +47,58 @@ public enum FirmwareGuestPatchResolution {
         return enabled.intersection(guestTargetIdentifiers).subtracting(admitted).sorted()
     }
 
+    /// HomePod has its own arm64e IPSW. Sharing TVOS does not admit the
+    /// Apple TV OTA swap, GPU injection, or plain-arm64 dyld workarounds.
+    public static let homePodSupportedGuestPatches = tvSupportedGuestPatches
+        .subtracting([FirmwareGuestSystemPatchSet.tvTPRO])
+        .union([FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass,
+                FirmwareGuestSystemPatchSet.homePodAudioProduct, FirmwareGuestSystemPatchSet.homePodWelcome,
+                FirmwareGuestSystemPatchSet.homePodSiriSpeech,
+                FirmwareGuestSystemPatchSet.homePodOTAUserland, FirmwareGuestSystemPatchSet.homePodSoundGlow,
+                FirmwareGuestSystemPatchSet.virtioSoundDriver])
+        .union(FirmwarePatchSetCatalog.tvOS27UserlandPatches)
+
+    public static func unvalidatedHomePodGuestPatches(enabled: Set<String>) -> [String] {
+        enabled.intersection(guestTargetIdentifiers).subtracting(homePodSupportedGuestPatches).sorted()
+    }
+
+    public static let homePodWelcomeDependencies: Set<String> = [
+        "system-vphoned-boot-install",
+        FirmwareGuestSystemPatchSet.homePodTopCap,
+        FirmwareGuestSystemPatchSet.homePodSetupBypass,
+        FirmwareGuestSystemPatchSet.virtioSoundDriver,
+        FirmwareGuestSystemPatchSet.homePodSiriSpeech,
+    ]
+
+    /// A welcome opt-out remains installable when any prerequisite is also off.
+    /// This checks the current guest selection before any filesystem writes;
+    /// the guest runtime must still verify readiness before consuming its claim.
+    public static func missingHomePodWelcomeDependencies(enabled: Set<String>) -> [String] {
+        guard enabled.contains(FirmwareGuestSystemPatchSet.homePodWelcome) else { return [] }
+        return homePodWelcomeDependencies.subtracting(enabled).sorted()
+    }
+
+    public static let homePodSiriSpeechDependencies: Set<String> = [
+        "system-vphoned-boot-install",
+        FirmwareGuestSystemPatchSet.homePodTopCap,
+        FirmwareGuestSystemPatchSet.virtioSoundDriver,
+    ]
+
+    public static func missingHomePodSiriSpeechDependencies(enabled: Set<String>) -> [String] {
+        guard enabled.contains(FirmwareGuestSystemPatchSet.homePodSiriSpeech) else { return [] }
+        return homePodSiriSpeechDependencies.subtracting(enabled).sorted()
+    }
+
+    public static let homePodSoundGlowDependencies: Set<String> = [
+        "system-vphoned-boot-install",
+        FirmwareGuestSystemPatchSet.homePodTopCap,
+    ]
+
+    public static func missingHomePodSoundGlowDependencies(enabled: Set<String>) -> [String] {
+        guard enabled.contains(FirmwareGuestSystemPatchSet.homePodSoundGlow) else { return [] }
+        return homePodSoundGlowDependencies.subtracting(enabled).sorted()
+    }
+
     /// Every bundled-set patch whose bytes the guest half of an install writes —
     /// the dyld shared cache, a guest Mach-O, its entitlements, a guest file, or
     /// the Preboot device tree. The complement is the boot chain, which `fw

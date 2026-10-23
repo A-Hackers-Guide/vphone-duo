@@ -68,7 +68,7 @@ public enum FirmwarePatchSetCatalog {
         Set(FirmwareKernelFridaPatchSet.manifest.patches.map(\.identifier))
             .union(hypervisorConcealmentPatches)
             .union(experimentalIdentityPatches)
-            .union([FirmwareGuestSystemPatchSet.otaUserland])
+            .union([FirmwareGuestSystemPatchSet.otaUserland, FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass, FirmwareGuestSystemPatchSet.homePodAudioProduct, FirmwareGuestSystemPatchSet.homePodWelcome, FirmwareGuestSystemPatchSet.homePodSiriSpeech, FirmwareGuestSystemPatchSet.homePodOTAUserland, FirmwareGuestSystemPatchSet.homePodSoundGlow])
             .union([FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers, misTrustAuthPatch, FirmwareGuestSystemPatchSet.settingsRootRows, FirmwareGuestSystemPatchSet.settingsSoftwareUpdate, FirmwareGuestSystemPatchSet.tvTPRO, FirmwareGuestSystemPatchSet.tvOTAUserland])
 
     /// ProMotion: the 120 Hz timing for the paravirtual display.
@@ -214,19 +214,19 @@ public enum FirmwarePatchSetCatalog {
         selection: .block(manualOnlyPatches),
     )
 
-    /// Everything the bundle declares, including the Frida relaxations, the
+    /// The general-purpose experimental patches, including the Frida relaxations, the
     /// hypervisor concealment and the iPhone17,3 identity. Each patch's own version
     /// gate still decides whether it lands.
     public static let experimentalPreset = VPhonePatchPreset(
         identifier: "experimental",
         title: "Experimental",
         summary: """
-        Every patch this bundle declares, including the Frida Stalker relaxations, \
+        The experimental patches, including the Frida Stalker relaxations, \
         the iPhone17,3 identity rewrites, and the hv_vmm_present concealment that a \
-        freshly restored 26.4 guest does not survive.
+        freshly restored 26.4 guest does not survive. The HomePod-only top cap is off.
         """,
         patchSets: bundledReferences,
-        selection: .all,
+        selection: .block([FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass, FirmwareGuestSystemPatchSet.homePodAudioProduct, FirmwareGuestSystemPatchSet.homePodWelcome, FirmwareGuestSystemPatchSet.homePodSiriSpeech, FirmwareGuestSystemPatchSet.homePodOTAUserland, FirmwareGuestSystemPatchSet.homePodSoundGlow]),
     )
 
     /// The iOS payloads, hooks and shared-cache patches an Apple TV guest has no
@@ -323,6 +323,22 @@ public enum FirmwarePatchSetCatalog {
         ),
     )
 
+    /// HomePod mini uses its own monolithic arm64e TVOS IPSW. Keep the 27
+    /// kernel compatibility patches, but never swap in an Apple TV OTA or
+    /// install the iPhone GPU/routing environment. The shared virtio audio
+    /// driver selects native B520 routing through an audio-only preference,
+    /// retaining the original VM product token for other services.
+    public static let homePodMiniPreset = VPhonePatchPreset(
+        identifier: VPhonePatchPreset.homePodMiniIdentifier,
+        title: "HomePod mini",
+        summary: "Research: HomePod mini's own arm64e TVOS IPSW with vphoned, its donor-driven top cap, local setup completion and virtio audio using an audio-only B520 route, without changing the VM product token or adding Apple TV OTA replacement or iPhone display, camera and routing hooks.",
+        patchSets: bundledReferences,
+        selection: .block(
+            manualOnlyPatches.subtracting([FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass, FirmwareGuestSystemPatchSet.homePodWelcome, FirmwareGuestSystemPatchSet.homePodSiriSpeech, FirmwareGuestSystemPatchSet.homePodOTAUserland, FirmwareGuestSystemPatchSet.homePodSoundGlow])
+                .union(tvOSBlockedPatches.subtracting(tvOS27UserlandPatches).subtracting([FirmwareGuestSystemPatchSet.virtioSoundDriver])),
+        ),
+    )
+
     /// The device tree patches ``minimalPreset`` keeps: the board presentation the
     /// guest UI lays out against, and the haptics and microphone array no VM
     /// has. They change no code, so they are no system modification.
@@ -408,5 +424,5 @@ public enum FirmwarePatchSetCatalog {
     )
 
     /// The presets the bundle ships.
-    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, experimentalPreset, tvOSPreset, tvOS4KPreset, minimalPreset, watchOSPreset]
+    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, experimentalPreset, tvOSPreset, tvOS4KPreset, homePodMiniPreset, minimalPreset, watchOSPreset]
 }

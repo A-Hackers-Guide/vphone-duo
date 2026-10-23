@@ -1,4 +1,5 @@
 import AppleArchive
+import ArchiveKit
 import CryptoKit
 import Darwin
 import Foundation
@@ -8,7 +9,7 @@ import VPhoneCoreKit
 /// A full OTA update, read with the system AppleArchive framework: no `ipsw`,
 /// no `aea` or `aa` process, nothing from Homebrew.
 ///
-/// An OTA is an AEA file (`AEA1`): an Apple Archive encrypted and
+/// Newer TV OTAs are AEA files (`AEA1`): an Apple Archive encrypted and
 /// authenticated with a symmetric key that Apple does not publish and AppleDB
 /// records. The archive inside is segmented: its top-level entries are
 /// metadata (`TYP=M`), and each one whose `YOP` is `E` (extract) carries in its
@@ -17,6 +18,7 @@ import VPhoneCoreKit
 /// fix-ups applied after extraction, neither of which staging needs. An
 /// archive that `aea decrypt` already wrote out (`AA01`, or a `pbz*`
 /// compressed one) is read the same way, without a key.
+/// HomePod full OTAs may instead use ZIP, read through bundled libarchive.
 ///
 /// Members stream from the file to their destination in fixed-size blocks,
 /// so a multi-gigabyte OTA is read once and never held in memory.
@@ -42,7 +44,7 @@ public enum VPhoneOTAArchive {
             case let .missingFile(file):
                 "OTA not found at \(file.path). Check the path and try again."
             case let .notAnOTA(file):
-                "\(file.lastPathComponent) is not an OTA: it is neither an AEA file nor an Apple Archive. Choose the device's full OTA (.aea)."
+                "\(file.lastPathComponent) is not an OTA: choose the device's full OTA (.aea, .zip or decrypted Apple Archive)."
             case .invalidKey:
                 "The OTA key must be 32 bytes in base64, as AppleDB lists it under the OTA's decryptionKey."
             case let .keyRequired(file):
@@ -124,6 +126,10 @@ public enum VPhoneOTAArchive {
         select: (String) throws -> Disposition,
         received: (String, Data?) throws -> Void,
     ) throws {
+        if try isZIP(ota) {
+            try readZIPMembers(ota, select: select, received: received)
+            return
+        }
         let opened = try openArchive(ota, key: key)
         let outer = opened.archive
         var buffer = [UInt8](repeating: 0, count: blockSize)
@@ -158,6 +164,91 @@ public enum VPhoneOTAArchive {
                 try stream.close()
             }
         }
+    }
+
+    /// HomePod full OTAs still use ZIP. Their Info.plist may follow the
+    /// payload physically, so visit the two identity/policy records first.
+    /// libarchive seeks over skipped ZIP members; no temporary full extraction
+    /// and no archive-provided pathname is ever used as a destination.
+    private static func readZIPMembers(
+        _ ota: URL,
+        select: (String) throws -> Disposition,
+        received: (String, Data?) throws -> Void
+    ) throws {
+        let metadata: Set = ["AssetData/Info.plist", manifestPath]
+        for metadataPass in [true, false] {
+            try withArchiveLocale {
+                guard let reader = archive_read_new() else { throw Error.unreadable(ota, "cannot create ZIP reader") }
+                defer { archive_read_free(reader) }
+                archive_read_support_format_zip(reader)
+                guard archive_read_open_filename(reader, ota.path, blockSize) == ARCHIVE_OK else {
+                    throw Error.unreadable(ota, archiveErrorString(reader))
+                }
+                var seen: Set<String> = []
+                var buffer = [UInt8](repeating: 0, count: blockSize)
+                while true {
+                    var entry: OpaquePointer?
+                    let status = archive_read_next_header(reader, &entry)
+                    if status == ARCHIVE_EOF { break }
+                    guard status == ARCHIVE_OK, let entry,
+                          let rawPath = archive_entry_pathname(entry) else {
+                        throw Error.unreadable(ota, archiveErrorString(reader))
+                    }
+                    let path = String(cString: rawPath)
+                    guard seen.insert(path).inserted else { throw Error.unreadable(ota, "duplicate ZIP member \(path)") }
+                    guard metadata.contains(path) == metadataPass,
+                          mode_t(archive_entry_filetype(entry)) == S_IFREG,
+                          archive_entry_hardlink(entry) == nil else {
+                        archive_read_data_skip(reader)
+                        continue
+                    }
+                    let disposition = try select(path)
+                    if case .skip = disposition {
+                        archive_read_data_skip(reader)
+                        continue
+                    }
+                    let declaredSize = archive_entry_size(entry)
+                    guard declaredSize >= 0 else { throw Error.unreadable(ota, "negative ZIP member size") }
+                    var data: Data?
+                    let output: FileHandle?
+                    switch disposition {
+                    case .skip: preconditionFailure()
+                    case .memory:
+                        guard UInt64(declaredSize) <= memoryLimit else { throw Error.unreadable(ota, "\(path) exceeds the metadata limit") }
+                        data = Data()
+                        output = nil
+                    case let .file(destination):
+                        guard FileManager.default.createFile(atPath: destination.path, contents: nil) else {
+                            throw Error.unreadable(ota, "cannot create \(destination.path)")
+                        }
+                        output = try FileHandle(forWritingTo: destination)
+                    }
+                    defer { try? output?.close() }
+                    var total: Int64 = 0
+                    while true {
+                        let count = buffer.withUnsafeMutableBytes { archive_read_data(reader, $0.baseAddress, $0.count) }
+                        if count == 0 { break }
+                        guard count > 0 else { throw Error.unreadable(ota, archiveErrorString(reader)) }
+                        total += Int64(count)
+                        guard total <= declaredSize else { throw Error.unreadable(ota, "\(path) exceeds its ZIP size") }
+                        let chunk = Data(buffer.prefix(Int(count)))
+                        if output != nil { try output?.write(contentsOf: chunk) } else { data?.append(chunk) }
+                    }
+                    guard total == declaredSize else { throw Error.unreadable(ota, "\(path) is truncated") }
+                    try output?.close()
+                    try received(path, data)
+                }
+                guard archive_read_close(reader) == ARCHIVE_OK else { throw Error.unreadable(ota, archiveErrorString(reader)) }
+            }
+        }
+    }
+
+    private static func isZIP(_ file: URL) throws -> Bool {
+        try readMagic(file) == Data([0x50, 0x4b, 0x03, 0x04])
+    }
+
+    private static func isDownloadMagic(_ data: Data) -> Bool {
+        data == Data("AEA1".utf8) || data == Data([0x50, 0x4b, 0x03, 0x04])
     }
 
     private struct OpenedArchive {
@@ -448,7 +539,7 @@ public enum VPhoneOTAArchive {
         of ota: URL,
         key: String?,
         device: VPhoneGuestDevice,
-        build: String,
+        build: String? = nil,
     ) throws -> (version: String, build: String) {
         struct Found: Swift.Error {}
         var identity: (version: String, build: String)?
@@ -633,7 +724,7 @@ public enum VPhoneOTAArchive {
         _ data: Data,
         of ota: URL,
         device: VPhoneGuestDevice,
-        build expected: String,
+        build expected: String?,
     ) throws -> (version: String, build: String) {
         guard let manifest = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               let version = manifest["ProductVersion"] as? String,
@@ -645,7 +736,7 @@ public enum VPhoneOTAArchive {
         guard types.contains(device.productType) else {
             throw Error.wrongDevice(ota, productTypes: types, expected: device.productType)
         }
-        guard build == expected else { throw Error.wrongBuild(ota, build: build, expected: expected) }
+        if let expected, build != expected { throw Error.wrongBuild(ota, build: build, expected: expected) }
         return (version, build)
     }
 
@@ -724,7 +815,7 @@ public enum VPhoneOTAArchive {
         if let expectedSize, actual != expectedSize {
             throw Error.unexpectedSize(remote, expected: expectedSize, actual: actual)
         }
-        guard try readMagic(pending).starts(with: Data("AEA1".utf8)) else { throw Error.notAnOTA(remote) }
+        guard try isDownloadMagic(readMagic(pending)) else { throw Error.notAnOTA(remote) }
         if fm.fileExists(atPath: cache.path) {
             try fm.removeItem(at: cache)
         }
@@ -744,7 +835,7 @@ public enum VPhoneOTAArchive {
             try fm.removeItem(at: cache)
             return false
         }
-        return magic.starts(with: Data("AEA1".utf8))
+        return isDownloadMagic(magic)
     }
 
     static func cacheName(for url: URL) -> String {
@@ -755,7 +846,7 @@ public enum VPhoneOTAArchive {
         })
         let digest = SHA256.hash(data: Data(url.absoluteString.utf8))
         let suffix = digest.prefix(6).map { String(format: "%02x", $0) }.joined()
-        return "\(safe.isEmpty ? "ota" : safe)-\(suffix).aea"
+        return "\(safe.isEmpty ? "ota" : safe)-\(suffix).\(url.pathExtension.lowercased() == "zip" ? "zip" : "aea")"
     }
 }
 

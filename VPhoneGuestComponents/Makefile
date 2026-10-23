@@ -95,6 +95,12 @@ ACCELEROMETER_INPUTS := $(call find_headers,Accelerometer) $(call find_folders,A
 ATTITUDE := $(STAGE)/attitude/libvphoneattitude.dylib
 ATTITUDE_SOURCES := $(call find_sources,Attitude)
 ATTITUDE_INPUTS := $(call find_headers,Attitude) $(call find_folders,Attitude) Shared/AttitudeProcess.h
+HOMEPODDISPLAY := $(STAGE)/homepoddisplay/libvphonehomepoddisplay.dylib
+HOMEPODDISPLAY_SOURCES := $(call find_sources,HomePodDisplay)
+HOMEPODDISPLAY_INPUTS := $(call find_headers,HomePodDisplay) $(call find_folders,HomePodDisplay)
+HOMEPODSETUP := $(STAGE)/homepodsetup/vphone-homepod-setup
+HOMEPODSETUP_SOURCES := $(call find_sources,HomePodSetup)
+HOMEPODSETUP_INPUTS := $(call find_headers,HomePodSetup) HomePodSetup/com.vphone.homepod-setup.plist
 GPU_PLUGIN := $(STAGE)/gpu/libAppleParavirtCompilerPluginIOGPUFamily.dylib
 GPU_PLUGIN_SOURCES := $(wildcard GraphicLoader/*.mm)
 GPU_PLUGIN_INCLUDES := $(wildcard GraphicLoader/*.h GraphicLoader/*.hpp GraphicLoader/*.inc)
@@ -128,7 +134,7 @@ GPU_DYNAMIC_LOOKUP_SYMS := \
 VIRTIOSOUND := $(STAGE)/virtiosound/VPhoneVirtIOSound.driver
 VIRTIOSOUND_SOURCES := $(wildcard VirtIOSound/*.m VirtIOSound/*.c)
 VIRTIOSOUND_INCLUDES := $(wildcard VirtIOSound/*.h) VirtIOSound/Info.plist VirtIOSound/AudioServerDriver.tbd
-ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(HAPTICSFIX) $(BATTERYHEALTHFIX) $(DEVICEHUBFIX) $(DEVICENAME) $(PREFSFIX) $(SIGNINFIX) $(GYROSCOPE) $(ACCELEROMETER) $(ATTITUDE) $(GPU_PLUGIN) $(VIRTIOSOUND)
+ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(HAPTICSFIX) $(BATTERYHEALTHFIX) $(DEVICEHUBFIX) $(DEVICENAME) $(PREFSFIX) $(SIGNINFIX) $(GYROSCOPE) $(ACCELEROMETER) $(ATTITUDE) $(HOMEPODDISPLAY) $(HOMEPODSETUP) $(GPU_PLUGIN) $(VIRTIOSOUND)
 PLISTS := $(STAGE)/camfix/libcamfix.plist $(STAGE)/vcamcaptured/libvcamcaptured.plist \
 	$(STAGE)/misfix/libmisfix.plist
 GPU_PROVENANCE := $(STAGE)/gpu/README.md
@@ -139,11 +145,42 @@ GPU_PROVENANCE := $(STAGE)/gpu/README.md
 
 all: $(ARTIFACTS) $(PLISTS) $(GPU_PROVENANCE)
 
+.PHONY: test-homepod-display
+test-homepod-display:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror -DVP_HOMEPOD_DISPLAY_TESTING \
+		-o $(OUT)/HomePodDisplayIdentityTests Tests/HomePodDisplayIdentityTests.m $(HOMEPODDISPLAY_SOURCES) -framework Foundation
+	@$(OUT)/HomePodDisplayIdentityTests
+
+.PHONY: test-homepod-welcome
+test-homepod-welcome:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror -IHomePodDisplay \
+		-o $(OUT)/HomePodWelcomeStateTests Tests/HomePodWelcomeStateTests.m HomePodDisplay/VPHomePodWelcomeState.m -framework Foundation
+	@$(OUT)/HomePodWelcomeStateTests
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror -IHomePodDisplay \
+		-o $(OUT)/HomePodWelcomeTests Tests/HomePodWelcomeTests.m HomePodDisplay/VPHomePodWelcomeState.m -framework Foundation
+	@$(OUT)/HomePodWelcomeTests
+
+.PHONY: test-homepod-siri-speech
+test-homepod-siri-speech:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror \
+		-o $(OUT)/HomePodSiriSpeechTests Tests/HomePodSiriSpeechTests.m -framework Foundation
+	@$(OUT)/HomePodSiriSpeechTests
+
+.PHONY: test-homepod-sound-glow
+test-homepod-sound-glow:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror \
+		-o $(OUT)/HomePodSoundGlowTests Tests/HomePodSoundGlowTests.m -framework Foundation
+	@$(OUT)/HomePodSoundGlowTests
+
 gpu: $(GPU_PLUGIN)
 
 package: all
 	@rm -f $(ARCHIVE)
-	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix hapticsfix batteryhealthfix devicehubfix devicename prefsfix signinfix gyroscope accelerometer attitude gpu virtiosound
+	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix hapticsfix batteryhealthfix devicehubfix devicename prefsfix signinfix gyroscope accelerometer attitude homepoddisplay homepodsetup gpu virtiosound
 	@echo "Packaged $(ARCHIVE)"
 
 test-loader-links:
@@ -335,6 +372,30 @@ $(ATTITUDE): $(ATTITUDE_SOURCES) $(ATTITUDE_INPUTS) | $(STAGE)/attitude
 		-install_name /usr/lib/libvphoneattitude.dylib -o $@ $(ATTITUDE_SOURCES) \
 		-framework Foundation -framework CoreMotion -Wl,-not_for_dyld_shared_cache
 	@codesign --force --sign - $@
+
+$(HOMEPODDISPLAY): $(HOMEPODDISPLAY_SOURCES) $(HOMEPODDISPLAY_INPUTS)
+	@mkdir -p $(STAGE)/homepoddisplay
+	xcrun --sdk appletvos clang -arch arm64e -mtvos-version-min=27.0 -Os -fobjc-arc \
+		-Wall -Wextra -Werror -dynamiclib -install_name /usr/lib/libvphonehomepoddisplay.dylib \
+		-o $@ $(HOMEPODDISPLAY_SOURCES) -framework Foundation -Wl,-not_for_dyld_shared_cache
+	@codesign --force --sign - $@
+
+$(HOMEPODSETUP): $(HOMEPODSETUP_SOURCES) $(HOMEPODSETUP_INPUTS)
+	@mkdir -p $(STAGE)/homepodsetup
+	xcrun --sdk appletvos clang -arch arm64e -mtvos-version-min=27.0 -Os -fobjc-arc \
+		-Wall -Wextra -Werror -o $@ $(HOMEPODSETUP_SOURCES) -framework Foundation
+	@cp HomePodSetup/com.vphone.homepod-setup.plist $(STAGE)/homepodsetup/
+	@codesign --force --sign - $@
+
+.PHONY: test-homepod-setup
+test-homepod-setup:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror -IHomePodSetup \
+		-o $(OUT)/HomePodSetupTests Tests/HomePodSetupTests.m HomePodSetup/HomePodSetupState.m -framework Foundation
+	@$(OUT)/HomePodSetupTests
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror -IHomePodSetup \
+		-o $(OUT)/HomePodSetupProcessTests Tests/HomePodSetupProcessTests.m HomePodSetup/HomePodSetupProcesses.m -framework Foundation
+	@$(OUT)/HomePodSetupProcessTests
 
 .PHONY: test-attitude
 test-attitude:

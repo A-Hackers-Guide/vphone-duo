@@ -60,14 +60,15 @@ public struct VPhoneOTARelease: Sendable, Equatable {
     public let url: String
     /// The `.aea` file's length, which a cached copy must have.
     public let size: Int64
-    /// The AEA archive's symmetric key, base64, as AppleDB records it.
-    public let key: String
+    /// The AEA archive's symmetric key, base64, as AppleDB records it; nil
+    /// for an unencrypted ZIP OTA.
+    public let key: String?
     /// The version of the base device's IPSW the OTA is restored over. The
     /// same as `version` while the base still gets releases; a later OTA goes
     /// over the base's last one, since only the userland is taken from it.
     public let baseVersion: String
 
-    public init(productType: String, version: String, build: String, url: String, size: Int64, key: String, baseVersion: String? = nil) {
+    public init(productType: String, version: String, build: String, url: String, size: Int64, key: String? = nil, baseVersion: String? = nil) {
         self.productType = productType
         self.version = version
         self.build = build
@@ -82,7 +83,7 @@ public struct VPhoneOTARelease: Sendable, Equatable {
 
     /// The name the IPSW cache keeps it under, in its `ota` folder.
     public var fileName: String {
-        "\(productType)_\(version)_\(build)_OTA.aea"
+        "\(productType)_\(version)_\(build)_OTA.\(URL(string: url)?.pathExtension.lowercased() == "zip" ? "zip" : "aea")"
     }
 }
 
@@ -462,6 +463,14 @@ public enum VPhoneFirmwareCatalog {
         ]),
     ]
 
+    /// HomePod mini's native IPSW. The boot chain still comes from cloudOS;
+    /// this is a research pairing, not a claim about Siri or Home pairing.
+    static let homePodReleases: [(devices: [String], releases: [(version: String, url: String)])] = [
+        (devices: ["AudioAccessory5,1"], releases: [
+            ("27.0", "https://updates.cdn-apple.com/2026SFallFCS/a595a3b2-2c42-470a-9417-a705aaafa05c/AudioAccessory5,1_27.0_24J361_Restore.ipsw"),
+        ]),
+    ]
+
     /// Apple Watch releases. The watch boots the research board kernel of the
     /// cloudOS its kernelcache recipe is for, rebuilt with the watchOS kexts:
     /// 26.4 (23E244) for watchOS 26.4.
@@ -515,6 +524,17 @@ public enum VPhoneFirmwareCatalog {
             key: "L3wZrfSYx2pFDbJSYtEteNDspB26qBv0lxLlkWrKTYk=",
             baseVersion: "26.6",
         ),
+        // HomePod's newer software ships as a full ZIP OTA. Keep its own
+        // 27.0 restore IPSW as the base; the OTA supplies only the userland
+        // and board tree, while the boot chain remains cloudOS 26.4.
+        .init(
+            productType: "AudioAccessory5,1",
+            version: "27.2",
+            build: "24K120",
+            url: "https://updates.cdn-apple.com/2026FallFCS/b191c01c-8e6e-4b74-8b84-015131f696b8/com_apple_MobileAsset_SoftwareUpdate/861a9e7426795ddb3eac86cd0b089e5bf7939258.zip",
+            size: 3_051_441_612,
+            baseVersion: "27.0",
+        ),
     ]
 
     /// The full OTA of `productType` at `build`, or nil when the catalog has none.
@@ -531,8 +551,9 @@ public enum VPhoneFirmwareCatalog {
 
     /// The URL of the base device's IPSW `release` is restored over.
     public static func restoreBaseURL(for release: VPhoneOTARelease) -> String? {
-        guard let base = VPhoneGuestDevice.named(release.productType)?.restoreBase else { return nil }
-        let releases = (iPhoneReleases + iPadReleases + tvReleases + watchReleases).first { $0.devices.contains(base.productType) }?.releases
+        guard let device = VPhoneGuestDevice.named(release.productType) else { return nil }
+        let base = device.restoreBase ?? device
+        let releases = (iPhoneReleases + iPadReleases + tvReleases + homePodReleases + watchReleases).first { $0.devices.contains(base.productType) }?.releases
         return releases?.first { $0.version == release.baseVersion }?.url
     }
 
@@ -560,16 +581,21 @@ public enum VPhoneFirmwareCatalog {
         }
         guard guest.presentsBoard else { return pairings }
         let restored = guest.restoreBase ?? guest
-        var releases = (iPhoneReleases + iPadReleases + tvReleases + watchReleases).first { $0.devices.contains(restored.productType) }?.releases ?? []
+        var releases = (iPhoneReleases + iPadReleases + tvReleases + homePodReleases + watchReleases).first { $0.devices.contains(restored.productType) }?.releases ?? []
         if restored != guest {
             releases = otaReleases.filter { $0.productType == guest.productType }.compactMap { ota in
                 guard let base = releases.first(where: { $0.version == ota.baseVersion }) else { return nil }
                 return (version: ota.version, url: ota.version == base.version ? base.url : ota.url)
             }
+        } else if guest.family == .homePod {
+            releases += otaReleases.filter { $0.productType == guest.productType }.compactMap { ota in
+                guard restoreBaseURL(for: ota) != nil else { return nil }
+                return (version: ota.version, url: ota.url)
+            }
         }
         return releases.map { release in
             let cloudOS = switch guest.family {
-            case .appleTV: VPhoneCloudOSOption(name: "cloudOS 26.4", url: cloud264)
+            case .appleTV, .homePod: VPhoneCloudOSOption(name: "cloudOS 26.4", url: cloud264)
             case .watch: researchBoardCloudOS(forVersion: release.version) ?? recommendedCloudOS(forVersion: release.version)
             case .iPhone, .iPad: recommendedCloudOS(forVersion: release.version)
             }

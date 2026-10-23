@@ -554,7 +554,9 @@ struct VPhoneLaunchpadControlCommands {
 
         var iphone = request.option("iphone-source")
         var cloudOS = request.option("cloudos-source")
-        let device = request.option("device")
+        let device = request.option("device") ?? iphone.flatMap { source in
+            VPhoneLaunchpadIPSW.productType(forSource: source)
+        }
         if iphone == nil || cloudOS == nil {
             let result = try await commandLine.run(["fw", "catalog", "--json"], recordInHistory: false)
             guard result.succeeded, let data = result.jsonData else {
@@ -587,9 +589,9 @@ struct VPhoneLaunchpadControlCommands {
             }
             return value
         }
-        // An Apple TV is restored on its own with the tvOS preset: templates
+        // Apple TV and HomePod restore on their own: templates
         // and slimming drive iOS Setup Assistant and its apps.
-        let isAppleTV = device?.hasPrefix("AppleTV") == true
+        let requiresStandaloneRestore = device?.hasPrefix("AppleTV") == true || device?.hasPrefix("AudioAccessory") == true
         let (patches, guestPatches) = try await Self.patches(
             request,
             commandLine: commandLine,
@@ -599,12 +601,12 @@ struct VPhoneLaunchpadControlCommands {
         // The Minimal preset seals the system it restores, which a template's
         // trim and setup boot would write.
         let restoredSystem = patches.customisesRestoredSystem
-        let usesTemplate = !request.flag("no-template") && !isAppleTV && !restoredSystem
+        let usesTemplate = !request.flag("no-template") && !requiresStandaloneRestore && !restoredSystem
         let slimming: VPhoneLaunchpadSlimming
-        if isAppleTV || restoredSystem {
+        if requiresStandaloneRestore || restoredSystem {
             if !Self.slimmingSwitches(request).isEmpty {
-                throw VPhoneLaunchpadError(isAppleTV
-                    ? "An Apple TV is created without a template; the slimming switches do not apply."
+                throw VPhoneLaunchpadError(requiresStandaloneRestore
+                    ? "Apple TV and HomePod are created without a template; the slimming switches do not apply."
                     : "The \(patches.preset) preset creates a machine without a template; the slimming switches do not apply.")
             }
             var off = VPhoneLaunchpadSlimming()
