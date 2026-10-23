@@ -42,6 +42,8 @@ final nonisolated class VPhoneLaunchpadChildProcess: @unchecked Sendable {
         arguments: [String],
         currentDirectory: URL? = nil,
         logFile: URL? = nil,
+        // Added to the environment of a child without `logFile`.
+        environment extra: [String: String] = [:],
         onLine: @escaping @Sendable (String) -> Void,
     ) throws {
         process.executableURL = executable
@@ -85,6 +87,7 @@ final nonisolated class VPhoneLaunchpadChildProcess: @unchecked Sendable {
             // terminal bar, which the pipe would drop.
             var environment = ProcessInfo.processInfo.environment
             environment["VPHONE_PROGRESS"] = "lines"
+            environment.merge(extra) { _, given in given }
             process.environment = environment
             try process.run()
             let reader = pipe.fileHandleForReading

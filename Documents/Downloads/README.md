@@ -12,6 +12,8 @@ Each [release](https://github.com/Lakr233/vphone-cli/releases) has up to three f
 
 | Series | Notarized | Not Notarized |
 | --- | --- | --- |
+| 2.12 | 2.12.0 | — |
+| 2.11 | 2.11.0 | — |
 | 2.10 | 2.10.1 | — |
 | 2.9 | 2.9.0, 2.9.1, 2.9.2 | — |
 | 2.8 | 2.8.0 | — |
@@ -34,6 +36,8 @@ Use a `VPhone.bundle` from the same series as Launchpad. The series is the first
 
 | Launchpad | VPhone.bundle |
 | --- | --- |
+| 2.12.x | 2.12.x |
+| 2.11.x | 2.11.x |
 | 2.10.x | 2.10.x |
 | 2.9.x | 2.9.x |
 | 2.8.x | 2.8.x |

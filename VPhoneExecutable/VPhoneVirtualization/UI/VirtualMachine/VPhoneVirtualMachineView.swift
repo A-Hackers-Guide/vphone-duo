@@ -27,6 +27,10 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     }
 
     private var currentTouchSwipeAim: Int = 0
+    /// The touch in flight started at a screen edge and goes through vphoned,
+    /// which can mark it as an edge touch. Decided when the finger goes down and
+    /// kept until it lifts, so one touch never switches injection path.
+    private var edgeTouchViaGuest = false
     private var isDragHighlightVisible = false
 
     /// Synthetic guest finger driven by an in-flight trackpad scroll gesture.
@@ -587,7 +591,8 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
             }
             let carry = scrollPending
             scrollPending = .zero
-            beginScrollTouch(at: scrollStartPoint(for: pointer, travel: carry))
+            let start = scrollStartPoint(for: pointer, travel: carry)
+            beginScrollTouch(at: start.point, swipeAim: start.swipeAim)
             if scrollTouchPoint != nil {
                 moveScrollTouch(by: carry)
             }
@@ -639,21 +644,29 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     ///
     /// Up and the bottom strip are the window's, which is the interface's: on
     /// a sideways guest the Home indicator runs along a long side of the panel.
-    private func scrollStartPoint(for pointer: NSPoint, travel: CGPoint) -> NSPoint {
+    ///
+    /// The snapped touch is also marked as starting at the bottom edge
+    /// (`swipeAim`): the guest's edge-pan recognizers ignore a touch that
+    /// begins at the edge but does not carry the edge flags.
+    private func scrollStartPoint(for pointer: NSPoint, travel: CGPoint) -> (point: NSPoint, swipeAim: Int) {
         let orientation = screenOrientation
         let screenTravel = orientation.screenVector(fromPanel: travel)
         let screenPointer = orientation.screenPoint(fromPanel: pointer, panel: bounds.size)
         let screenHeight = orientation.displayedSize(panel: bounds.size).height
         guard screenTravel.y > abs(screenTravel.x),
               screenPointer.y <= screenHeight * Self.homeEdgeSnapFraction
-        else { return pointer }
-        return orientation.panelPoint(fromScreen: CGPoint(x: screenPointer.x, y: 0), panel: bounds.size)
+        else { return (pointer, 0) }
+        let point = orientation.panelPoint(fromScreen: CGPoint(x: screenPointer.x, y: 0), panel: bounds.size)
+        // The interface's bottom is a panel edge; on a sideways guest it is a
+        // long side of the panel, which is what the digitizer reports.
+        return (point, hitTestEdge(at: clampedTouchPoint(point)))
     }
 
     /// Press the synthetic finger down at `point`, so the drag starts where the
     /// user is pointing.
-    private func beginScrollTouch(at point: NSPoint) {
+    private func beginScrollTouch(at point: NSPoint, swipeAim: Int = 0) {
         releaseSecondaryPress()
+        currentTouchSwipeAim = swipeAim
         let start = clampedTouchPoint(point)
         scrollTouchPoint = start
         scrollLastSend = 0
@@ -735,6 +748,8 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
             phase: 3, localPoint: clampedTouchPoint(current),
             timestamp: ProcessInfo.processInfo.systemUptime,
         )
+        // The re-press lands inside the window: an ordinary touch.
+        currentTouchSwipeAim = 0
     }
 
     private func hasScrollRebaseGapElapsed() -> Bool {
@@ -767,6 +782,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
             phase: 3, localPoint: point, allowOutside: true,
             timestamp: ProcessInfo.processInfo.systemUptime,
         )
+        currentTouchSwipeAim = 0
     }
 
     private func beginPinch(at center: NSPoint) {
@@ -1069,10 +1085,24 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         guard !localPoints.isEmpty else { return false }
         let normalized = localPoints.map { normalizeCoordinate($0, allowOutside: allowOutside) }
 
+        // A single finger that starts at a screen edge goes through vphoned
+        // when the guest can flag it as an edge touch. The native path cannot:
+        // VZ forwards `swipeAim` to its USB touchscreen, whose HID report has
+        // no field for it, so UIKit's edge-pan recognizers (SpringBoard's home
+        // gesture) never begin. The choice is made on the down and kept until
+        // the lift.
+        if phase == 0 {
+            edgeTouchViaGuest = localPoints.count == 1 && swipeAim != 0
+                && control?.supportsEdgeTouch == true
+        }
+        defer {
+            if phase == 3 { edgeTouchViaGuest = false }
+        }
+
         // iOS 18 bases: the VZ USB touchscreen dext emits no digitizer events on
         // the 26.x kernel, so route touches through vphoned's guest-side HID
         // injection. 26.x bases fall through to the native VZ multitouch path.
-        if let control, control.useGuestTouchInjection {
+        if let control, control.useGuestTouchInjection || edgeTouchViaGuest {
             if normalized.count >= 2, control.supportsMultiTouch {
                 control.sendTouch2(
                     phase: phase,
@@ -1080,8 +1110,22 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
                     x2: Double(normalized[1].x), y2: Double(normalized[1].y),
                 )
             } else {
+                var point = normalized[0]
+                // UIKit only accepts an edge touch that begins within a few
+                // points of the edge; the 32pt mouse zone rarely gets there.
+                // Start it on the edge, like a finger sliding in.
+                if phase == 0, control.supportsEdgeTouch {
+                    let inset: CGFloat = 0.001
+                    switch swipeAim {
+                    case VPhoneDisplayGeometry.Edge.top.rawValue: point.y = inset
+                    case VPhoneDisplayGeometry.Edge.bottom.rawValue: point.y = 1 - inset
+                    case VPhoneDisplayGeometry.Edge.right.rawValue: point.x = 1 - inset
+                    case VPhoneDisplayGeometry.Edge.left.rawValue: point.x = inset
+                    default: break
+                    }
+                }
                 control.sendTouch(
-                    phase: phase, x: Double(normalized[0].x), y: Double(normalized[0].y),
+                    phase: phase, x: Double(point.x), y: Double(point.y), edge: swipeAim,
                 )
             }
             return true

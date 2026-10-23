@@ -57,7 +57,15 @@ struct VPhoneVirtualMachineLaunchCommand: ParsableCommand {
             throw ExitCode(1)
         }
         if !dfu {
-            _ = try layout.stageVphoned(into: bundle)
+            // A system the restore installed customised (`minimal`) is sealed and
+            // boots on a stock AMFI: a vphoned the host pushed would never run,
+            // and the host would push it again on every probe. Without the
+            // staged copy, vphone-vm pushes none.
+            if VPhoneCustomFirmwareInstaller.restoredCustomisedSystem(VPhonePatchPresetStore.plan(forVM: bundle.url)) {
+                try? FileManager.default.removeItem(at: bundle.url.appendingPathComponent(".vphoned.signed"))
+            } else {
+                _ = try layout.stageVphoned(into: bundle)
+            }
         }
 
         let boot = VPhoneBootCommand(

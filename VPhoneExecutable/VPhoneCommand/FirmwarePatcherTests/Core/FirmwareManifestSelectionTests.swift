@@ -173,6 +173,78 @@ struct FirmwareManifestSelectionTests {
         }
     }
 
+    // MARK: - findRuntime
+
+    @Test
+    func `the guest takes vphone600ap's identities where the cloudOS has them`() {
+        let identities = [
+            Self.identity(deviceClass: "vresearch101ap"),
+            Self.identity(deviceClass: "vresearch101ap", variant: "Research Erase Install"),
+            Self.identity(deviceClass: "vphone600ap"),
+            Self.identity(deviceClass: "vphone600ap", variant: "Research Erase Install"),
+        ]
+        let (release, research) = FirmwareManifest.findRuntime(identities, researchBoard: (0, 1))
+        #expect(release == 2)
+        #expect(research == 3)
+    }
+
+    @Test
+    func `without vphone600ap the research board stands in`() {
+        let identities = [
+            Self.identity(deviceClass: "vresearch101ap"),
+            Self.identity(deviceClass: "vresearch101ap", variant: "Research Erase Install"),
+        ]
+        let (release, research) = FirmwareManifest.findRuntime(identities, researchBoard: (0, 1))
+        #expect(release == 0)
+        #expect(research == 1)
+    }
+
+    /// An identity naming each of `components` at `<component>.<device class>`.
+    static func identity(deviceClass: String, variant: String, components: [String]) -> PlistDict {
+        var identity = identity(deviceClass: deviceClass, variant: variant)
+        var manifest = PlistDict()
+        for component in components {
+            manifest[component] = ["Info": ["Path": "\(component).\(deviceClass)"] as PlistDict] as PlistDict
+        }
+        identity["Manifest"] = manifest
+        return identity
+    }
+
+    @Test
+    func `the research board supplies the guest's components and may lack a RecoveryMode`() throws {
+        let cloud = [
+            "LLB", "iBSS", "iBEC", "iBoot", "Ap,RestoreSecurePageTableMonitor", "Ap,RestoreTrustedExecutionMonitor",
+            "Ap,SecurePageTableMonitor", "Ap,TrustedExecutionMonitor", "DeviceTree", "RestoreDeviceTree", "SEP",
+            "RestoreSEP", "KernelCache", "RestoreKernelCache", "RestoreRamDisk", "RestoreTrustCache",
+        ]
+        let cloudIdentities = [
+            Self.identity(deviceClass: "vresearch101ap", variant: "Darwin Cloud Customer Erase Install (IPSW)", components: cloud),
+            Self.identity(deviceClass: "vresearch101ap", variant: "Research Darwin Cloud Customer Erase Install (IPSW)", components: cloud),
+        ]
+        let iPhoneIdentities = [
+            Self.identity(deviceClass: "d47ap", variant: "Customer Erase Install (IPSW)", components: [
+                "Ap,SystemVolumeCanonicalMetadata", "OS", "StaticTrustCache", "SystemVolume",
+            ]),
+        ]
+        let (vp, vpr) = FirmwareManifest.findRuntime(cloudIdentities, researchBoard: (0, 1))
+        let identity = try FirmwareManifest.buildEraseIdentity(
+            cloudIdentities: cloudIdentities,
+            iPhoneIdentities: iPhoneIdentities,
+            prod: 0,
+            res: 1,
+            vp: vp,
+            vpr: vpr,
+            iErase: 0,
+        )
+        let manifest = try #require(identity["Manifest"] as? PlistDict)
+        func path(_ component: String) -> String? {
+            ((manifest[component] as? PlistDict)?["Info"] as? PlistDict)?["Path"] as? String
+        }
+        #expect(path("RestoreDeviceTree") == "RestoreDeviceTree.vresearch101ap")
+        #expect(path("SEP") == "SEP.vresearch101ap")
+        #expect(manifest["RecoveryMode"] == nil)
+    }
+
     // MARK: - findIPhoneErase
 
     @Test

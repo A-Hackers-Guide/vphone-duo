@@ -219,7 +219,10 @@ AX orientation request whenever the HID provider is alive and enumerated.
 Mobile preferences retain the pose across a SpringBoard or backboardd restart;
 invalid or absent preferences default to stationary portrait. The read form
 adds `accelerometer` with the configuration and provider status. Its original
-SpringBoard interface-orientation readback still decides request success.
+SpringBoard interface-orientation readback still decides request success, and a
+refused request puts the previous pose back and asks again for the previous
+interface orientation; otherwise the persisted pose and iPadOS's pointer stay
+turned the way the interface is not.
 Nested `orientation_sink` reports native readiness, the last BKS orientation
 and delivery count separately from HID enumeration/dispatch. The outer
 `device_orientation` remains UIDevice's value in vphoned, which does not

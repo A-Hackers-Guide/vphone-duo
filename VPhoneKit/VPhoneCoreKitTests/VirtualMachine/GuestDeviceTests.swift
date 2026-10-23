@@ -153,9 +153,20 @@ struct GuestDeviceTests {
     }
 
     @Test
+    func `an iPhone XS Max is presented as the iPhone17,3 with its own artwork`() {
+        let xsMax = VPhoneGuestDevice.iPhone11_6
+        #expect(!xsMax.presentsBoard)
+        #expect(xsMax.notchedArtworkSubtype == 2688)
+        #expect(xsMax.screen == .init(width: 1242, height: 2688, pixelsPerInch: 458, scale: 3.0))
+        #expect(VPhoneGuestDevice.iPhone17_3.notchedArtworkSubtype == nil)
+        // Its IPSW covers the XS (iPhone11,2), which vphone does not run, first.
+        #expect(VPhoneGuestDevice.detect(buildManifest: ["SupportedProductTypes": ["iPhone11,2", "iPhone11,4", "iPhone11,6"]]) == xsMax)
+    }
+
+    @Test
     func `every other iPhone presents its own board at 3x`() {
         #expect(!VPhoneGuestDevice.iPhone17_3.presentsBoard)
-        for device in VPhoneGuestDevice.known where device.family == .iPhone && device != .iPhone17_3 {
+        for device in VPhoneGuestDevice.known where device.family == .iPhone && device != .iPhone17_3 && device.notchedArtworkSubtype == nil {
             #expect(device.presentsBoard)
             #expect(device.screen.scale == 3.0)
             #expect(device.screen.pixelsPerInch == 460)
@@ -185,5 +196,20 @@ struct GuestDeviceTests {
         #expect(decoded.guestProductType == "iPhone19,2")
         #expect(decoded.guestDevice == device)
         #expect(decoded.screenConfig == .init(width: 1206, height: 2622, pixelsPerInch: 460, scale: 3.0))
+    }
+
+    @Test
+    func `iPhone Duo preserves its V68 identity and outer display in the VM`() throws {
+        let device = try #require(VPhoneGuestDevice.detect(buildManifest: ["SupportedProductTypes": ["iPhone19,4"]]))
+        #expect(device == .iPhone19_4)
+        #expect(device.boardDeviceTreePath == "Firmware/all_flash/DeviceTree.v68ap.im4p")
+        let manifest = VPhoneVirtualMachineManifest.newVM().updating(guestDevice: device)
+        let decoded = try PropertyListDecoder().decode(
+            VPhoneVirtualMachineManifest.self,
+            from: PropertyListEncoder().encode(manifest),
+        )
+        #expect(decoded.guestProductType == "iPhone19,4")
+        #expect(decoded.guestDevice == device)
+        #expect(decoded.screenConfig == .init(width: 1398, height: 2034, pixelsPerInch: 460, scale: 3.0))
     }
 }

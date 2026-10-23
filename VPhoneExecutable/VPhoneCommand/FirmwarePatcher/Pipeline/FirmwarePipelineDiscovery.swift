@@ -19,7 +19,7 @@ extension FirmwarePipeline {
 
     /// Find the `*Restore*` subdirectory inside the VM directory.
     /// Mirrors Python `find_restore_dir`.
-    func findRestoreDirectory() throws -> URL {
+    public func findRestoreDirectory() throws -> URL {
         let fm = FileManager.default
         let contents = try fm.contentsOfDirectory(
             at: vmDirectory,
@@ -33,6 +33,27 @@ extension FirmwarePipeline {
             throw PatcherError.fileNotFound("Restore directory in \(vmDirectory.path). Run vphone-cli fw prepare first.")
         }
         return restoreDir
+    }
+
+    /// The research board kernelcache the VM's mix is built from, as shipped:
+    /// its `RestoreKernelCache`, from the originals once `fw patch` has put it
+    /// aside. Nil when the restore tree has vphone600 components.
+    public func researchBoardKernelcache() throws -> KernelCacheMixer.Input? {
+        let restoreDir = try findRestoreDirectory()
+        guard Self.researchBoardStandsIn(restoreDir: restoreDir) else { return nil }
+        let file = try restoreDir.appending(path: Self.manifestComponentPath("RestoreKernelCache", in: restoreDir))
+        let stashed = originalURL(for: file).flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
+        return try KernelCacheMixer.Input(
+            kernelcache: Data(contentsOf: stashed ?? file),
+            guest: readGuestDevice(restoreDir).family.rawValue,
+            restoreTree: restoreDir,
+        )
+    }
+
+    /// The guest family the preserved iPhone manifest names (iPhone when none).
+    static func guestFamily(restoreDir: URL) -> String {
+        let manifest = restoreDir.appendingPathComponent("iPhone-BuildManifest.plist")
+        return (VPhoneGuestDevice.detect(buildManifestAt: manifest) ?? .default).family.rawValue
     }
 
     /// `ProductVersion` from a manifest in `restoreDir`, or nil if absent/unreadable.

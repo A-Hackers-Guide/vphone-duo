@@ -76,12 +76,16 @@ public enum FirmwareManifest {
         // per board it covers, so the userland one is picked by board.
         let device = chosen ?? VPhoneGuestDevice.detect(buildManifest: iPhoneBM) ?? .default
         let (prod, res) = try findCloudOS(cloudIdentities, deviceClass: "vresearch101ap")
-        let (vp, vpr) = try findCloudOS(cloudIdentities, deviceClass: "vphone600ap")
+        let (vp, vpr) = findRuntime(cloudIdentities, researchBoard: (prod, res))
         let iErase = try findIPhoneErase(iPhoneIdentities, deviceClass: device.deviceClass)
 
         if verbose {
             print("  cloudOS vresearch101ap: release=#\(prod), research=#\(res)")
-            print("  cloudOS vphone600ap:    release=#\(vp), research=#\(vpr)")
+            if (vp, vpr) == (prod, res) {
+                print("  cloudOS vphone600ap:    none, the research board stands in")
+            } else {
+                print("  cloudOS vphone600ap:    release=#\(vp), research=#\(vpr)")
+            }
             print("  \(device.productType) erase: #\(iErase)")
         }
 
@@ -178,6 +182,17 @@ public enum FirmwareManifest {
             throw ManifestError.identityNotFound("research identity for \(deviceClass) in the cloudOS BuildManifest")
         }
         return (rel, res)
+    }
+
+    /// The identities the guest's device tree, SEP and kernel come from:
+    /// vphone600ap's, which only the 26.1–26.4 beta cloudOS releases carry, or
+    /// else the research board's, which `fw patch` converts
+    /// (FirmwareResearchBoardPatchSet).
+    static func findRuntime(
+        _ identities: [PlistDict],
+        researchBoard: (release: Int, research: Int),
+    ) -> (release: Int, research: Int) {
+        (try? findCloudOS(identities, deviceClass: "vphone600ap")) ?? researchBoard
     }
 
     /// Return the index of the first iPhone erase identity.
@@ -381,8 +396,10 @@ public enum FirmwareManifest {
         m["KernelCache"] = try entry(C, vpr, "KernelCache") // research
         m["RestoreKernelCache"] = try entry(C, vp, "RestoreKernelCache") // release
 
-        // Recovery mode (vphone600ap carries this entry).
-        m["RecoveryMode"] = try entry(C, vp, "RecoveryMode")
+        // Recovery mode, which vphone600ap carries and the research board may not.
+        if let recoveryMode = try? entry(C, vp, "RecoveryMode") {
+            m["RecoveryMode"] = recoveryMode
+        }
 
         // CloudOS erase ramdisk.
         m["RestoreRamDisk"] = try entry(C, prod, "RestoreRamDisk")

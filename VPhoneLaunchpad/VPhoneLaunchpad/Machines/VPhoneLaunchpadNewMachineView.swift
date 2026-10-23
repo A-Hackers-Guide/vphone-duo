@@ -36,6 +36,17 @@ struct VPhoneLaunchpadNewMachineView: View {
     @State private var customGuestProductType: String?
     @State private var inspectedCustomSource: String?
     @State private var cloudOSSource = ""
+    /// Run the release on its own cloudOS, where the research board stands in
+    /// for vphone600 and the kernelcache is mixed (`fw kernelcache`).
+    @State private var usesOwnCloudOS = false
+    /// The ipsw that stages a mix; vphone-cli does not ship one.
+    @AppStorage("KernelcacheIPSW") private var kernelcacheIPSW = ""
+    /// The Mac that links an iOS 18 guest's kernel-first mix over ssh
+    /// (`user@host`), kept like the ipsw.
+    @AppStorage("KernelcacheBuilder") private var kernelcacheBuilderDestination = ""
+    /// Its password, for ssh and sudo there. Kept only while the sheet is
+    /// open, and by the creation that runs with it.
+    @State private var kernelcacheBuilderPassword = ""
     @State private var cpu = Self.defaultCPU
     @State private var memoryMB = Self.defaultMemoryMB
     @State private var diskSizeGB = Self.defaultDiskSizeGB
@@ -80,7 +91,54 @@ struct VPhoneLaunchpadNewMachineView: View {
             let cloudOS = cloudOSSource.trimmingCharacters(in: .whitespaces)
             return iphone.isEmpty || cloudOS.isEmpty ? nil : (iphone, cloudOS)
         }
-        return selectedPairing.map { ($0.ios.url, $0.recommendedCloudOS.url) }
+        return selectedPairing.map { ($0.ios.url, ownCloudOS?.url ?? $0.recommendedCloudOS.url) }
+    }
+
+    /// The release's own cloudOS, when chosen and the pairing has one.
+    private var ownCloudOS: VPhoneLaunchpadFirmwareCatalog.Image? {
+        usesOwnCloudOS && !usesCustomSources ? selectedPairing?.matchingCloudOS : nil
+    }
+
+    /// Whether `fw patch` rebuilds the kernelcache, which needs the ipsw: on
+    /// the release's own cloudOS, always for a watch, whose kexts no cloudOS
+    /// kernelcache has, and for an iOS 18 guest, which boots its own release's
+    /// research board kernel.
+    private var rebuildsKernelcache: Bool {
+        ownCloudOS != nil || !usesCustomSources && (selectedGuest?.isWatch == true || linksKernelFirst)
+    }
+
+    private var hasKernelcacheIPSW: Bool {
+        FileManager.default.isExecutableFile(atPath: kernelcacheIPSW)
+    }
+
+    /// An iOS 18 guest from the catalog, whose kernelcache only the kmutil of
+    /// macOS 15 or 26.0 to 26.3 links.
+    private var linksKernelFirst: Bool {
+        !usesCustomSources && selectedGuest?.linksKernelFirst == true
+    }
+
+    /// The ssh builder that links it, when one is named.
+    private var kernelcacheBuilder: VPhoneLaunchpadKernelcacheBuilder? {
+        let destination = kernelcacheBuilderDestination.trimmingCharacters(in: .whitespaces)
+        guard linksKernelFirst, !destination.isEmpty else {
+            return nil
+        }
+        return VPhoneLaunchpadKernelcacheBuilder(destination: destination, password: kernelcacheBuilderPassword)
+    }
+
+    /// Why the builder stops Create: none named where this Mac links
+    /// kernel-last, or one that is not `user@host`.
+    private var kernelcacheBuilderProblem: String? {
+        guard linksKernelFirst else {
+            return nil
+        }
+        if let kernelcacheBuilder {
+            return VPhoneLaunchpadKernelcacheBuilder.isValid(kernelcacheBuilder.destination)
+                ? nil : String(localized: "Name the macOS builder as user@host.")
+        }
+        return VPhoneLaunchpadKernelcacheBuilder.hostNeedsBuilder
+            ? String(localized: "Name a Mac or macOS VM running macOS 15 or 26.0 to 26.3, with Remote Login on, as the macOS builder in Advanced Options: this Mac's kmutil cannot link iOS 18 kernels.")
+            : nil
     }
 
     private var effectiveName: String {
@@ -171,6 +229,7 @@ struct VPhoneLaunchpadNewMachineView: View {
     private var canCreate: Bool {
         nameProblem == nil && advancedProblem == nil && sources != nil && bundleVersion != nil
             && (!usesCustomSources || inspectedCustomSource == iphoneSource)
+            && (!rebuildsKernelcache || hasKernelcacheIPSW) && kernelcacheBuilderProblem == nil
     }
 
     var body: some View {
@@ -215,8 +274,19 @@ struct VPhoneLaunchpadNewMachineView: View {
         // Off when there is no template to clone; it can still be turned on
         // to build one.
         .onChange(of: templateAvailable, initial: true) {
-            if let templateAvailable, !requiresStandaloneRestore {
+            if let templateAvailable, !requiresStandaloneRestore, !patches.customisesRestoredSystem {
                 usesTemplate = templateAvailable
+            }
+        }
+        // The Minimal preset is restored on its own and not slimmed.
+        .onChange(of: patches.customisesRestoredSystem) { _, restored in
+            guard !requiresStandaloneRestore else { return }
+            if restored {
+                usesTemplate = false
+                slimming.slim = false
+            } else {
+                usesTemplate = templateAvailable ?? true
+                slimming = VPhoneLaunchpadSlimming()
             }
         }
         .onAppear {
@@ -257,9 +327,9 @@ struct VPhoneLaunchpadNewMachineView: View {
                         hardwarePage
                         advancedSections(.hardware)
                     case .template:
-                        VPhoneLaunchpadSlimmingSections(part: .template, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, requiresStandaloneRestore: requiresStandaloneRestore)
+                        VPhoneLaunchpadSlimmingSections(part: .template, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, requiresStandaloneRestore: requiresStandaloneRestore, forRestoredSystem: patches.customisesRestoredSystem)
                     case .slimming:
-                        VPhoneLaunchpadSlimmingSections(part: .slimming, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, requiresStandaloneRestore: requiresStandaloneRestore)
+                        VPhoneLaunchpadSlimmingSections(part: .slimming, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, requiresStandaloneRestore: requiresStandaloneRestore, forRestoredSystem: patches.customisesRestoredSystem)
                     case .firmware:
                         bundleSection
                         firmwareSourceSection
@@ -397,6 +467,25 @@ struct VPhoneLaunchpadNewMachineView: View {
             } else {
                 Text("Choose a guest IPSW and a cloudOS IPSW in Advanced Options.").foregroundStyle(.red)
             }
+        } else if let own = ownCloudOS {
+            Text(hasKernelcacheIPSW
+                ? "On its own cloudOS, \(own.name): the kernelcache is rebuilt, which asks for administrator access once."
+                : "Choose an ipsw with `kernel extract --kdk` in Advanced Options to run on \(own.name).")
+                .foregroundStyle(hasKernelcacheIPSW ? Color.secondary : Color.red)
+        } else if linksKernelFirst, let cloudOS = selectedPairing?.recommendedCloudOS.name {
+            if !hasKernelcacheIPSW {
+                Text("Choose an ipsw with `kernel extract --kdk` in Advanced Options: the release's own kernel is rebuilt with the vphone600 kexts.").foregroundStyle(.red)
+            } else if let kernelcacheBuilderProblem {
+                Text(kernelcacheBuilderProblem).foregroundStyle(.red)
+            } else {
+                Text("With \(cloudOS): the kernelcache is rebuilt and linked \(kernelcacheBuilder.map { "on \($0.destination)" } ?? "on this Mac"), and the restore image asks for administrator access once.")
+                    .foregroundStyle(.secondary)
+            }
+        } else if rebuildsKernelcache, let cloudOS = selectedPairing?.recommendedCloudOS.name {
+            Text(hasKernelcacheIPSW
+                ? "With \(cloudOS): the kernelcache is rebuilt with the watch's kexts, which asks for administrator access once."
+                : "Choose an ipsw with `kernel extract --kdk` in Advanced Options: the watch's kernelcache is rebuilt with its kexts.")
+                .foregroundStyle(hasKernelcacheIPSW ? Color.secondary : Color.red)
         } else if let selectedGuest, let cloudOS = selectedPairing?.recommendedCloudOS.name {
             Text("Recommended firmware pairings for \(selectedGuest.detailedName), with \(cloudOS).")
                 .foregroundStyle(.secondary)
@@ -570,14 +659,36 @@ struct VPhoneLaunchpadNewMachineView: View {
             if usesCustomSources {
                 sourceField("Guest IPSW", $iphoneSource)
                 sourceField("cloudOS IPSW", $cloudOSSource)
+            } else if let pairing = selectedPairing, let own = pairing.matchingCloudOS {
+                Picker("cloudOS", selection: $usesOwnCloudOS) {
+                    Text(verbatim: pairing.recommendedCloudOS.name).tag(false)
+                    Text(verbatim: own.name).tag(true)
+                }
+                if usesOwnCloudOS {
+                    sourceField("ipsw", $kernelcacheIPSW)
+                }
             } else {
                 LabeledContent("cloudOS", value: selectedPairing?.recommendedCloudOS.name ?? "—")
+                if rebuildsKernelcache {
+                    sourceField("ipsw", $kernelcacheIPSW)
+                }
+                if linksKernelFirst {
+                    TextField("macOS builder", text: $kernelcacheBuilderDestination, prompt: Text("user@host"))
+                    SecureField("Password", text: $kernelcacheBuilderPassword, prompt: Text("None with ssh keys"))
+                        .disabled(kernelcacheBuilder == nil)
+                }
             }
         } header: {
             Text("Firmware")
         } footer: {
             Text(usesCustomSources
                 ? "These two files replace the device and version chosen on the basic page."
+                : ownCloudOS != nil
+                ? "On its own cloudOS the release boots its own kernel, rebuilt with the vphone600 virtualisation kexts: the ipsw (with `kernel extract --kdk`) stages it as you, and the helper links it as root."
+                : linksKernelFirst
+                ? "iOS 18 boots its own release's kernel, rebuilt with the vphone600 kexts of cloudOS 26.1: the ipsw (with `kernel extract --kdk`) stages it as you. Only the kmutil of macOS 15 or 26.0 to 26.3 links it: from macOS 26.4 on, the macOS builder, a Mac or macOS VM with Remote Login on, links it over ssh as root there. The password is for ssh and sudo on it and is not saved; leave it empty with ssh keys and passwordless sudo."
+                : rebuildsKernelcache
+                ? "A watch boots the cloudOS kernel rebuilt with its own kexts: the ipsw (with `kernel extract --kdk`) stages it as you, and the helper links it as root."
                 : "The device and version are chosen on the basic page; cloudOS goes with them.")
                 .foregroundStyle(.secondary)
         }
@@ -725,16 +836,19 @@ struct VPhoneLaunchpadNewMachineView: View {
     }
 
     private func applyGuestDefaults(previousProductType: String?) {
-        let wasStandalone = previousProductType?.hasPrefix("AppleTV") == true || previousProductType?.hasPrefix("AudioAccessory") == true
+        let previousPreset = VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: previousProductType)
+        let nextPreset = VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: guestProductType)
+        let hadOwnPreset = previousPreset != VPhoneLaunchpadPatchSelection.defaultPreset
+        let hasOwnPreset = nextPreset != VPhoneLaunchpadPatchSelection.defaultPreset
         // Preserve custom iPhone/iPad patch and template settings when
         // switching between guests that share the iOS creation workflow.
-        guard wasStandalone != requiresStandaloneRestore
-            || requiresStandaloneRestore && previousProductType != guestProductType else { return }
+        guard hadOwnPreset != hasOwnPreset
+            || hasOwnPreset && previousProductType != guestProductType else { return }
         patches = VPhoneLaunchpadPatchSelection()
         patches.preset = VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: guestProductType)
-        usesTemplate = requiresStandaloneRestore ? false : templateAvailable ?? true
+        usesTemplate = hasOwnPreset ? false : templateAvailable ?? true
         slimming = VPhoneLaunchpadSlimming()
-        if requiresStandaloneRestore {
+        if hasOwnPreset {
             slimming.slim = false
         }
         Task { await loadPatchCatalog() }
@@ -797,6 +911,8 @@ struct VPhoneLaunchpadNewMachineView: View {
             keepArtifacts: keepArtifacts,
             usesTemplate: usesTemplate,
             slimming: slimming,
+            kernelcacheIPSW: rebuildsKernelcache ? kernelcacheIPSW : nil,
+            kernelcacheBuilder: kernelcacheBuilder,
         )
         let pipeline = model.machines.create(options)
         model.machines.selection = [pipeline.machine]

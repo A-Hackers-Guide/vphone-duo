@@ -58,6 +58,8 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
         let localHostName: String?
         /// False when the guest is not given this Mac's name locally.
         let resolvesMacName: Bool?
+        /// False when a nat guest is kept from the other nat machines.
+        let reachesPeers: Bool?
     }
 
     struct OSVersion: Decodable, Hashable, Sendable {
@@ -154,15 +156,20 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
         guestProductType?.hasPrefix("AudioAccessory") == true
     }
 
-    /// The guest OS's name.
+    var isWatch: Bool {
+        guestProductType?.hasPrefix("Watch") == true
+    }
+
+    /// The guest OS name, including accessory and watch guests.
     var osName: String {
-        isHomePod ? "HomePod Software" : isAppleTV ? "tvOS" : isPad ? "iPadOS" : "iOS"
+        isHomePod ? "HomePod Software" : isWatch ? "watchOS" : isAppleTV ? "tvOS" : isPad ? "iPadOS" : "iOS"
     }
 
     /// config.plist's `guestProductType`, else the product type in the name
     /// of the restore tree `fw prepare` keeps in `FirmwareOriginals`
     /// (`iPhone17,3_…_Restore`, or `iPhoneOS_iPad16,1_…_Restore` for an iPad
-    /// and `iPhoneOS_AppleTV5,3_…_Restore` for an Apple TV),
+    /// and `iPhoneOS_AppleTV5,3_…_Restore` for an Apple TV, `iPhoneOS_Watch7,18_…`
+    /// for an Apple Watch),
     /// for configs written before the key.
     static func guestProductType(in folder: URL) -> String? {
         let config = NSDictionary(contentsOf: folder.appendingPathComponent("config.plist"))
@@ -172,7 +179,7 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
         let originals = folder.appendingPathComponent("FirmwareOriginals", isDirectory: true)
         let names = (try? FileManager.default.contentsOfDirectory(atPath: originals.path)) ?? []
         for name in names.sorted() where name.hasSuffix("_Restore") {
-            if let type = name.split(separator: "_").first(where: { $0.wholeMatch(of: /(iPhone|iPad|AppleTV|AudioAccessory)\d+,\d+/) != nil }) {
+            if let type = name.split(separator: "_").first(where: { $0.wholeMatch(of: /(iPhone|iPad|AppleTV|AudioAccessory|Watch)\d+,\d+/) != nil }) {
                 return String(type)
             }
         }
@@ -236,6 +243,9 @@ nonisolated struct VPhoneLaunchpadFirmwareCatalog: Decodable, Sendable {
     struct Pairing: Decodable, Hashable, Identifiable, Sendable {
         let ios: Image
         let recommendedCloudOS: Image
+        /// The release's own cloudOS, on the research board, from a bundle that
+        /// links its kernelcache mix (`fw kernelcache`).
+        var matchingCloudOS: Image?
 
         var id: String {
             ios.url
@@ -262,12 +272,22 @@ nonisolated struct VPhoneLaunchpadFirmwareCatalog: Decodable, Sendable {
         /// The product type `fw prepare --device` takes.
         let productType: String
         let name: String
-        /// `iPhone`, `iPad`, `appleTV` or `homePod`.
+        /// The guest family identifier, including homePod and watch.
         let family: String
         let pairings: [Pairing]
+        /// `kernel-first` for a device whose kernelcache mix only the kmutil
+        /// of macOS 15 or 26.0 to 26.3 links, from a bundle that has one.
+        var kernelcacheLayout: String?
 
         var id: String {
             productType
+        }
+
+        /// The iOS 18 research board guest: every pairing rebuilds a
+        /// kernel-first kernelcache, which from macOS 26.4 on another Mac links
+        /// over ssh (`VPhoneLaunchpadKernelcacheBuilder`).
+        var linksKernelFirst: Bool {
+            kernelcacheLayout == "kernel-first"
         }
 
         var isPad: Bool {
@@ -276,6 +296,10 @@ nonisolated struct VPhoneLaunchpadFirmwareCatalog: Decodable, Sendable {
 
         var isAppleTV: Bool {
             family == "appleTV"
+        }
+
+        var isWatch: Bool {
+            family == "watch"
         }
 
         var isHomePod: Bool {
@@ -289,7 +313,7 @@ nonisolated struct VPhoneLaunchpadFirmwareCatalog: Decodable, Sendable {
 
         /// The system its IPSWs install.
         var osName: String {
-            isHomePod ? "HomePod Software" : isAppleTV ? "tvOS" : isPad ? "iPadOS" : "iOS"
+            isHomePod ? "HomePod Software" : isWatch ? "watchOS" : isAppleTV ? "tvOS" : isPad ? "iPadOS" : "iOS"
         }
 
         /// The name with its product type, `iPhone 16 (iPhone17,3)`: Launchpad

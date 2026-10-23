@@ -9,7 +9,7 @@ import Foundation
 /// manifest cannot be read.
 nonisolated struct VPhoneLaunchpadIPSW: Hashable, Sendable {
     enum Kind: Hashable, Sendable {
-        case iPhone, iPad, appleTV, homePod, cloudOS, unknown
+        case iPhone, iPad, appleTV, homePod, watch, cloudOS, unknown
 
         /// The system the IPSW installs: the first word of its title.
         var systemName: String? {
@@ -18,6 +18,7 @@ nonisolated struct VPhoneLaunchpadIPSW: Hashable, Sendable {
             case .iPad: "iPadOS"
             case .appleTV: "tvOS"
             case .homePod: "HomePod Software"
+            case .watch: "watchOS"
             case .cloudOS: "cloudOS"
             case .unknown: nil
             }
@@ -53,6 +54,9 @@ nonisolated struct VPhoneLaunchpadIPSW: Hashable, Sendable {
         }
         if productTypes.contains(where: { $0.hasPrefix("AudioAccessory") }) {
             return .homePod
+        }
+        if productTypes.contains(where: { $0.hasPrefix("Watch") }) {
+            return .watch
         }
         return .unknown
     }

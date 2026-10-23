@@ -2,9 +2,12 @@
 //
 // Two kernel checks stand between Frida's Stalker and a working trace: the
 // entitlement flag thread_set_state wants, and the immutability vm_map_delete
-// enforces over code pages. Neither is needed to boot, and both widen what any
-// process in the guest can do, so this set is opt-in — no preset that a VM gets
-// by default includes it.
+// enforces over code pages. Two more stand between Frida and some targets: the
+// TPRO state dyld asserts on entry, which aborts spawned apps, and the per-process
+// syscall filters, which deny the agent inside filtered daemons. The last two are
+// ported from mowisec/frida_patches_srd. None is needed to boot, and all widen
+// what any process in the guest can do, so this set is opt-in — no preset that a
+// VM gets by default includes it.
 //
 // Gated to cloudOS 26.4 and newer, where these shapes were verified.
 
@@ -32,6 +35,20 @@ public enum FirmwareKernelFridaPatchSet {
                 identifier: "kernel-exp-frida_vm_map_delete_immutable_code",
                 title: "Immutable code deletion",
                 summary: "Lets vm_map_delete remove an immutable code mapping, which Stalker rewrites over.",
+                target: .firmware(.kernelcache),
+                applicability: fridaCapable,
+            ),
+            VPhonePatchDeclaration(
+                identifier: "kernel-exp-frida_tpro_off",
+                title: "TPRO off",
+                summary: "Turns TPRO off system-wide, so dyld's TPRO entry check cannot abort an app Frida spawns.",
+                target: .firmware(.kernelcache),
+                applicability: fridaCapable,
+            ),
+            VPhonePatchDeclaration(
+                identifier: "kernel-exp-frida_syscall_filter_off",
+                title: "Syscall filters off",
+                summary: "Ignores per-process syscall filters, so Frida's agent survives inside filtered daemons such as trustd or backboardd.",
                 target: .firmware(.kernelcache),
                 applicability: fridaCapable,
             ),

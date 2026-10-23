@@ -4,6 +4,19 @@ import Testing
 @testable import VPhoneCoreKit
 
 struct ConfinedDirectoryTests {
+    @Test func `directory permissions stay on the pinned inode after a path swap`() throws {
+        let tree = try Tree()
+        defer { tree.remove() }
+        let directory = try VPhoneConfinedDirectory(root: tree.root.path)
+        let originalOutsideMode = mode(tree.outside) & 0o777
+        let moved = tree.base.appendingPathComponent("moved")
+        try FileManager.default.moveItem(at: tree.root, to: moved)
+        try FileManager.default.createSymbolicLink(at: tree.root, withDestinationURL: tree.outside)
+        try directory.setPermissions(mode: 0o700)
+        #expect(mode(moved) & 0o777 == 0o700)
+        #expect(mode(tree.outside) & 0o777 == originalOutsideMode)
+    }
+
     /// A canonical scratch tree: `root/` is the confinement root, `outside/`
     /// holds `keep`, and `root/link` points at `outside/`.
     private struct Tree {

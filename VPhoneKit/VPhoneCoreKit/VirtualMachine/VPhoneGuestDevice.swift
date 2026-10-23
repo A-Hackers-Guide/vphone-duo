@@ -20,6 +20,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         case iPad
         case appleTV
         case homePod
+        case watch
 
         public var osName: String {
             switch self {
@@ -27,6 +28,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
             case .iPad: "iPadOS"
             case .appleTV: "tvOS"
             case .homePod: "HomePod Software"
+            case .watch: "watchOS"
             }
         }
 
@@ -71,10 +73,19 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
 
     /// Whether the guest boots a device tree of its own that presents this
     /// board, built by `fw patch` from the board's tree in the IPSW. Every
-    /// device but the iPhone17,3 does; that one keeps the fixed D47 identity
-    /// `cfw install` writes into the restored tree.
+    /// device but the iPhone17,3 and the iPhone XS Max does; those keep the
+    /// fixed D47 identity `cfw install` writes into the restored tree.
     public var presentsBoard: Bool {
-        productType != Self.iPhone17_3.productType
+        productType != Self.iPhone17_3.productType && notchedArtworkSubtype == nil
+    }
+
+    /// The artwork subtype of a guest presented as the iPhone17,3 whose own
+    /// userland has none of the iPhone 16's: the XS family's asset catalogs
+    /// only carry 2436 and 2688 artwork, and its SpringBoard no Dynamic Island
+    /// layout. Without it Hello and the wallpaper stay empty and the home
+    /// gesture breaks. Nil for every other device.
+    public var notchedArtworkSubtype: Int? {
+        productType == "iPhone11,6" ? 2688 : nil
     }
 
     // MARK: - Known Devices
@@ -124,6 +135,23 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     public static let iPhone18_5 = iPhone("iPhone18,5", "v159ap", "iPhone 17e", width: 1170, height: 2532)
     /// iPhone 18 Pro (V63AP): 1206x2622, 402x874 points.
     public static let iPhone19_2 = iPhone("iPhone19,2", "v63ap", "iPhone 18 Pro", width: 1206, height: 2622)
+
+    /// iPhone Duo (V68AP), using only its outer display for initial bring-up.
+    /// The inner display and hinge are not represented by the VM's single panel.
+    public static let iPhone19_4 = iPhone("iPhone19,4", "v68ap", "iPhone Duo", width: 1398, height: 2034)
+
+    /// iPhone XS Max: 1242x2688 at 458 ppi, 414x896 points. Its IPSW carries the
+    /// iOS 18 releases after 18.6, which the iPhone 16 never got; the research
+    /// board's own iOS 18 kernel boots it (the 18.x kernelcache recipes, `minimal`
+    /// only). It is presented as the iPhone17,3 with its own artwork
+    /// (`notchedArtworkSubtype`).
+    public static let iPhone11_6 = VPhoneGuestDevice(
+        family: .iPhone,
+        productType: "iPhone11,6",
+        deviceClass: "d331pap",
+        productName: "iPhone XS Max",
+        screen: .init(width: 1242, height: 2688, pixelsPerInch: 458, scale: 3.0),
+    )
 
     private static func iPad(
         _ productType: String,
@@ -194,6 +222,18 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         screen: .init(width: 320, height: 320, pixelsPerInch: 72, scale: 1.0),
     )
 
+    /// Apple Watch Series 11 (GPS), 46 mm: 416x496 at 330 ppi, 208x248 points.
+    /// The research board's kernel boots it with the watchOS kexts of its IPSW
+    /// (the `watch` kernelcache recipe); N227b's device tree supplies the watch
+    /// idiom and 2x identity.
+    public static let watch7_18 = VPhoneGuestDevice(
+        family: .watch,
+        productType: "Watch7,18",
+        deviceClass: "n227bap",
+        productName: "Apple Watch Series 11 (GPS)",
+        screen: .init(width: 416, height: 496, pixelsPerInch: 330, scale: 2.0),
+    )
+
     /// Whether the guest's userland is plain arm64 rather than arm64e: only
     /// the Apple TV HD's. HomePod mini 27.0 ships arm64e dyld and launchd.
     /// The Apple TV HD has no paravirtual GPU driver to load, and its
@@ -214,7 +254,8 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         iPhone17_3,
         iPhone17_4, iPhone17_1, iPhone17_2, iPhone17_5,
         iPhone18_3, iPhone18_4, iPhone18_1, iPhone18_2, iPhone18_5,
-        iPhone19_2,
+        iPhone19_2, iPhone19_4,
+        iPhone11_6,
         iPad16_1,
         iPad15_7,
         iPad15_3, iPad15_5,
@@ -222,11 +263,13 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         iPad17_1, iPad17_3,
         appleTV5_3, appleTV14_1,
         audioAccessory5_1,
+        watch7_18,
     ]
 
     /// Cellular models that ship in the same IPSW as a known Wi-Fi model and map
     /// onto it: the VM has no baseband, so it gets the Wi-Fi identity.
     static let aliases: [String: String] = [
+        "iPhone11,4": "iPhone11,6",
         "iPad16,2": "iPad16,1",
         "iPad15,4": "iPad15,3",
         "iPad15,6": "iPad15,5",
@@ -256,7 +299,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     public func restoreTreeName(version: String, build: String) -> String {
         switch family {
         case .iPhone: "\(productType)_\(version)_\(build)_Restore"
-        case .iPad, .appleTV, .homePod: "iPhoneOS_\(productType)_\(version)_\(build)_Restore"
+        case .iPad, .appleTV, .homePod, .watch: "iPhoneOS_\(productType)_\(version)_\(build)_Restore"
         }
     }
 

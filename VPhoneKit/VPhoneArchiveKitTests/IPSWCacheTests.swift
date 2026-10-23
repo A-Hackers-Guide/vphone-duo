@@ -516,7 +516,9 @@ struct IPSWCacheTests {
         }
     }
 
-    @Test func `a cloudOS without the virtual iPhone is refused before extraction`() throws {
+    // `fw prepare` then takes the research board's components and checks that a
+    // kernelcache recipe exists for them.
+    @Test func `a cloudOS without the virtual iPhone pairs, the research board standing in`() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -525,12 +527,7 @@ struct IPSWCacheTests {
         let cloud = try ipsw(in: root, "cloud", productTypes: ["ComputeModule14,1", "Mac14,14"],
                              deviceClasses: ["j226cap", "j236cap", "vresearch101ap"])
 
-        #expect {
-            try VPhoneIPSWCache.checkPair(iPhone: phone, cloudOS: cloud)
-        } throws: { error in
-            guard case .noVirtualPhoneInCloudOS? = error as? VPhoneIPSWCache.Error else { return false }
-            return error.localizedDescription.contains("vphone600ap")
-        }
+        try VPhoneIPSWCache.checkPair(iPhone: phone, cloudOS: cloud)
     }
 
     @Test func `a known TV donor pairs with cloudOS without admitting unknown TVs`() throws {

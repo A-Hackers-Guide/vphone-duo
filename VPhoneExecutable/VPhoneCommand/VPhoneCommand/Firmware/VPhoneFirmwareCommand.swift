@@ -17,6 +17,7 @@ struct VPhoneFirmwareCommand: ParsableCommand {
             VPhoneFirmwareOTACommand.self,
             VPhoneFirmwarePrepareCommand.self,
             VPhoneFirmwarePatchCommand.self,
+            VPhoneFirmwareKernelcacheCommand.self,
             VPhoneFirmwarePatchesCommand.self,
             VPhoneFirmwareSetPatchesCommand.self,
             VPhoneFirmwareManifestCommand.self,
@@ -200,10 +201,18 @@ struct VPhoneFirmwareCatalogCommand: ParsableCommand {
             print("Firmware catalog (\(entry.productType), \(entry.name))")
             let os = VPhoneGuestDevice.Family(rawValue: entry.family)?.osName ?? "iOS"
             let width = max(os.count, entry.pairings.map(\.ios.name.count).max() ?? 0)
-            print("\(os.padding(toLength: width, withPad: " ", startingAt: 0))  recommended cloudOS")
+            let recommendedWidth = max(19, entry.pairings.map(\.recommendedCloudOS.name.count).max() ?? 0)
+            let ownColumn = entry.pairings.contains { $0.matchingCloudOS != nil }
+            print("\(os.padding(toLength: width, withPad: " ", startingAt: 0))  "
+                + "recommended cloudOS".padding(toLength: recommendedWidth, withPad: " ", startingAt: 0)
+                + (ownColumn ? "  own cloudOS (research board: root, VPHONE_IPSW)" : ""))
             for e in entry.pairings {
                 let ios = e.ios.name.padding(toLength: width, withPad: " ", startingAt: 0)
-                print("\(ios)  \(e.recommendedCloudOS.name)")
+                if let own = e.matchingCloudOS {
+                    print("\(ios)  \(e.recommendedCloudOS.name.padding(toLength: recommendedWidth, withPad: " ", startingAt: 0))  \(own.name)")
+                } else {
+                    print("\(ios)  \(e.recommendedCloudOS.name)")
+                }
             }
         }
     }
@@ -353,17 +362,36 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
     )
     var preset: String?
     @Flag(name: .shortAndLong, help: "Suppress per-component progress") var quiet = false
+    @Flag(help: ArgumentHelp(
+        "Refuse unless the selection merges the restore image (the Launchpad helper's root run)",
+        visibility: .hidden,
+    ))
+    var restoreImageOnly = false
+
+    @Option(name: .customLong("work-parent"), help: ArgumentHelp("Private firmware work directory", visibility: .hidden))
+    var workParent = "/private/var/tmp"
 
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
         let bundle = try lib.library.bundle(named: name)
-        defer {
-            try? VPhoneHostFilePermissions.makeAccessible(at: bundle.url)
+        if geteuid() == 0 {
+            let workspace = try FirmwarePatchWorkspace(machine: bundle.url, workParent: workParent)
+            defer {
+                do { try workspace.remove() }
+                catch { fputs("warning: firmware work files remain at \(workspace.root.path): \(error)\n", stderr) }
+            }
+            try patch(directory: workspace.machine, name: name)
+            try workspace.publish()
+        } else {
+            try patch(directory: bundle.url, name: name)
+            try VPhoneHostFilePermissions.makeAccessible(at: bundle.url)
         }
+    }
 
+    private func patch(directory: URL, name: String) throws {
         // An explicit --preset wins and is remembered, so `cfw install` and a
         // later re-patch agree without the flag being repeated.
-        var selection = VPhonePatchPresetStore.selection(forVM: bundle.url)
+        var selection = VPhonePatchPresetStore.selection(forVM: directory)
         if let preset {
             selection.presetIdentifier = preset
         }
@@ -374,8 +402,39 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
             )
         }
 
+        // The restore image patches merge and reseal the system image, which
+        // needs root; nothing else here does.
+        let mergesRestoreImage = resolved.patchSets.contains { $0.identifier == FirmwareRestoreImagePatchSet.identifier }
+            && !selection.blockedPatches.contains(FirmwareRestoreImagePatchSet.cryptexMerge)
+        if restoreImageOnly, !mergesRestoreImage {
+            throw ValidationError("\(name) is not set to a preset that customises its system before the restore.")
+        }
+        if mergesRestoreImage, geteuid() != 0 {
+            throw ValidationError("The \(selection.presetIdentifier) preset rebuilds the system image, which needs root. Run this command with sudo.")
+        }
+        if mergesRestoreImage {
+            // Never execute the caller's staged seal tool as root. Fetch it
+            // again from Apple's CDN into this run's private snapshot.
+            let restore = try FirmwarePipeline(vmDirectory: directory).findRestoreDirectory()
+            let tools = restore.appendingPathComponent(".tools", isDirectory: true)
+            try VPhoneFirmwareSealToolCommand.stage(
+                version: try CryptexFilesystemPatcher(buildManiest: Data(), restoreDir: restore).getProductVersion(),
+                into: tools,
+            )
+        }
+        // A research board kernelcache is mixed beforehand (`fw kernelcache`),
+        // since linking it needs root; root builds it here if need be.
+        if geteuid() != 0, !selection.blockedPatches.contains(FirmwareResearchBoardPatchSet.kernelMix),
+           let input = try FirmwarePipeline(vmDirectory: directory, variant: .jb).researchBoardKernelcache()
+        {
+            let state = try KernelCacheMixer(recipes: .locate()).state(for: input)
+            if state != .mixed {
+                throw ValidationError(KernelCacheMixer.linkInstructions(staged: state == .staged).replacingOccurrences(of: "<vm>", with: name))
+            }
+        }
+
         let pipeline = FirmwarePipeline(
-            vmDirectory: bundle.url,
+            vmDirectory: directory,
             variant: .jb,
             verbose: !quiet,
             noBinpack: true,
@@ -386,7 +445,7 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
         let records = try pipeline.patchAll()
 
         if let plan = pipeline.resolvedPlan {
-            try VPhonePatchPresetStore.write(selection, forVM: bundle.url)
+            try VPhonePatchPresetStore.write(selection, forVM: directory)
             try VPhonePatchPresetStore.write(
                 VPhoneVirtualMachinePatchPlan(
                     plan: plan,
@@ -394,11 +453,10 @@ struct VPhoneFirmwarePatchCommand: ParsableCommand {
                     cloudOS: pipeline.cloudOSProductVersion,
                     notApplicablePatches: pipeline.notApplicablePatches,
                 ),
-                forVM: bundle.url,
+                forVM: directory,
             )
         }
 
-        try VPhoneHostFilePermissions.makeAccessible(at: bundle.url)
         print("[fw patch] applied \(records.count) CFW patches"
             + " (preset \(selection.presetIdentifier))")
     }
@@ -632,5 +690,75 @@ extension VPhoneLibraryOption {
             ? libraryRoot
             : "'" + libraryRoot.replacingOccurrences(of: "'", with: "'\\''") + "'"
         return " --library-root \(quoted)"
+    }
+}
+
+// MARK: - kernelcache
+
+/// Builds the kernelcache mix of a VM on a cloudOS without vphone600
+/// components, in the two steps that need different users: staging runs `ipsw`
+/// and is the invoking user's, linking runs kmutil and is root's. `fw patch`
+/// then takes the mix from the cache. See KernelCacheMixer.
+struct VPhoneFirmwareKernelcacheCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "kernelcache",
+        abstract: "Build a research board VM's kernelcache mix: stage it as yourself (VPHONE_IPSW), link it with sudo",
+    )
+
+    @OptionGroup var lib: VPhoneLibraryOption
+    @Argument(help: "VM name") var name: String?
+    @Flag(help: ArgumentHelp(
+        "Only link a staged volume; never stage, so no ipsw runs (the Launchpad helper's root run)",
+        visibility: .hidden,
+    ))
+    var linkOnly = false
+    @Option(help: ArgumentHelp("The ipsw to stage with (default: $VPHONE_IPSW)", valueName: "path"))
+    var ipsw: String?
+    @Option(name: .customLong("work-parent"), help: ArgumentHelp("Private kernelcache work directory", visibility: .hidden))
+    var workParent = "/private/var/tmp"
+
+    func run() throws {
+        let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
+        let bundle = try lib.library.bundle(named: name)
+        let workspace = try geteuid() == 0 ? FirmwarePatchWorkspace(machine: bundle.url, workParent: workParent) : nil
+        defer { try? workspace?.remove() }
+        guard let input = try FirmwarePipeline(vmDirectory: workspace?.machine ?? bundle.url, variant: .jb).researchBoardKernelcache() else {
+            print("[=] \(name)'s cloudOS has vphone600 components; its kernelcache needs no mix.")
+            return
+        }
+        let mixer = try KernelCacheMixer(recipes: .locate())
+        let state = try mixer.state(for: input)
+        if state == .mixed {
+            print("[+] The kernelcache mix is ready; `fw patch` takes it from the cache.")
+            return
+        }
+        if geteuid() == 0 {
+            if state == .missing {
+                guard !linkOnly else {
+                    throw ValidationError("\(name)'s kernelcache mix is not staged. Stage it first, as yourself: \(KernelCacheMixer.ipswEnvironmentVariable)=<ipsw> vphone-cli fw kernelcache \(name)")
+                }
+                try mixer.stage(input, ipsw: ipsw)
+            }
+            try mixer.link(input)
+            print("[+] The kernelcache mix is ready; `fw patch` takes it from the cache.")
+            return
+        }
+        // Another Mac's kmutil (VPHONE_KMUTIL_SSH) links as root there.
+        let remote = try mixer.linksRemotely(input)
+        guard !linkOnly || remote else {
+            throw ValidationError("Linking the kernelcache mix needs root. Run this command with sudo.")
+        }
+        if state == .missing {
+            guard !linkOnly else {
+                throw ValidationError("\(name)'s kernelcache mix is not staged. Stage it first: \(KernelCacheMixer.ipswEnvironmentVariable)=<ipsw> vphone-cli fw kernelcache \(name)")
+            }
+            try mixer.stage(input, ipsw: ipsw)
+        }
+        guard remote else {
+            print("[+] Staged. Link it with: sudo vphone-cli fw kernelcache \(name)")
+            return
+        }
+        try mixer.link(input)
+        print("[+] The kernelcache mix is ready; `fw patch` takes it from the cache.")
     }
 }

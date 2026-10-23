@@ -71,6 +71,8 @@ fi
 # libraries only into a tvOS-platform process, so this copy says tvOS.
 daemon_sdk="$(/usr/bin/otool -l "$guest/vphoned" | /usr/bin/awk '/LC_BUILD_VERSION/ { found = 1 } found && $1 == "sdk" { print $2; exit }')"
 /usr/bin/xcrun vtool -set-build-version tvos 15.0 "$daemon_sdk" -replace -output "$guest/vphoned-tvos" "$guest/vphoned"
+# The same for watch guests: watchOS 8 is iOS 15's release.
+/usr/bin/xcrun vtool -set-build-version watchos 8.0 "$daemon_sdk" -replace -output "$guest/vphoned-watchos" "$guest/vphoned"
 /bin/cp "$root/VPhoneDaemon/Configuration/vphoned.plist" "$guest/vphoned.plist"
 /bin/cp "$guest_products/launchhook/launchdhook-vphone.dylib" "$guest/launchdhook-vphone.dylib"
 /bin/cp "$guest_products/systemhook/SystemHook-vphone.dylib" "$guest/SystemHook-vphone.dylib"
@@ -132,6 +134,9 @@ fi
 /bin/mkdir -p "$resources/patches_presets"
 /bin/cp "$root/VPhoneExecutable/VPhoneVirtualization/Resources/patches_presets/"*.plist \
     "$resources/patches_presets/"
+# What `fw patch` rebuilds a research board kernelcache from; see its README.
+/bin/rm -rf "$resources/kernelcache_recipes"
+/bin/cp -R "$root/VPhoneExecutable/VPhoneVirtualization/Resources/kernelcache_recipes" "$resources/"
 
 "${0:a:h}/SyncStrings.sh"
 /usr/bin/xcrun xcstringstool compile \
@@ -168,6 +173,7 @@ compatibility_library="$(/usr/bin/xcrun swift-stdlib-tool --print \
 /usr/bin/codesign --force --sign - "$macos/vphone-cli"
 /usr/bin/codesign --force --sign - --entitlements "$root/VPhoneDaemon/Configuration/VPhoneDaemon.entitlements" "$guest/vphoned"
 /usr/bin/codesign --force --sign - --entitlements "$root/VPhoneDaemon/Configuration/VPhoneDaemon.entitlements" "$guest/vphoned-tvos"
+/usr/bin/codesign --force --sign - --entitlements "$root/VPhoneDaemon/Configuration/VPhoneDaemon.entitlements" "$guest/vphoned-watchos"
 /usr/bin/codesign --force --sign - "$macos/vphone-escalator"
 /usr/bin/codesign --force --sign - "$macos/libswiftCompatibilitySpan.vphone.dylib"
 /usr/bin/codesign --force --sign - --entitlements "$root/VPhoneExecutable/VPhoneVirtualization/Resources/VPhoneVirtualization.entitlements" "$macos/vphone-vm"

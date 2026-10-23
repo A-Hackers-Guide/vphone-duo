@@ -109,12 +109,15 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
         patchVmFaultEnterPrepare()
         patchVmMapProtect()
 
-        // Opt-in Frida Stalker support, from the kernel.frida patch set:
-        // existing-thread follow (thread_set_state) + repeated VM_PROT_COPY
-        // overwrite (vm_map_delete).
+        // Opt-in Frida support, from the kernel.frida patch set: existing-thread
+        // follow (thread_set_state), repeated VM_PROT_COPY overwrite
+        // (vm_map_delete), spawn (TPRO) and syscall-filtered targets. The gate
+        // writes each only when its own identifier is selected.
         if applyFrida {
             patchThreadSetStateEntitlementFlag()
             patchVmMapDeleteImmutableCode()
+            patchTproOff()
+            patchSyscallFilterOff()
         }
 
         // The paravirtual display advertises 120 Hz instead of the host's

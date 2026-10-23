@@ -2,12 +2,53 @@ import Darwin
 import Foundation
 import Observation
 
+// MARK: - Kernelcache Builder
+
+/// Another Mac, or a macOS VM, whose kmutil links an iOS 18 guest's
+/// kernel-first kernelcache mix: kmutil takes the layout from the macOS it runs
+/// on, and only macOS 15 and 26.0 to 26.3 link kernel-first. `fw kernelcache`
+/// reaches it over ssh (`VPHONE_KMUTIL_SSH`) and links as root there, so the
+/// helper links nothing. The password, for ssh and sudo, goes to `vphone-cli` in
+/// its environment only: never into an argument, a log or a file.
+nonisolated struct VPhoneLaunchpadKernelcacheBuilder: Sendable, Equatable {
+    static let destinationVariable = "VPHONE_KMUTIL_SSH"
+    static let passwordVariable = "VPHONE_KMUTIL_SSH_PASSWORD"
+
+    /// `user@host`.
+    var destination: String
+    /// Nil or empty with ssh keys and passwordless sudo.
+    var password: String?
+
+    var environment: [String: String] {
+        var environment = [Self.destinationVariable: destination]
+        if let password, !password.isEmpty {
+            environment[Self.passwordVariable] = password
+        }
+        return environment
+    }
+
+    /// Whether `destination` reads as `user@host`.
+    static func isValid(_ destination: String) -> Bool {
+        let parts = destination.split(separator: "@", omittingEmptySubsequences: false)
+        return parts.count == 2 && parts.allSatisfy { !$0.isEmpty && !$0.contains(where: \.isWhitespace) }
+            && !destination.hasPrefix("-")
+    }
+
+    /// Whether this Mac's kmutil links kernel-last (macOS 26.4 and later), so a
+    /// kernel-first mix needs a builder.
+    static var hostNeedsBuilder: Bool {
+        let host = ProcessInfo.processInfo.operatingSystemVersion
+        return host.majorVersion > 26 || host.majorVersion == 26 && host.minorVersion >= 4
+    }
+}
+
 /// `vm create`, one command at a time.
 ///
 /// `vphone-cli vm create` runs the same stages in one process and asks for
 /// sudo partway through, which a GUI cannot answer. Running the stages here
 /// keeps every step visible and retryable, and keeps root to the one step
-/// that needs it: `cfw install`, run by the helper. The waits mirror
+/// that needs it: `cfw install`, run by the helper (or, for the Minimal preset,
+/// which customises the system before the restore, `fw patch`). The waits mirror
 /// VPhoneVirtualMachineCreator: the device identity file, 90 recovery probes,
 /// up to 30 seconds for the post-restore panic, 5 seconds before CFW, and up
 /// to 300 seconds for vphoned to answer on first boot.
@@ -58,6 +99,13 @@ final class VPhoneLaunchpadCreationPipeline {
         /// of its own.
         var usesTemplate = true
         var slimming = VPhoneLaunchpadSlimming()
+        /// The ipsw that stages the kernelcache mix of a machine on its
+        /// release's own cloudOS (`fw kernelcache --ipsw`), whose link the helper
+        /// runs as root. Nil for every other machine.
+        var kernelcacheIPSW: String?
+        /// The Mac that links a kernel-first mix over ssh, for an iOS 18 guest
+        /// on a Mac whose kmutil links kernel-last; nil links here, as root.
+        var kernelcacheBuilder: VPhoneLaunchpadKernelcacheBuilder?
 
         var machine: VPhoneLaunchpadMachinePath {
             VPhoneLaunchpadMachinePath(libraryRoot: libraryRoot, name: name)
@@ -349,11 +397,14 @@ final class VPhoneLaunchpadCreationPipeline {
 
         func run(
             _ arguments: [String],
+            builder: VPhoneLaunchpadKernelcacheBuilder? = nil,
             onLine: @escaping @Sendable (String) -> Void = output,
             onProgress: (@Sendable (Double) -> Void)? = nil,
         ) async throws {
-            onLine("$ \(VPhoneLaunchpadCommandLine.display(arguments))")
-            try await commandLine.runChecked(arguments, onLine: onLine, onProgress: onProgress)
+            // The builder's destination is shown, its password is not.
+            let prefix = builder.map { "\(VPhoneLaunchpadKernelcacheBuilder.destinationVariable)=\($0.destination) " } ?? ""
+            onLine("$ \(prefix)\(VPhoneLaunchpadCommandLine.display(arguments))")
+            try await commandLine.runChecked(arguments, environment: builder?.environment ?? [:], onLine: onLine, onProgress: onProgress)
         }
 
         // For the template steps: a failure names the step and carries the
@@ -403,6 +454,11 @@ final class VPhoneLaunchpadCreationPipeline {
             // step has moved on, so only the firmware step takes it. A finished
             // download clears it: extraction follows with no progress of its own.
             defer { downloadFraction = nil }
+            // `fw prepare` stages what the selection needs (the GPU driver, the
+            // seal tool), so the preset is on record before it runs.
+            if !options.patches.presetArguments.isEmpty {
+                try await run(["fw", "set-patches", name] + options.patches.presetArguments + library)
+            }
             try await run(["fw", "prepare", name, "--iphone-source", options.iphoneSource,
                            "--cloudos-source", options.cloudOSSource] + deviceArguments + library,
                           onProgress: { [weak self] fraction in
@@ -434,7 +490,42 @@ final class VPhoneLaunchpadCreationPipeline {
                     onLine: tee,
                 )
             }
-            try await run(patchArguments(name) + library, onLine: tee)
+            let libraryRoot = Self.canonicalPath(URL(fileURLWithPath: options.libraryRoot, isDirectory: true))
+            // On the release's own cloudOS the kernelcache is mixed first: staged
+            // here, as the user, with the chosen ipsw, and linked by the helper as
+            // root, which runs no ipsw. `fw patch` takes the mix from the cache.
+            // With an ssh builder, `fw kernelcache` links it on that Mac, and
+            // nothing here needs root for it.
+            if let ipsw = options.kernelcacheIPSW, let builder = options.kernelcacheBuilder {
+                try await run(["fw", "kernelcache", name, "--ipsw", ipsw] + library, builder: builder, onLine: tee)
+            } else if let ipsw = options.kernelcacheIPSW {
+                try await run(["fw", "kernelcache", name, "--ipsw", ipsw] + library, onLine: tee)
+                let status = try await helper.linkKernelcache(
+                    bundleVersion: version,
+                    machineName: name,
+                    libraryRoot: libraryRoot,
+                    onLine: tee,
+                )
+                guard status == 0 else {
+                    throw VPhoneLaunchpadError(String(localized: "Unable to link the kernelcache. Check the log for details."), detail: log.tail)
+                }
+            }
+            guard options.patches.customisesRestoredSystem else {
+                try await run(patchArguments(name) + library, onLine: tee)
+                return
+            }
+            // The Minimal preset merges and reseals the system image, which
+            // needs root: the helper runs `fw patch` with the selection
+            // recorded before `fw prepare` and above, as it runs `cfw install`.
+            let status = try await helper.patchRestoreImage(
+                bundleVersion: version,
+                machineName: name,
+                libraryRoot: libraryRoot,
+                onLine: tee,
+            )
+            guard status == 0 else {
+                throw VPhoneLaunchpadError(String(localized: "Unable to patch the firmware. Check the log for details."), detail: log.tail)
+            }
 
         case .bootDFU:
             let arguments = ["vm", "launch", name, "--dfu"] + library

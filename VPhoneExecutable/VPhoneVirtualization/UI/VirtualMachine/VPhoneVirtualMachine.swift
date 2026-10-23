@@ -49,6 +49,9 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         var isPadGuest = false
         var isTVGuest = false
         var isHomePodGuest = false
+        /// The guest runs watchOS: its side button is a key of its own (consumer
+        /// Help), apart from the crown (Home) and the power key.
+        var isWatchGuest = false
     }
 
     private struct DeviceIdentity {

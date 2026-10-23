@@ -129,6 +129,15 @@ struct VPhoneTCPForwarderTests {
             queue.sync { forwarder.stop() }
         }
 
+        /// Run the idle reaper as if `seconds` had passed with nothing sent.
+        func reap(after seconds: TimeInterval) {
+            queue.sync { forwarder.reapIdle(now: Date().addingTimeInterval(seconds)) }
+        }
+
+        var connectionCount: Int {
+            forwarder.connectionCount
+        }
+
         /// Wait for something a background socket is responsible for.
         ///
         /// Polls rather than sleeping a fixed time: the far end of these tests is
@@ -515,6 +524,53 @@ struct VPhoneTCPForwarderTests {
             return counts.values.contains { $0 > 1 }
         }
         #expect(nudged, "nothing was ever sent twice, so a lost segment would stall forever")
+    }
+
+    // MARK: - Idle connections
+
+    /// An ssh session nobody types into sends nothing. Reaped after 120 s of
+    /// silence, it dropped two to four minutes after its user stopped typing.
+    @Test func `an established connection survives minutes of silence`() throws {
+        let server = try LoopbackServer { client, server in server.drain(client) }
+        defer { server.stop() }
+
+        let harness = Harness(guestPort: 51006, destinationPort: server.port)
+        harness.start()
+        defer { harness.stop() }
+
+        try handshake(harness)
+        #expect(harness.connectionCount == 1)
+
+        harness.reap(after: 30 * 60)
+        #expect(harness.connectionCount == 1, "an idle established connection was reaped after 30 minutes")
+
+        harness.reap(after: 3 * 3600)
+        #expect(harness.connectionCount == 0, "a connection silent for three hours was kept")
+    }
+
+    /// A handshake the guest never finished still goes after the short bound.
+    @Test func `a half-open connection is still reaped quickly`() throws {
+        let server = try LoopbackServer { client, server in server.drain(client) }
+        defer { server.stop() }
+
+        let harness = Harness(guestPort: 51007, destinationPort: server.port)
+        harness.start()
+        defer { harness.stop() }
+
+        harness.feed(VPhoneTCPSegment(
+            sourcePort: harness.guestPort,
+            destinationPort: server.port,
+            sequenceNumber: 1000,
+            acknowledgmentNumber: 0,
+            flags: VPhoneTCPFlags.syn,
+            windowSize: 65535,
+            maximumSegmentSize: 1460,
+        ))
+        try #require(harness.waitUntil("the SYN-ACK") { harness.ourISN != nil })
+        #expect(harness.connectionCount == 1)
+
+        harness.reap(after: 180)
+        #expect(harness.connectionCount == 0, "a handshake left unanswered for three minutes was kept")
     }
 
     // MARK: - Throughput

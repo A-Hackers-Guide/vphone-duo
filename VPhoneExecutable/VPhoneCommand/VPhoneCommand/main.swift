@@ -19,6 +19,10 @@ import VPhoneCoreKit
 // far end may already be gone. Make that an EPIPE error, not a silent exit.
 signal(SIGPIPE, SIG_IGN)
 
+// One line at a time through a pipe too (`| tee`, Launchpad), so an error on
+// stderr follows the steps that led to it instead of coming before them.
+setvbuf(stdout, nil, _IOLBF, 0)
+
 do {
     let command = try VPhoneCommand.parseAsRoot()
 

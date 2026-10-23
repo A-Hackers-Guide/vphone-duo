@@ -7,6 +7,7 @@ import Virtualization
 public enum VPhoneNetworkingError: Error, Equatable {
     /// hostOnly has no native Virtualization.framework attachment.
     case hostOnlyUnsupported
+    case peerNATUnsupported
     /// A bridge interface was requested but no such interface exists on the host.
     case bridgeInterfaceNotFound(requested: String, available: [String])
     /// bridged mode was selected but the host exposes no bridgeable interfaces.
@@ -47,6 +48,8 @@ extension VPhoneNetworkingError: CustomStringConvertible, LocalizedError {
         switch self {
         case .hostOnlyUnsupported:
             "Network mode 'hostOnly' is not supported. Use nat, bridged, tunnel, or none."
+        case .peerNATUnsupported:
+            "This macOS cannot let NAT machines reach each other. Set --nat-peers off and use an address on the isolated NAT network, or use bridged networking."
         case let .bridgeInterfaceNotFound(requested, available):
             "Bridge interface '\(requested)' not found. Available: \(available.isEmpty ? "none" : available.joined(separator: ", "))."
         case .noBridgeInterfaces:
@@ -70,7 +73,7 @@ extension VPhoneNetworkingError: CustomStringConvertible, LocalizedError {
         case let .natRouterFixed(expected, subnet):
             "In nat mode the Mac is the gateway on \(subnet), at \(expected). Leave --gateway out, or set it to \(expected)."
         case let .natAddressOffSharedNetwork(address, shared):
-            "\(address) is not on the Mac's shared NAT network \(shared), which nat mode uses. Pick an address on it, or use tunnel mode for another subnet."
+            "\(address) is not on the Mac's shared NAT network \(shared), which nat mode uses for this machine (a machine that reaches the other NAT machines is on vmnet's second one; see --nat-peers). Pick an address on it, or use tunnel mode for another subnet."
         case let .tooManyDNSServers(count):
             "\(count) DNS servers is more than the guest takes. Give at most 4."
         case let .settingWithoutAddress(option):
@@ -108,6 +111,24 @@ public struct VPhoneNetworkHost: Equatable, Sendable {
     public init(sharedNATSubnet: VPhoneIPv4Subnet, sharedNATHost: VPhoneIPv4Address) {
         self.sharedNATSubnet = sharedNATSubnet
         self.sharedNATHost = sharedNATHost
+    }
+
+    /// The network vmnet runs for the machines that reach each other
+    /// (`reachesPeers`): a NAT attachment without interface isolation joins a
+    /// second shared network, the block right after the first one (192.168.65.0/24
+    /// beside 192.168.64.0/24), with the Mac at its first host.
+    public var peerNATSubnet: VPhoneIPv4Subnet {
+        VPhoneIPv4Subnet(containing: VPhoneIPv4Address(sharedNATSubnet.broadcast.raw &+ 1), prefixLength: sharedNATSubnet.prefixLength)
+            ?? sharedNATSubnet
+    }
+
+    public var peerNATHost: VPhoneIPv4Address {
+        peerNATSubnet.firstHost
+    }
+
+    /// The network a `nat` guest is on, and the Mac's address there.
+    public func natNetwork(reachesPeers: Bool) -> (subnet: VPhoneIPv4Subnet, host: VPhoneIPv4Address) {
+        reachesPeers ? (peerNATSubnet, peerNATHost) : (sharedNATSubnet, sharedNATHost)
     }
 
     /// vmnet's own default, used unless the host's preferences move it.
@@ -194,6 +215,9 @@ public struct VPhoneNetworkPlan: Equatable, Sendable {
     /// Whether vphoned registers this Mac's `.local` name with the guest's
     /// mDNSResponder, pointing at `macAddressForGuest`.
     public let resolvesMacName: Bool
+    /// In `nat`: whether the guest and the other machines on the shared
+    /// network reach each other (vmnet's interface isolation off).
+    public var reachesPeers = false
     /// The address the guest reaches this Mac at: the shared network's host
     /// address in `nat`, the gateway in `tunnel` (which carries it to the
     /// Mac's loopback). Nil in `bridged`, where it is the Mac's address on the
@@ -237,6 +261,8 @@ public struct VPhoneNetworkEdit: Equatable, Sendable {
     public var localHostName: String??
     /// Turn the guest's local record for the Mac's name on or off.
     public var resolvesMacName: Bool?
+    /// Let the guest reach the other machines on the shared network, or not.
+    public var reachesPeers: Bool?
     public var addForwards: [PortForward]
     /// Forwards to drop, named as `vm info` lists them or by host port.
     public var removeForwards: [String]
@@ -251,6 +277,7 @@ public struct VPhoneNetworkEdit: Equatable, Sendable {
         dns: [String]?? = nil,
         localHostName: String?? = nil,
         resolvesMacName: Bool? = nil,
+        reachesPeers: Bool? = nil,
         addForwards: [PortForward] = [],
         removeForwards: [String] = [],
         clearForwards: Bool = false,
@@ -263,6 +290,7 @@ public struct VPhoneNetworkEdit: Equatable, Sendable {
         self.dns = dns
         self.localHostName = localHostName
         self.resolvesMacName = resolvesMacName
+        self.reachesPeers = reachesPeers
         self.addForwards = addForwards
         self.removeForwards = removeForwards
         self.clearForwards = clearForwards
@@ -570,6 +598,8 @@ public enum VPhoneNetworking {
             localHostName: edit.localHostName.map { try $0.map(validLocalHostName) } ?? current.localHostName,
             // On is the default, so it is stored as an absent key.
             resolvesMacName: edit.resolvesMacName.map { $0 ? nil : false } ?? current.resolvesMacName,
+            // Stored as set: its default depends on the address.
+            reachesPeers: edit.reachesPeers ?? current.reachesPeers,
         )
         try validate(merged, host: host)
         return merged
@@ -590,7 +620,21 @@ public enum VPhoneNetworking {
         let dns: [VPhoneIPv4Address]
     }
 
-    static func resolve(_ ipv4: IPv4Config, mode: NetworkMode, host: VPhoneNetworkHost) throws -> ResolvedIPv4 {
+    /// Whether `cfg` fixes the guest's address on the first shared network.
+    /// Such a machine keeps the isolation it was configured under unless it
+    /// asks to reach its peers: those are on vmnet's second shared network,
+    /// where its address does not exist.
+    static func hasFixedSharedAddress(_ cfg: NetworkConfig, host: VPhoneNetworkHost) -> Bool {
+        guard let address = cfg.ipv4.flatMap({ VPhoneIPv4Address(dotted: $0.address) }) else { return false }
+        return host.sharedNATSubnet.contains(address)
+    }
+
+    /// Whether a `nat` guest of `cfg` reaches the other NAT machines.
+    public static func reachesPeers(_ cfg: NetworkConfig, host: VPhoneNetworkHost = .current) -> Bool {
+        cfg.mode == .nat && (cfg.reachesPeers ?? !hasFixedSharedAddress(cfg, host: host))
+    }
+
+    static func resolve(_ ipv4: IPv4Config, mode: NetworkMode, host: VPhoneNetworkHost, reachesPeers: Bool = false) throws -> ResolvedIPv4 {
         guard let address = VPhoneIPv4Address(dotted: ipv4.address) else {
             throw VPhoneNetworkingError.invalidAddress(field: "the guest address", value: ipv4.address)
         }
@@ -612,15 +656,17 @@ public enum VPhoneNetworking {
         // would allow any subnet, but InternetSharing keeps such a subnet
         // reserved after the VM process exits, and later launches on it fail
         // (still 40 minutes on); see Research/Host/network_fixed_address.md.
+        // A guest that reaches its peers is on vmnet's second shared network.
         var defaultRouter = subnet.firstHost
         if mode == .nat {
-            guard subnet == host.sharedNATSubnet else {
+            let network = host.natNetwork(reachesPeers: reachesPeers)
+            guard subnet == network.subnet else {
                 throw VPhoneNetworkingError.natAddressOffSharedNetwork(
                     address: ipv4.address,
-                    shared: host.sharedNATSubnet.description,
+                    shared: network.subnet.description,
                 )
             }
-            defaultRouter = host.sharedNATHost
+            defaultRouter = network.host
         }
 
         let router: VPhoneIPv4Address
@@ -702,7 +748,8 @@ public enum VPhoneNetworking {
         let mac: VPhoneMACAddress? = cfg.macAddress.isEmpty
             ? nil
             : try VPhoneMACAddress(string: normalizeMACAddress(cfg.macAddress))
-        let resolved = try cfg.ipv4.map { try resolve($0, mode: cfg.mode, host: host) }
+        let reachesPeers = reachesPeers(cfg, host: host)
+        let resolved = try cfg.ipv4.map { try resolve($0, mode: cfg.mode, host: host, reachesPeers: reachesPeers) }
         let forwards = cfg.portForwards ?? []
         try validatePortForwards(forwards, mode: cfg.mode)
         let localHostName = try cfg.localHostName.map(validLocalHostName)
@@ -726,17 +773,20 @@ public enum VPhoneNetworking {
                                      resolvesMacName: false, macAddressForGuest: nil, forwardingAddress: nil)
 
         case .nat:
+            let natHost = host.natNetwork(reachesPeers: reachesPeers).host
             guard let resolved else {
                 return VPhoneNetworkPlan(
                     attachment: .sharedNAT, macAddress: mac, guestIPv4: .dhcp,
                     portForwards: forwards, localHostName: localHostName,
-                    resolvesMacName: resolvesMacName, macAddressForGuest: host.sharedNATHost, forwardingAddress: nil,
+                    resolvesMacName: resolvesMacName, reachesPeers: reachesPeers,
+                    macAddressForGuest: natHost, forwardingAddress: nil,
                 )
             }
             return VPhoneNetworkPlan(
                 attachment: .sharedNAT, macAddress: mac, guestIPv4: manual(resolved),
                 portForwards: forwards, localHostName: localHostName,
-                resolvesMacName: resolvesMacName, macAddressForGuest: host.sharedNATHost, forwardingAddress: resolved.address,
+                resolvesMacName: resolvesMacName, reachesPeers: reachesPeers,
+                macAddressForGuest: natHost, forwardingAddress: resolved.address,
             )
 
         case .bridged:
@@ -779,6 +829,21 @@ public enum VPhoneNetworking {
         public let userspaceNetwork: VPhoneUserspaceNetwork?
     }
 
+    /// vmnet isolates each guest on the shared network from the others, and
+    /// Virtualization has no public switch for it. A VM with isolation off
+    /// shares the bridge with the others without its private flag, so they
+    /// reach each other directly (Bonjour included). A Virtualization without
+    /// the private setter cannot realize the peer network; fail before boot
+    /// rather than use the isolated network with the peer network's addresses.
+    static func setInterfaceIsolation(_ enabled: Bool, of attachment: VZNATNetworkDeviceAttachment) throws {
+        let selector = NSSelectorFromString("_setInterfaceIsolationEnabled:")
+        guard attachment.responds(to: selector), let method = class_getInstanceMethod(type(of: attachment), selector) else {
+            throw VPhoneNetworkingError.peerNATUnsupported
+        }
+        typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+        unsafeBitCast(method_getImplementation(method), to: Setter.self)(attachment, selector, enabled)
+    }
+
     /// Build the VZ network device for a config, or nil for `.off` (no NIC).
     /// Throws if the config cannot be realized (missing bridge interface, hostOnly).
     public static func makeNetworkDevice(_ cfg: NetworkConfig) throws
@@ -796,7 +861,11 @@ public enum VPhoneNetworking {
         case .none:
             return NetworkDevice(configuration: nil, userspaceNetwork: nil)
         case .sharedNAT:
-            attachment = VZNATNetworkDeviceAttachment()
+            let nat = VZNATNetworkDeviceAttachment()
+            if plan.reachesPeers {
+                try setInterfaceIsolation(false, of: nat)
+            }
+            attachment = nat
         case let .tunnel(configuration):
             let network = try VPhoneUserspaceNetwork(configuration: configuration)
             userspaceNetwork = network

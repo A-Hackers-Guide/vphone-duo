@@ -92,6 +92,30 @@ done
 for preset in "$resources/patches_presets/"*.plist; do
     /usr/bin/plutil -lint -s "$preset" || { print -u2 "Malformed patch preset: ${preset:t}"; exit 1; }
 done
+# Every kernelcache recipe has its symbol map and bundle list, and its donor.
+for manifest in "$resources/kernelcache_recipes/bases/"*/manifest.json; do
+    recipe=${manifest:h}
+    for key in symbols kexts; do
+        file=$(/usr/bin/plutil -extract $key raw -o - "$manifest") || { print -u2 "Malformed kernelcache recipe: ${recipe:t}"; exit 1; }
+        [[ -s "$recipe/$file" ]] || { print -u2 "Kernelcache recipe ${recipe:t} lacks $file"; exit 1; }
+    done
+    # The donor, or the kext sources in order (the base and donors).
+    donors=()
+    if count=$(/usr/bin/plutil -extract sources raw -o - "$manifest" 2>/dev/null); then
+        for (( i = 0; i < count; i++ )); do
+            source=$(/usr/bin/plutil -extract sources.$i raw -o - "$manifest")
+            [[ $source == base ]] || donors+=($source)
+        done
+    else
+        donors=($(/usr/bin/plutil -extract donor raw -o - "$manifest"))
+    fi
+    for donor in $donors; do
+        [[ -s "$resources/kernelcache_recipes/donors/$donor/manifest.json" ]] || {
+            print -u2 "Kernelcache recipe ${recipe:t} names a missing donor: $donor"
+            exit 1
+        }
+    done
+done
 # New machines copy this ROM. Without it vm new would fail, and OpenAVB is
 # distributed only with its licences. The ROM window is 512 KiB.
 for name in OpenAVB.bin LICENSE APSL-2.0.txt; do
@@ -120,7 +144,7 @@ if /usr/bin/grep -q 'AVPSEPBooter-' "$resources/OpenSEP/OpenSEP.bin"; then
     exit 1
 fi
 
-for name in vphoned vphoned-tvos launchdhook-vphone.dylib SystemHook-vphone.dylib libcamfix.dylib \
+for name in vphoned vphoned-tvos vphoned-watchos launchdhook-vphone.dylib SystemHook-vphone.dylib libcamfix.dylib \
     libvcamcaptured.dylib libmisfix.dylib libhapticsfix.dylib libbatteryhealthfix.dylib libdevicehubfix.dylib libdevicename.dylib \
     libprefsfix.dylib libsigninfix.dylib libvphonegyro.dylib libvphoneaccelerometer.dylib libvphoneattitude.dylib libvphonehomepoddisplay.dylib vphone-homepod-setup libAppleParavirtCompilerPluginIOGPUFamily.dylib; do
     require_signed_macho "$guest/$name"
@@ -180,6 +204,9 @@ while IFS= read -r file; do
             # tvOS dyld refuses an iOS-platform daemon on an Apple TV guest.
             [[ "$platform" == TVOS ]] || { print -u2 "Non-tvOS binary: ${file#$bundle/}"; exit 1; }
             ;;
+        "$guest/vphoned-watchos")
+            [[ "$platform" == WATCHOS ]] || { print -u2 "Non-watchOS binary: ${file#$bundle/}"; exit 1; }
+            ;;
         "$guest/"*)
             [[ "$platform" == IOS ]] || { print -u2 "Non-iOS binary in guest-resources: ${file#$bundle/}"; exit 1; }
             ;;
@@ -203,7 +230,7 @@ vm_entitlements="$(/usr/bin/codesign -d --entitlements - --xml "$macos/vphone-vm
     print -u2 "Guest daemon entitlements leaked into vphone-vm"
     exit 1
 }
-for daemon in vphoned vphoned-tvos; do
+for daemon in vphoned vphoned-tvos vphoned-watchos; do
     daemon_entitlements="$(/usr/bin/codesign -d --entitlements - --xml "$guest/$daemon" 2>/dev/null)"
     [[ "$daemon_entitlements" == *'com.apple.CommCenter.fine-grained'* &&
         "$daemon_entitlements" != *'com.apple.private.virtualization'* ]] || {

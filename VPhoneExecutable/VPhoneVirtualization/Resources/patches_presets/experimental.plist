@@ -7,7 +7,7 @@
 
   Read this as the catalogue and standard as the safe subset — the two name the
   same patch sets and differ only in their selection. Each patch's own version gate
-  still applies, so the Frida pair lands only on cloudOS 26.4 and newer.
+  still applies, so the Frida patches land only on cloudOS 26.4 and newer.
 
   The hv_vmm_present pair is here and nowhere else for a reason: on a freshly
   restored 26.4 guest it is a brick. Renaming the OID makes bluetoothd's cached
@@ -55,6 +55,12 @@
 			<string>Bundled</string>
 			<key>Identifier</key>
 			<string>com.vphone.patchset.kernel.frida</string>
+		</dict>
+		<dict>
+			<key>Kind</key>
+			<string>Bundled</string>
+			<key>Identifier</key>
+			<string>com.vphone.patchset.research.board</string>
 		</dict>
 		<dict>
 			<key>Kind</key>

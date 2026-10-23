@@ -24,9 +24,12 @@ struct FirmwarePickerTests {
         }
     }
 
-    @Test func `cloud OS options are distinct in first seen order`() {
+    @Test func `cloud OS options are distinct in first seen order, the research board ones last`() {
         let opts = VPhoneFirmwareCatalog.cloudOSOptions
-        #expect(opts.map(\.name) == ["cloudOS 26.1", "cloudOS 26.2", "cloudOS 26.3", "cloudOS 26.4"])
+        #expect(opts.map(\.name) == [
+            "cloudOS 26.1", "cloudOS 26.2", "cloudOS 26.3", "cloudOS 26.4",
+            "cloudOS 26.4 (23E244)", "cloudOS 26.5 (23F75)", "cloudOS 26.6 (23G71)", "cloudOS 26.7 (23H20)",
+        ])
         #expect(Set(opts.map(\.url)).count == opts.count) // no dup URLs
     }
 

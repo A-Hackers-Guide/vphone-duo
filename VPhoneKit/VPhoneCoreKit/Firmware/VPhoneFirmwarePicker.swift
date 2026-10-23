@@ -102,6 +102,7 @@ public enum VPhoneFirmwarePicker {
         case .iPad: "an iPadOS"
         case .appleTV: "a tvOS"
         case .homePod: "a HomePod"
+        case .watch: "a watchOS"
         case .iPhone, nil: "an iPhone"
         }
         let idx = try choose(

@@ -37,6 +37,7 @@ public enum FirmwareGuestSystemPatchSet {
         "System/Library/Extensions/AppleParavirtGPUMetalIOGPUFamily.bundle/AppleParavirtGPUMetalIOGPUFamily"
 
     public static let locationdCohorting = "system-locationd-cfw-disable_auto_cohort"
+    public static let virtualBluetooth = "system-bluetoothd-cfw-btvc_le_connection"
     public static let jetsamDisableAllowed = "system-jetsamproperties-cfw-disable_allowed"
     public static let tvTPRO = "system-dyld-exp-tv_tpro"
     /// Replaces the restored System volume with an Apple TV 4K userland
@@ -103,6 +104,13 @@ public enum FirmwareGuestSystemPatchSet {
                 title: "Apple TV 4K userland from OTA",
                 summary: "Research: replaces the System volume with the arm64e tvOS userland staged in the VM's OTAUserland folder, extracted with aa so ownership, modes, flags and compression survive.",
                 target: .guestFile(path: "/"),
+                applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 26, minor: 0)),
+            ),
+            VPhonePatchDeclaration(
+                identifier: virtualBluetooth,
+                title: "Virtual Bluetooth",
+                summary: "Turns on the feature flag that lets bluetoothd connect over its virtual controller, which a paired watch and phone talk over.",
+                target: .guestFile(path: "/" + CustomFirmwareBluetoothVirtualController.relativePath),
                 applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 26, minor: 0)),
             ),
             VPhonePatchDeclaration(

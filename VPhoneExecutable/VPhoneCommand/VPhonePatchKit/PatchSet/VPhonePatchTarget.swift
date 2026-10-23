@@ -17,6 +17,7 @@ public enum VPhoneFirmwareComponent: String, Sendable, Hashable, Codable, CaseIt
     case restoreTrustCache = "RestoreTrustCache"
     case kernelcache
     case deviceTree = "DeviceTree"
+    case sep = "SEP"
     case filesystem = "Filesystem"
     case manifest = "Manifest"
 }

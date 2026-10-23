@@ -354,4 +354,3 @@ bundle build log; `final-late-*`, `final-normal-*`, `final-repeat-*` and
 and original patch selection are retained there for local recovery. No
 activation ticket, Apple Account or HomeKit identity was fabricated. The
 fixture is not shipped in the bundle.
-

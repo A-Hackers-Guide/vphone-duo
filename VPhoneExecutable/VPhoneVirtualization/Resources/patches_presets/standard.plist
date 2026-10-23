@@ -38,6 +38,12 @@
 		</dict>
 		<dict>
 			<key>Identifier</key>
+			<string>com.vphone.patchset.research.board</string>
+			<key>Kind</key>
+			<string>Bundled</string>
+		</dict>
+		<dict>
+			<key>Identifier</key>
 			<string>com.vphone.patchset.devicetree</string>
 			<key>Kind</key>
 			<string>Bundled</string>
@@ -76,6 +82,8 @@
 			<string>preboot-homepod-exp-audio_product</string>
 			<string>kernel-exp-frida_thread_set_state_entitlement_flag</string>
 			<string>kernel-exp-frida_vm_map_delete_immutable_code</string>
+			<string>kernel-exp-frida_tpro_off</string>
+			<string>kernel-exp-frida_syscall_filter_off</string>
 			<string>kernel-exp-hv_vmm</string>
 			<string>dyld-exp-hv_vmm</string>
 			<string>system-watchdogd-exp-hv_vmm_cache</string>

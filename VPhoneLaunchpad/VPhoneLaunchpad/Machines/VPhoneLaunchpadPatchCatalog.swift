@@ -83,7 +83,7 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
         }
 
         private static let bootChainParts: Set<String> = [
-            "AVPBooter", "iBSS", "iBEC", "LLB", "TXM", "kernelcache", "DeviceTree", "Filesystem", "Manifest",
+            "AVPBooter", "iBSS", "iBEC", "LLB", "TXM", "kernelcache", "DeviceTree", "SEP", "Filesystem", "Manifest",
         ]
 
         /// False when the patch applies to every version, which is not worth a
@@ -283,6 +283,13 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
     /// `VPhonePatchPreset.tvOS4KIdentifier`: its arm64e userland comes from
     /// the OTA, with the paravirtual GPU driver.
     static let tvOS4KPreset = "tvos-4k"
+    /// The preset that customises the system before the restore and patches
+    /// no boot chain: `fw patch` runs as root, and nothing writes the system
+    /// afterwards, so there is no template and no slimming.
+    static let minimalPreset = "minimal"
+    /// The preset an Apple Watch guest gets, mirroring
+    /// `VPhonePatchPreset.watchOSIdentifier`: `minimal` for the watch board.
+    static let watchOSPreset = "watchos"
 
     /// The HomePod mini's arm64e userland has a preset of its own.
     static let homePodMiniPreset = "homepod-mini"
@@ -293,6 +300,9 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
         case "AudioAccessory5,1": homePodMiniPreset
         case "AppleTV14,1": tvOS4KPreset
         case let type? where type.hasPrefix("AppleTV"): tvOSPreset
+        case let type? where type.hasPrefix("Watch"): watchOSPreset
+        // The iOS 18 research board kernels boot no other preset.
+        case "iPhone11,6", "iPhone11,4": minimalPreset
         default: defaultPreset
         }
     }
@@ -320,6 +330,10 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
     }
 
     /// The `--preset` flag `fw patch` and `fw patches` carry, if any.
+    var customisesRestoredSystem: Bool {
+        preset == Self.minimalPreset || preset == Self.watchOSPreset
+    }
+
     var presetArguments: [String] {
         preset == Self.defaultPreset ? [] : ["--preset", preset]
     }

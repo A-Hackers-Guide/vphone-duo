@@ -97,14 +97,24 @@ extension GuestAPI {
                 timeout: number(params, "timeout", default: 10),
             )
         case "ui.ocr":
+            try requireTextRecognition()
             return try recognizeScreen(
                 languages: params["languages"] as? [String] ?? ["en-US"],
                 minConfidence: Float(number(params, "min_confidence", default: 0.3)),
             )
         case "ui.describe":
+            try requireTextRecognition()
             return try describeScreen()
         default:
             return nil
+        }
+    }
+
+    /// IcliKit's OCR is Vision's, which watchOS does not ship: vphoned links
+    /// it weakly, so its classes are nil on a watch.
+    private static func requireTextRecognition() throws {
+        guard NSClassFromString("VNRecognizeTextRequest") != nil else {
+            throw GuestAPIError.operationFailed("Text recognition needs Vision, which this guest does not have")
         }
     }
 

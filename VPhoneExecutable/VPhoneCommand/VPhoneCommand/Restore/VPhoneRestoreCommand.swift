@@ -245,6 +245,7 @@ struct VPhoneCustomFirmwareCommand: ParsableCommand {
             VPhoneCustomFirmwareInjectDylibCommand.self,
             VPhoneCustomFirmwarePatchBuildVersionCommand.self,
             VPhoneCustomFirmwarePatchLocationdCohortingCommand.self,
+            VPhoneCustomFirmwarePatchVirtualBluetoothCommand.self,
             VPhoneCustomFirmwarePatchJetsamDisableAllowedCommand.self,
             VPhoneCustomFirmwarePatchVirtualAudioGraphConfigurationsCommand.self,
             VPhoneCustomFirmwarePatchVirtualAudioSpeakerRawCommand.self,

@@ -188,6 +188,12 @@ public struct VPhoneVirtualMachineCreator {
         outputs: VPhoneCreatedOutputs,
     ) throws {
         let v = options.verbosity
+        // `fw prepare` stages what the selection needs (the GPU driver, the seal
+        // tool), so the preset has to be on record before it runs.
+        try VPhonePatchPresetStore.write(
+            VPhoneVirtualMachinePatchSelection(presetIdentifier: options.patchPreset),
+            forVM: bundleURL,
+        )
         print("\n=== fw prepare ===")
         try runFWPrepare(options: options, bundleURL: bundleURL)
 
@@ -507,6 +513,7 @@ public struct VPhoneVirtualMachineCreator {
             device: options.device,
             otaSource: options.otaSource,
             otaKey: options.otaKey,
+            checksKernelcacheMix: true,
             bundle: bundle, resources: resources,
         )
         print("[+] Firmware prepared (iPhone + cloudOS merged into bundle).")
