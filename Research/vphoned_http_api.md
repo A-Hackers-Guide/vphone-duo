@@ -403,7 +403,11 @@ dispatch, which by itself did not drive orientation on the research board.
 When the provider is running, setting rotation first publishes a stationary
 gravity pose matching the requested orientation. The existing SpringBoard
 request and interface-orientation readback still decide success; a running HID
-provider is not an acknowledgement that SpringBoard rotated. The selected
+provider is not an acknowledgement that SpringBoard rotated. A refused request
+puts the previous pose back and asks again for the interface orientation from
+before it. A refused request still turns iPadOS's pointer: with the screen off,
+an upside-down request left the interface portrait and the pointer upside down,
+so the mouse moved backwards until a request for the current orientation. The selected
 `system-backboardd-cfw-accelerometer` patch installs this provider; older or
 disabled guests retain their existing rotation path.
 
