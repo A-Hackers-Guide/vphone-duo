@@ -1,9 +1,12 @@
 # HomePod mini first-boot welcome
 
 The guest policies, SoundBoard welcome coordinator, isolated Siri playback
-adapter and durable once state are implemented. Local tests pass. No updated
-bundle has been installed; audible Siri speech and the full welcome still need
-live validation.
+adapter and durable once state are implemented. Local tests pass. Live tests on
+27.0 (24J361) confirm audible native Siri speech, the exact automatic welcome
+sentence, tone 1 and both native animations. The first live run exposed an
+Identify ownership cleanup error, corrected and validated on a fresh-identity
+clone. The original guest retains its claim without replay after update, cold
+boot or SoundBoard restart; direct Siri speech and tones still work afterward.
 
 ## Patch policies
 
@@ -48,7 +51,10 @@ and verifies that the old UInt64 shape is rejected.
 `HPACoordinatedSession.setActive:` is an error/no-op, so it must not be used.
 Identify's `launchWithOptions:` would also play tone 6, so the welcome does not
 use that entry point. Apple's Identify renderer supplies the animation;
-`endLocalSessionActivity` releases it when the tone finishes or fails.
+`setLocalSessionActive:NO` releases it when the tone finishes or fails. The
+coordinated setter clears ownership, calls Identify's `endLocalSessionActivity`
+cleanup and dismisses the foreground activity. Calling the subclass cleanup
+directly leaves Identify active and lets it resurface after Siri finishes.
 
 After successful tone completion and a 650 ms pause, the coordinator rechecks
 policy and Siri idleness, then calls the native Siri manager with exactly:
@@ -153,7 +159,7 @@ Snapshots are `soundboard-animation-audit-rea.json` and
 `sirivox-external-animation-audit-rea.json`. These establish native control flow,
 not actual frame delivery, speech metering or audibility in the installed guest.
 
-## Verification and remaining live checks
+## Verification
 
 Catalogue/resolution tests pass (43 tests), covering version/preset selection,
 TV rejection, both policy targets, missing dependencies and independent opt-out.
@@ -177,42 +183,61 @@ session lifetime and cleanup, duplicate completion and original dispatch when
 disabled. The display harness checks the existing MiniDisplay identity adapter.
 Mock tests establish control flow and ABI handling, not audible synthesis.
 
-Live proof must establish exactly one tone/flourish sequence, the exact spoken
-sentence, native Siri animation, completion ordering and no replay after cold
-boot. It must also repeat direct debug `siriSay:` and verify display and ordinary
-tone playback with the original product token intact. Bundle installation and
-these end-to-end checks are deferred until the user is available to authorize
-updates. The prior installed audio/display build remains in place.
+### Live validation (2026-10-23)
 
-### Live validation order when authorization is available
+Installed through Launchpad with `--keep-default`; the final host and guest
+bundle bound to `homepod-mini` is `2.11.0-local.3f1d474e`. Other machines and the
+library default were preserved. The final complete bundle build passed admission
+and the four standalone state/welcome/speech/display harnesses passed. The
+original virtual product token and the existing audio-only ProductIDOverride
+remain unchanged.
 
-1. Install the candidate with `bundle install-local <path> --keep-default`.
-   Use its returned version when rebinding `homepod-mini`; preserve the library
-   default and other machines. The last read-only inventory still has this VM
-   running host/guest bundle `2.11.0-local.40cd1d45`.
-2. Inspect the machine's current patch selection. For an initial speech-only
-   comparison, block welcome while keeping native Siri speech selected, then
-   stop/rebind with `vm set-bundle ... --update-environment`. Do not weaken any
-   boot-volume protections or edit the root-owned installed bundle manually.
-3. Clear the earlier research-only Buddy debug override before the comparison.
-   The existing VM retained `HomePodBuddyConnection` with a simulated
-   `siriThinking` activity; this is absent from the default template. Reset that
-   default through SoundBoard's native debug interface and restart SoundBoard
-   normally (or apply it before the planned VM reboot). Do not replace it with
-   another debug override or an LED replay to make the welcome visible.
-4. On the speech-only boot, capture SoundBoard/SiriHeadlessService/sirittsd logs,
-   native activity diagnostics and top-cap frames while issuing `siriSay:` with
-   the exact sentence. Confirm audible speech, presenting-to-idle rendering,
-   native finalization, isolated-session cleanup and continued ordinary tone
-   output. A submitted debug RPC alone is not a pass.
-5. Re-enable welcome, update the guest environment through Launchpad and boot
-   with the listener ready. Verify native tone 1 and Identify animation first,
-   then the short pause, exact Siri sentence and its native speech animation.
-   Inspect the guest's identity-scoped claim/status after playback.
-6. Cold boot again and restart SoundBoard: the welcome must not repeat. Verify
-   that standalone `siriSay:` remains usable and display frames still arrive.
-   Retain the consumption marker; do not add a production reset/replay trigger.
+Before enabling welcome, the speech policy was tested alone and the old
+`HomePodBuddyConnection` research override was reset through the native debug
+interface followed by a normal SoundBoard restart. The owner heard the exact
+full sentence. Synchronized native logs establish a five-second utterance,
+SiriHeadlessService `#Success #SpeechRequest`, sirittsd playback start/finish,
+SoundBoard presenting-to-idle, nil final NSError and auxiliary-session
+activation/deactivation. Native colorful top-cap generations advanced through
+1056, 1166 and 1244, then returned to black at 1322/1336.
 
-These are planned checks, not completed live results. Administrator authorization
-is needed for bundle installation and guest-environment deployment; it has not
-been requested while the user is unavailable.
+Enabling welcome produced native tone 1 and Identify at 09:38:45 UTC, tone
+completion at 09:38:50, speech request at 09:38:51 and speech finalization at
+09:38:56. The owner confirmed tone, the full sentence and both animations.
+This run exposed Identify remaining active after the subclass cleanup callback.
+The fix calls `setLocalSessionActive:NO`, the native ownership setter that
+clears the flag, invokes `endLocalSessionActivity` and dismisses the activity.
+The mock now models that distinction rather than clearing ownership in the
+callback. Donor REA evidence:
+`ev_ca49a2aa400858202bf60981f5512d8c5bf4da3583865995f66d8f29fa4067f1`
+(setter) and
+`ev_7199672608d79af3adaceccbac5c735e3968d6934ec5dbbd7e36f415f4299774`
+(Identify callback), retained in `soundboard-identify-cleanup-rea.json`.
+
+A temporary APFS clone with `--new-identity` verified the corrected whole sequence
+without resetting the original claim. The clone retained the copied identity's
+claim and created a second claim for its own identity. At 09:43:43 it played tone
+1 with Identify; at 09:43:48 Identify went inactive and the activity stack
+returned to idle before speech began. At 09:43:53 Siri finished, its auxiliary
+session deactivated and Status became `SpeechFinalized`. Diagnostics then showed
+no foreground activity, an empty stack, `IdentifyRunning=false` and Siri idle.
+The temporary clone was stopped and removed after saving its evidence.
+
+The original was updated to the final bundle and cold-booted. Its Claim and
+Status bytes remained exactly unchanged (claim 09:38:45, finalization 09:38:56).
+A complete, untruncated boot capture contained no welcome tone or speech. A
+normal SoundBoard restart then produced another complete capture with the
+speech adapter installed, no welcome playback and an empty idle activity stack.
+The marker was never removed or rewritten to replay a test.
+
+After that restart, direct `siriSay:` was retested on the final original VM:
+09:47:16 presenting, 09:47:21 idle, auxiliary session deactivated, final error
+nil. Colorful frame generations 309/405/496 became black at 625. Ordinary tone 1
+then played at 09:47:27 and completed normally at 09:47:32. The owner confirmed
+both audible outputs and the display's return to idle. The VM remains running
+with the default `homepod-mini` selection and its original claim intact.
+
+Raw live RPC results, synchronized logs, frame samples, claim/status copies and
+build logs are local diagnostics in `.build/homepod-welcome-research/`, not
+shipped runtime dependencies. The welcome is initiated and coordinated wholly
+inside SoundBoard; the host RPCs above are verification only.

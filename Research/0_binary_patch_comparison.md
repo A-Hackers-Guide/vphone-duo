@@ -1,6 +1,6 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
-> **HomePod Siri speech policy (2026-10-22, repair runtime unverified).**
+> **HomePod Siri speech policy (2026-10-23, live speech verified).**
 > New optional `system-homepod-exp-siri_speech` generates
 > `/usr/share/vphone/HomePodSiriSpeech.plist` with `Enabled=true`, restricted to
 > 27.x HomePod guests and selected by default only in `homepod-mini`. Installation
@@ -11,10 +11,13 @@
 > and completion to handle speech without entering physical recording setup.
 > The candidate repair is scoped to the existing SoundBoard adapter; global
 > product identity, audio route and microphone capability flags remain intact.
-> Native branch analysis is verified; repair playback remains unverified.
+> Live `siriSay:` speaks the full exact welcome sentence. SiriHeadlessService
+> reports synthesis success, sirittsd records playback start/finish, SoundBoard
+> returns to idle and deactivates the auxiliary session. Colorful native frames
+> advance during speech and return to black afterward.
 > See [welcome and speech policy](Firmware/homepod_welcome.md).
 
-> **HomePod welcome policy (2026-10-22, runtime validation pending).**
+> **HomePod welcome policy (2026-10-23, live sequence verified).**
 > New optional `system-homepod-exp-welcome` is restricted to 27.x and admitted
 > only for HomePod guests. Only `homepod-mini` selects it by default. The guest
 > installer checks that vphoned, the HomePod top cap, local setup completion and
@@ -25,9 +28,18 @@
 > native tone completion, a coordinated Identify activity and Siri finalization
 > after boot readiness. A durable guest-identity claim prevents replay across
 > restarts and updates while allowing each template clone its own welcome.
-> Catalogue and standalone runtime/state tests pass. Audible synthesis, native
-> flourish and end-to-end first-boot behavior still require live validation.
-> See [welcome policy and pending native behavior](Firmware/homepod_welcome.md).
+> The owner confirms tone, exact speech and both animations on automatic boot.
+> Logs establish TonePlaying, ToneFinished, SpeechRequested and SpeechFinalized.
+> Live inspection caught Identify remaining active: cleanup must call the
+> coordinated `setLocalSessionActive:NO`, which invokes the subclass cleanup;
+> calling `endLocalSessionActivity` alone does not relinquish ownership. The
+> regression mock now preserves that native distinction. Final installed bundle
+> `2.11.0-local.3f1d474e` passes the complete sequence on a fresh-identity clone,
+> returning to an empty activity stack. The original claim/status stay byte
+> identical after update, cold boot and SoundBoard restart with no replay.
+> Direct Siri speech, native animated frames and ordinary tone 1 still pass
+> afterward, including the owner's audible and return-to-idle confirmation.
+> See [welcome policy and native behavior](Firmware/homepod_welcome.md).
 
 > **HomePod welcome pre-live ABI audit (2026-10-23).**
 > Direct 24J361 donor-cache metadata establishes UInt32 tone playback

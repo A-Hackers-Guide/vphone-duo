@@ -20,7 +20,7 @@ static BOOL needsSetup;
 @end
 
 @interface WelcomeActivity : NSObject
-@property BOOL localSessionActive;
+@property (nonatomic) BOOL localSessionActive;
 @property BOOL remoteSessionActive;
 @property BOOL siriUIEnabled;
 @property (copy) NSString *activityName;
