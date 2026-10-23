@@ -57,8 +57,16 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
 
     /// Same rationale as the UDP forwarder: UDP has no teardown, so a timer is
     /// the only bound. TCP does have one, but a peer that vanishes mid-connection
-    /// leaves a session behind until this fires.
+    /// leaves a session behind until this fires. Also how often the reaper runs.
+    ///
+    /// This bound is for connections that are opening or closing.
     private static let idleTimeout: TimeInterval = 120
+    /// The bound for an established connection, RFC 5382's floor (REQ-5).
+    /// Silence there is normal: an ssh session with no keepalives sends
+    /// nothing while its user reads, and push and chat connections ping every
+    /// few minutes. Reaped at 120 s, such a connection was torn down under its
+    /// user with no RST to the guest.
+    private static let establishedIdleTimeout: TimeInterval = 2 * 3600 + 4 * 60
     /// A ceiling, so a guest that opens sockets in a loop cannot exhaust the
     /// host. Well above what a VM needs.
     private static let maximumConnections = 256
@@ -834,9 +842,12 @@ final class VPhoneTCPForwarder: @unchecked Sendable {
 
     // MARK: - Housekeeping
 
-    private func reapIdle() {
-        let now = Date()
-        for (key, connection) in connections where now.timeIntervalSince(connection.lastActivity) >= Self.idleTimeout {
+    /// Internal, with `now`, so tests can run it as if time had passed.
+    func reapIdle(now: Date = Date()) {
+        dispatchPrecondition(condition: .onQueue(queue))
+        for (key, connection) in connections {
+            let limit = connection.state == .established ? Self.establishedIdleTimeout : Self.idleTimeout
+            guard now.timeIntervalSince(connection.lastActivity) >= limit else { continue }
             close(connection)
             connections[key] = nil
         }
