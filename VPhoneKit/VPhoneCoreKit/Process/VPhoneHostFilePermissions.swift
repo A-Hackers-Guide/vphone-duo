@@ -14,10 +14,17 @@ public enum VPhoneHostFilePermissions {
     /// skipped: root must never widen a file its invoking user could not.
     public static func makeAccessible(at url: URL) throws {
         let owners = permittedOwners()
+        let user = geteuid()
         try walkTree(
             at: url,
             admits: { metadata in owners.map { $0.contains(metadata.st_uid) } ?? true },
-            visit: { descriptor, _ in
+            visit: { descriptor, metadata in
+                // Already shared, or, without root, another account's: a cached
+                // IPSW a sudo run downloaded is root's, and only its owner may
+                // change its mode, so reusing it as the user must not try.
+                if metadata.st_mode & 0o777 == 0o777 || (user != 0 && metadata.st_uid != user) {
+                    return
+                }
                 guard fchmod(descriptor, 0o777) == 0 else { throw currentError() }
             },
         )
@@ -36,8 +43,18 @@ public enum VPhoneHostFilePermissions {
         guard fstat(descriptor, &metadata) == 0, metadata.st_mode & S_IFMT == S_IFDIR else {
             throw POSIXError(.ENOTDIR)
         }
+        // Already shared. A cache a sudo run made is root's, and only its
+        // owner may change its mode, so the next run as the user must not try.
+        if metadata.st_mode & 0o777 == 0o777 {
+            return
+        }
         // Root leaves a directory it does not share with the invoking user as is.
         if let owners = permittedOwners(), !owners.contains(metadata.st_uid) {
+            return
+        }
+        // Another account's directory: the kernel's own checks decide whether
+        // this process can write in it.
+        if geteuid() != 0, metadata.st_uid != geteuid() {
             return
         }
         guard fchmod(descriptor, 0o777) == 0 else {

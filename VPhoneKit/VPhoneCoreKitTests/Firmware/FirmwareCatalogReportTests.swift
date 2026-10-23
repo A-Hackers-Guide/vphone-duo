@@ -17,7 +17,7 @@ struct FirmwareCatalogReportTests {
     }
 
     @Test func `an OTA pairing names its build and the files it needs`() throws {
-        let tv4K = try #require(VPhoneFirmwareCatalog.report.devices.first { $0.productType == "AppleTV14,1" })
+        let tv4K = try #require(VPhoneFirmwareCatalog.report(hostMacOS: 27).devices.first { $0.productType == "AppleTV14,1" })
         let ipsw = try #require(tv4K.pairings.first { $0.ios.name == "tvOS 26.6" })
         let ota = try #require(tv4K.pairings.first { $0.ios.name == "tvOS 27.0" })
         #expect(ipsw.ios.build == nil && ipsw.ios.files == nil)
@@ -60,7 +60,7 @@ struct FirmwareCatalogReportTests {
     }
 
     @Test func `the Apple TV 4K pairs each OTA with the Apple TV HD IPSW it is restored over`() throws {
-        let pairings = VPhoneFirmwareCatalog.pairings(for: "AppleTV14,1")
+        let pairings = VPhoneFirmwareCatalog.pairings(for: "AppleTV14,1", hostMacOS: 27)
         #expect(pairings.map(\.iosName) == ["tvOS 26.6", "tvOS 27.0"])
         let hd = try #require(VPhoneFirmwareCatalog.pairings(for: "AppleTV5,3").first { $0.iosName == "tvOS 26.6" })
         for p in pairings {
@@ -110,7 +110,7 @@ struct FirmwareCatalogReportTests {
     }
 
     @Test func `HomePod mini pairs its native 27 IPSW with cloudOS without an OTA base`() throws {
-        let pairings = VPhoneFirmwareCatalog.pairings(for: "AudioAccessory5,1")
+        let pairings = VPhoneFirmwareCatalog.pairings(for: "AudioAccessory5,1", hostMacOS: 27)
         #expect(pairings.count == 2)
         let pairing = try #require(pairings.first)
         #expect(pairing.device == "AudioAccessory5,1")
@@ -136,13 +136,30 @@ struct FirmwareCatalogReportTests {
         #expect(release.version == "27.2" && release.baseVersion == "27.0")
         #expect(release.key == nil && release.size == 3_051_441_612)
         #expect(release.fileName == "AudioAccessory5,1_27.2_24K120_OTA.zip")
-        let pairings = VPhoneFirmwareCatalog.pairings(for: release.productType)
+        let pairings = VPhoneFirmwareCatalog.pairings(for: release.productType, hostMacOS: 27)
         #expect(VPhoneFirmwareCatalog.restoreBaseURL(for: release) == pairings[0].iosURL)
         #expect(pairings[1].iosURL == release.url)
         #expect(VPhoneFirmwareCatalog.otaRelease(source: "/cache/ota/\(release.fileName)") == release)
-        let device = try #require(VPhoneFirmwareCatalog.report.devices.first { $0.productType == release.productType })
+        let device = try #require(VPhoneFirmwareCatalog.report(hostMacOS: 27).devices.first { $0.productType == release.productType })
         #expect(device.pairings[1].ios.build == "24K120")
         #expect(device.pairings[1].ios.files == ["ota/\(release.fileName)", (pairings[0].iosURL as NSString).lastPathComponent])
+    }
+
+    @Test func `a Mac before macOS 27 is offered no OTA it cannot unpack`() throws {
+        // tvOS 27.0 and HomePod Software 27.2 compress their chunks with LZRAVEN.
+        let lzraven = VPhoneFirmwareCatalog.otaReleases.filter { $0.minimumHostMacOS == 27 }
+        #expect(Set(lzraven.map(\.build)) == ["24J361", "24K120"])
+        for release in lzraven {
+            #expect(!release.unpacks(onMacOS: 26) && release.unpacks(onMacOS: 27))
+        }
+        #expect(VPhoneFirmwareCatalog.pairings(for: "AppleTV14,1", hostMacOS: 26).map(\.iosName) == ["tvOS 26.6"])
+        #expect(VPhoneFirmwareCatalog.pairings(for: "AudioAccessory5,1", hostMacOS: 26).map(\.iosName) == ["HomePod Software 27.0"])
+        let report = VPhoneFirmwareCatalog.report(hostMacOS: 26)
+        let tv4K = try #require(report.devices.first { $0.productType == "AppleTV14,1" })
+        #expect(tv4K.pairings.map(\.ios.name) == ["tvOS 26.6"])
+        // Nothing else depends on the host.
+        #expect(VPhoneFirmwareCatalog.pairings(for: "AppleTV5,3", hostMacOS: 26) == VPhoneFirmwareCatalog.pairings(for: "AppleTV5,3", hostMacOS: 27))
+        #expect(VPhoneFirmwareCatalog.pairings(for: "iPhone17,3", hostMacOS: 26) == VPhoneFirmwareCatalog.pairings)
     }
 
     @Test func `i pad pairings come from an IPSW that covers the device`() {

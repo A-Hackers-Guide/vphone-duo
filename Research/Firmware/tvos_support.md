@@ -436,6 +436,16 @@ layout is the 26.6 one: monolithic, no cryptex, `payloadv2` chunks, the root
 filesystem's `.mtree`, `.root_hash` and `.trustcache`, and the J255 device tree.
 (Checked on the AppleTV11,1 27.0 OTA, a plain zip, from its central directory.)
 
+The 27.0 OTA needs a Mac on macOS 27. Its `payloadv2` chunks are `pbzm`, not
+`pbzx`: LZRAVEN (`COMPRESSION_LZRAVEN`, 0xD05), which libcompression gained in
+macOS 27, and a chunk's first block decodes to `YAA1` only there. On macOS
+26.6.2 neither AppleArchive nor `aa` reads it, and the creation failed after
+the restore, when `cfw install` unpacked the userland (2026-10-23). The catalog
+records the requirement (`VPhoneOTARelease.minimumHostMacOS`): on an older Mac
+`fw catalog` and the default pairing stop at tvOS 26.6, an explicit 27.0 source
+is refused before anything is downloaded, and staging refuses a `pbzm` chunk by
+name.
+
 So a 27 guest is the 26.6 one with a later OTA: the HD's last IPSW, 26.6, is
 the restore base and only the userland changes. `VPhoneOTARelease.baseVersion`
 records the base an OTA goes over. The 4K's tvOS 27.0 pairing names the OTA

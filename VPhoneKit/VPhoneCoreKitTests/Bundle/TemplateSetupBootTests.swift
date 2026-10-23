@@ -45,6 +45,9 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
     /// Apps vphoned had to unregister more than once, as it reports them.
     var unregisterAttempts: [String: Int] = [:]
     var servicesKeepRunning = false
+    /// Applies whose disable of com.apple.weatherd launchd refuses, as it
+    /// refused com.apple.seserviced early in an iOS 26.5 setup boot.
+    var profileRefusals = 0
     var rebootNeverReturns = false
     var stopsCleanly = true
     /// vphoned still answers the first ping after `system.reboot`, then takes
@@ -218,6 +221,12 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
             return ["results": results, "removed": ids.count, "failed": 0]
         case "services.profile.apply":
             let wanted = params["profile"] as? String ?? ""
+            if wanted == "trimmed", profileRefusals > 0 {
+                profileRefusals -= 1
+                return ["profile": wanted, "disabled": [String](), "enabled": [String](), "owned": 0, "failed": [
+                    ["label": "com.apple.weatherd", "action": "disable", "error": "disable requires root (launchd status 1)"],
+                ]]
+            }
             profile = wanted
             if wanted == "trimmed" {
                 groups = ["app_store", "base", "signin_followup"] + (params["groups"] as? [String] ?? [])
@@ -429,6 +438,26 @@ struct TemplateSetupBootTests {
         let outcome = try run(guest).get()
         #expect(guest.calls.count(where: { $0 == "apfs.snapshot.delete" }) == 3)
         #expect(outcome.isComplete)
+    }
+
+    @Test func `a service launchd refuses early in the boot is applied again`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.profileRefusals = 1
+        let outcome = try run(guest).get()
+        #expect(guest.calls.count(where: { $0 == "services.profile.apply" }) == 2)
+        #expect(outcome.serviceProfile == "trimmed")
+    }
+
+    @Test func `a service launchd keeps refusing fails the profile step after two retries`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.profileRefusals = 5
+        guard case let .failure(failure) = run(guest) else {
+            Issue.record("the setup boot succeeded")
+            return
+        }
+        #expect(failure.step == .serviceProfile)
+        #expect(failure.reason.contains("com.apple.weatherd"))
+        #expect(guest.calls.count(where: { $0 == "services.profile.apply" }) == 3)
     }
 
     @Test func `setup skip that fails early in the boot is retried`() throws {
