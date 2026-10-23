@@ -138,6 +138,16 @@ preserved. See [Sound Glow](homepod_sound_glow.md) for evidence and build detail
 The host label now records the actual installed userland after disk commit,
 preserving cloudOS; preparation alone continues to report the restore base.
 
+The 27.2 OTA needs a Mac on macOS 27. Its `payloadv2` chunks are `pbzm`:
+LZRAVEN (`COMPRESSION_LZRAVEN`, 0xD05), which libcompression gained in macOS
+27. On macOS 26.6.2 neither AppleArchive nor `aa` reads them, and the creation
+stopped at "payload.000 could not be read: ioError. Download the OTA again."
+although the archive matched AppleDB's SHA-256 (2026-10-23). The catalog
+records the requirement (`VPhoneOTARelease.minimumHostMacOS`): on an older Mac
+`fw catalog` and the default pairing stop at HomePod Software 27.0, an explicit
+27.2 source is refused before anything is downloaded, and staging refuses a
+`pbzm` chunk by name.
+
 ## Validation
 
 Validated on 2026-10-22 with four CPUs, 4 GiB memory and a 32 GB disk:

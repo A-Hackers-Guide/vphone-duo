@@ -3728,6 +3728,21 @@ it was not ("Invalid root hash", `apfs_sealvolume` exit 65 in
   for `apfs_sealvolume`, which needs the device; the mount changed the volume
   after the mtree described it. It attaches the image with `-noMount` now.
 
+On macOS 26.6.2 two more steps failed (2026-10-23, Mac mini M4):
+
+- `diskutil image attach -mountPoint` refuses a folder that does not exist
+  ("Mount point … doesn't exist", exit 64), and the merge attached at a fresh
+  `<tmp>/volume` it had not created. Every preset that merges the restore
+  image (watchos, minimal) stopped there. The folder is created first now.
+- The watchOS 26.4 system image has no partition map: its APFS container
+  spans the whole file, and `diskutil image resize` grows it no further than
+  that ("Requested size exceeds maximum size"; min 11.05 GB, max = current =
+  11.26 GB once merged). Left at that size, `apfs_sealvolume` ran out of space
+  remapping the fsroot tree with 541 MB free (ENOSPC, exit 65). `growImage`
+  now extends the file and runs `diskutil apfs resizeContainer <container> 0`,
+  which gave the same image 2.7 GB free. The iOS images, which diskutil can
+  grow, are resized as before.
+
 The binaries the merge patches (`launchd_cache_loader`, `mobileactivationd`)
 are re-signed in Apple's ad-hoc shape (`VPhoneSignOptions.Style.appleAdHoc`),
 like the stock binaries around them. The guest's TXM is stock here: it takes

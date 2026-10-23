@@ -51,6 +51,36 @@ day: `iPhone17,3 27.0.1 + 26.4-23E5207q` with the patch boots to the guest
 and answers a vphoned `device.info`. Bundle 2.6.0 is the first release that
 carries it.
 
+## macOS 26.6.2 hosts
+
+Checked on 2026-10-23 on Mac mini M4 hosts (Mac16,10, 16 GB, macOS 26.6.2 25G83) with Core Bundle 2.12.1. Every machine was created from nothing, from the CLI: the research-board pairings stage their kernelcache mix as the user and link it with sudo, then `sudo vphone-cli vm create`. A default is the newest pairing `fw catalog` gives that device on this Mac, as Launchpad's New Machine selects. Each machine then booted twice headless: vphoned answered, `device.info` reported the release, and the guest's serial log showed no panic.
+
+| Guest | Firmware | cloudOS | Result |
+| --- | --- | --- | --- |
+| iPhone17,3 | iOS 27.0.1 (default) | `26.4-23E5207q` | template build, clone, two boots |
+| iPhone18,2 | iOS 27.0.1 (default) | `26.4-23E5207q` | template build, clone, two boots |
+| iPad16,1 | iPadOS 27.0.1 (default) | `26.4-23E5207q` | template build, clone, two boots |
+| iPhone17,3 | iOS 26.6.2 | `26.4-23E5207q` | template build, clone, two boots |
+| iPhone17,3 | iOS 26.6.2 | `26.6-23G71` | research board: native KDK extraction, macOS 26 link with no auth stubs left, 28 kernelcache patches, two boots |
+| iPhone17,3 | iOS 26.5 | `26.5-23F75` | research board, as above |
+| iPhone17,3 | iOS 26.4 | `26.4-23E244` | research board, as above |
+| iPhone17,3 | iOS 18.6.2 | `26.1-23B85` | template build, clone, two boots |
+| iPhone11,6 | iOS 18.7.2 (default) | `18.7.2-22H43` | Minimal, mix linked over ssh by the kmutil of a macOS 15.7.7 VM, two boots |
+| iPhone11,6 | iOS 18.6 | `18.6-22G86` | as above: the first boot of this recipe |
+| iPhone11,6 | iOS 18.7 | `18.7-22H20` | as above: the first boot of this recipe |
+| Watch7,18 | watchOS 26.4 (default) | `26.4-23E244` | `watchos` preset, watch kernelcache mix, two boots |
+| AppleTV5,3 | tvOS 26.6 (default) | `26.4-23E5207q` | `tvos` preset, two boots |
+| AppleTV14,1 | tvOS 26.6 (default on macOS 26) | `26.4-23E5207q` | `tvos-4k` preset, 26.6 OTA userland, two boots |
+| AudioAccessory5,1 | HomePod Software 27.0 (default on macOS 26) | `26.4-23E5207q` | `homepod-mini` preset, two boots |
+| AppleTV14,1 | tvOS 27.0 | — | refused before any download: needs macOS 27 |
+| AudioAccessory5,1 | HomePod Software 27.2 | — | refused before any download: needs macOS 27 |
+
+The tvOS 27.0 (24J361) and HomePod Software 27.2 (24K120) OTAs compress their payload with LZRAVEN, which only macOS 27 unpacks. On an older Mac `fw catalog` leaves them out, so Launchpad's default for those devices is tvOS 26.6 and HomePod Software 27.0, and naming one is refused before anything is downloaded.
+
+cloudOS 26.7 (23H20) has no iPhone release to pair with. Staged with iOS 26.6.2's userland, its mix links and its 28 kernelcache patches apply; the CFW patch `_vm_fault_enter_prepare` finds no site in that kernel. It has not booted.
+
+`vphone-escalator`'s allowlist is kept in amfid's memory, so it is lost when amfid restarts, as it did once on these hosts mid-run. Launchpad allows the bundle again when AMFI refuses it; from the CLI, run the `vphone-escalator allow` command `host preflight` prints again.
+
 ## Other iPhone models
 
 See [Other iPhone models](iphone-models.md).
