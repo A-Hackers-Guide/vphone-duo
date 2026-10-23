@@ -20,7 +20,7 @@ import Testing
 struct CryptexFileOpsTests {
     @Test("Guest file edits reject symlink parents and leaves")
     func guestEditsStayInsideImage() throws {
-        let root = try makeScratch().resolvingSymlinksInPath()
+        let root = try makeScratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let image = root.appending(path: "image")
         let outside = root.appending(path: "outside")
@@ -42,7 +42,7 @@ struct CryptexFileOpsTests {
 
     @Test("Cryptex copying keeps symlinks as links")
     func cryptexCopyDoesNotFollowLinks() throws {
-        let root = try makeScratch().resolvingSymlinksInPath()
+        let root = try makeScratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let source = root.appending(path: "source")
         let destination = root.appending(path: "destination")
