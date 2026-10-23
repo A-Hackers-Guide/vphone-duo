@@ -71,6 +71,13 @@ struct KernelCacheMixerTests {
         try work.publish()
         #expect(try String(contentsOf: component, encoding: .utf8) == "patched")
         #expect(try String(contentsOf: outside, encoding: .utf8) == "outside")
+        let mixer = KernelCacheMixer(recipes: Self.recipes, cacheDirectory: base)
+        let cached = base.appending(path: "cached.im4p")
+        try Data("cache".utf8).write(to: cached)
+        #expect(try mixer.cachedMix(at: cached) == Data("cache".utf8))
+        try FileManager.default.removeItem(at: cached)
+        try FileManager.default.createSymbolicLink(at: cached, withDestinationURL: outside)
+        #expect(throws: (any Error).self) { try mixer.cachedMix(at: cached) }
         try FileManager.default.removeItem(at: component)
         try FileManager.default.createSymbolicLink(at: component, withDestinationURL: outside)
         #expect(throws: (any Error).self) { try FirmwarePatchWorkspace(machine: vm, workParent: base.path) }
