@@ -18,6 +18,43 @@ import Testing
 
 @Suite("Cryptex file operations")
 struct CryptexFileOpsTests {
+    @Test("Guest file edits reject symlink parents and leaves")
+    func guestEditsStayInsideImage() throws {
+        let root = try makeScratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let image = root.appending(path: "image")
+        let outside = root.appending(path: "outside")
+        try FileManager.default.createDirectory(at: image, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let file = outside.appending(path: "payload")
+        try Data("unchanged".utf8).write(to: file)
+        let patcher = makePatcher(root)
+        try FileManager.default.createSymbolicLink(at: image.appending(path: "parent"), withDestinationURL: outside)
+        #expect(throws: (any Error).self) {
+            try patcher.editGuestFile("parent/payload", targetMount: image.path, mode: 0o644) { _ in Issue.record("Followed a guest symlink") }
+        }
+        try FileManager.default.createSymbolicLink(at: image.appending(path: "leaf"), withDestinationURL: file)
+        #expect(throws: (any Error).self) {
+            try patcher.editGuestFile("leaf", targetMount: image.path, mode: 0o644) { _ in Issue.record("Followed a guest symlink") }
+        }
+        #expect(try String(contentsOf: file, encoding: .utf8) == "unchanged")
+    }
+
+    @Test("Cryptex copying keeps symlinks as links")
+    func cryptexCopyDoesNotFollowLinks() throws {
+        let root = try makeScratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appending(path: "source")
+        let destination = root.appending(path: "destination")
+        try FileManager.default.createDirectory(at: source.appending(path: "folder"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try Data("file".utf8).write(to: source.appending(path: "folder/file"))
+        try FileManager.default.createSymbolicLink(atPath: source.appending(path: "link").path, withDestinationPath: "folder/file")
+        try makePatcher(root).copyImageContents(source: source, destination: destination)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: destination.appending(path: "link").path) == "folder/file")
+        #expect(try String(contentsOf: destination.appending(path: "folder/file"), encoding: .utf8) == "file")
+    }
+
     /// A patcher is only needed for the methods; nothing here reads a manifest.
     private func makePatcher(_ scratch: URL) -> CryptexFilesystemPatcher {
         CryptexFilesystemPatcher(buildManiest: Data(), restoreDir: scratch, verbose: false)
@@ -27,7 +64,9 @@ struct CryptexFileOpsTests {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("vphone-fileops-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
+        guard let path = realpath(url.path, nil) else { throw POSIXError(.ENOENT) }
+        defer { free(path) }
+        return URL(fileURLWithPath: String(cString: path))
     }
 
     private func mode(of url: URL) throws -> Int {
@@ -246,6 +285,32 @@ struct CryptexFileOpsTests {
     </dict>
     </plist>
     """
+
+    // MARK: - Seal remap time
+
+    @Test(arguments: [
+        ".               type=dir nlink=19 size=608 time=1792405582.069334279\n",
+        ".               type=dir nlink=19 \\\n                size=608 time=1792405582.069334279\n",
+    ])
+    func `the remap time is the root entry's, not the newest one's`(root: String) throws {
+        let scratch = try makeScratch()
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let mtree = scratch.appendingPathComponent("mtree.txt")
+        try ("""
+        #\t   tree: /Volumes/LuckG23G71.D47OS
+
+        # .
+        /set type=file uid=0 gid=0 mode=0755 nlink=1 flags=none
+
+        """ + root + """
+            .file       gid=80 mode=0 size=0 time=1784253250.000000000
+
+        # ./private/var
+        var             type=dir nlink=31 size=992 time=1792405582.936736187
+
+        """).write(to: mtree, atomically: true, encoding: .utf8)
+        #expect(try makePatcher(scratch).parseRootTime(mtree: mtree) == "1792405582069334279")
+    }
 
     @Test func `the max size comes back as the string diskutil wants back`() throws {
         #expect(try CryptexFilesystemPatcher.maxResizeSize(

@@ -78,9 +78,17 @@ public struct VPhonePatchPreset: Sendable, Hashable, Codable, Identifiable {
     /// preset: standard without the iOS payloads tvOS has no port of.
     public static let tvOSIdentifier = "tvos"
 
+    /// The identifier of the preset that patches no boot chain, kernel or TXM and
+    /// customises the system before the restore instead.
+    public static let minimalIdentifier = "minimal"
+
     /// The preset an Apple TV 4K guest gets: the TV preset for an arm64e
     /// userland taken from the device's OTA.
     public static let tvOS4KIdentifier = "tvos-4k"
+
+    /// The identifier an Apple Watch guest gets: ``minimalIdentifier`` for a
+    /// watch, which presents its own board.
+    public static let watchOSIdentifier = "watchos"
 
     /// Whether this is the preset a VM gets by default.
     public var isStandard: Bool {

@@ -1,0 +1,11 @@
+{
+  "description" : "Apple Watch kernelcache of the Watch7,18 26.4 (23T240) IPSW: the watchOS kexts, read from the guest restore tree",
+  "id" : "watch7c_26.4_23T240",
+  "kernel" : {
+    "decompressedSHA256" : "399333b1f4a9e2a9f9ad34740b741a6c000c1d8bf92294d5c5a7b6671ad927f4",
+    "file" : "kernelcache.release.watch7c",
+    "kdk" : "KDK_26.4_23T235.kdk",
+    "sha256" : "cd0f707f6741b147b457df8dead2eb00bb1ebf8d72d28a0db47c09b0dce917be"
+  },
+  "symbols" : "symbols.json.gz"
+}

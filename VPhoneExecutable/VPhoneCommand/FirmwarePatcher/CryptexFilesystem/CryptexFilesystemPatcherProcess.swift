@@ -38,11 +38,10 @@ extension CryptexFilesystemPatcher {
         }
 
         try process.run()
-        process.waitUntilExit()
-
         let output = output == nil
             ? String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
             : nil
+        process.waitUntilExit()
         guard process.terminationStatus == 0 else {
             throw ProcessError.failed(process.terminationStatus, output ?? "")
         }

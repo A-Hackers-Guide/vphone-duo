@@ -1,4 +1,5 @@
 import ArgumentParser
+import FirmwarePatcher
 import Foundation
 import VPhoneCoreKit
 import VPhonePatchKit
@@ -90,13 +91,29 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         VPhoneGuestDevice.named(device)?.family == .appleTV
     }
 
+    /// A preset that customises the system before the restore (`minimal`): the
+    /// offline trim and the setup boot of a template write the System volume,
+    /// which would break that system's seal.
+    private var customisesRestoredSystem: Bool {
+        VPhonePatchPresetStore.preset(named: preset ?? defaultPreset)?.patchSets
+            .contains { $0.identifier == FirmwareRestoreImagePatchSet.identifier } ?? false
+    }
+
     /// An Apple TV takes the TV preset; one whose userland comes from an OTA
-    /// takes the arm64e one, with the GPU driver and the userland swap.
+    /// takes the arm64e one, with the GPU driver and the userland swap. An
+    /// Apple Watch takes the watch preset, an iPhone XS Max `minimal`: its iOS 18
+    /// research board kernel boots no other.
     private var defaultPreset: String {
-        guard let guest = VPhoneGuestDevice.named(device), guest.family == .appleTV else {
-            return VPhonePatchPreset.standardIdentifier
+        switch VPhoneGuestDevice.named(device) {
+        case let guest? where guest.family == .appleTV:
+            guest.restoreBase == nil ? VPhonePatchPreset.tvOSIdentifier : VPhonePatchPreset.tvOS4KIdentifier
+        case let guest? where guest.family == .watch:
+            VPhonePatchPreset.watchOSIdentifier
+        case let guest? where guest.notchedArtworkSubtype != nil:
+            VPhonePatchPreset.minimalIdentifier
+        default:
+            VPhonePatchPreset.standardIdentifier
         }
-        return guest.restoreBase == nil ? VPhonePatchPreset.tvOSIdentifier : VPhonePatchPreset.tvOS4KIdentifier
     }
 
     func validate() throws {
@@ -116,6 +133,14 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
             }
             if try !slimming.request.isEmpty {
                 throw ValidationError("An Apple TV guest is built without a template; the slimming switches do not apply.")
+            }
+        }
+        if customisesRestoredSystem {
+            if template != nil {
+                throw ValidationError("The \(preset ?? defaultPreset) preset builds a VM without a template; --template cannot be used.")
+            }
+            if try !slimming.request.isEmpty {
+                throw ValidationError("The \(preset ?? defaultPreset) preset builds a VM without a template; the slimming switches do not apply.")
             }
         }
         _ = try slimming.resolve()
@@ -142,7 +167,7 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         let unlocks = try unlockAtStartup.map { try VPhoneVirtualMachineConfigCommand.parseSwitch($0, option: "--unlock-at-startup") }
         let templateUse: VPhoneVirtualMachineCreator.TemplateUse = if let template {
             .identifier(template)
-        } else if noTemplate || isAppleTV {
+        } else if noTemplate || isAppleTV || customisesRestoredSystem {
             .none
         } else {
             .automatic

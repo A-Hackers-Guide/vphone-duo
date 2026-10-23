@@ -43,6 +43,11 @@ extension VPhoneMenuController {
             modifiers: [],
             symbol: "arrow.uturn.backward",
         ))
+        // Shown only for an Apple Watch guest; see `showsWatchControls`.
+        let sideButton = makeItem("Side Button", action: #selector(sendWatchSideButton), symbol: "button.vertical.right.press")
+        sideButton.isHidden = true
+        watchSideButtonItem = sideButton
+        menu.addItem(sideButton)
         menu.addItem(makeItem("Power", action: #selector(sendPower), symbol: "power"))
         menu.addItem(makeItem("Volume Up", action: #selector(sendVolumeUp), symbol: "speaker.plus"))
         menu.addItem(makeItem("Volume Down", action: #selector(sendVolumeDown), symbol: "speaker.minus"))
@@ -148,6 +153,10 @@ extension VPhoneMenuController {
     /// "cancel" (or, in Safari, "stop loading").
     @objc func sendBack() {
         captureView?.performBackGesture()
+    }
+
+    @objc func sendWatchSideButton() {
+        keySender.sendWatchSideButton()
     }
 
     @objc func sendPower() {

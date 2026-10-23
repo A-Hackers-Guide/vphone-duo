@@ -242,6 +242,10 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
         bridged: the Mac's address on that interface), instead of racing mDNS answers. \
         --mac-name off withdraws it. Applied each time vphone-vm connects to the guest.
 
+        --nat-peers (on by default) lets a nat guest and the other nat machines on this Mac \
+        reach each other, as a watch and the phone it pairs with must. --nat-peers off keeps \
+        the guest isolated: it reaches only this Mac and beyond. Applies from the next launch.
+
         --unlock-at-startup on has vphone-vm wake the guest and dismiss its Lock Screen each time \
         vphoned starts in it: after the VM starts and after the guest reboots. Applies from the \
         next connect.
@@ -287,6 +291,8 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
     var mdns: String?
     @Option(name: .long, help: "Have the guest resolve this Mac's .local name locally: on (default) | off")
     var macName: String?
+    @Option(name: .long, help: "Let this nat guest and the other nat machines reach each other: on (default) | off")
+    var natPeers: String?
     @Option(name: .long, help: "Unlock the guest when it starts: on | off (default)")
     var unlockAtStartup: String?
     @Option(name: .long, help: "Forward this Mac's location to the guest: on | off (default)")
@@ -364,6 +370,12 @@ struct VPhoneVirtualMachineConfigCommand: ParsableCommand {
         case "off": edit.resolvesMacName = false
         default: throw ValidationError("--mac-name takes on or off.")
         }
+        switch natPeers?.lowercased() {
+        case nil: break
+        case "on": edit.reachesPeers = true
+        case "off": edit.reachesPeers = false
+        default: throw ValidationError("--nat-peers takes on or off.")
+        }
         switch mdns?.lowercased() {
         case nil: break
         case "off": edit.localHostName = .some(nil)
@@ -421,6 +433,9 @@ func describeNetwork(_ net: VPhoneVirtualMachineManifest.NetworkConfig) -> Strin
     }
     if net.resolvesMacName == false {
         parts.append("mac-name off")
+    }
+    if net.mode == .nat, !VPhoneNetworking.reachesPeers(net) {
+        parts.append("nat-peers off")
     }
     return parts.joined(separator: ", ")
 }

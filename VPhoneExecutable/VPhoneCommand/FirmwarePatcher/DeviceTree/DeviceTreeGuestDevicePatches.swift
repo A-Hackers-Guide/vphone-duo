@@ -62,6 +62,9 @@ extension DeviceTreePatcher {
     static let iPadIdentityPatch = "devicetree-cfw-ipad_identity"
     static let iPadAudioPatch = "devicetree-cfw-ipad_audio"
     static let tvAppArchitecturePatch = "devicetree-cfw-tv_app_architecture"
+    static let watchPresentationPatch = "devicetree-cfw-watch_presentation"
+    static let watchDriverKitPatch = "devicetree-cfw-watch_driverkit"
+    static let watchCompanionPatch = "devicetree-cfw-watch_companion"
     static let hapticsPatch = "devicetree-cfw-product_haptics_node"
     static let microphoneArrayPatch = "devicetree-cfw-product_audio_microphone_array"
 
@@ -172,6 +175,12 @@ extension DeviceTreePatcher {
                                    action: .set(architecture), patchID: tvAppArchitecturePatch))
         }
 
+        if let idiom = value(sourceProduct, "artwork-device-idiom"),
+           String(decoding: idiom.prefix { $0 != 0 }, as: UTF8.self) == "watch"
+        {
+            edits += watchEdits(product: product, value: { value(sourceProduct, $0) })
+        }
+
         for (name, patchID) in copiedProductProperties {
             let action: GuestEdit.Action = value(sourceProduct, name).map { .set($0) } ?? .remove
             edits.append(GuestEdit(nodePath: product, property: name, action: action, patchID: patchID))
@@ -204,6 +213,53 @@ extension DeviceTreePatcher {
         }
         edits.append(GuestEdit(nodePath: ["device-tree"], property: "compatible",
                                action: .set(Self.compatible(board: Data(first))), patchID: iPadIdentityPatch))
+        return edits
+    }
+
+    // MARK: - Watch
+
+    /// `/product` properties a watch's display is described by, beyond those
+    /// every board copies.
+    static let watchDisplayProperties = ["artwork-display-gamut", "artwork-dynamic-displaymode", "framebuffer-identifier"]
+
+    /// The gestalt variant tags MobileGestalt reads in place of syscfg on the
+    /// VM, and the board's `/product` property each stands for. vphone600's
+    /// carry the D47's values; a watch whose tags still describe a phone shows
+    /// no UI ("unsupported screen class"). A property the board lacks is a
+    /// boolean it does not have: 0.
+    static let watchVariantTags: [(tag: String, property: String)] = [
+        ("tag-ards", "artwork-device-subtype"),
+        ("tag-arsf", "artwork-scale-factor"),
+        ("tag-codf", "compatible-device-fallback"),
+        ("tag-tprt", "sub-product-type"),
+        ("tag-crid", "chrome-identifier"),
+        ("tag-dcrd", "display-corner-radius"),
+        ("tag-fbid", "framebuffer-identifier"),
+        ("tag-prde", "product-description"),
+        ("tag-isnl", "island-notch-location"),
+        ("tag-waco", "watch-companion"),
+    ]
+
+    static let watchVariantNode = ["device-tree", "product", "vphone600-gestalt-variants", "d47vm2025vre-variant"]
+
+    /// The edits a watch board needs besides the common copy: its display
+    /// properties, the variant tags, and `supports-driverkit`. The VM's touch
+    /// screen is a USB device whose HID driver is a dext, and launchd starts
+    /// driverkitd only on a device tree that says so; a real watch has no USB
+    /// touch screen, so N227b's tree does not.
+    static func watchEdits(product: [String], value: (String) -> Data?) -> [GuestEdit] {
+        var edits: [GuestEdit] = []
+        for name in watchDisplayProperties {
+            let action: GuestEdit.Action = value(name).map { .set($0) } ?? .remove
+            edits.append(GuestEdit(nodePath: product, property: name, action: action, patchID: watchPresentationPatch))
+        }
+        let absent = Data(count: 4)
+        for (tag, property) in watchVariantTags {
+            edits.append(GuestEdit(nodePath: watchVariantNode, property: tag,
+                                   action: .set(value(property) ?? absent), patchID: watchPresentationPatch))
+        }
+        edits.append(GuestEdit(nodePath: product, property: "supports-driverkit",
+                               action: .set(Data([1, 0, 0, 0])), patchID: watchDriverKitPatch))
         return edits
     }
 
@@ -541,6 +597,76 @@ extension DeviceTreePatcher {
         ))
         if verbose {
             print("  -node  : /product/haptics, no actuator or haptic server on a VM (\(removed.count)B)  [\(Self.hapticsPatch)]")
+        }
+    }
+
+    // MARK: - Notched iPhone
+
+    static let islandNotchLocationPatch = "devicetree-cfw-island_notch_location"
+
+    /// Removes `/product/island-notch-location` for a guest whose userland has
+    /// no Dynamic Island layout (`VPhoneGuestDevice.notchedArtworkSubtype`),
+    /// under the patch that otherwise sets it.
+    func removeIslandNotchLocation(root: DTNode) throws {
+        guard gateAllows(Self.islandNotchLocationPatch),
+              let product = Self.optionalChild(of: root, named: "product"),
+              let index = product.properties.firstIndex(where: { $0.name == "island-notch-location" })
+        else { return }
+        let removed = product.properties.remove(at: index)
+        patches.append(PatchRecord(
+            patchID: Self.islandNotchLocationPatch,
+            component: component,
+            fileOffset: removed.valueOffset,
+            virtualAddress: nil,
+            originalBytes: removed.value,
+            patchedBytes: Data(),
+            description: "Remove the island notch location: \(device.productName) has no Dynamic Island",
+        ))
+        if verbose {
+            print("  -prop  : /product/island-notch-location, no Dynamic Island on \(device.productName)  [\(Self.islandNotchLocationPatch)]")
+        }
+    }
+
+    // MARK: - Watch Companion
+
+    /// Give an iPhone guest's `/product/watch-companion` the value 1, adding it
+    /// where the board copy removed it. Returns its value before (nil when it
+    /// was absent), or nil changes when it already is a plain 1.
+    ///
+    /// vphone600's is `syscfg/waco`, which the VM's syscfg does not have, so
+    /// iBoot drops the property and MobileGestalt answers that the phone pairs
+    /// with no watch: the Watch app has no icon, and NanoRegistry's clients
+    /// never see the watch nanoregistryd discovers.
+    static func presentWatchCompanion(in root: DTNode) -> (before: Data?, after: Data)? {
+        guard let product = optionalChild(of: root, named: "product") else { return nil }
+        let value = Data([1, 0, 0, 0])
+        if let existing = product.properties.first(where: { $0.name == "watch-companion" }) {
+            guard existing.flags & placeholderFlag != 0 || existing.value != value else { return nil }
+            let before = existing.value
+            existing.flags = 0
+            existing.value = value
+            return (before, value)
+        }
+        product.properties.append(DTProperty(name: "watch-companion", flags: 0, value: value, valueOffset: 0))
+        return (nil, value)
+    }
+
+    /// Applies `presentWatchCompanion(in:)` to an iPhone guest's tree.
+    func applyWatchCompanion(root: DTNode) {
+        guard device.family == .iPhone, gateAllows(Self.watchCompanionPatch),
+              let change = Self.presentWatchCompanion(in: root)
+        else { return }
+        patches.append(PatchRecord(
+            patchID: Self.watchCompanionPatch,
+            component: component,
+            fileOffset: 0,
+            virtualAddress: nil,
+            originalBytes: change.before ?? Data(),
+            patchedBytes: change.after,
+            description: "Set /device-tree/product/watch-companion = 1",
+        ))
+        if verbose {
+            print("  =prop  : /product/watch-companion = 1, the VM syscfg has no waco  [\(Self.watchCompanionPatch)]")
         }
     }
 

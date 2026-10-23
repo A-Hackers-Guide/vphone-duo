@@ -383,6 +383,27 @@ struct DeviceTreeGuestDeviceTests {
         #expect(Self.integer(installed["device-tree/product"]?["island-notch-location"]) == 144)
     }
 
+    @Test func `an iPhone XS Max keeps the iPhone17,3 presentation with its own artwork and no island`() throws {
+        #expect(!VPhoneGuestDevice.iPhone11_6.presentsBoard)
+        #expect(VPhoneGuestDevice.named("iPhone11,4") == .iPhone11_6)
+        let shared = try Self.patch(device: .iPhone11_6, role: .shared)
+        let product = try #require(shared["device-tree/product"])
+        #expect(Self.integer(product["artwork-device-subtype"]) == 2688)
+        #expect(product["island-notch-location"] == nil)
+        #expect(Self.string(product["artwork-device-idiom"]) == "phone")
+
+        let patcher = DeviceTreePatcher(data: Self.tree.serialized(), verbose: false, device: .iPhone11_6, role: .shared)
+        let records = try patcher.findAll()
+        #expect(records.contains { $0.patchID == "devicetree-cfw-island_notch_location" && $0.patchedBytes.isEmpty })
+
+        // The island patch's gate decides the removal, as it decides the value.
+        let gated = DeviceTreePatcher(data: Self.tree.serialized(), verbose: false, device: .iPhone11_6, role: .shared)
+        let declared = Set(FirmwareDeviceTreePatchSet.manifest.patches.map(\.identifier))
+        gated.gate = VPhonePatchGate(declared: declared, enabled: declared.subtracting(["devicetree-cfw-island_notch_location"]))
+        _ = try gated.findAll()
+        #expect(Self.read(gated.patchedData)["device-tree/product"]?["island-notch-location"] != nil)
+    }
+
     @Test func `a 13-inch M-series board keeps Stage Manager and its own identity`() throws {
         let board = Self.board(model: "iPad17,3", unique: "J820AP", subtype: 2752, disablesStageManager: false)
         let tree = try Self.patch(device: .iPad17_3, role: .installed, board: board)
@@ -423,6 +444,21 @@ struct DeviceTreeGuestDeviceTests {
         )
         _ = try twice.findAll()
         #expect(twice.patchedData == once.patchedData)
+    }
+
+    // MARK: - Watch Companion
+
+    @Test(arguments: Guest.allCases)
+    func `only an iPhone guest says it pairs with a watch`(guest: Guest) throws {
+        let (patched, records) = try Self.patched(Self.tree.serialized(), as: guest)
+        let property = Self.read(patched)["device-tree/product"]?["watch-companion"]
+        if guest == .iPhone {
+            #expect(property?.0 == 0)
+            #expect(property?.1 == Data([1, 0, 0, 0]))
+            #expect(records.contains { $0.patchID == "devicetree-cfw-watch_companion" })
+        } else {
+            #expect(!records.contains { $0.patchID == "devicetree-cfw-watch_companion" })
+        }
     }
 
     // MARK: - Haptics

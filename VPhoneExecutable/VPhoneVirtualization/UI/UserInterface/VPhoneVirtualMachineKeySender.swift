@@ -68,6 +68,15 @@ class VPhoneVirtualMachineKeySender {
         }
     }
 
+    /// An Apple Watch's side button is consumer Help (0x0C/0x95), the device
+    /// tree's `/buttons` "help" beside the crown's "menu". Carousel reads it
+    /// as the side button (Control Center, Wallet, SOS); consumer Power
+    /// (0x30) only sleeps or wakes the display there.
+    func sendWatchSideButton() {
+        guard requireConnection() else { return }
+        control.sendHIDPress(page: 0x0C, usage: 0x95)
+    }
+
     func sendPower() {
         guard requireConnection() else { return }
         control.sendHIDPress(page: 0x0C, usage: 0x30)

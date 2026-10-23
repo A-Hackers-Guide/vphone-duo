@@ -165,6 +165,17 @@ struct VPhoneCustomFirmwareInstaller {
         // both ways. Read through the pinned descriptor so root never follows a
         // link out of the bundle.
         let rawPlan = readPatchPlan(in: bundleDirectory)
+        if Self.restoredCustomisedSystem(rawPlan) {
+            // The restore installed the finished system (the restore image
+            // patches): there is nothing to add, and writing the System volume
+            // would break the seal its stock boot chain checks.
+            guard mode == .full else {
+                throw Self.restoreImageRefusal(mode)
+            }
+            print("[cfw] The restore installed this VM's customised system; nothing to install.")
+            recordGuestReceipt(live: [], notApplicable: [], in: bundleDirectory, owner: invokingUser.map { ($0.uid, $0.gid) })
+            return
+        }
         let plan = resolveGuestSelection(rawPlan, in: bundleDirectory)
         // What was live in the guest before this run, so a now-off patch this run
         // cannot revert (no backup, no undo record) stays honestly recorded.
@@ -584,6 +595,17 @@ struct VPhoneCustomFirmwareInstaller {
         let callerUID = invokingUser?.uid
         let bundleDirectory = try pinBundle(owner: callerUID)
         let bundlePath = try bundleDirectory.path
+        let recordedPlan = readPatchPlan(in: bundleDirectory)
+        if Self.restoredCustomisedSystem(recordedPlan) {
+            throw Self.restoreImageRefusal(mode)
+        }
+        // Its originals hold the research board's kernel, not the mix.
+        if recordedPlan?.isEnabled(FirmwareResearchBoardPatchSet.kernelMix) == true {
+            throw ValidationError(
+                "This VM boots a kernelcache rebuilt from the research board's (its cloudOS has no vphone600 components), "
+                    + "which a kernel update cannot rebuild. Change its kernel patches with `fw patch` and a restore instead.",
+            )
+        }
 
         let disk = try openDiskImage(in: bundleDirectory, path: bundlePath, owner: callerUID)
         let diskPath = (bundlePath as NSString).appendingPathComponent("Disk.img")
@@ -839,6 +861,19 @@ struct VPhoneCustomFirmwareInstaller {
         } catch {
             fputs("warning: could not record the kernelcache receipt: \(error)\n", stderr)
         }
+    }
+
+    /// Whether the VM's restore installed a system customised by `fw patch`
+    /// (``FirmwareRestoreImagePatchSet``), which nothing may write afterwards.
+    static func restoredCustomisedSystem(_ plan: VPhoneVirtualMachinePatchPlan?) -> Bool {
+        plan?.enabledPatches.contains(FirmwareRestoreImagePatchSet.cryptexMerge) == true
+    }
+
+    static func restoreImageRefusal(_ mode: Mode) -> ValidationError {
+        ValidationError(
+            "This VM's system was customised before its restore (the \(VPhonePatchPreset.minimalIdentifier) preset), "
+                + "and a \(mode.summary) would break its seal. Patch and restore the VM again instead.",
+        )
     }
 
     /// The verb to credit a receipt write to.
@@ -1351,6 +1386,25 @@ struct VPhoneCustomFirmwareInstaller {
             dyld, dsc: dsc, cacheRelative: cacheRelative, system: system, plan: plan, priorGuest: priorGuest,
             live: &live, failures: &failures,
         )
+
+        // The feature plist exists from iOS 26. Turning the patch off restores
+        // the original.
+        let bluetoothID = FirmwareGuestSystemPatchSet.virtualBluetooth
+        let bluetoothPath = CustomFirmwareBluetoothVirtualController.relativePath
+        isolate([bluetoothID]) {
+            if !version.hasPrefix("1"), on(bluetoothID) {
+                try patchCopy(
+                    of: bluetoothPath, in: system, work: work,
+                    verb: "patch-virtual-bluetooth", backupSafe: backupSafe(bluetoothID),
+                )
+                live.insert(bluetoothID)
+            } else if try revertCopy(of: bluetoothPath, in: system) {
+                print("  [+] \(bluetoothID): restored the Bluetooth feature flags")
+            } else if priorGuest.contains(bluetoothID) {
+                print("  [!] \(bluetoothID): no backup to revert (not revertible)")
+                live.insert(bluetoothID)
+            }
+        }
 
         // A missing legacy plan must not apply this iOS-27-only change to
         // other bases. Turning it off restores the original feature plist.

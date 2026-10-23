@@ -294,9 +294,13 @@ struct FirmwareMatrixParsingTests {
             readme: RealData.repositoryCompatibilityGuide(),
             device: Fixture.d,
         )
-        #expect(tested.count == 2)
+        #expect(tested.count == 5)
         #expect(tested.contains(VPhoneFirmwareBuildID(version: "26.6.2", build: "23G90")))
         #expect(tested.contains(VPhoneFirmwareBuildID(version: "27.0", build: "24A435")))
+        // The research board rows: each release on its own cloudOS.
+        for (version, build) in [("26.4", "23E246"), ("26.5", "23F77"), ("26.6", "23G71")] {
+            #expect(tested.contains(VPhoneFirmwareBuildID(version: version, build: build)))
+        }
         #expect(tested.allSatisfy { !$0.version.isEmpty && !$0.build.isEmpty })
         #expect(tested.allSatisfy { !$0.version.contains("`") && !$0.build.contains("`") })
     }

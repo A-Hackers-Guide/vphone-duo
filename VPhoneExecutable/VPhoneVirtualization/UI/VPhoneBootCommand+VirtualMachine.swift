@@ -33,6 +33,7 @@ extension VPhoneBootCommand {
             kernelDebugPort: kernelDebugPort,
             isPadGuest: manifest.guestDevice.isPad,
             isTVGuest: manifest.guestDevice.family == .appleTV,
+            isWatchGuest: manifest.guestDevice.family == .watch,
         )
     }
 }

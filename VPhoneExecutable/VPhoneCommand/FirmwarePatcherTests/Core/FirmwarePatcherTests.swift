@@ -629,6 +629,29 @@ struct FirmwarePipelineTests {
         #expect(components.first { $0.name == "Manifest" }?.patcherFactories.isEmpty == true)
     }
 
+    @Test func `the minimal preset builds no kernel or TXM patcher`() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+        func patched(_ preset: VPhonePatchPreset) throws -> [String] {
+            let plan = try VPhonePatchPlan.resolve(
+                preset: preset,
+                patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: VPhoneVersion("26.4"),
+                cloudOS: VPhoneVersion("26.4"),
+            )
+            let pipeline = FirmwarePipeline(vmDirectory: root, variant: .jb, verbose: false)
+            return try pipeline.buildComponentList(restoreDir: root, iOSBase: VPhoneVersion("26.4"), plan: plan)
+                .filter { !$0.patcherFactories.isEmpty }
+                .map(\.name)
+        }
+        let minimal = try patched(FirmwarePatchSetCatalog.minimalPreset)
+        #expect(!minimal.contains("kernelcache"))
+        #expect(!minimal.contains("TXM"))
+        #expect(Set(["iBEC", "LLB", "DeviceTree", "Filesystem", "Manifest"]).isSubset(of: Set(minimal)))
+        let standard = try patched(FirmwarePatchSetCatalog.standardPreset)
+        #expect(!standard.contains("Filesystem"))
+        #expect(!standard.contains("Manifest"))
+    }
+
     @Test func `standard turns the paravirtual user-client allowlist on before 27`() throws {
         // The flag the kernel CFW patcher is built with, from the standard plan and
         // from the no-plan fallback, which has to give the same answer.

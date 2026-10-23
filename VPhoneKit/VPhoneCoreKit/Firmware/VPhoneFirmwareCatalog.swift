@@ -28,6 +28,16 @@ public struct VPhoneFirmwarePairing: Sendable, Equatable {
     }
 }
 
+public extension VPhoneFirmwarePairing {
+    /// The release's own cloudOS, where the research board stands in for
+    /// vphone600, or nil when there is none. iPhone only: no other guest has run
+    /// on the research board.
+    var matchingCloudOS: VPhoneCloudOSOption? {
+        guard device == VPhoneFirmwareCatalog.device, let version = iosName.split(separator: " ").last else { return nil }
+        return VPhoneFirmwareCatalog.researchBoardCloudOS(forVersion: String(version))
+    }
+}
+
 // MARK: - VPhoneCloudOSOption
 
 public struct VPhoneCloudOSOption: Sendable, Equatable {
@@ -93,6 +103,24 @@ public enum VPhoneFirmwareCatalog {
     static let cloud262 = "https://updates.cdn-apple.com/private-cloud-compute/0cb00f22e0f7a8b33995b49b2bdca77f781ed6093a09c570ac21b0f012bab908"
     static let cloud263 = "https://updates.cdn-apple.com/private-cloud-compute/edc92b58ab7e2f207a6407fd0a0e1a60f7d43bf9d93325bf6d3db3e154ee5525"
     static let cloud264 = "https://updates.cdn-apple.com/private-cloud-compute/c0ecdb4b310cf5239ab2b248dd3098eec297dc5aa3bbe6ada27273262b0b8b64"
+
+    /// cloudOS releases with only the research board (vresearch101ap). A VM on one
+    /// of them runs its own release's kernel, rebuilt with the vphone600 kexts
+    /// (FirmwareResearchBoardPatchSet, kernelcache_recipes), which needs root and an
+    /// ipsw with `kernel extract --kdk`. They are offered beside the 26.4 beta, which
+    /// stays the recommendation: it needs neither.
+    public static let researchBoardCloudOS: [(version: String, option: VPhoneCloudOSOption)] = [
+        ("26.4", .init(name: "cloudOS 26.4 (23E244)", url: "https://updates.cdn-apple.com/private-cloud-compute/6acb7959507f25a76753f5a08ee39f09671486eb7619367e42dc1869bd779035")),
+        ("26.5", .init(name: "cloudOS 26.5 (23F75)", url: "https://updates.cdn-apple.com/private-cloud-compute/602f1132456a1323ac145ea13828c3ca72845259b50f99af1cef8329d5e25748")),
+        ("26.6", .init(name: "cloudOS 26.6 (23G71)", url: "https://updates.cdn-apple.com/private-cloud-compute/bdad1f912196b6c5fe9342e0bdee8768c7f5bb366cb0dde007f5c28c5d148042")),
+        ("26.7", .init(name: "cloudOS 26.7 (23H20)", url: "https://updates.cdn-apple.com/private-cloud-compute/46960a4703ec9b2a81df524d639ea9fe55b30e04f6cf7e21518c2049659509a7")),
+    ]
+
+    /// The research board cloudOS of an iOS release's own major and minor version.
+    public static func researchBoardCloudOS(forVersion version: String) -> VPhoneCloudOSOption? {
+        let release = version.split(separator: ".").prefix(2).joined(separator: ".")
+        return researchBoardCloudOS.first { $0.version == release }?.option
+    }
 
     /// The iPhone17,3 pairings, oldest first. Launchpad offers the last one by
     /// default, so the newest release stays last.
@@ -430,6 +458,36 @@ public enum VPhoneFirmwareCatalog {
         ]),
     ]
 
+    /// Apple Watch releases. The watch boots the research board kernel of the
+    /// cloudOS its kernelcache recipe is for, rebuilt with the watchOS kexts:
+    /// 26.4 (23E244) for watchOS 26.4.
+    static let watchReleases: [(devices: [String], releases: [(version: String, url: String)])] = [
+        (devices: ["Watch7,18"], releases: [
+            ("26.4", "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/122-09130/486B2E2B-DEDB-4DCF-80F0-7A84ED51B074/Watch7,18_26.4_23T240_Restore.ipsw"),
+        ]),
+    ]
+
+    /// iPhone XS Max releases, each paired with its own release's research board
+    /// cloudOS: the 18.x kernelcache recipes rebuild that iOS 18 kernel with the
+    /// cloudOS 26.1 vphone600 kexts. Kernel-first, so macOS 26.4 and later link
+    /// it over ssh on an older Mac (`VPHONE_KMUTIL_SSH`), and only `minimal` boots it.
+    static let iOS18ResearchBoardReleases: [(version: String, url: String, cloudOS: VPhoneCloudOSOption)] = [
+        ("18.1", "https://updates.cdn-apple.com/2024FallFCS/fullrestores/072-12814/E17284F9-4885-4E16-840A-40DF173142B3/iPhone11,2,iPhone11,4,iPhone11,6_18.1_22B83_Restore.ipsw",
+         .init(name: "cloudOS 18.1 (22B83)", url: "https://updates.cdn-apple.com/private-cloud-compute/729b85b9b89b4383e7dfafdf0f5867b8cd2f3e4e69b279c8785dc7d044e377b7")),
+        ("18.2.1", "https://updates.cdn-apple.com/2024FallFCS/fullrestores/072-56807/7999846C-76E5-42DC-A3F0-96E5FD27FF44/iPhone11,2,iPhone11,4,iPhone11,6_18.2.1_22C161_Restore.ipsw",
+         .init(name: "cloudOS 18.2.1 (22C161)", url: "https://updates.cdn-apple.com/private-cloud-compute/0aadbf7c7e768c73e1f0a6331fbcc96e3792a9f2176509f6225059fbad0bb6b6")),
+        ("18.3.1", "https://updates.cdn-apple.com/2025WinterFCS/fullrestores/072-84318/BE724963-525E-4B8D-8E9F-018395E81BA2/iPhone11,2,iPhone11,4,iPhone11,6_18.3.1_22D72_Restore.ipsw",
+         .init(name: "cloudOS 18.3.1 (22D72)", url: "https://updates.cdn-apple.com/private-cloud-compute/0ce2ff6ad1af4052bbabf38a4627506613ca5c2061e198888391a430357f0b39")),
+        ("18.5", "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/082-45658/0CEE897C-AD56-4422-BD70-FA3CB060E23C/iPhone11,2,iPhone11,4,iPhone11,6_18.5_22F76_Restore.ipsw",
+         .init(name: "cloudOS 18.5 (22F76)", url: "https://updates.cdn-apple.com/private-cloud-compute/ceb5e5bde2427bf7a227b61ff307f79c4b9c701f46023262abd763758aea6453")),
+        ("18.6", "https://updates.cdn-apple.com/2025SummerFCS/fullrestores/082-99059/7A2E93FF-79D9-4AD7-862B-5A4B812ADD90/iPhone11,2,iPhone11,4,iPhone11,6_18.6_22G86_Restore.ipsw",
+         .init(name: "cloudOS 18.6 (22G86)", url: "https://updates.cdn-apple.com/private-cloud-compute/8b2181f68080c42ae57bb8bf516715841060ee3aaf8c0ff06e1cf627169ef574")),
+        ("18.7", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/082-75719/D271E370-84A4-494D-8547-BDBE20AC1EEA/iPhone11,2,iPhone11,4,iPhone11,6_18.7_22H20_Restore.ipsw",
+         .init(name: "cloudOS 18.7 (22H20)", url: "https://updates.cdn-apple.com/private-cloud-compute/9b0acae06a068476c5bf0c1ecdf686cf1ff4ead5a9dcf7429c7d86d01033ef9b")),
+        ("18.7.2", "https://updates.cdn-apple.com/2025FallFCS/fullrestores/089-18690/1C111BF6-B55E-460B-AE63-5343B163CAE4/iPhone11,2,iPhone11,4,iPhone11,6_18.7.2_22H124_Restore.ipsw",
+         .init(name: "cloudOS 18.7.2 (22H43)", url: "https://updates.cdn-apple.com/private-cloud-compute/d425a03c76f1ddb92a65a27d56e80beffe399605018d4d268f5ef8889d0ec9e7")),
+    ]
+
     /// Full OTAs of devices without an IPSW, oldest first. Each has a
     /// `tvReleases` entry of its `baseVersion` for its `restoreBase`. The keys
     /// are AppleDB's.
@@ -470,7 +528,7 @@ public enum VPhoneFirmwareCatalog {
     /// The URL of the base device's IPSW `release` is restored over.
     public static func restoreBaseURL(for release: VPhoneOTARelease) -> String? {
         guard let base = VPhoneGuestDevice.named(release.productType)?.restoreBase else { return nil }
-        let releases = (iPhoneReleases + iPadReleases + tvReleases).first { $0.devices.contains(base.productType) }?.releases
+        let releases = (iPhoneReleases + iPadReleases + tvReleases + watchReleases).first { $0.devices.contains(base.productType) }?.releases
         return releases?.first { $0.version == release.baseVersion }?.url
     }
 
@@ -478,15 +536,27 @@ public enum VPhoneFirmwareCatalog {
     /// or another model's releases with the cloudOS an iPhone17,3 of that
     /// release uses. A cellular iPad gets its Wi-Fi model's; an Apple TV gets
     /// cloudOS 26.4, the only kernel its TPRO compatibility patch covers; a
+    /// watch gets the research board cloudOS its kernelcache recipe covers; a
     /// device without an IPSW gets one per OTA for it, named for the OTA: the
     /// base's IPSW when the OTA is of the same version, else the OTA itself,
     /// which `fw prepare` restores over its base's IPSW; an unknown device
     /// gets none.
     public static func pairings(for device: String) -> [VPhoneFirmwarePairing] {
         guard let guest = VPhoneGuestDevice.named(device) else { return [] }
+        if guest.notchedArtworkSubtype != nil {
+            return iOS18ResearchBoardReleases.map { release in
+                VPhoneFirmwarePairing(
+                    device: guest.productType,
+                    iosName: "iOS \(release.version)",
+                    iosURL: release.url,
+                    cloudosName: release.cloudOS.name,
+                    cloudosURL: release.cloudOS.url,
+                )
+            }
+        }
         guard guest.presentsBoard else { return pairings }
         let restored = guest.restoreBase ?? guest
-        var releases = (iPhoneReleases + iPadReleases + tvReleases).first { $0.devices.contains(restored.productType) }?.releases ?? []
+        var releases = (iPhoneReleases + iPadReleases + tvReleases + watchReleases).first { $0.devices.contains(restored.productType) }?.releases ?? []
         if restored != guest {
             releases = otaReleases.filter { $0.productType == guest.productType }.compactMap { ota in
                 guard let base = releases.first(where: { $0.version == ota.baseVersion }) else { return nil }
@@ -494,9 +564,11 @@ public enum VPhoneFirmwareCatalog {
             }
         }
         return releases.map { release in
-            let cloudOS = guest.family == .appleTV
-                ? VPhoneCloudOSOption(name: "cloudOS 26.4", url: cloud264)
-                : recommendedCloudOS(forVersion: release.version)
+            let cloudOS = switch guest.family {
+            case .appleTV: VPhoneCloudOSOption(name: "cloudOS 26.4", url: cloud264)
+            case .watch: researchBoardCloudOS(forVersion: release.version) ?? recommendedCloudOS(forVersion: release.version)
+            case .iPhone, .iPad: recommendedCloudOS(forVersion: release.version)
+            }
             return VPhoneFirmwarePairing(
                 device: guest.productType,
                 iosName: "\(guest.family.osName) \(release.version)",
@@ -524,6 +596,7 @@ public enum VPhoneFirmwareCatalog {
         for p in pairings where seen.insert(p.cloudosName).inserted {
             out.append(VPhoneCloudOSOption(name: p.cloudosName, url: p.cloudosURL))
         }
+        out += researchBoardCloudOS.map(\.option)
         return out
     }
 
@@ -542,6 +615,7 @@ public enum VPhoneFirmwareCatalog {
                         files: ota.map { ["\(VPhoneOTARelease.cacheDirectoryName)/\($0.fileName)"] + (base.map { [$0] } ?? []) },
                     ),
                     recommendedCloudOS: .init(name: $0.cloudosName, url: $0.cloudosURL),
+                    matchingCloudOS: $0.matchingCloudOS.map { .init(name: $0.name, url: $0.url) },
                 )
             }
         }
@@ -556,6 +630,9 @@ public enum VPhoneFirmwareCatalog {
                     name: guest.productName,
                     family: guest.family.rawValue,
                     pairings: entries(pairings),
+                    // The iOS 18 research board kernels: from macOS 26.4 on, a
+                    // Mac running an older macOS links them over ssh.
+                    kernelcacheLayout: guest.notchedArtworkSubtype == nil ? nil : "kernel-first",
                 )
             },
         )
@@ -586,9 +663,13 @@ public struct VPhoneFirmwareCatalogReport: Codable, Equatable, Sendable {
     public struct Entry: Codable, Equatable, Sendable {
         public let ios: Firmware
         public let recommendedCloudOS: Firmware
-        public init(ios: Firmware, recommendedCloudOS: Firmware) {
+        /// The release's own cloudOS, on the research board, when one exists
+        /// (`VPhoneFirmwarePairing.matchingCloudOS`).
+        public let matchingCloudOS: Firmware?
+        public init(ios: Firmware, recommendedCloudOS: Firmware, matchingCloudOS: Firmware? = nil) {
             self.ios = ios
             self.recommendedCloudOS = recommendedCloudOS
+            self.matchingCloudOS = matchingCloudOS
         }
     }
 
@@ -601,11 +682,16 @@ public struct VPhoneFirmwareCatalogReport: Codable, Equatable, Sendable {
         /// `iPhone`, `iPad` or `appleTV`.
         public let family: String
         public let pairings: [Entry]
-        public init(productType: String, name: String, family: String, pairings: [Entry]) {
+        /// `kernel-first` for a device whose every pairing boots a kernelcache
+        /// mix that only the kmutil of macOS 15 or 26.0 to 26.3 links
+        /// (`VPHONE_KMUTIL_SSH` from 26.4 on); absent for every other device.
+        public let kernelcacheLayout: String?
+        public init(productType: String, name: String, family: String, pairings: [Entry], kernelcacheLayout: String? = nil) {
             self.productType = productType
             self.name = name
             self.family = family
             self.pairings = pairings
+            self.kernelcacheLayout = kernelcacheLayout
         }
     }
 

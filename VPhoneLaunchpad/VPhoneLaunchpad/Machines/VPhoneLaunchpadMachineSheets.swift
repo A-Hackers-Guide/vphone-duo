@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 /// offered when one is selected, on pages of their own.
 struct VPhoneLaunchpadMachineSettingsView: View {
     private enum Field {
-        case cpu, memory, network, address, mac, forwards, mdns, macName, unlock, location
+        case cpu, memory, network, address, mac, forwards, mdns, macName, natPeers, unlock, location
     }
 
     enum Page: Hashable {
@@ -34,6 +34,7 @@ struct VPhoneLaunchpadMachineSettingsView: View {
     @State private var forwards: [String]
     @State private var advertisesName: Bool
     @State private var resolvesMacName: Bool
+    @State private var reachesPeers: Bool
     @State private var unlocksAtStartup: Bool
     @State private var syncsHostLocation: Bool
     @State private var newTransport = "tcp"
@@ -58,6 +59,7 @@ struct VPhoneLaunchpadMachineSettingsView: View {
         _forwards = State(initialValue: first?.network.portForwards?.map(\.argument) ?? [])
         _advertisesName = State(initialValue: first?.network.localHostName != nil)
         _resolvesMacName = State(initialValue: first?.network.resolvesMacName != false)
+        _reachesPeers = State(initialValue: first?.network.reachesPeers != false)
         _unlocksAtStartup = State(initialValue: first?.unlocksAtStartup == true)
         _syncsHostLocation = State(initialValue: first?.syncsHostLocation == true)
     }
@@ -162,6 +164,7 @@ struct VPhoneLaunchpadMachineSettingsView: View {
         .onChange(of: forwards) { edited.insert(.forwards) }
         .onChange(of: advertisesName) { edited.insert(.mdns) }
         .onChange(of: resolvesMacName) { edited.insert(.macName) }
+        .onChange(of: reachesPeers) { edited.insert(.natPeers) }
         .onChange(of: unlocksAtStartup) { edited.insert(.unlock) }
         .onChange(of: syncsHostLocation) { edited.insert(.location) }
         #if DEBUG
@@ -214,6 +217,9 @@ struct VPhoneLaunchpadMachineSettingsView: View {
             }
             if network == "bridged" {
                 TextField("Interface", text: $bridgeInterface, prompt: Text("First available"))
+            }
+            if network == "nat" {
+                Toggle("Reach other NAT machines", isOn: $reachesPeers)
             }
         } header: {
             if !single {
@@ -371,6 +377,9 @@ struct VPhoneLaunchpadMachineSettingsView: View {
             }
             if edited.contains(.macName) {
                 networkArguments += ["--mac-name", resolvesMacName ? "on" : "off"]
+            }
+            if edited.contains(.natPeers) {
+                networkArguments += ["--nat-peers", reachesPeers ? "on" : "off"]
             }
             if edited.contains(.mdns) {
                 networkArguments += ["--mdns", advertisesName ? "on" : "off"]

@@ -343,6 +343,7 @@ class VPhoneHostAutomationServer {
         let hidKey: (page: UInt32, usage: UInt32)? = switch name {
         case "home": (0x0C, 0x40)
         case "power": (0x0C, 0x30)
+        case "side": (0x0C, 0x95) // An Apple Watch's side button.
         case "volup": (0x0C, 0xE9)
         case "voldown": (0x0C, 0xEA)
         default: nil

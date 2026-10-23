@@ -35,6 +35,7 @@ Use a `VPhone.bundle` from the same series as Launchpad. The series is the first
 
 | Launchpad | VPhone.bundle |
 | --- | --- |
+| 2.12.x | 2.12.x |
 | 2.11.x | 2.11.x |
 | 2.10.x | 2.10.x |
 | 2.9.x | 2.9.x |

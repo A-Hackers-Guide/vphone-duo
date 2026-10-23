@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import Virtualization
 @testable import VPhoneCoreKit
 
 /// Editing, validating and planning a VM's network: fixed addresses, MACs and
@@ -81,9 +82,10 @@ struct NetworkPlanTests {
     }
 
     /// Only the shared network: a subnet of the VM's own stays reserved after
-    /// the VM exits, so it would work for one launch.
+    /// the VM exits, so it would work for one launch. A machine that reaches
+    /// its peers is held to vmnet's second shared network.
     @Test func `a nat address off the shared network is refused`() {
-        #expect(throws: VPhoneNetworkingError.natAddressOffSharedNetwork(address: "192.168.70.10", shared: "192.168.64.0/24")) {
+        #expect(throws: VPhoneNetworkingError.natAddressOffSharedNetwork(address: "192.168.70.10", shared: "192.168.65.0/24")) {
             _ = try VPhoneNetworking.plan(config(.nat, ip: IPv4Config(address: "192.168.70.10", prefixLength: 24)), host: host)
         }
         #expect(throws: VPhoneNetworkingError.natAddressOffSharedNetwork(address: "192.168.64.50", shared: "192.168.64.0/24")) {
@@ -332,9 +334,10 @@ struct NetworkPlanTests {
     // MARK: - The Mac's name in the guest
 
     @Test func `the Mac's name points where the guest reaches the Mac`() throws {
+        // A nat guest reaches its peers by default, on vmnet's second network.
         let nat = try VPhoneNetworking.plan(config(.nat), host: host)
         #expect(VPhoneNetworking.macStaticNames(plan: nat, macName: "Lab-Mac") == [
-            .init(address: VPhoneIPv4Address(192, 168, 64, 1), names: ["Lab-Mac.local"]),
+            .init(address: VPhoneIPv4Address(192, 168, 65, 1), names: ["Lab-Mac.local"]),
         ])
         let tunnel = try VPhoneNetworking.plan(config(.tunnel), host: host)
         #expect(VPhoneNetworking.macStaticNames(plan: tunnel, macName: "Lab-Mac").first?.address == VPhoneIPv4Address(192, 168, 127, 1))
@@ -354,6 +357,57 @@ struct NetworkPlanTests {
         let on = try VPhoneNetworking.merge(into: off, edit: VPhoneNetworkEdit(resolvesMacName: true), host: host)
         #expect(on.resolvesMacName == nil)
         #expect(try VPhoneNetworking.plan(on, host: host).resolvesMacName)
+    }
+
+    /// NAT machines reach each other unless one opts out; the switch is
+    /// stored like the Mac's name, and only `nat` has it.
+    @Test func `nat machines reach each other unless one opts out`() throws {
+        #expect(try VPhoneNetworking.plan(.default, host: host).reachesPeers)
+        let off = try VPhoneNetworking.merge(into: .default, edit: VPhoneNetworkEdit(reachesPeers: false), host: host)
+        #expect(off.reachesPeers == false)
+        #expect(try !VPhoneNetworking.plan(off, host: host).reachesPeers)
+        let on = try VPhoneNetworking.merge(into: off, edit: VPhoneNetworkEdit(reachesPeers: true), host: host)
+        #expect(on.reachesPeers == true)
+        let tunnel = try VPhoneNetworking.merge(into: .default, edit: VPhoneNetworkEdit(mode: .tunnel), host: host)
+        #expect(try !VPhoneNetworking.plan(tunnel, host: host).reachesPeers)
+    }
+
+    /// Peers are on vmnet's second shared network, the block after the first.
+    @Test func `a machine that reaches its peers is on the second shared network`() throws {
+        #expect(host.peerNATSubnet.description == "192.168.65.0/24")
+        #expect(host.peerNATHost == VPhoneIPv4Address(192, 168, 65, 1))
+        #expect(try VPhoneNetworking.plan(.default, host: host).macAddressForGuest == host.peerNATHost)
+        let off = try VPhoneNetworking.merge(into: .default, edit: VPhoneNetworkEdit(reachesPeers: false), host: host)
+        #expect(try VPhoneNetworking.plan(off, host: host).macAddressForGuest == host.sharedNATHost)
+
+        // A fixed address follows: on the second network with peers, on the
+        // first without.
+        let peer = try VPhoneNetworking.merge(
+            into: .default, edit: VPhoneNetworkEdit(address: .fixed(address: "192.168.65.50", prefixLength: 24)), host: host,
+        )
+        #expect(try VPhoneNetworking.plan(peer, host: host).reachesPeers)
+        #expect(throws: VPhoneNetworkingError.self) {
+            try VPhoneNetworking.merge(into: off, edit: VPhoneNetworkEdit(address: .fixed(address: "192.168.65.50", prefixLength: 24)), host: host)
+        }
+
+        // A fixed address on the first network, set before peers existed,
+        // keeps that machine isolated, unless it asks for its peers.
+        let shared = try VPhoneNetworking.merge(
+            into: .default, edit: VPhoneNetworkEdit(address: .fixed(address: "192.168.64.50", prefixLength: 24)), host: host,
+        )
+        #expect(try !VPhoneNetworking.plan(shared, host: host).reachesPeers)
+        #expect(!VPhoneNetworking.reachesPeers(shared, host: host))
+        #expect(throws: VPhoneNetworkingError.self) {
+            try VPhoneNetworking.merge(into: shared, edit: VPhoneNetworkEdit(reachesPeers: true), host: host)
+        }
+    }
+
+    @Test func `a NAT attachment can drop its isolation`() throws {
+        let nat = VZNATNetworkDeviceAttachment()
+        #expect(nat.responds(to: NSSelectorFromString("_setInterfaceIsolationEnabled:")))
+        try VPhoneNetworking.setInterfaceIsolation(false, of: nat)
+        let device = try VPhoneNetworking.makeNetworkDevice(VPhoneNetworking.plan(.default, host: host))
+        #expect(device.configuration?.attachment is VZNATNetworkDeviceAttachment)
     }
 
     // MARK: - Guest setting

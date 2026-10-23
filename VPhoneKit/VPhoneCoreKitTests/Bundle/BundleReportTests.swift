@@ -3,6 +3,22 @@ import Testing
 @testable import VPhoneCoreKit
 
 struct BundleReportTests {
+    @Test func `reports effective peers for a legacy fixed NAT address`() throws {
+        let fixed = VPhoneNetworking.reachesPeers(.default)
+        let address = VPhoneNetworkHost.current.sharedNATSubnet.firstHost
+        let network = VPhoneVirtualMachineManifest.NetworkConfig(
+            mode: .nat, macAddress: "00:11:22:33:44:55",
+            ipv4: .init(address: VPhoneIPv4Address(address.raw + 10).description, prefixLength: VPhoneNetworkHost.current.sharedNATSubnet.prefixLength)
+        )
+        let manifest = VPhoneVirtualMachineManifest(cpuCount: 2, memorySize: 2 << 30, networkConfig: network, romImages: nil)
+        let report = VPhoneBundleReport(bundle: VPhoneBundle(url: URL(fileURLWithPath: "/tmp/report"), manifest: manifest))
+        #expect(network.reachesPeers == nil)
+        #expect(report.network.reachesPeers == false)
+        #expect(fixed)
+        let decoded = try JSONDecoder().decode(VPhoneBundleReport.self, from: JSONEncoder().encode(report))
+        #expect(decoded.network.reachesPeers == false)
+    }
+
     @Test func `maps manifest fields`() {
         let manifest = VPhoneVirtualMachineManifest(
             cpuCount: 6,
