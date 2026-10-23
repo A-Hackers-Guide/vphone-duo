@@ -485,6 +485,12 @@ public final class VPhoneConfinedDirectory: Sendable {
         }
     }
 
+    /// Change this pinned directory itself, without resolving its path again.
+    /// A writable ancestor may have been renamed since it was opened.
+    public func setPermissions(mode: mode_t, owner: (uid: uid_t, gid: gid_t)? = nil) throws {
+        try Self.applyAttributes(to: descriptor, owner: owner, mode: mode, path: path)
+    }
+
     public func setOwner(_ relative: String, uid: uid_t, gid: gid_t) throws {
         let (directory, leaf) = try parent(of: relative)
         guard fchownat(directory.descriptor, leaf, uid, gid, AT_SYMLINK_NOFOLLOW) == 0 else {

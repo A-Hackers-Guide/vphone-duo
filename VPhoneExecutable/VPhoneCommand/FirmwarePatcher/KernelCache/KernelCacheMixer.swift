@@ -320,15 +320,27 @@ public final class KernelCacheMixer {
     /// root writes there.
     func storeMix(_ data: Data, at url: URL) throws {
         let user = VPhoneInvokingUser.current
-        let cache = cacheDirectory.standardizedFileURL.path
-        try FileManager.default.createDirectory(atPath: cache, withIntermediateDirectories: true)
+        let cache = cacheDirectory.path
+        // A privileged linker only consumes an existing user stage. Do not
+        // create or revisit a path through its user-writable ancestors as root.
+        if geteuid() != 0 {
+            try FileManager.default.createDirectory(atPath: cache, withIntermediateDirectories: true)
+        }
         let root = try VPhoneConfinedDirectory.pin(absolutePath: cache)
-        let relative = String(url.standardizedFileURL.path.dropFirst(cache.count + 1))
+        guard url.path.hasPrefix(cache + "/") else {
+            throw PatcherError.invalidFormat("The kernelcache output is outside its cache directory.")
+        }
+        let relative = String(url.path.dropFirst(cache.count + 1))
         let (directory, leaf) = try root.parent(of: relative, create: true)
         try directory.writeFile(leaf, contents: data, mode: 0o644, owner: user.map { ($0.uid, $0.gid) })
         // Under sudo, so the user's later runs, which link over ssh, can store here too.
         if geteuid() == 0 {
-            try VPhoneHostFilePermissions.makeAccessible(at: cacheDirectory)
+            var current = root
+            try current.setPermissions(mode: 0o777, owner: user.map { ($0.uid, $0.gid) })
+            for name in relative.split(separator: "/").dropLast() {
+                current = try current.directory(String(name))
+                try current.setPermissions(mode: 0o777, owner: user.map { ($0.uid, $0.gid) })
+            }
         }
     }
 

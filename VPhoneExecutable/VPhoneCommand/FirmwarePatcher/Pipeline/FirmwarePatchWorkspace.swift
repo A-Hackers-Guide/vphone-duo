@@ -96,6 +96,7 @@ public struct FirmwarePatchWorkspace {
         if try input.isDirectory(name) {
             let sourceChild = try input.directory(name)
             let targetChild = try output.directory(name, create: true, mode: 0o777)
+            try targetChild.setPermissions(mode: 0o777, owner: owner)
             for child in try sourceChild.entries() {
                 try publish(child, from: sourceChild, to: targetChild, relative: relative + "/" + child)
             }
