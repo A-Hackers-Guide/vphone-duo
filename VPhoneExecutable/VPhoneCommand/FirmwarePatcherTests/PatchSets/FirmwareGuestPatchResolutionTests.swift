@@ -12,6 +12,36 @@ import VPhonePatchKit
 
 @Suite("Guest patch resolution")
 struct FirmwareGuestPatchResolutionTests {
+    @Test(arguments: [FirmwareGuestSystemPatchSet.homePodCryptexStaging, FirmwareGuestSystemPatchSet.homePodCryptexClass])
+    func `HomePod cryptex staging is independent of the iPhone environment and reversible in selection`(identifier: String) throws {
+        for base in ["26.4", "27.0", "27.2", "28.0"] {
+            for preset in FirmwarePatchSetCatalog.builtInPresets {
+                let plan = try VPhonePatchPlan.resolve(
+                    preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
+                    iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4"),
+                )
+                #expect(plan.isEnabled(identifier) == (base.hasPrefix("27.")
+                    && preset.identifier == VPhonePatchPreset.homePodMiniIdentifier))
+                if plan.isEnabled(identifier) {
+                    #expect(!plan.isEnabled("system-launchdaemons-boot-environment"))
+                    let disabled = try VPhonePatchPlan.resolve(
+                        preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
+                        iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4"),
+                        blocked: [identifier],
+                    )
+                    #expect(!disabled.isEnabled(identifier))
+                    #expect(FirmwareGuestPatchResolution.guestPatchesOff(selectionEnabled: disabled.enabled).contains(identifier))
+                }
+            }
+        }
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [identifier]).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true) == [identifier])
+        let declaration = try #require(FirmwarePatchSetCatalog.allDeclarations.first { $0.identifier == identifier })
+        #expect(declaration.target == (identifier == FirmwareGuestSystemPatchSet.homePodCryptexStaging
+            ? .guestExecutable(path: "/usr/libexec/cryptexd") : .prebootDeviceTree))
+        #expect(!declaration.bootEssential)
+    }
+
     @Test(arguments: [FirmwareGuestSystemPatchSet.homePodOTAUserland, FirmwareGuestSystemPatchSet.homePodSoundGlow])
     func `HomePod OTA and Sound Glow require 27 point 2 and stay out of other presets`(identifier: String) throws {
         for version in ["26.6", "27.0", "27.1", "27.2", "27.3"] {

@@ -1,5 +1,35 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **HomePod cryptex DDI staging (2026-10-23).**
+> `system-cryptexd-exp-homepod_staging` is a selectable HomePod 27 guest patch,
+> enabled by `homepod-mini` and excluded from the iOS/Apple TV presets. It
+> injects the TVOS arm64e `libvphonecryptexstaging.dylib` into cryptexd through
+> a load command, preserving the daemon's entitlements and an original `.bak`.
+> Deselecting restores the daemon before removing the library. Only failed
+> `F_SETPROTECTIONCLASS` calls returning `EPERM` become `ENOTSUP`, the daemon's
+> existing unsupported-filesystem fallback. Other fcntl calls tail-forward
+> their complete ABI arguments. Apple ticket/signature/trust-cache/graft checks
+> remain on the native path. DDI persistence and nonce persistence use Apple's
+> until-reboot mode. The research SEP's digest-storage failure is tolerated only
+> for error 104 in the cryptex POSIX domain and an info plist naming Apple's DDI,
+> `/System/Developer`, and DeveloperModeRequired true; the preceding native
+> signature lock is unchanged. This does not enable the broad iPhone environment or its
+> display hooks. Validation and deployment results are recorded in
+> `Research/Guest/developer_disk_images.md`.
+> TempPod confirmed the staging errno, then exposed an authenticated APFS
+> `clas` mismatch (tvOS ticket `0xf4`, research kernel `0xf2`). The independent
+> `preboot-homepod-exp-cryptex_class` repair sets or adds only the concrete uint32
+> `/product/cryptex1-product-class` to `0xf4`, which the kernel's native Image4
+> runtime reads. It preserves equality verification and global product-id;
+> Preboot backup composition makes it reversible. No kernel instruction is
+> patched. Reveal/validation procedure is in the same research document.
+> TempPod now reports `connected` with a compatible, usable 27B48 tvOS cryptex
+> DDI. Device/process/app/file queries and Xcode Device Hub DDI readiness pass.
+> Display preview remains pending; debugger and app launch are not yet verified.
+> Live opt-out restores cryptexd and the whole personalized DeviceTree to their
+> pre-patch bytes, removing the injected library. Full bundle admission, 76
+> selected Swift tests, and the scoped native adapter harness pass.
+
 > **HomePod integration with upstream main (2026-10-23).**
 > Merged upstream `d14231a4` into the HomePod branch, retaining upstream's
 > 2.12 compatibility contract, Apple Watch, research-board and sealed restore

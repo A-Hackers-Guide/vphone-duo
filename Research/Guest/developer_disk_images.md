@@ -1,10 +1,143 @@
 # Developer disk images on virtual guests
 
+## Implemented HomePod support (2026-10-23)
+
+TempPod (`0000FE01-EEC843C8BD20F085`, HomePod mini 27.2/24K120 over cloudOS
+26.4) now mounts Apple's signed tvOS 27B48 cryptex DDI at `/System/Developer`.
+CoreDevice reports `connected`, `isCryptexDDI: true`, `contentIsCompatible:
+true`, and `isUsable: true`. Process, app, device-detail and crash-log file
+queries succeed. Xcode 27.2's Device Hub lists it under Available and shows
+DDI Services Enabled, File System Live, and Tunnel State Connected. Its Apps
+inspector completes. Display preview still stays at “Connecting display…”;
+DeviceKit error 4002 reports DDI services available but FramebufferProviderStates
+`none`, timing out after 60 seconds. This is a separate live-view failure.
+Debugger attachment, app installation/launch and every Xcode feature have not
+been validated. DDI readiness does not establish those features.
+
+`system-cryptexd-exp-homepod_staging` injects a small TVOS arm64e library
+directly into HomePod 27's cryptexd, preserving entitlements and its original
+backup. The HomePod preset selects it independently of the iPhone environment.
+It implements three scoped compatibility operations:
+
+- Failed class-D `F_SETPROTECTIONCLASS` calls returning `EPERM` report
+  `ENOTSUP`, reaching cryptexd's existing unsupported-filesystem fallback.
+  Other protection classes, errors and fcntl commands pass through.
+- The remote DDI GenericDmg tuple (image-type-index 10, product-class enabled,
+  Cryptex1 subtype 2 and nonce domain 4) reads persistence/nonce-persistence
+  as zero: Apple's until-reboot mode. Invalid options pass through.
+- After the native signature lock succeeds, SEP digest storage still fails
+  with `com.apple.security.cryptex.posix` error 104 (`ENOTRECOVERABLE`). Only
+  that exact failure is tolerated, and only when the supplied info descriptor
+  parses as `com.apple.MobileAsset.DDI`, RequiredMountPath `/System/Developer`,
+  and DeveloperModeRequired true. It uses bounded `pread`, retaining the file
+  position. Unrelated cryptexes and other failures retain the native result.
+
+The shim retains TSS personalization, Image4 manifest equality, APFS payload
+and root-hash authentication, the first native signature lock, and the native
+trust-cache/bootstrap path. It specifically omits successful SEP storage for
+the until-reboot DDI; it does not provide persistent SEP authorization. The
+serial log confirms authenticated mount and a native trust-cache load request;
+`dtdeviceinfod` and `dtappserviced` then run from the DDI and answer CoreDevice.
+Existing research kernel/TXM policy is unchanged; this is not a claim of stock
+hardware security semantics.
+
+### TempPod: staging confirmed, product class revealed
+
+The staging-only build `2.12.0-local.373ae97b` was deployed through Launchpad
+to the stopped TempPod clone, UDID `0000FE01-EEC843C8BD20F085`. On boot its
+log confirmed the actual `F_SETPROTECTIONCLASS EPERM, reported as ENOTSUP`.
+Preparation then returned a concrete APFS mount failure, rather than hanging:
+`clas: enforcing[manifest == chip]: 0xf4 == 0xf2`, followed by root-hash
+authentication error 13. The staging fix is verified; mounting was still
+blocked by the kernel's iOS Cryptex class.
+
+Reveal procedure for `kernelcache.research.vphone600`, cloudOS 26.4 raw
+SHA-256 `86895a2eebeb7fcfb68bcd60f2d7e685687faea07ee31166fb58c872b38e0d92`:
+the symbol database exists but its referenced JSON dumps are absent. Decode
+the kernel with the project's IM4PHandler and Capstone-only KernelPatcherBase.
+Find `cryptex1-product-class` string xrefs: uint32 runtime callbacks at file
+offsets `0xc78d8c` and `0xc83434`. The CLAS cases read four bytes through
+context node pointers at +0x20 and +0x10 respectively, without byte swapping.
+Trace the corresponding initializers (`0xc7786c` and `0xc82858`) through
+`/product` string xrefs: each stores exactly that node in those fields. The
+first getter uses an IORegistry OSData read; the second uses SecureDT. These
+are recovered callback roles, not recovered symbol names. No offset is used
+by the patch.
+
+`preboot-homepod-exp-cryptex_class` therefore adds the concrete four-byte
+`/product/cryptex1-product-class` as native HomePod `0xf4` when absent, or changes
+an existing `0xf2` value to `0xf4`. TempPod's restored tree omits it; adding the
+property grows the flat tree by 40 bytes. Unexpected values and malformed or
+duplicate properties are rejected. All other properties, including product-id,
+are preserved. It is composed
+from the installer's clean Preboot backup and can be deselected independently.
+It retains Image4's equality enforcement, tickets and signatures. The accepted
+values are documented in Apple's XNU `EXTERNAL_HEADERS/img4/runtime.h` under
+`IMG4_IDENTIFIER_CLAS`; the property path and read layout come from the actual
+kernel. The class-only build `2.12.0-local.ce1cc9bf` passed Image4 and APFS
+root-hash authentication, mounted `Xcode_tvOS_Cryptex_DDI`, then unmounted after
+the SEP storage failure. Thus neither host DDI selection nor TSS needed a bypass.
+
+### SEP reveal and validation
+
+Native HomePod cryptexd SHA-256
+`d9de66977d00db02246d237d84e95ccde5cd9407ea71241fdfc4f9ab49210d12`:
+Hopper `_sub_remote_service_demux` at `0x100027ff8` reads the two persistence
+fields with `xpc_dictionary_get_uint64`; its install block at `0x10002a4fc`
+passes the parsed values to the core persistence setters. `_quire_bootstrap_continue`
+at `0x100039ce0` calls `cryptex_signature_lock`, then
+`cryptex_signature_lock_with_sep(signature, infoFD)` at `0x10003a004`. The second
+call is independent of the ephemeral option. REA evidence:
+`ev_cd5d8e54bab204df109744019430583894dc3404dde06ff330e4d8242ba6abcf`,
+`ev_a760648dda74045963afd7b4dd0b679bcc747e998a156c393ed6df69b18b0076`,
+`ev_d1e96c889080feb0eec9ac138b4a6612b02466c67814a6b7b154c461d1878a54`.
+The import ABI is corroborated by local disassembly and successful live calls.
+No private struct offsets or executable instruction patches are used by the shim.
+
+The installed host has `mountCryptexesEphemerally` in the `com.apple.CoreDevice`
+NSUserDefaults suite (not `com.apple.dt.coredevice`). Temporarily enabling it
+still failed at SEP storage. Both temporary test keys were removed; no host
+preference is required by the guest fix. The guest mapped both fields live in
+build `2.12.0-local.d619811f` but likewise failed without the SEP fallback.
+Build `2.12.0-local.4cf6da01` then activated the DDI successfully, including
+CoreDevice queries and Xcode's ready state above.
+
+Opt-out was tested through `fw set-patches` and Launchpad Update Guest Environment.
+It restored cryptexd byte-for-byte to the native SHA-256 above, removed the
+library and `.bak`, and restored the complete personalized Preboot IMG4 byte-for-byte
+to its saved pre-patch state. The original `homepod-mini` selection (no overrides)
+was restored afterward. The full bundle build and admission checks pass; 76
+selected patch/catalog/DeviceTree tests and the native arm64 forwarding,
+persistence filtering and SEP error-policy harness pass. The native harness
+checks unrelated identities, mount paths, absent Developer Mode metadata,
+different errors/domains, invalid descriptors, and file-position preservation.
+
+The remaining sections retain the initial Olive investigation as historical
+evidence. Olive and the default installed bundle were not modified for this work.
+
+Final deployment: `2.12.0-local.5dc5805b` is installed and bound only to TempPod,
+with the original homepod-mini preset and no overrides. After re-enabling the
+patches and rebooting, the serial log again confirms fresh authenticated DDI
+mount by cryptexd (pid 148), and all four queries below return success:
+
+```sh
+xcrun devicectl device info ddiServices --device 0000FE01-EEC843C8BD20F085
+xcrun devicectl device info processes --device 0000FE01-EEC843C8BD20F085
+xcrun devicectl device info apps --device 0000FE01-EEC843C8BD20F085
+xcrun devicectl device info files --device 0000FE01-EEC843C8BD20F085 --domain-type systemCrashLogs --no-recurse
+```
+
+Final JSON evidence is `/tmp/temppod-{ddi,processes,apps,files}-final.json`.
+Xcode's Apps inspector completes again after this reboot. Both temporary host
+preference keys are absent, the read-only inspection disk is detached, and
+TempPod is left running. Full VPhone build/admission and the 76 selected Swift
+tests passed again on the final implementation.
+
 Investigated 2026-10-23. Host: macOS 27.0.1 (26A434), selected Xcode
 `/Applications/Xcode.app/Contents/Developer`, Xcode 27.2 (27B48), CoreDevice
 651.31. Live target: Olive, native HomePod mini (`AudioAccessory5,1`, B520AP)
 27.2 (24K120) over the cloudOS 26.4 boot chain, VPhone bundle
-2.12.0-local.7bd0af87. This is an investigation, not a deployed fix.
+2.12.0-local.7bd0af87. These are the pre-fix investigation conditions.
 
 ## Result
 

@@ -98,6 +98,8 @@ ATTITUDE_INPUTS := $(call find_headers,Attitude) $(call find_folders,Attitude) S
 HOMEPODDISPLAY := $(STAGE)/homepoddisplay/libvphonehomepoddisplay.dylib
 HOMEPODDISPLAY_SOURCES := $(call find_sources,HomePodDisplay)
 HOMEPODDISPLAY_INPUTS := $(call find_headers,HomePodDisplay) $(call find_folders,HomePodDisplay)
+CRYPTEXSTAGING := $(STAGE)/cryptexstaging/libvphonecryptexstaging.dylib
+CRYPTEXSTAGING_SOURCE := CryptexStagingFix/libvphonecryptexstaging.c
 HOMEPODSETUP := $(STAGE)/homepodsetup/vphone-homepod-setup
 HOMEPODSETUP_SOURCES := $(call find_sources,HomePodSetup)
 HOMEPODSETUP_INPUTS := $(call find_headers,HomePodSetup) HomePodSetup/com.vphone.homepod-setup.plist
@@ -134,7 +136,7 @@ GPU_DYNAMIC_LOOKUP_SYMS := \
 VIRTIOSOUND := $(STAGE)/virtiosound/VPhoneVirtIOSound.driver
 VIRTIOSOUND_SOURCES := $(wildcard VirtIOSound/*.m VirtIOSound/*.c)
 VIRTIOSOUND_INCLUDES := $(wildcard VirtIOSound/*.h) VirtIOSound/Info.plist VirtIOSound/AudioServerDriver.tbd
-ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(HAPTICSFIX) $(BATTERYHEALTHFIX) $(DEVICEHUBFIX) $(DEVICENAME) $(PREFSFIX) $(SIGNINFIX) $(GYROSCOPE) $(ACCELEROMETER) $(ATTITUDE) $(HOMEPODDISPLAY) $(HOMEPODSETUP) $(GPU_PLUGIN) $(VIRTIOSOUND)
+ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(HAPTICSFIX) $(BATTERYHEALTHFIX) $(DEVICEHUBFIX) $(DEVICENAME) $(PREFSFIX) $(SIGNINFIX) $(GYROSCOPE) $(ACCELEROMETER) $(ATTITUDE) $(HOMEPODDISPLAY) $(CRYPTEXSTAGING) $(HOMEPODSETUP) $(GPU_PLUGIN) $(VIRTIOSOUND)
 PLISTS := $(STAGE)/camfix/libcamfix.plist $(STAGE)/vcamcaptured/libvcamcaptured.plist \
 	$(STAGE)/misfix/libmisfix.plist
 GPU_PROVENANCE := $(STAGE)/gpu/README.md
@@ -180,7 +182,7 @@ gpu: $(GPU_PLUGIN)
 
 package: all
 	@rm -f $(ARCHIVE)
-	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix hapticsfix batteryhealthfix devicehubfix devicename prefsfix signinfix gyroscope accelerometer attitude homepoddisplay homepodsetup gpu virtiosound
+	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix hapticsfix batteryhealthfix devicehubfix devicename prefsfix signinfix gyroscope accelerometer attitude homepoddisplay cryptexstaging homepodsetup gpu virtiosound
 	@echo "Packaged $(ARCHIVE)"
 
 test-loader-links:
@@ -379,6 +381,21 @@ $(HOMEPODDISPLAY): $(HOMEPODDISPLAY_SOURCES) $(HOMEPODDISPLAY_INPUTS)
 		-Wall -Wextra -Werror -dynamiclib -install_name /usr/lib/libvphonehomepoddisplay.dylib \
 		-o $@ $(HOMEPODDISPLAY_SOURCES) -framework Foundation -Wl,-not_for_dyld_shared_cache
 	@codesign --force --sign - $@
+
+$(CRYPTEXSTAGING): $(CRYPTEXSTAGING_SOURCE)
+	@mkdir -p $(STAGE)/cryptexstaging
+	xcrun --sdk appletvos clang -arch arm64e -mtvos-version-min=27.0 -Os \
+		-Wall -Wextra -Werror -Wno-unused-parameter -dynamiclib \
+		-install_name /usr/lib/libvphonecryptexstaging.dylib \
+		-o $@ $< -framework CoreFoundation -lcryptex_core -Wl,-not_for_dyld_shared_cache
+	@codesign --force --sign - $@
+
+.PHONY: test-cryptex-staging
+test-cryptex-staging:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -arch arm64 -O1 -Wall -Wextra -Werror -Wno-unused-parameter \
+		-o $(OUT)/CryptexStagingTests Tests/CryptexStagingTests.c -framework CoreFoundation
+	@$(OUT)/CryptexStagingTests
 
 $(HOMEPODSETUP): $(HOMEPODSETUP_SOURCES) $(HOMEPODSETUP_INPUTS)
 	@mkdir -p $(STAGE)/homepodsetup

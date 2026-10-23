@@ -91,6 +91,7 @@ daemon_sdk="$(/usr/bin/otool -l "$guest/vphoned" | /usr/bin/awk '/LC_BUILD_VERSI
 /bin/cp "$guest_products/gyroscope/libvphonegyro.dylib" "$guest/libvphonegyro.dylib"
 /bin/cp "$guest_products/accelerometer/libvphoneaccelerometer.dylib" "$guest/libvphoneaccelerometer.dylib"
 /bin/cp "$guest_products/attitude/libvphoneattitude.dylib" "$guest/libvphoneattitude.dylib"
+/bin/cp "$guest_products/cryptexstaging/libvphonecryptexstaging.dylib" "$guest/libvphonecryptexstaging.dylib"
 /bin/cp "$guest_products/homepoddisplay/libvphonehomepoddisplay.dylib" "$guest/libvphonehomepoddisplay.dylib"
 /bin/cp "$guest_products/homepodsetup/vphone-homepod-setup" "$guest/vphone-homepod-setup"
 /bin/cp "$guest_products/homepodsetup/com.vphone.homepod-setup.plist" "$guest/com.vphone.homepod-setup.plist"

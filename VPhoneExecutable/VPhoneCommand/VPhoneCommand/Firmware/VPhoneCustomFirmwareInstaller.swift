@@ -226,6 +226,9 @@ struct VPhoneCustomFirmwareInstaller {
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodSiriSpeech), device.family != .homePod {
             throw ValidationError("The HomePod Siri-speech patch is supported only for a HomePod guest.")
         }
+        if !effectiveEnabled.isDisjoint(with: [FirmwareGuestSystemPatchSet.homePodCryptexStaging, FirmwareGuestSystemPatchSet.homePodCryptexClass]), device.family != .homePod {
+            throw ValidationError("The HomePod cryptex staging patch is supported only for a HomePod guest.")
+        }
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodSoundGlow), device.family != .homePod {
             throw ValidationError("The HomePod Sound Glow patch is supported only for a HomePod guest.")
         }
@@ -1432,6 +1435,33 @@ struct VPhoneCustomFirmwareInstaller {
             if on("system-launchdaemons-boot-environment") {
                 try installEnvironment(system: system, environmentOnly: environmentOnly)
                 live.insert("system-launchdaemons-boot-environment")
+            }
+        }
+        // HomePod deliberately excludes the iPhone environment. Inject only the
+        // cryptex staging compatibility, directly into its platform executable.
+        let staging = FirmwareGuestSystemPatchSet.homePodCryptexStaging
+        isolate([staging]) {
+            let library = FirmwareGuestSystemPatchSet.homePodCryptexStagingLibrary
+            let libraryPath = String(library.dropFirst())
+            let executable = "usr/libexec/cryptexd"
+            if plan?.isEnabled(staging) == true {
+                guard guestDevice.family == .homePod else {
+                    throw ValidationError("HomePod cryptex staging requires a HomePod guest.")
+                }
+                let payload = try VPhoneGuestBinaries.resolve((library as NSString).lastPathComponent)
+                try system.replaceFile(libraryPath, fromFileAt: payload, mode: 0o755, owner: Self.guestOwner)
+                try patchMachO(system: system, work: work, path: executable,
+                               preserveEntitlements: true, injectedDylibPath: library)
+                live.insert(staging)
+            } else if guestDevice.family == .homePod || priorGuest.contains(staging) {
+                if try revertMachO(system: system, work: work, path: executable) {
+                    print("  [+] \(staging): restored cryptexd from backup")
+                } else if priorGuest.contains(staging) {
+                    // Keep the dependency while a patched daemon still needs it.
+                    live.insert(staging)
+                    throw ValidationError("HomePod cryptex staging has no cryptexd backup; cannot safely remove its library.")
+                }
+                try system.removeItem(libraryPath)
             }
         }
         // Geometry and its SoundBoard-only identity shim belong to one patch:
@@ -2926,6 +2956,9 @@ struct VPhoneCustomFirmwareInstaller {
             // when it is off: restoring the clean backup needs no source tree.
             if enabled(FirmwareGuestSystemPatchSet.homePodAudioProduct), boardDeviceTree == nil {
                 throw ValidationError("HomePod audio identity needs its original donor device tree.")
+            }
+            if plan != nil || priorGuest.contains(FirmwareGuestSystemPatchSet.homePodCryptexClass) {
+                repairGroup.append((FirmwareGuestSystemPatchSet.homePodCryptexClass, "patch-dt-homepod-cryptex-class", []))
             }
             repairGroup.append((FirmwareGuestSystemPatchSet.homePodAudioProduct, "patch-dt-homepod-audio-product",
                                 boardDeviceTree.map { [$0.path] } ?? []))

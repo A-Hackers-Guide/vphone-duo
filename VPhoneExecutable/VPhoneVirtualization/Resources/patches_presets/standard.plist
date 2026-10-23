@@ -79,6 +79,8 @@
 			<string>system-homepod-exp-siri_speech</string>
 			<string>system-homepod-exp-ota_userland</string>
 			<string>system-homepod-exp-sound_glow</string>
+			<string>system-cryptexd-exp-homepod_staging</string>
+			<string>preboot-homepod-exp-cryptex_class</string>
 			<string>preboot-homepod-exp-audio_product</string>
 			<string>kernel-exp-frida_thread_set_state_entitlement_flag</string>
 			<string>kernel-exp-frida_vm_map_delete_immutable_code</string>

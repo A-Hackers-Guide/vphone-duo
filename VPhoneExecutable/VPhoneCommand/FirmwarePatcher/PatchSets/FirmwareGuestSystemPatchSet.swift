@@ -44,6 +44,9 @@ public enum FirmwareGuestSystemPatchSet {
     /// staged from its OTA. Research only: no IPSW exists for that device.
     public static let tvOTAUserland = "system-tv-exp-ota_userland"
     public static let homePodOTAUserland = "system-homepod-exp-ota_userland"
+    public static let homePodCryptexClass = "preboot-homepod-exp-cryptex_class"
+    public static let homePodCryptexStaging = "system-cryptexd-exp-homepod_staging"
+    public static let homePodCryptexStagingLibrary = "/usr/lib/libvphonecryptexstaging.dylib"
     public static let homePodSoundGlow = "system-homepod-exp-sound_glow"
     public static let homePodSoundGlowPath = "/usr/share/vphone/HomePodSoundGlow.plist"
     public static let otaUserland = "system-exp-ota_userland"
@@ -71,6 +74,20 @@ public enum FirmwareGuestSystemPatchSet {
         name: "Guest System",
         summary: "Shared-cache policy gates, patched system daemons and the vphone guest payload",
         patches: [
+            VPhonePatchDeclaration(
+                identifier: homePodCryptexClass,
+                title: "HomePod Cryptex product class",
+                summary: "Sets the research kernel's Cryptex product class to the native tvOS/HomePod value so signed tvOS developer images pass Image4 equality validation. Changes only /product/cryptex1-product-class; preserves the global product token.",
+                target: .prebootDeviceTree,
+                applicability: ios27,
+            ),
+            VPhonePatchDeclaration(
+                identifier: homePodCryptexStaging,
+                title: "HomePod developer image staging",
+                summary: "Lets HomePod 27 cryptexd stage and activate developer images on the research guest: accepts unsupported protection classes, uses until-reboot DDI lifetime, and tolerates the research SEP's unavailable digest storage only for the verified DDI. Retains Apple personalization, signature, root-hash and trust-cache checks.",
+                target: .guestExecutable(path: "/usr/libexec/cryptexd"),
+                applicability: ios27,
+            ),
             VPhonePatchDeclaration(
                 identifier: homePodOTAUserland,
                 title: "HomePod userland from OTA",
