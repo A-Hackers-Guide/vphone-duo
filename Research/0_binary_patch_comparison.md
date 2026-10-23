@@ -3723,7 +3723,17 @@ it was not ("Invalid root hash", `apfs_sealvolume` exit 65 in
   restore's own `mtree -m` sets it from the root entry (`.`), not from the
   newest one: run on 2026-10-19, the device took the root's
   `1792405582.069334279` while `/private/var` said `…582.936736187`. The
-  remap takes the root's time now.
+  remap takes the root's time now. Corrected 2026-10-23: `mtree -m` takes
+  the time of the *first entry in walk order whose time differs* (checked
+  with the host's `mtree -m` on a small tree). The restore gets the image as
+  it was encrypted, before `removeSpecificSystemFiles`, so that entry is the
+  first one edited afterwards. The root was that entry only because the
+  browsable mount had created `.fseventsd` and removing it edited the root.
+  Since the mounts are `-nobrowse` (6dcc3f2c) there is no `.fseventsd`, the
+  root keeps the IPSW's time, and sealing with it failed again ("Invalid
+  root hash"; seen on 18.6 22G86 on cloudOS 22G86, where the device took
+  `/private/var`'s time). The remap now takes the first mtree entry edited
+  since `removeSpecificSystemFiles` started.
 - `createDigestAndHash` mounted the image writable only to unmount it again
   for `apfs_sealvolume`, which needs the device; the mount changed the volume
   after the mtree described it. It attaches the image with `-noMount` now.

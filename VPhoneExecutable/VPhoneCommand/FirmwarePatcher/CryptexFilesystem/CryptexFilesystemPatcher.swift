@@ -108,6 +108,9 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
         let trustcachePath = try createTrustcache(filesystem: unencryptedImage)
 
         print("Creating mtree…")
+        // The restore gets the image as encrypted above, so whatever changes
+        // from here on is what its mtree finds different (see parseEditTime).
+        let editStart = Date()
         let didEdit = try removeSpecificSystemFiles(filesystem: unencryptedImage)
         let mtreePath = try createMtree(filesystem: unencryptedImage)
 
@@ -120,6 +123,7 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
             filesystem: unencryptedImage,
             mtree: mtreePath,
             remap: didEdit,
+            editedSince: editStart,
         )
         let metadataPath = try compressCanonicalMetadata(mtree: mtreePath, digestDb: digestDbPath)
         let rootHashContainer = try wrapRootHash(rootHashPath)

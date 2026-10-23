@@ -288,13 +288,7 @@ struct CryptexFileOpsTests {
 
     // MARK: - Seal remap time
 
-    @Test(arguments: [
-        ".               type=dir nlink=19 size=608 time=1792405582.069334279\n",
-        ".               type=dir nlink=19 \\\n                size=608 time=1792405582.069334279\n",
-    ])
-    func `the remap time is the root entry's, not the newest one's`(root: String) throws {
-        let scratch = try makeScratch()
-        defer { try? FileManager.default.removeItem(at: scratch) }
+    private func writeMtree(root: String, in scratch: URL) throws -> URL {
         let mtree = scratch.appendingPathComponent("mtree.txt")
         try ("""
         #\t   tree: /Volumes/LuckG23G71.D47OS
@@ -308,8 +302,38 @@ struct CryptexFileOpsTests {
         # ./private/var
         var             type=dir nlink=31 size=992 time=1792405582.936736187
 
+        # ./private/var/MobileAsset
+        MobileAsset     type=dir uid=0 gid=0 nlink=2 size=64 \\
+                        time=1792405581.550614134
+
         """).write(to: mtree, atomically: true, encoding: .utf8)
-        #expect(try makePatcher(scratch).parseRootTime(mtree: mtree) == "1792405582069334279")
+        return mtree
+    }
+
+    @Test(arguments: [
+        ".               type=dir nlink=19 size=608 time=1792405582.069334279\n",
+        ".               type=dir nlink=19 \\\n                size=608 time=1792405582.069334279\n",
+    ])
+    func `the remap time is the first edited entry's, not the newest one's`(root: String) throws {
+        // 26.6, 2026-10-19 (browsable mounts): removing the host's
+        // .fseventsd edited the root, and the device took the root's time.
+        let scratch = try makeScratch()
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let mtree = try writeMtree(root: root, in: scratch)
+        let since = Date(timeIntervalSince1970: 1_792_405_580.9)
+        #expect(try makePatcher(scratch).parseEditTime(mtree: mtree, since: since) == "1792405582069334279")
+    }
+
+    @Test func `an unedited root leaves the remap time to the first edited directory`() throws {
+        // 18.6, 2026-10-23 (-nobrowse mounts): the root kept the IPSW's
+        // time, and the device took /private/var's, which comes before
+        // MobileAsset in walk order.
+        let scratch = try makeScratch()
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let root = ".               type=dir nlink=19 size=608 time=1753444429.383219423\n"
+        let mtree = try writeMtree(root: root, in: scratch)
+        let since = Date(timeIntervalSince1970: 1_792_405_580.9)
+        #expect(try makePatcher(scratch).parseEditTime(mtree: mtree, since: since) == "1792405582936736187")
     }
 
     @Test func `the max size comes back as the string diskutil wants back`() throws {
