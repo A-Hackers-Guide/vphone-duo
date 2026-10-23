@@ -19,7 +19,11 @@
 > A scoped request adapter selects MediaRemote's local destination only for
 > that own-device UID; native request/response and artwork processing remain
 > intact. Remote requests and opt-out pass through. The routing correction,
-> artwork changes and animation synchronization still need live validation.
+> artwork processing succeed live in 24K120. Purple and yellow album artwork
+> produce distinct native animated colors; pause fades to idle and resume works.
+> A follow-up to the existing Siri speech patch uses a mixable, ducking auxiliary
+> session with notify-on-deactivation after the live interruption test made
+> Music abandon the receiver. Its AirPlay handoff still needs live verification.
 
 > **HomePod Siri speech policy (2026-10-23, live speech verified).**
 > New optional `system-homepod-exp-siri_speech` generates

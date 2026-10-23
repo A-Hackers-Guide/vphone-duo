@@ -1,5 +1,14 @@
 # HomePod mini first-boot welcome
 
+The 2026-10-23 Sound Glow tests on 27.2 exposed an AirPlay interaction absent
+from the original speech-only tests: the nonmixing auxiliary Playback session
+made the Music sender switch back to the Mac. The adapter now uses AVFAudio's
+MixWithOthers|DuckOthers category options and NotifyOthersOnDeactivation. It
+retains the separate native session and synthesis completion lifetime; the
+shared session and microphone route remain untouched. Local lifetime/error
+tests and the bundle pass; live AirPlay/Siri handoff validation is recorded in
+[Sound Glow](homepod_sound_glow.md).
+
 The guest policies, SoundBoard welcome coordinator, isolated Siri playback
 adapter and durable once state are implemented. Local tests pass. Live tests on
 27.0 (24J361) confirm audible native Siri speech, the exact automatic welcome

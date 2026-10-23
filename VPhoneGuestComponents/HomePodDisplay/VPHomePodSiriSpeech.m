@@ -1,6 +1,14 @@
 #import "VPHomePodSiriSpeech.h"
 #import <objc/runtime.h>
 #include <mach/mach_time.h>
+#ifdef VP_HOMEPOD_SIRI_SPEECH_TESTING
+// Frozen public AVFAudio SDK values for the macOS-only native harness.
+enum { AVAudioSessionCategoryOptionMixWithOthers = 0x1,
+       AVAudioSessionCategoryOptionDuckOthers = 0x2,
+       AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation = 0x1 };
+#else
+#import <AVFAudio/AVAudioSession.h>
+#endif
 
 @protocol VPHomePodSiriNative
 @optional
@@ -96,7 +104,8 @@ static NSError *VPSiriSpeechError(NSString *message) {
     }
     if (self.active) {
         NSError *cleanupError = nil;
-        if (![self.audioManager deactivateWithOptions:0 deactivateImmediately:YES error:&cleanupError]) {
+        if (![self.audioManager deactivateWithOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+                               deactivateImmediately:YES error:&cleanupError]) {
             NSLog(@"vphone HomePod Siri speech: auxiliary session cleanup failed: %@", cleanupError);
         }
         self.active = NO;
@@ -118,7 +127,11 @@ static void VPSiriSpeechSay(id<VPHomePodSiriNative> manager, SEL selector, NSStr
     lifetime.completion = completion;
     @try {
         id<VPHomePodSiriNative> configuration = [(id<VPHomePodSiriNative>)[VPSiriClass(@"SBAudioSessionConfiguration") alloc]
-            initWithCategory:@"AVAudioSessionCategoryPlayback" categoryOptions:0];
+            initWithCategory:@"AVAudioSessionCategoryPlayback"
+            categoryOptions:AVAudioSessionCategoryOptionMixWithOthers | AVAudioSessionCategoryOptionDuckOthers];
+        // A nonmixing playback session interrupts tvairplayd and makes the
+        // sender abandon this AirPlay receiver. Duck its existing session for
+        // speech, then notify it on deactivation so music and cap can continue.
         if (!configuration) {
             [lifetime finish:VPSiriSpeechError(@"Unable to create auxiliary playback configuration")];
             return;

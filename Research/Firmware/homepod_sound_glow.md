@@ -156,8 +156,24 @@ to `MRDestination.localDestination`. Identifiers, dimensions, completion and
 native artwork decoding/color extraction remain untouched. Other destinations
 and policy opt-out retain the original call. All participating method ABIs
 are checked before installation; the harness verifies local/remote/nil targets,
-completion preservation and opt-out. This routing change still needs live
-verification. No host artwork fetching or generated frames are involved.
+completion preservation and opt-out. The first routing build correctly refused
+the adapter because its guard looked for deviceUID on MRDeviceInfoRequest
+instead of the returned MRDeviceInfo; the guard and independent fixture now
+match the native class layout. Build `2.11.0-local.729f73aa` logs both adapters
+ready, completes its local artwork request in 0.0532 seconds, and emits native
+colored frames with no rejected reports. Supremacy produces purple tones and
+Dear Maria, Count Me In switches to yellow tones. Pause settles both banks to
+black and a fixed generation; resume restores animation. Screenshots verify
+those native frames reach the host window. No host artwork fetching or
+generated frames are involved.
+
+The Siri interruption test produced full speech and native Siri frames, but
+the owner observed Music switching output back to the Mac at speech start.
+The existing auxiliary Playback session used categoryOptions=0, interrupting
+tvairplayd. Its policy now uses the public AVFAudio MixWithOthers|DuckOthers
+options and NotifyOthersOnDeactivation, without touching the shared session.
+The native lifetime/error harness and complete bundle pass. Live verification
+of the AirPlay-preserving speech handoff remains pending that build's deploy.
 
 Install the prepared bundle through Launchpad when authorization is available.
 Use the returned installed version, preserving the default bundle and all other

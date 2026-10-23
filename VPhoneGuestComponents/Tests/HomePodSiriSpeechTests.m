@@ -53,7 +53,7 @@ static __weak SBAudioSessionManager *lastAuxiliary;
     return YES;
 }
 - (BOOL)deactivateWithOptions:(NSUInteger)options deactivateImmediately:(BOOL)immediately error:(NSError **)error {
-    assert(options == 0 && immediately);
+    assert(options == 1 && immediately);
     (void)error;
     self.deactivations++;
     return YES;
@@ -141,7 +141,7 @@ int main(void) {
         }
         SBAudioSessionManager *aux = lastAuxiliary;
         assert(aux && aux.activations == 1 && aux.deactivations == 0 && completions == 0);
-        assert([aux.configuration.category isEqual:@"AVAudioSessionCategoryPlayback"] && aux.configuration.options == 0);
+        assert([aux.configuration.category isEqual:@"AVAudioSessionCategoryPlayback"] && aux.configuration.options == 3);
         assert(service.event.type == 13 && service.event.timestamp && service.event.audioSessionID == 47);
         assert(service.event.speechSynthesisRequest.priority == 2 && service.event.speechSynthesisRequest.options == 0);
         assert([service.event.speechSynthesisRequest.speakableText isEqual:@"Native Siri phrase"]);
