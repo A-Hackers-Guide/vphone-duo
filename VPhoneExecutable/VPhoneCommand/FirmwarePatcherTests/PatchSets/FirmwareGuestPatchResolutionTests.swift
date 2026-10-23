@@ -35,6 +35,7 @@ struct FirmwareGuestPatchResolutionTests {
                     iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4"),
                 )
                 #expect(plan.isEnabled(identifier) == (base.hasPrefix("27.")
+                    && identifier != FirmwareGuestSystemPatchSet.homePodAudioProduct
                     && preset.identifier == VPhonePatchPreset.homePodMiniIdentifier))
             }
         }
@@ -151,7 +152,7 @@ struct FirmwareGuestPatchResolutionTests {
     }
 
     @Test
-    func `HomePod audio uses its native identity and shared driver without iPhone routing patches`() throws {
+    func `HomePod audio uses its shared driver without global identity or iPhone routing patches`() throws {
         let driver = FirmwareGuestSystemPatchSet.virtioSoundDriver
         let product = FirmwareGuestSystemPatchSet.homePodAudioProduct
         let plan = try VPhonePatchPlan.resolve(
@@ -160,7 +161,7 @@ struct FirmwareGuestPatchResolutionTests {
             iOSBase: VPhoneVersion("27.0"), cloudOS: VPhoneVersion("26.4"),
         )
         #expect(plan.isEnabled(driver))
-        #expect(plan.isEnabled(product))
+        #expect(!plan.isEnabled(product))
         #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [driver, product]).isEmpty)
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [driver]) == [driver])
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [driver], arm64eUserland: true) == [driver])

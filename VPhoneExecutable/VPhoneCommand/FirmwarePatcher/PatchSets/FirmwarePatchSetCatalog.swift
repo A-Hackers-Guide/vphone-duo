@@ -318,14 +318,15 @@ public enum FirmwarePatchSetCatalog {
     /// HomePod mini uses its own monolithic arm64e TVOS IPSW. Keep the 27
     /// kernel compatibility patches, but never swap in an Apple TV OTA or
     /// install the iPhone GPU/routing environment. The shared virtio audio
-    /// driver uses HomePod's own product identity and routing implementation.
+    /// driver selects native B520 routing through an audio-only preference,
+    /// retaining the original VM product token for other services.
     public static let homePodMiniPreset = VPhonePatchPreset(
         identifier: VPhonePatchPreset.homePodMiniIdentifier,
         title: "HomePod mini",
-        summary: "Research: HomePod mini's own arm64e TVOS IPSW with vphoned, its donor-driven top cap, local setup completion and virtio audio using its native identity, without Apple TV OTA replacement or iPhone display, camera and routing hooks.",
+        summary: "Research: HomePod mini's own arm64e TVOS IPSW with vphoned, its donor-driven top cap, local setup completion and virtio audio using an audio-only B520 route, without changing the VM product token or adding Apple TV OTA replacement or iPhone display, camera and routing hooks.",
         patchSets: bundledReferences,
         selection: .block(
-            manualOnlyPatches.subtracting([FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass, FirmwareGuestSystemPatchSet.homePodAudioProduct])
+            manualOnlyPatches.subtracting([FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass])
                 .union(tvOSBlockedPatches.subtracting(tvOS27UserlandPatches).subtracting([FirmwareGuestSystemPatchSet.virtioSoundDriver])),
         ),
     )

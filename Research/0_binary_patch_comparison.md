@@ -1,5 +1,21 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **HomePod audio-only identity correction (2026-10-23).**
+> An A/B boot of the same installed bundle, changing only the validated donor
+> product token back to its prior virtual value, restores the native red replay;
+> restoring the donor token blacks the same fixture. The donor identity enables
+> HomePodDisplayService's physical gamma path, which requires absent brightness
+> hardware. Audio now selects native B520 route **4** through VirtualAudio's own
+> `ProductIDOverride`, stored by vphoned and set in-process by the HAL plugin.
+> The boot-tree HomePod capability patch retains the original VM product token.
+> `preboot-homepod-exp-audio_product` is now blocked in every preset; its existing
+> inverse restores previously installed guests from the shared Preboot backup.
+> The old repair remains declared for explicit research and reversible migration.
+> No display workaround or new instruction patch. All 88 focused Xcode firmware
+> tests, four audio transport harnesses, the unchanged display adapter harness,
+> the full bundle build and strict signature verification pass. Final install
+> and combined audio/display validation await the owner's availability.
+
 > **HomePod audio port (2026-10-22, live routing validation).**
 > New `preboot-homepod-exp-audio_product` restores the donor's exact 20-byte
 > `/product/product-id` in Preboot through the existing reversible repair

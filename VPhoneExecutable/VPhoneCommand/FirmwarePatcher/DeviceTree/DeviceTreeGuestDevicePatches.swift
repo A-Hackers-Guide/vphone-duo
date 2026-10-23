@@ -185,8 +185,8 @@ extension DeviceTreePatcher {
                 edits.append(GuestEdit(nodePath: product, property: name,
                                        action: action, patchID: homePodProductPatch))
             }
-            edits.append(GuestEdit(nodePath: product, property: "product-id",
-                                   action: .set(try homePodAudioProductID(from: source)), patchID: homePodProductPatch))
+            // Keep the VM product token. Audio uses VirtualAudio's local
+            // ProductIDOverride; a donor token changes unrelated MG clients.
         }
 
         for (name, patchID) in copiedProductProperties {

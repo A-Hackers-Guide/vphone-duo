@@ -264,8 +264,9 @@ static const char *VPMachine(void) {
 }
 
 /// A VirtualAudio routing override, or 0 to retain native product selection.
-/// HomePod mini selects its own routing from the donor product digest; only
-/// its output device UID is adapted below, without using an iPhone override.
+/// HomePod mini uses native B520 route 4 through this audio-only preference.
+/// Keep the original VM product token: its donor replacement also changes
+/// unrelated services, including HomePodDisplayService's physical gamma path.
 ///
 /// VirtualAudio derives its ProductID from a MobileGestalt class answer, and
 /// vphone600 lands on a simulator class — 196 presenting an iPad, 195 an
@@ -288,6 +289,7 @@ static int VPGuestProductID(void) {
     dispatch_once(&once, ^{
         const char *machine = VPMachine();
         product = strncmp(machine, "iPad", 4) == 0 || strncmp(machine, "iPhone", 6) == 0 ? 8010 : 0;
+        if (strcmp(machine, "AudioAccessory5,1") == 0) product = 4;
         id chosen = CFBridgingRelease(CFPreferencesCopyAppValue(CFSTR("VPhoneVirtIOSoundProductID"), kSettingsDomain));
         if ([chosen isKindOfClass:NSNumber.class] && [chosen intValue] >= 0) {
             product = [chosen intValue];
@@ -315,13 +317,12 @@ static NSString *VPDeviceUID(ASDStreamDirection direction, unsigned index) {
     // Only where the route is set up: a speaker route on a VirtualAudio that
     // was not deadlocked audiomxd and crash-looped it across launches.
     // HomePod mini's native B238 routing also claims PuffinOutput. Its
-    // ProductID comes from the donor product digest in the installed tree,
-    // not the iPhone routing override. Leave its input unclaimed: microphone
+    // ProductID uses the audio-only B520 override. Leave its input unclaimed: microphone
     // routing needs the physical array and is not part of this output port.
     if (!input && index == 0 && strcmp(VPMachine(), "AudioAccessory5,1") == 0) {
         return @"PuffinOutput";
     }
-    if (index == 0 && VPGuestProductID() != 0) {
+    if (index == 0 && VPGuestProductID() != 0 && strcmp(VPMachine(), "AudioAccessory5,1") != 0) {
         return input ? @"Digital Mic" : @"PuffinOutput";
     }
     return [NSString stringWithFormat:@"VPhoneVirtIOSound%s:%u", input ? "Input" : "", index];

@@ -12,10 +12,61 @@ The owner authorized live tests. Launchpad installed the final
 `2.11.0-local.b284734a`, passed host preflight, and updated `homepod-mini`'s
 guest environment. Ordinary AVAudioPlayer playback reaches the Mac's selected
 Studio Display speakers, and the owner confirmed **“Yes, clear tones.”**
-Native HomePod identity, B520 routing, the tvOS HAL driver and the 48 kHz
+Donor HomePod identity, B520 routing, the tvOS HAL driver and the 48 kHz
 physical endpoint are verified. Both 48 kHz and 44.1 kHz source WAVs play
 without a preferred-sample-rate override. The earlier failed iterations and
 their discriminating probes are retained below.
+
+### Product identity regression and audio-only correction (2026-10-23)
+
+The donor product token used by that audio build also changes unrelated
+MobileGestalt clients. An A/B boot using the same bundle and device tree,
+changing exactly its 20-byte product token, restores the red LED replay with
+the original virtual token (RGB/icons 0.749996), and blacks it with the donor
+token. Native animation buffers remain red. `HPDSProductType.hasSiriGammaLUT`
+now selects the physical gamma path; unlike the prior direct color path it
+requires CoreBrightness input that the VM does not provide. The candidate
+physical power-limiter exemption did not fix this and was removed.
+
+Keep the original global token. VirtualAudio already offers a narrower
+boundary: its resolver at `0x26d4ec` reads integer `ProductIDOverride` in
+`com.apple.audio.virtualaudio`, takes the value directly at `0x26d528`, and
+returns it at `0x26dc70` without MobileGestalt/acoustic-ID mapping. **4** is its
+native B520 product enum, distinct from the iPhone's 8010 choice. The wrapper
+at `0xc16f0` caches the result, so the preference must precede initialization
+or audiomxd must restart. Other direct MG queries still exist in VirtualAudio;
+this static evidence needs live playback validation with the original token.
+
+The HAL plugin and vphoned now choose 4 for exactly AudioAccessory5,1, honoring
+the existing explicit override including zero. Other guests retain their prior
+policy. The boot-tree capability patch leaves product-id untouched. Every
+preset blocks the old donor identity repair; updating an existing guest rebuilds
+Preboot from its retained clean backup and reapplies the remaining repairs.
+This VM's backup contains the original virtual token. A boot baseline already
+containing a donor token is not reconstructed by disabling that repair; retain
+its original research tree before migration. No display shim changes remain.
+
+The owner asked to defer further authenticated bundle updates. The installed
+display candidate is not the final audio-only build; final install and cold-boot
+audio/display validation remain pending availability. Research artifacts are
+under `.build/homepod-audio-research/display-regression-*`.
+
+Local verification: all **88** focused Xcode firmware tests pass, including
+the original-token fixture, all-preset donor-repair exclusion, shipped/built-in
+preset agreement, and shared Preboot inverse composition. Four audio transport
+harnesses and the unchanged display identity harness pass. The full `VPhone`
+bundle build and `codesign --verify --deep --strict` pass. The final bundle is
+`.build/XcodeBundle/Build/Products/Debug/VPhone.bundle`; it was not installed.
+
+A guest-only read/write Preboot remount was rejected by automatic approval
+review because it changes boot-volume protection. That probe was not executed
+or retried. Use the normal authorized Launchpad environment update when the
+owner returns. The temporary audio override was restored to its originally
+absent state, other diagnostic preferences were restored, and the VM was
+stopped. Its installed host/guest bundle remains `2.11.0-local.f695af7f` (the
+failed limiter candidate), with the donor token still installed. The final
+source contains no display workaround; the next environment update must
+replace that candidate and apply the newly disabled donor repair's inverse.
 
 ## Native reveal procedure
 
@@ -67,11 +118,11 @@ The ledger, donor hashes, original disassembly, extracted ASD method encodings,
 reproducible product-table probe, native diagnostic records, and closed REA
 snapshot are retained under `.build/homepod-audio-research/`.
 
-## Implementation
+## Initial implementation (superseded identity policy)
 
 `preboot-homepod-exp-audio_product` copies the validated donor product digest
 into the restored Preboot device tree. It is declared, optional, HomePod-only,
-27.x-gated, and selected only by `homepod-mini`. It joins the existing Preboot
+27.x-gated, and was selected only by `homepod-mini`. It joins the existing Preboot
 repair composition and its inverse rather than overwriting unrelated tree
 repairs. New boot trees also receive that digest through the HomePod product
 patch. The literal donor digest is never embedded in patch logic.

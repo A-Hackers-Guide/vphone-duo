@@ -47,12 +47,14 @@ enum GuestVirtualAudioProduct {
     }
 
     /// The same answer as the plugin's `VPGuestProductID`: 8010 on an iPad or
-    /// iPhone guest, 0 (no override) on anything else, unless one was chosen.
-    /// HomePod mini keeps native routing through its donor product identity.
+    /// iPhone guest, native B520 route 4 on HomePod mini, 0 elsewhere unless
+    /// one was chosen. This preference affects only VirtualAudio; the VM keeps
+    /// its original MobileGestalt product token for every other subsystem.
     static func product(machine: String, chosen: Int?) -> Int {
         if let chosen, chosen >= 0 {
             return chosen
         }
+        if machine == "AudioAccessory5,1" { return 4 }
         return machine.hasPrefix("iPad") || machine.hasPrefix("iPhone") ? 8010 : 0
     }
 

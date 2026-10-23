@@ -494,8 +494,8 @@ public enum FirmwareGuestSystemPatchSet {
             ),
             VPhonePatchDeclaration(
                 identifier: homePodAudioProduct,
-                title: "HomePod native audio identity",
-                summary: "Copies the HomePod mini donor's concrete 20-byte product-id into its installed Preboot device tree. MobileGestalt then selects the native HomePod audio family instead of the virtual phone's, without an iPhone ProductIDOverride. Rebuilt from the shared Preboot repair backup when disabled.",
+                title: "HomePod donor product identity (experimental)",
+                summary: "Copies the donor's product-id into Preboot, changing MobileGestalt identity system-wide. Off in every preset: audio uses VirtualAudio's local product override instead. Retained for explicit research and to restore the shared Preboot backup when disabled after an earlier install.",
                 target: .prebootDeviceTree,
                 applicability: VPhonePatchApplicability(iOSBase: .major(27)),
             ),

@@ -311,8 +311,13 @@ struct DeviceTreeGuestDeviceTests {
     // MARK: - Tests
 
     @Test func `HomePod installed identity copies accessory capabilities and removes placeholder artwork`() throws {
+        let originalToken = Data(0..<20)
+        let originalProduct = Self.tree.children[0]
+        let tree = Node(properties: Self.tree.properties, children: [
+            Node(properties: originalProduct.properties + [Property(name: "product-id", flags: 0, value: originalToken)], children: originalProduct.children),
+        ] + Self.tree.children.dropFirst())
         let patcher = DeviceTreePatcher(
-            data: Self.tree.serialized(), verbose: false, device: .audioAccessory5_1,
+            data: tree.serialized(), verbose: false, device: .audioAccessory5_1,
             role: .installed, sourceTree: Self.homePodBoard().serialized(),
         )
         let records = try patcher.findAll()
@@ -330,9 +335,9 @@ struct DeviceTreeGuestDeviceTests {
         #expect(hub.0 == 0 && hub.1.isEmpty)
         #expect(Self.string(product["app-macho-architecture"]) == "arm64")
         #expect(product["app-macho-architecture"]?.0 == 0)
-        #expect(product["product-id"]?.1 == Data(base64Encoded: "l2aw/kQAaW9zNqWJvWMfJJjJKt0="))
+        #expect(product["product-id"]?.1 == originalToken)
         #expect(product["product-id"]?.0 == 0)
-        #expect(records.filter { $0.patchID == DeviceTreePatcher.homePodProductPatch }.count == 4)
+        #expect(records.filter { $0.patchID == DeviceTreePatcher.homePodProductPatch }.count == 3)
         #expect(!records.contains { $0.patchID == DeviceTreePatcher.tvAppArchitecturePatch })
         // Restore sees the same virtual board and product as before HomePod support.
         let restore = DeviceTreePatcher(

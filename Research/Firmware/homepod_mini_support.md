@@ -42,7 +42,10 @@ family. The HomePod mini uses the existing TVOS-retargeted vphoned executable.
 `homepod-mini` selects the existing 27 userland/kernel compatibility patches
 and vphoned. GPU injection, iPhone audio/camera/sensor/environment hooks,
 Apple TV OTA replacement and plain-arm64 TPRO workarounds stay off. The shared
-virtio-snd driver and donor product identity repair now load on HomePod;
+virtio-snd driver selects B520 routing through VirtualAudio's audio-only
+`ProductIDOverride = 4`; the global VM product token stays unchanged. The donor
+token repair is blocked by default, including on HomePod. The existing Preboot
+inverse restores this VM's original token during an environment update. The
 [audio routing and live findings](../Guest/homepod_audio.md) track the remaining
 output work. Physical accessory transports require separate validation.
 
