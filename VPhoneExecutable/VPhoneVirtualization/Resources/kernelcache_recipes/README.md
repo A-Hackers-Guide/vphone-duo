@@ -54,6 +54,11 @@ kexts whose imports have no counterpart there (15 donor kexts instead of 18).
   macOS 15 or 26.0 to 26.3 for the iOS 18 ones. A Mac with the other layout
   links over ssh on one that has it (`VPHONE_KMUTIL_SSH`, see
   `Documents/Guides/create-and-run.md`).
+- The kmutil of macOS 27 links `kernel-last` too, but keeps every kext's
+  `__auth_stubs`. After the link, `KernelCollectionStubCalls` makes the calls
+  through them direct again and seals corecrypto's FIPS HMAC again, so the
+  kernel patches find the call sites they find on a macOS 26 link
+  (`Research/0_binary_patch_comparison.md`, "macOS 27's kmutil keeps auth stubs").
 
 `vphone-cli fw kernelcache <vm>` stages the mix as the user (the extractions
 and the volume, in `~/.vphone/kernelcache/staged`), and under sudo links it:

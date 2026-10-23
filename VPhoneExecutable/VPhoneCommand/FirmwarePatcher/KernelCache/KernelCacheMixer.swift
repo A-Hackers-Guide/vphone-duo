@@ -12,8 +12,10 @@
 //   3. keeps the recipe's bundle list: the base without its research-board-only
 //      kexts, plus the donor's virtualisation kexts;
 //   4. stages the bundles as a volume and links it with kmutil;
-//   5. restores Apple's CPU subtype if the builder wrote another, checks every
-//      bundle was linked, and caches the result.
+//   5. restores Apple's CPU subtype if the builder wrote another, branches
+//      straight past the auth stubs macOS 27's builder keeps
+//      (KernelCollectionStubCalls), checks every bundle was linked, and caches
+//      the result.
 //
 // The maps are research results: BinDiff symbolication against a symbolicated
 // KDK of the same family, plus verified fixes (see the README beside the
@@ -48,7 +50,7 @@ public final class KernelCacheMixer {
     }
 
     /// Bump when the steps change, so cached mixes are rebuilt.
-    static let revision = 4
+    static let revision = 6
 
     /// Legacy source-compatibility constant. Native extraction does not read it.
     public static let ipswEnvironmentVariable = "VPHONE_IPSW"
@@ -390,13 +392,23 @@ public final class KernelCacheMixer {
         guard missing.isEmpty else {
             throw PatcherError.invalidFormat("kexts missing from the linked kernelcache: \(missing.joined(separator: ", "))")
         }
+        var changed = false
         let start = payload.startIndex
         let subtype = payload[start + 8 ..< start + 12]
         let wanted = original[original.startIndex + 8 ..< original.startIndex + 12]
-        guard subtype != wanted else { return im4pData }
-        log("  [kc] restoring CPU subtype \(Data(wanted).hex) (the builder wrote \(Data(subtype).hex))")
-        payload.replaceSubrange(start + 8 ..< start + 12, with: wanted)
-        let url = work.appending(path: "subtype.im4p")
+        if subtype != wanted {
+            log("  [kc] restoring CPU subtype \(Data(wanted).hex) (the builder wrote \(Data(subtype).hex))")
+            payload.replaceSubrange(start + 8 ..< start + 12, with: wanted)
+            changed = true
+        }
+        let stubs = try KernelCollectionStubCalls.directCalls(in: payload)
+        if stubs.branches > 0 {
+            log("  [kc] the builder kept \(stubs.stubs) auth stubs; \(stubs.branches) calls now branch to their targets directly")
+            payload = stubs.payload
+            changed = true
+        }
+        guard changed else { return im4pData }
+        let url = work.appending(path: "finalized.im4p")
         try IM4PHandler.save(patchedData: payload, originalIM4P: im4p, to: url)
         return try Data(contentsOf: url)
     }
