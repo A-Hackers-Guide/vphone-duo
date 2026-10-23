@@ -12,6 +12,38 @@ import VPhonePatchKit
 
 @Suite("Guest patch resolution")
 struct FirmwareGuestPatchResolutionTests {
+    @Test(arguments: [FirmwareGuestSystemPatchSet.homePodOTAUserland, FirmwareGuestSystemPatchSet.homePodSoundGlow])
+    func `HomePod OTA and Sound Glow require 27 point 2 and stay out of other presets`(identifier: String) throws {
+        for version in ["26.6", "27.0", "27.1", "27.2", "27.3"] {
+            for preset in FirmwarePatchSetCatalog.builtInPresets {
+                let plan = try VPhonePatchPlan.resolve(
+                    preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
+                    iOSBase: VPhoneVersion(version), cloudOS: VPhoneVersion("26.4"),
+                )
+                #expect(plan.isEnabled(identifier) == (VPhoneVersion(version)! >= VPhoneVersion(major: 27, minor: 2)
+                    && preset.identifier == VPhonePatchPreset.homePodMiniIdentifier))
+            }
+        }
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [identifier]).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true) == [identifier])
+        #expect(FirmwareGuestPatchResolution.guestPatchesOff(selectionEnabled: []).contains(identifier))
+    }
+
+    @Test func `Sound Glow requires native cap delivery but not speech or welcome`() throws {
+        let glow = FirmwareGuestSystemPatchSet.homePodSoundGlow
+        let dependencies = FirmwareGuestPatchResolution.homePodSoundGlowDependencies
+        #expect(dependencies == ["system-vphoned-boot-install", FirmwareGuestSystemPatchSet.homePodTopCap])
+        let enabled = dependencies.union([glow])
+        #expect(FirmwareGuestPatchResolution.missingHomePodSoundGlowDependencies(enabled: enabled).isEmpty)
+        for dependency in dependencies {
+            #expect(FirmwareGuestPatchResolution.missingHomePodSoundGlowDependencies(enabled: enabled.subtracting([dependency])) == [dependency])
+        }
+        #expect(FirmwareGuestPatchResolution.missingHomePodSoundGlowDependencies(enabled: []).isEmpty)
+        let declaration = try #require(FirmwarePatchSetCatalog.allDeclarations.first { $0.identifier == glow })
+        #expect(declaration.target == .guestFile(path: FirmwareGuestSystemPatchSet.homePodSoundGlowPath))
+        #expect(!declaration.bootEssential)
+    }
+
     @Test func `only the HomePod preset selects the top cap and TV rejects explicit selection`() throws {
         let identifier = FirmwareGuestSystemPatchSet.homePodTopCap
         for preset in FirmwarePatchSetCatalog.builtInPresets {

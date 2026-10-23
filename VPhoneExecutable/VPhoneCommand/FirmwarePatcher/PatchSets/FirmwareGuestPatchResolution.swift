@@ -54,6 +54,7 @@ public enum FirmwareGuestPatchResolution {
         .union([FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass,
                 FirmwareGuestSystemPatchSet.homePodAudioProduct, FirmwareGuestSystemPatchSet.homePodWelcome,
                 FirmwareGuestSystemPatchSet.homePodSiriSpeech,
+                FirmwareGuestSystemPatchSet.homePodOTAUserland, FirmwareGuestSystemPatchSet.homePodSoundGlow,
                 FirmwareGuestSystemPatchSet.virtioSoundDriver])
         .union(FirmwarePatchSetCatalog.tvOS27UserlandPatches)
 
@@ -86,6 +87,16 @@ public enum FirmwareGuestPatchResolution {
     public static func missingHomePodSiriSpeechDependencies(enabled: Set<String>) -> [String] {
         guard enabled.contains(FirmwareGuestSystemPatchSet.homePodSiriSpeech) else { return [] }
         return homePodSiriSpeechDependencies.subtracting(enabled).sorted()
+    }
+
+    public static let homePodSoundGlowDependencies: Set<String> = [
+        "system-vphoned-boot-install",
+        FirmwareGuestSystemPatchSet.homePodTopCap,
+    ]
+
+    public static func missingHomePodSoundGlowDependencies(enabled: Set<String>) -> [String] {
+        guard enabled.contains(FirmwareGuestSystemPatchSet.homePodSoundGlow) else { return [] }
+        return homePodSoundGlowDependencies.subtracting(enabled).sorted()
     }
 
     /// Every bundled-set patch whose bytes the guest half of an install writes —

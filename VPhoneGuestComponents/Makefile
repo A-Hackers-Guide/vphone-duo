@@ -169,6 +169,13 @@ test-homepod-siri-speech:
 		-o $(OUT)/HomePodSiriSpeechTests Tests/HomePodSiriSpeechTests.m -framework Foundation
 	@$(OUT)/HomePodSiriSpeechTests
 
+.PHONY: test-homepod-sound-glow
+test-homepod-sound-glow:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror \
+		-o $(OUT)/HomePodSoundGlowTests Tests/HomePodSoundGlowTests.m -framework Foundation
+	@$(OUT)/HomePodSoundGlowTests
+
 gpu: $(GPU_PLUGIN)
 
 package: all

@@ -81,6 +81,61 @@ For the manual prepare/restore pipeline, select `homepod-mini` with
 `fw set-patches` before preparing. The guest family and preset ship in the
 2.11 bundle/Launchpad series; Launchpad's minimum bundle version is 2.11.0.
 
+## HomePod Software 27.2 from a full OTA
+
+The 27.2 catalog entry uses HomePod mini's full OTA (`24K120`) over its own
+27.0 (`24J361`) restore IPSW, following the Apple TV 4K userland staging path.
+The original HomePod model, cloudOS 26.4 kernel and boot chain remain the base.
+Apple's update metadata calls the OTA `24K6120`; the archive's BuildManifest
+and extracted SystemVersion identify the installed software as `24K120`.
+The [AppleDB record](https://api.appledb.dev/ios/HomePod%20Software;24K120.json)
+lists the same active Apple CDN archive: 3,051,441,612 bytes, SHA-256
+`72830cc7ea154fbb6fa26904d6b527977a5d35fe8130e1fcd027ae9e0243507a`.
+
+The historical `--iphone-source` may name the catalog OTA URL. Preparation
+then resolves the 27.0 restore base and stages the OTA. For existing local
+downloads, pass the restore IPSW and full ZIP separately:
+
+```zsh
+"$cli" vm create homepod-mini-27-2 --device AudioAccessory5,1 \
+  --iphone-source '/absolute/path/to/AudioAccessory5,1_27.0_24J361_Restore.ipsw' \
+  --ota-source '/absolute/path/to/HomePod-mini-27.2-OTA.zip' \
+  --cloudos-source '/absolute/path/to/cloudOS_23E5207q_Restore.ipsw' \
+  --cpu 4 --memory 4096 --disk-size 32
+```
+
+This creates a separate machine; it does not update or erase an existing
+HomePod. The journaled `fw ota` migration workflow remains qualified only for
+iPhone/iPad. A stopped clone of an existing machine can be used for subsequent
+controlled installation research, retaining its Data and identity, but that
+is not a verified HomePod migration path.
+
+`VPhoneOTAArchive` reads HomePod's ZIP with the bundled libarchive, without
+Homebrew or an external unzip tool. It reads identity and prerequisite
+metadata before staging payload, even though `AssetData/Info.plist` occurs
+after the payload in this ZIP. It bounds in-memory metadata, rejects duplicate
+ZIP records and requires a full update. All Apple Archive payload paths and
+the separate hard-link manifest are validated before publication. The
+resulting `OTAUserland/Version.plist` records `Device`, `Version` and `Build`;
+the restore tree's `OTA-SystemVersion.plist` carries `ProductVersion` and
+`ProductBuildVersion` for patch-plan resolution. The HomePod preset selects
+`system-homepod-exp-ota_userland` only on 27.2 or later; other presets leave
+the HomePod replacement off.
+
+Offline fixture tests cover ZIP staging, late metadata, duplicate records,
+metadata bounds, existing payload traversal/symlink checks and the catalog's
+same-device restore-base pairing. The production bundle's native `fw prepare`
+also completed against the actual OTA: 51 payload chunks and 6,721 separate
+hard-link destinations passed full path validation, both target-version
+records identify 27.2/24K120, and the base IPSW manifest remains 27.0/24J361.
+`fw patch` resolved the 27.2 HomePod preset and processed all 11 components,
+applying 241 patches without an undeclared patch warning. The stopped,
+unrestored candidate is under
+`.build/homepod-sound-glow-research/machines/homepod-27-2`; preparation and
+patch logs are beside it in the research artifact directory. No VM was
+launched and no privileged installation was performed during these checks.
+Boot, migration and native Sound Glow still need live validation.
+
 ## Validation
 
 Validated on 2026-10-22 with four CPUs, 4 GiB memory and a 32 GB disk:

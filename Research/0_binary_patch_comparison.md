@@ -1,5 +1,26 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **HomePod 27.2 OTA and native Sound Glow (2026-10-23, offline candidate).**
+> The 27.0 donor lacks the artwork/color extraction and native media animation
+> cases introduced in 27.2. `system-homepod-exp-ota_userland` stages the full
+> Apple HomePod mini OTA over the same device's 27.0 IPSW, retaining its restore
+> identity and cloudOS boot chain, as the Apple TV OTA pairing does.
+> `system-homepod-exp-sound_glow` injects the existing guest adapter into
+> NowPlayingCap and generates `/usr/share/vphone/HomePodSoundGlow.plist`.
+> Its narrow native `AccessorySettingProvider.mediaUI` getter selects value 1;
+> Apple's artwork service, color extractor and CAPAnimationEffect.media remain
+> responsible for rendering. Opt-out restores the original app and removes the
+> policy. Both declarations are HomePod-only, require 27.2 or later, and are
+> selected by default only by `homepod-mini`. Original product identity and
+> existing audio/Siri behavior are retained. Local validation and native
+> evidence are recorded in [Sound Glow](Firmware/homepod_sound_glow.md).
+> Live 27.2 boot and clear Music/AirPlay audio are verified. Initial playback
+> exposed an unresolved own-device endpoint in the native artwork request.
+> A scoped request adapter selects MediaRemote's local destination only for
+> that own-device UID; native request/response and artwork processing remain
+> intact. Remote requests and opt-out pass through. The routing correction,
+> artwork changes and animation synchronization still need live validation.
+
 > **HomePod Siri speech policy (2026-10-23, live speech verified).**
 > New optional `system-homepod-exp-siri_speech` generates
 > `/usr/share/vphone/HomePodSiriSpeech.plist` with `Enabled=true`, restricted to

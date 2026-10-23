@@ -42,6 +42,9 @@ public enum FirmwareGuestSystemPatchSet {
     /// Replaces the restored System volume with an Apple TV 4K userland
     /// staged from its OTA. Research only: no IPSW exists for that device.
     public static let tvOTAUserland = "system-tv-exp-ota_userland"
+    public static let homePodOTAUserland = "system-homepod-exp-ota_userland"
+    public static let homePodSoundGlow = "system-homepod-exp-sound_glow"
+    public static let homePodSoundGlowPath = "/usr/share/vphone/HomePodSoundGlow.plist"
     public static let otaUserland = "system-exp-ota_userland"
 
     private static let ios27 = VPhonePatchApplicability(iOSBase: .major(27))
@@ -67,6 +70,20 @@ public enum FirmwareGuestSystemPatchSet {
         name: "Guest System",
         summary: "Shared-cache policy gates, patched system daemons and the vphone guest payload",
         patches: [
+            VPhonePatchDeclaration(
+                identifier: homePodOTAUserland,
+                title: "HomePod userland from OTA",
+                summary: "Research: replaces the restored HomePod mini System volume with its full 27.2 or later OTA, retaining the HomePod restore identity and cloudOS boot chain. The staged payload is verified before installation.",
+                target: .guestFile(path: "/"),
+                applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 27, minor: 2)),
+            ),
+            VPhonePatchDeclaration(
+                identifier: homePodSoundGlow,
+                title: "HomePod Sound Glow",
+                summary: "Enables the native HomePod 27.2 media display through a process-local accessory setting adapter. Requires vphoned and the donor-driven HomePod top cap; keeps the original product token.",
+                target: .guestFile(path: "/usr/share/vphone/HomePodSoundGlow.plist"),
+                applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 27, minor: 2)),
+            ),
             VPhonePatchDeclaration(
                 identifier: otaUserland,
                 title: "Full OTA system update",

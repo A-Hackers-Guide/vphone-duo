@@ -1,4 +1,5 @@
 import AppleArchive
+import ArchiveKit
 import CryptoKit
 import Foundation
 import System
@@ -158,6 +159,28 @@ struct OTAArchiveTests {
         return file
     }
 
+    private func makeZIP(in root: URL, _ members: [(String, Data)]) throws -> URL {
+        let file = root.appendingPathComponent("HomePod.zip")
+        let writer = try #require(archive_write_new())
+        defer { archive_write_free(writer) }
+        try #require(archive_write_set_format_zip(writer) == ARCHIVE_OK)
+        try #require(archive_write_open_filename(writer, file.path) == ARCHIVE_OK)
+        for (path, data) in members {
+            let entry = try #require(archive_entry_new())
+            defer { archive_entry_free(entry) }
+            archive_entry_set_pathname(entry, path)
+            archive_entry_set_filetype(entry, UInt32(S_IFREG))
+            archive_entry_set_perm(entry, 0o644)
+            archive_entry_set_size(entry, Int64(data.count))
+            try #require(archive_write_header(writer, entry) == ARCHIVE_OK)
+            try data.withUnsafeBytes { bytes in
+                try #require(archive_write_data(writer, bytes.baseAddress, bytes.count) == bytes.count)
+            }
+        }
+        try #require(archive_write_close(writer) == ARCHIVE_OK)
+        return file
+    }
+
     private func stage(_ ota: URL, in root: URL, key: String?, build: String = "23L773") throws -> VPhoneOTAArchive.StagedUserland {
         let flash = root.appendingPathComponent("restore/Firmware/all_flash", isDirectory: true)
         try FileManager.default.createDirectory(at: flash, withIntermediateDirectories: true)
@@ -179,6 +202,56 @@ struct OTAArchiveTests {
     }
 
     // MARK: - Staging
+
+    @Test func `HomePod ZIP staging reads late metadata before payload and ignores unrelated paths`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let flash = root.appendingPathComponent("flash")
+        try FileManager.default.createDirectory(at: flash, withIntermediateDirectories: true)
+        let manifest = try PropertyListSerialization.data(fromPropertyList: [
+            "ProductVersion": "27.2", "ProductBuildVersion": "24K120",
+            "SupportedProductTypes": ["AudioAccessory5,1"],
+        ], format: .xml, options: 0)
+        let info = try PropertyListSerialization.data(fromPropertyList: ["OSVersion": "27.2"], format: .xml, options: 0)
+        let payload = try encode([.directory("System"), .file("System/source", Data("native".utf8))], in: root)
+        let ota = try makeZIP(in: root, [
+            ("../outside", Data("unselected".utf8)),
+            ("AssetData/payloadv2/payload.000", payload),
+            ("AssetData/payloadv2/payload.000.ecc", Data("ecc".utf8)),
+            ("AssetData/payloadv2/payload_chunks.txt", Data("0: 1000\n".utf8)),
+            ("AssetData/payloadv2/links.txt", Data("=System/source\n+System/copy\n".utf8)),
+            ("AssetData/boot/Firmware/all_flash/DeviceTree.b520ap.im4p", Data("b520".utf8)),
+            ("AssetData/boot/BuildManifest.plist", manifest),
+            ("AssetData/Info.plist", info),
+        ])
+        let identity = try VPhoneOTAArchive.checkIdentity(of: ota, key: nil, device: .audioAccessory5_1, build: "24K120")
+        #expect(identity.version == "27.2")
+        let userland = root.appendingPathComponent("OTAUserland")
+        let result = try VPhoneOTAArchive.stageUserland(from: ota, key: nil, device: .audioAccessory5_1,
+            build: "24K120", deviceTreeDirectory: flash, userlandDirectory: userland, requireFullUpdate: true)
+        #expect(result.chunks == ["payload.000"])
+        #expect(try Data(contentsOf: userland.appendingPathComponent("payload.000")) == payload)
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("outside").path))
+    }
+
+    @Test func `ZIP duplicate metadata is refused`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ota = try makeZIP(in: root, [("AssetData/Info.plist", Data()), ("AssetData/Info.plist", Data())])
+        #expect(throws: VPhoneOTAArchive.Error.self) {
+            try VPhoneOTAArchive.readMembers(ota, key: nil, select: { _ in .skip }, received: { _, _ in })
+        }
+    }
+
+    @Test func `ZIP metadata has the same bounded memory admission as Apple Archive`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let oversized = Data(repeating: 0, count: Int(VPhoneOTAArchive.memoryLimit) + 1)
+        let ota = try makeZIP(in: root, [("AssetData/Info.plist", oversized)])
+        #expect(throws: VPhoneOTAArchive.Error.self) {
+            try VPhoneOTAArchive.readMembers(ota, key: nil, select: { _ in .memory }, received: { _, _ in Issue.record("oversized metadata delivered") })
+        }
+    }
 
     @Test func `hard-link lists preserve spaces and reject unsafe or ambiguous records`() throws {
         let links = try VPhoneOTAArchive.parseHardLinks(Data("=System/source file\n+System/copy file\n+System/another\n".utf8))
@@ -448,7 +521,7 @@ struct OTAArchiveTests {
         }
     }
 
-    @Test func `a file that is neither AEA nor Apple Archive is not an OTA`() throws {
+    @Test func `a truncated ZIP is refused before any OTA chunk is written`() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
         let zip = root.appendingPathComponent("AppleTV5,3_26.6_23L773_Restore.ipsw")
@@ -457,7 +530,7 @@ struct OTAArchiveTests {
         #expect {
             try stage(zip, in: root, key: keyText)
         } throws: { error in
-            if case .notAnOTA? = error as? VPhoneOTAArchive.Error { true } else { false }
+            if case .unreadable? = error as? VPhoneOTAArchive.Error { true } else { false }
         }
     }
 

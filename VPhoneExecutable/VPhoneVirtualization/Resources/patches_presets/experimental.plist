@@ -91,6 +91,8 @@
 			<string>system-homepod-exp-setup_bypass</string>
 			<string>system-homepod-exp-welcome</string>
 			<string>system-homepod-exp-siri_speech</string>
+			<string>system-homepod-exp-ota_userland</string>
+			<string>system-homepod-exp-sound_glow</string>
 			<string>preboot-homepod-exp-audio_product</string>
 		</array>
 	</dict>

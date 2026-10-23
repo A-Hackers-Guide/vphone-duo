@@ -4,6 +4,7 @@
 #import "VPHomePodSiriSpeech.h"
 
 void VPHomePodWelcomeInstall(void);
+BOOL VPHomePodSoundGlowInstall(void);
 
 // IOHIDUserDevice deliberately rejects reserved IOKit properties, including
 // IOClass. MiniDisplay's HW3 path tests that property before reading MDHWVersion.
@@ -163,6 +164,10 @@ bool VPHomePodInstallDisplayIdentity(void) {
 #ifndef VP_HOMEPOD_DISPLAY_TESTING
 __attribute__((constructor)) static void VPHomePodDisplayInitialize(void) {
     @autoreleasepool {
+        if ([NSProcessInfo.processInfo.processName isEqualToString:@"NowPlayingCap"]) {
+            VPHomePodSoundGlowInstall();
+            return;
+        }
         // The executable load command limits this library to SoundBoard. dlopen ensures
         // its MiniDisplay class is registered before we install the adapter.
         void *framework = dlopen("/System/Library/PrivateFrameworks/MiniDisplay.framework/MiniDisplay", RTLD_NOW);

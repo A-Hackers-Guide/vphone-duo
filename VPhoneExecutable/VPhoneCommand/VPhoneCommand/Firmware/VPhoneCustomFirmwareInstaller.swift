@@ -215,6 +215,16 @@ struct VPhoneCustomFirmwareInstaller {
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodSiriSpeech), device.family != .homePod {
             throw ValidationError("The HomePod Siri-speech patch is supported only for a HomePod guest.")
         }
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodSoundGlow), device.family != .homePod {
+            throw ValidationError("The HomePod Sound Glow patch is supported only for a HomePod guest.")
+        }
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodOTAUserland), device.family != .homePod {
+            throw ValidationError("The HomePod OTA userland patch is supported only for a HomePod guest.")
+        }
+        let missingGlowDependencies = FirmwareGuestPatchResolution.missingHomePodSoundGlowDependencies(enabled: effectiveEnabled)
+        guard missingGlowDependencies.isEmpty else {
+            throw ValidationError("The HomePod Sound Glow patch requires these selected guest patches: \(missingGlowDependencies.joined(separator: ", ")).")
+        }
         let missingSpeechDependencies = FirmwareGuestPatchResolution.missingHomePodSiriSpeechDependencies(enabled: effectiveEnabled)
         guard missingSpeechDependencies.isEmpty else {
             throw ValidationError("The HomePod Siri-speech patch requires these selected guest patches: \(missingSpeechDependencies.joined(separator: ", ")).")
@@ -226,9 +236,9 @@ struct VPhoneCustomFirmwareInstaller {
         // Research: an Apple TV 4K userland staged from its OTA, which
         // `system-tv-exp-ota_userland` puts in place of the restored one.
         let hasOTAUserland = (try? bundleDirectory.isDirectory(VPhoneOTAArchive.userlandDirectoryName)) == true
-        let isOTAUpdate = device.family != .appleTV && mode == .full && hasOTAUserland
+        let isOTAUpdate = device.family != .appleTV && device.family != .homePod && mode == .full && hasOTAUserland
             && effectiveEnabled.contains(FirmwareGuestSystemPatchSet.otaUserland)
-        let otaUserland = (device.family == .appleTV || isOTAUpdate) && hasOTAUserland
+        let otaUserland = (device.family == .appleTV || device.family == .homePod || isOTAUpdate) && hasOTAUserland
             ? try bundleDirectory.directory(VPhoneOTAArchive.userlandDirectoryName)
             : nil
         if isOTAUpdate {
@@ -1252,13 +1262,18 @@ struct VPhoneCustomFirmwareInstaller {
         }
 
         // First, so every later step patches the userland that will boot.
-        if guestDevice.family == .appleTV {
-            let identifier = FirmwareGuestSystemPatchSet.tvOTAUserland
+        if guestDevice.family == .appleTV || guestDevice.family == .homePod {
+            let identifier = guestDevice.family == .homePod
+                ? FirmwareGuestSystemPatchSet.homePodOTAUserland : FirmwareGuestSystemPatchSet.tvOTAUserland
             if on(identifier) {
                 guard let otaUserland else {
                     throw ValidationError("\(identifier) is on, but the VM has no OTAUserland folder with the staged payload chunks.")
                 }
-                try replaceTVUserland(system: system, ota: otaUserland, work: work)
+                if guestDevice.family == .homePod {
+                    try replaceHomePodUserland(system: system, ota: otaUserland, work: work, plan: plan, device: guestDevice)
+                } else {
+                    try replaceTVUserland(system: system, ota: otaUserland, work: work)
+                }
                 live.insert(identifier)
             } else if priorGuest.contains(identifier) {
                 print("  [!] \(identifier): off now, but the swapped userland cannot be reverted without a restore")
@@ -1421,6 +1436,23 @@ struct VPhoneCustomFirmwareInstaller {
             // Once-only state belongs to the guest's writable Data volume and
             // survives opt-out, re-enabling and bundle/environment updates.
             try system.removeItem(welcomePath)
+        }
+        let glow = FirmwareGuestSystemPatchSet.homePodSoundGlow
+        let glowPath = String(FirmwareGuestSystemPatchSet.homePodSoundGlowPath.dropFirst())
+        if plan?.isEnabled(glow) == true {
+            guard guestDevice.family == .homePod else {
+                throw ValidationError("HomePod Sound Glow requires a HomePod guest.")
+            }
+            _ = try system.directory("usr/share/vphone", create: true, mode: 0o755)
+            let policy = try PropertyListSerialization.data(fromPropertyList: ["Enabled": true], format: .binary, options: 0)
+            try updateHomePodNowPlaying(system: system, work: work, enabled: true)
+            try system.writeFile(glowPath, contents: policy, mode: 0o644, owner: Self.guestOwner)
+            live.insert(glow)
+        } else {
+            if guestDevice.family == .homePod || priorGuest.contains(glow) {
+                try updateHomePodNowPlaying(system: system, work: work, enabled: false)
+            }
+            try system.removeItem(glowPath)
         }
         for (identifier, library) in [
             (FirmwareGuestSystemPatchSet.gyroscope, "libvphonegyro.dylib"),
@@ -2300,7 +2332,7 @@ struct VPhoneCustomFirmwareInstaller {
     ) throws {
         let marker = ".vphone-ota-userland"
         let chunkList = try ota.readData(VPhoneOTAArchive.chunkListName)
-        if identifier == FirmwareGuestSystemPatchSet.tvOTAUserland,
+        if [FirmwareGuestSystemPatchSet.tvOTAUserland, FirmwareGuestSystemPatchSet.homePodOTAUserland].contains(identifier),
            try system.isRegularFile(marker), try system.readData(marker) == chunkList {
             print("  [·] \(identifier): userland already in place")
             return
@@ -2325,7 +2357,7 @@ struct VPhoneCustomFirmwareInstaller {
         } else {
             linkList = nil
         }
-        if identifier == FirmwareGuestSystemPatchSet.otaUserland {
+        if identifier == FirmwareGuestSystemPatchSet.otaUserland || identifier == FirmwareGuestSystemPatchSet.homePodOTAUserland {
             // Root extracts only pinned private copies. Reject traversal and
             // any later member beneath an archive-created symlink first.
             guard let linkList else {
@@ -2349,6 +2381,55 @@ struct VPhoneCustomFirmwareInstaller {
         }
         try system.writeFile(marker, contents: chunkList, mode: 0o644, owner: Self.guestOwner)
         print("  [+] \(identifier): userland extracted")
+    }
+
+    /// The OTA supplies the complete HomePod System; its original 27.0 IPSW
+    /// still supplies the restore identity. Verify the target independently of
+    /// that base manifest, including on an idempotent environment redeploy.
+    private func replaceHomePodUserland(
+        system: VPhoneConfinedDirectory,
+        ota: VPhoneConfinedDirectory,
+        work: WorkDirectory,
+        plan: VPhoneVirtualMachinePatchPlan?,
+        device: VPhoneGuestDevice
+    ) throws {
+        guard let metadata = try PropertyListSerialization.propertyList(from: ota.readData("Version.plist"), format: nil) as? [String: String],
+              metadata["Device"] == device.productType,
+              let version = metadata["Version"], version == plan?.iOSBaseVersion,
+              let parsed = VPhoneVersion(version), parsed >= VPhoneVersion("27.2")!,
+              let build = metadata["Build"], !build.isEmpty else {
+            throw ValidationError("The HomePod OTA device/version does not match the patch plan. Prepare the matching full HomePod OTA before installation.")
+        }
+        // Chunk names alone can be identical across releases. A prior marker
+        // may skip extraction only when the actual System has this identity.
+        let marker = ".vphone-ota-userland"
+        if try system.isRegularFile(marker),
+           let actual = try? PropertyListSerialization.propertyList(from: system.readData("System/Library/CoreServices/SystemVersion.plist"), format: nil) as? [String: Any],
+           actual["ProductVersion"] as? String != version || actual["ProductBuildVersion"] as? String != build {
+            try system.removeItem(marker)
+        }
+        try replaceTVUserland(system: system, ota: ota, work: work,
+                              identifier: FirmwareGuestSystemPatchSet.homePodOTAUserland)
+        guard let actual = try PropertyListSerialization.propertyList(from: system.readData("System/Library/CoreServices/SystemVersion.plist"), format: nil) as? [String: Any],
+              actual["ProductVersion"] as? String == version,
+              actual["ProductBuildVersion"] as? String == build else {
+            throw ValidationError("The extracted HomePod SystemVersion does not match its staged OTA. The private disk clone was discarded.")
+        }
+    }
+
+    private func updateHomePodNowPlaying(system: VPhoneConfinedDirectory, work: WorkDirectory, enabled: Bool) throws {
+        let app = "Applications/NowPlayingCap.app"
+        let executable = "\(app)/NowPlayingCap"
+        if enabled {
+            guard try system.isRegularFile(executable) else {
+                throw ValidationError("HomePod Sound Glow requires the native 27.2 NowPlayingCap app.")
+            }
+            try patchMachO(system: system, work: work, path: executable,
+                           preserveEntitlements: true, injectedDylibPath: "/usr/lib/libvphonehomepoddisplay.dylib")
+            try sealGuestBundle(system: system, bundle: app, preserveEntitlements: true)
+        } else if try revertMachO(system: system, work: work, path: executable) {
+            try sealGuestBundle(system: system, bundle: app, preserveEntitlements: true)
+        }
     }
 
     /// The paravirtual GPU driver and its compiler plugin are built for iOS.
