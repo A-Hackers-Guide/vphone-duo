@@ -335,7 +335,7 @@ public enum FirmwarePatchSetCatalog {
         patchSets: bundledReferences,
         selection: .block(
             manualOnlyPatches.subtracting([FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass, FirmwareGuestSystemPatchSet.homePodWelcome, FirmwareGuestSystemPatchSet.homePodSiriSpeech, FirmwareGuestSystemPatchSet.homePodOTAUserland, FirmwareGuestSystemPatchSet.homePodSoundGlow, FirmwareGuestSystemPatchSet.homePodCryptexStaging, FirmwareGuestSystemPatchSet.homePodCryptexClass])
-                .union(tvOSBlockedPatches.subtracting(tvOS27UserlandPatches).subtracting([FirmwareGuestSystemPatchSet.virtioSoundDriver])),
+                .union(tvOSBlockedPatches.subtracting(tvOS27UserlandPatches).subtracting([FirmwareGuestSystemPatchSet.virtioSoundDriver, FirmwareGuestSystemPatchSet.installCoordinationPersona])),
         ),
     )
 

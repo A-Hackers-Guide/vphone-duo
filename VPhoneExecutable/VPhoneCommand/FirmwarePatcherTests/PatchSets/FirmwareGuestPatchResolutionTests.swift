@@ -12,6 +12,28 @@ import VPhonePatchKit
 
 @Suite("Guest patch resolution")
 struct FirmwareGuestPatchResolutionTests {
+    @Test func `HomePod persona lookup uses isolated tvOS deployment and follows selection`() throws {
+        let identifier = FirmwareGuestSystemPatchSet.installCoordinationPersona
+        for base in ["26.4", "27.0", "27.2", "28.0"] {
+            let plan = try VPhonePatchPlan.resolve(
+                preset: FirmwarePatchSetCatalog.homePodMiniPreset, patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4"),
+            )
+            #expect(plan.isEnabled(identifier) == base.hasPrefix("27."))
+            #expect(!plan.isEnabled("system-launchdaemons-boot-environment"))
+            #expect(!plan.isEnabled(FirmwareGuestSystemPatchSet.arm64eX1LaunchdBootstrap))
+            #expect(!plan.isEnabled("system-launchd-boot-jetsam_panic_guard_bypass"))
+        }
+        let disabled = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.homePodMiniPreset, patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("27.2"), cloudOS: VPhoneVersion("26.4"), blocked: [identifier],
+        )
+        #expect(!disabled.isEnabled(identifier))
+        #expect(FirmwareGuestPatchResolution.guestPatchesOff(selectionEnabled: disabled.enabled).contains(identifier))
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [identifier]).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true) == [identifier])
+    }
+
     @Test(arguments: [FirmwareGuestSystemPatchSet.homePodCryptexStaging, FirmwareGuestSystemPatchSet.homePodCryptexClass])
     func `HomePod cryptex staging is independent of the iPhone environment and reversible in selection`(identifier: String) throws {
         for base in ["26.4", "27.0", "27.2", "28.0"] {

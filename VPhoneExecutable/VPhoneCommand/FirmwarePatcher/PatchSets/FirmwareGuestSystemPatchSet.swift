@@ -21,6 +21,7 @@ public enum FirmwareGuestSystemPatchSet {
 
     public static let installCoordinationPersona = "system-installcoordination_proxy-cfw-persona_lookup"
     public static let installCoordinationPersonaMarker = "/usr/lib/vphone-installcoordination-persona-lookup"
+    public static let homePodInstallPersonaLibrary = "/usr/lib/libvphoneinstallpersona.dylib"
     public static let metalCacheReuse = "system-systemhook-cfw-metal_cache_reuse"
     public static let metalCacheReuseMarker = "/usr/lib/vphone-metal-cache-reuse"
     public static let gyroscope = "system-backboardd-cfw-gyroscope"
@@ -310,7 +311,7 @@ public enum FirmwareGuestSystemPatchSet {
             VPhonePatchDeclaration(
                 identifier: installCoordinationPersona,
                 title: "Xcode installation persona lookup",
-                summary: "Allows only the CoreDevice installation proxy to look up UserManager through the launchd hook on the hybrid guest.",
+                summary: "Allows only the CoreDevice installation proxy to look up UserManager through launchd on the hybrid guest. HomePod uses a dedicated tvOS adapter with the same audit-token checks, independently of the iPhone environment.",
                 target: .guestFile(path: installCoordinationPersonaMarker),
                 applicability: ios27,
             ),

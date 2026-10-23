@@ -1,5 +1,18 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **HomePod Xcode installation persona (2026-10-23).**
+> The existing `system-installcoordination_proxy-cfw-persona_lookup` now has a
+> HomePod 27 deployment, selected by `homepod-mini`. TempPod reproduced the
+> iPhone's Protobox denial of the installation proxy's UserManager lookup.
+> HomePod loads a dedicated TVOS arm64e `libvphoneinstallpersona.dylib` in
+> launchd via the short `/vp` alias. It reuses the existing root-owned marker,
+> exact service/path/signing-identity and kernel-validated audit-token checks.
+> Other sandbox calls retain their arguments and native result. No spawn,
+> jetsam or iPhone environment hooks are included. Opt-out restores launchd
+> from its original backup before removing the marker, alias and library.
+> Live Xcode install/launch validation is in progress; see
+> `Research/Guest/ios27_xcode_persona_lookup.md`.
+
 > **HomePod cryptex DDI staging (2026-10-23).**
 > `system-cryptexd-exp-homepod_staging` is a selectable HomePod 27 guest patch,
 > enabled by `homepod-mini` and excluded from the iOS/Apple TV presets. It

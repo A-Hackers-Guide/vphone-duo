@@ -1863,7 +1863,42 @@ struct VPhoneCustomFirmwareInstaller {
 
         let launchdJetsam = "system-launchd-boot-jetsam_panic_guard_bypass"
         let launchdX1 = FirmwareGuestSystemPatchSet.arm64eX1LaunchdBootstrap
-        isolate([launchdJetsam, launchdX1]) {
+        let personaPatch = FirmwareGuestSystemPatchSet.installCoordinationPersona
+        let personaMarker = String(FirmwareGuestSystemPatchSet.installCoordinationPersonaMarker.dropFirst())
+        let isHomePod = guestDevice.family == .homePod
+        isolate([launchdJetsam, launchdX1] + (isHomePod ? [personaPatch] : [])) {
+            if isHomePod {
+                let library = FirmwareGuestSystemPatchSet.homePodInstallPersonaLibrary
+                let path = String(library.dropFirst())
+                if on(personaPatch) {
+                    let payload = try VPhoneGuestBinaries.resolve((library as NSString).lastPathComponent)
+                    try system.replaceFile(path, fromFileAt: payload, mode: 0o755, owner: Self.guestOwner)
+                    // launchd needs a short load command; this alias is owned
+                    // only by HomePod's isolated installation compatibility.
+                    try installLibraryAlias(system: system, alias: "vp", target: library)
+                    try patchMachO(system: system, work: work, path: "sbin/launchd",
+                                   preserveEntitlements: true, injectedDylibPath: "/vp")
+                    try system.writeFile(personaMarker, contents: Data("1\n".utf8), mode: 0o644, owner: Self.guestOwner)
+                    live.insert(personaPatch)
+                    print("  [+] \(personaPatch): installed scoped HomePod UserManager adapter")
+                } else {
+                    if try revertMachO(system: system, work: work, path: "sbin/launchd") {
+                        print("  [+] \(personaPatch): restored HomePod launchd from backup")
+                    } else if priorGuest.contains(personaPatch) {
+                        live.insert(personaPatch)
+                        throw ValidationError("HomePod persona compatibility has no launchd backup; cannot safely remove its library.")
+                    }
+                    try system.removeItem(personaMarker)
+                    if try system.exists("vp") {
+                        guard try system.readLink("vp") == library else {
+                            throw ValidationError("Another file uses /vp; leaving it intact.")
+                        }
+                        try system.removeItem("vp")
+                    }
+                    try system.removeItem(path)
+                }
+                return
+            }
             let enabled = [launchdJetsam, launchdX1].filter(on)
             if !enabled.isEmpty {
                 var verbs: [String] = []
@@ -1918,9 +1953,7 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
 
-        let personaPatch = FirmwareGuestSystemPatchSet.installCoordinationPersona
-        let personaMarker = String(FirmwareGuestSystemPatchSet.installCoordinationPersonaMarker.dropFirst())
-        isolate([personaPatch]) {
+        if !isHomePod { isolate([personaPatch]) {
             // Undo the experimental entitlement-only patch if this machine
             // received it. Platform Protobox profiles ignore that exception.
             let proxy = "System/Library/PrivateFrameworks/InstallCoordination.framework/Support/installcoordination_proxy"
@@ -1934,7 +1967,7 @@ struct VPhoneCustomFirmwareInstaller {
             } else {
                 try system.removeItem(personaMarker)
             }
-        }
+        } }
 
         // SystemHook sets FS_CACHE_REUSE_ON_REBOOT while this marker exists.
         let metalCachePatch = FirmwareGuestSystemPatchSet.metalCacheReuse
