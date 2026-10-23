@@ -93,7 +93,8 @@ struct VPhoneLaunchpadHelperFirmwareRequest {
         case .patchRestoreImage:
             arguments = ["fw", "patch", machineName, "--library-root", libraryRoot, "--restore-image-only", "--work-parent", workParent]
         case .linkKernelcache:
-            arguments = ["fw", "kernelcache", machineName, "--library-root", libraryRoot, "--link-only"]
+            arguments = ["fw", "kernelcache", machineName, "--library-root", libraryRoot,
+                         "--link-only", "--work-parent", workParent]
         }
 
         self.executable = executable

@@ -712,11 +712,15 @@ struct VPhoneFirmwareKernelcacheCommand: ParsableCommand {
     var linkOnly = false
     @Option(help: ArgumentHelp("The ipsw to stage with (default: $VPHONE_IPSW)", valueName: "path"))
     var ipsw: String?
+    @Option(name: .customLong("work-parent"), help: ArgumentHelp("Private kernelcache work directory", visibility: .hidden))
+    var workParent = "/private/var/tmp"
 
     func run() throws {
         let name = try VPhoneVirtualMachineSelection.resolveExisting(name, in: lib.library)
         let bundle = try lib.library.bundle(named: name)
-        guard let input = try FirmwarePipeline(vmDirectory: bundle.url, variant: .jb).researchBoardKernelcache() else {
+        let workspace = try geteuid() == 0 ? FirmwarePatchWorkspace(machine: bundle.url, workParent: workParent) : nil
+        defer { try? workspace?.remove() }
+        guard let input = try FirmwarePipeline(vmDirectory: workspace?.machine ?? bundle.url, variant: .jb).researchBoardKernelcache() else {
             print("[=] \(name)'s cloudOS has vphone600 components; its kernelcache needs no mix.")
             return
         }

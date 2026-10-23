@@ -147,7 +147,7 @@ public final class KernelCacheMixer {
     public func mix(_ input: Input) throws -> Data {
         let (base, paths) = try locations(for: input)
         log("  [kc] base \(base.id) (\(base.productVersion)), donors \(base.donors.joined(separator: ", "))")
-        if let data = try? Data(contentsOf: paths.mixed), !data.isEmpty {
+        if let data = try cachedMix(at: paths.mixed), !data.isEmpty {
             log("  [kc] using the cached mix \(paths.mixed.path)")
             return data
         }
@@ -219,7 +219,7 @@ public final class KernelCacheMixer {
     @discardableResult
     public func link(_ input: Input) throws -> Data {
         let (base, paths) = try locations(for: input)
-        if let data = try? Data(contentsOf: paths.mixed), !data.isEmpty {
+        if let data = try cachedMix(at: paths.mixed), !data.isEmpty {
             return data
         }
         let location = try KernelCollectionBuilder.location(for: base)
@@ -299,6 +299,28 @@ public final class KernelCacheMixer {
     }
 
     // MARK: - Cache
+
+    /// A privileged patch run must not follow a cache link to another host
+    /// file. Keep the descriptor alive through the read, including a rename.
+    func cachedMix(at url: URL) throws -> Data? {
+        do {
+            let root = try VPhoneConfinedDirectory.pin(absolutePath: cacheDirectory.path)
+            guard url.path.hasPrefix(cacheDirectory.path + "/") else {
+                throw PatcherError.invalidFormat("The kernelcache input is outside its cache directory.")
+            }
+            let relative = String(url.path.dropFirst(cacheDirectory.path.count + 1))
+            let file = try root.openRegularFile(relative, requireSingleLink: true)
+            let uid = VPhoneInvokingUser.current?.uid ?? getuid()
+            guard file.owner == 0 || file.owner == uid else {
+                throw PatcherError.invalidFormat("The cached kernelcache belongs to another user.")
+            }
+            return try withExtendedLifetime(file) {
+                try FileHandle(fileDescriptor: file.descriptor, closeOnDealloc: false).readToEnd()
+            }
+        } catch VPhoneConfinedDirectoryError.missing {
+            return nil
+        }
+    }
 
     static let stagedMarker = ".staged"
 
