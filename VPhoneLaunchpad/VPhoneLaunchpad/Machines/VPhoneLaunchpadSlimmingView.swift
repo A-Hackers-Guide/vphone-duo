@@ -140,7 +140,7 @@ struct VPhoneLaunchpadSlimmingSections: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("About 140 launch daemons a research machine rarely needs, Apple Account's among them.")
                 if warnsAboutServiceTrimming {
-                    Text("Service trimming is available only for iOS 26 and iOS 27.")
+                    Text("Service trimming is available only for iOS 26 and iOS 27. This step will be skipped on unsupported versions.")
                 }
                 if !warnsAboutServiceTrimming, slimming.trimsServices {
                     // terminusd and the nano daemons are among them.

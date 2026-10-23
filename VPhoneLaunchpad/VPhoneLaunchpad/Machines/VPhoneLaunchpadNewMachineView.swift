@@ -254,11 +254,11 @@ struct VPhoneLaunchpadNewMachineView: View {
         .sheet(isPresented: $showsAdvanced) {
             advancedSheet
                 .environment(model)
-                .alert("Service trimming is available only for iOS 26 and iOS 27.", isPresented: $showsServiceTrimmingNotice) {
+                .alert("Service trimming is available only for iOS 26 and iOS 27. This step will be skipped on unsupported versions.", isPresented: $showsServiceTrimmingNotice) {
                     Button("OK", role: .cancel) {}
                 }
         }
-        .alert("Service trimming is available only for iOS 26 and iOS 27.", isPresented: Binding(
+        .alert("Service trimming is available only for iOS 26 and iOS 27. This step will be skipped on unsupported versions.", isPresented: Binding(
             get: { showsServiceTrimmingNotice && !showsAdvanced },
             set: { showsServiceTrimmingNotice = $0 },
         )) {
