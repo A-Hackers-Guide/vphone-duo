@@ -596,17 +596,43 @@ struct VPhoneLaunchpadControlCommands {
             defaultPreset: VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: device),
             emit: emit,
         )
-        let usesTemplate = !request.flag("no-template") && !isAppleTV
+        // The Minimal preset seals the system it restores, which a template's
+        // trim and setup boot would write.
+        let restoredSystem = patches.customisesRestoredSystem
+        let usesTemplate = !request.flag("no-template") && !isAppleTV && !restoredSystem
         let slimming: VPhoneLaunchpadSlimming
-        if isAppleTV {
+        if isAppleTV || restoredSystem {
             if !Self.slimmingSwitches(request).isEmpty {
-                throw VPhoneLaunchpadError("An Apple TV is created without a template; the slimming switches do not apply.")
+                throw VPhoneLaunchpadError(isAppleTV
+                    ? "An Apple TV is created without a template; the slimming switches do not apply."
+                    : "The \(patches.preset) preset creates a machine without a template; the slimming switches do not apply.")
             }
             var off = VPhoneLaunchpadSlimming()
             off.slim = false
             slimming = off
         } else {
             slimming = try Self.slimming(request, usesTemplate: usesTemplate)
+        }
+        // A machine on its release's own cloudOS stages its kernelcache mix with
+        // an ipsw, as New Machine's ipsw field; `fw kernelcache` does nothing
+        // on a cloudOS that still has vphone600 components.
+        let kernelcacheIPSW = request.option("ipsw")
+        if let kernelcacheIPSW, !FileManager.default.isExecutableFile(atPath: kernelcacheIPSW) {
+            throw VPhoneLaunchpadError("--ipsw names \(kernelcacheIPSW), which is not an executable.")
+        }
+        // An iOS 18 guest's kernel-first mix is linked over ssh on the Mac
+        // --kmutil-ssh names; vphone-launchpad-cli passes the password from its
+        // own VPHONE_KMUTIL_SSH_PASSWORD, never as an argument.
+        let kernelcacheBuilder = request.option("kmutil-ssh").map {
+            VPhoneLaunchpadKernelcacheBuilder(destination: $0, password: request.option(VPhoneLaunchpadControlRequest.kmutilSSHPasswordOption))
+        }
+        if let kernelcacheBuilder {
+            guard VPhoneLaunchpadKernelcacheBuilder.isValid(kernelcacheBuilder.destination) else {
+                throw VPhoneLaunchpadError("--kmutil-ssh takes user@host, not \(kernelcacheBuilder.destination).")
+            }
+            guard kernelcacheIPSW != nil else {
+                throw VPhoneLaunchpadError("--kmutil-ssh links the kernelcache mix that --ipsw stages; pass --ipsw too.")
+            }
         }
         let options = try VPhoneLaunchpadCreationPipeline.Options(
             name: machine.name,
@@ -624,6 +650,8 @@ struct VPhoneLaunchpadControlCommands {
             keepArtifacts: request.flag("keep-artifacts"),
             usesTemplate: usesTemplate,
             slimming: slimming,
+            kernelcacheIPSW: kernelcacheIPSW,
+            kernelcacheBuilder: kernelcacheBuilder,
         )
         return library.create(options)
     }

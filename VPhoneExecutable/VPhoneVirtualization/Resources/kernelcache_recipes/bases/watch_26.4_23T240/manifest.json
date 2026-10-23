@@ -1,0 +1,19 @@
+{
+  "builderLayout" : "kernel-last",
+  "guest" : "watch",
+  "id" : "watch_26.4_23T240",
+  "kernel" : {
+    "decompressedSHA256" : "e4de60cdf330adefedcc6d6eae1874cff83f955e9ca25191e31e918def8306d0",
+    "file" : "kernelcache.release.vresearch101",
+    "kdk" : "KDK_26.4_23E235.kdk",
+    "sha256" : "79a43249ea047f23c2046c266ee3419d3223038dae9efe367dbb4fb1b1486cd1"
+  },
+  "kexts" : "kexts.txt",
+  "productVersion" : "26.4",
+  "sources" : [
+    "watch7c_26.4_23T240",
+    "base",
+    "vphone600_26.4_23E5207q"
+  ],
+  "symbols" : "symbols.json.gz"
+}

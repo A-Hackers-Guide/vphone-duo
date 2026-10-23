@@ -101,6 +101,7 @@ public enum VPhoneFirmwarePicker {
         let os = switch VPhoneGuestDevice.named(pairings.first?.device)?.family {
         case .iPad: "an iPadOS"
         case .appleTV: "a tvOS"
+        case .watch: "a watchOS"
         case .iPhone, nil: "an iPhone"
         }
         let idx = try choose(

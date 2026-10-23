@@ -2,6 +2,9 @@
 //
 // Merge the cryptex filesystems inside the main OS filesystem.
 //
+// A watchOS image has no cryptexes: its dyld caches are in the OS image, and
+// only the guest payload is added before the seal.
+//
 // 1. Collect the AppOS and SystemOS Cryptex from the iPhone BuildManifest
 // 2. With the OS, AppOS, and SystemOS images, attach them and copy them to a target image
 // 3. Create trustcache for resulting image
@@ -28,9 +31,12 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
     public let verbose: Bool
     public let noBinpack: Bool
     let resources = VPhoneResources.resolve()
+    public var gate: VPhonePatchGate = .unrestricted
 
     var buildManiest: Data
     var rebuiltData: Data?
+    /// The guest's `VPhoneGuestDevice.Family`, from the preserved iPhone manifest.
+    lazy var guestFamily = VPhoneGuestDevice.Family(rawValue: FirmwarePipeline.guestFamily(restoreDir: restoreDir)) ?? .iPhone
     var tmpDirectories: [URL] = []
     var attachedDevices: Set<String> = []
 
@@ -63,16 +69,30 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
 
     // MARK: - Patcher
 
+    /// One record per step the gate lets through. The merge itself is the
+    /// patcher: the pipeline builds it only when the merge is on.
     public func findAll() throws -> [PatchRecord] {
-        [PatchRecord(
-            patchID: "filesystem.cryptex.merge",
-            component: "",
-            fileOffset: 0,
-            originalBytes: Data(),
-            patchedBytes: Data(),
-            description: "Merge the cryptex filesystems inside the OS filesystem",
-        )]
+        Self.steps.filter { gate.isEnabled($0.identifier) && ($0.identifier != FirmwareRestoreImagePatchSet.surfaceCompression || isIOS18) }.map { step in
+            PatchRecord(
+                patchID: step.identifier,
+                component: "",
+                fileOffset: 0,
+                originalBytes: Data(),
+                patchedBytes: Data(),
+                description: step.description,
+            )
+        }
     }
+
+    static let steps: [(identifier: String, description: String)] = [
+        (FirmwareRestoreImagePatchSet.cryptexMerge, "Merge the cryptex filesystems inside the OS filesystem"),
+        (FirmwareRestoreImagePatchSet.gpuDriver, "Install the paravirtual GPU driver"),
+        (FirmwareRestoreImagePatchSet.surfaceCompression, "Turn off CoreAnimation's surface compression (iOS 18)"),
+        (FirmwareRestoreImagePatchSet.mobileActivation, "Patch mobileactivationd"),
+        (FirmwareRestoreImagePatchSet.vphoned, "Install vphoned and its launch daemon"),
+        (FirmwareRestoreImagePatchSet.launchdCacheLoader, "Patch launchd_cache_loader"),
+        (FirmwareRestoreImagePatchSet.virtualBluetooth, "Enable LE connections over the virtual Bluetooth controller"),
+    ]
 
     @discardableResult
     public func apply() throws -> Int {
@@ -92,6 +112,10 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
         let mtreePath = try createMtree(filesystem: unencryptedImage)
 
         print("Creating digest database and root hash…")
+        // The merged image was shrunk to its minimum size. With a remap,
+        // apfs_sealvolume copies the whole fsroot tree first and fails with
+        // ENOSPC (exit 65) in the space that is left.
+        try growImage(dmg: unencryptedImage, by: 2 << 30)
         let (digestDbPath, rootHashPath) = try createDigestAndHash(
             filesystem: unencryptedImage,
             mtree: mtreePath,
@@ -136,25 +160,46 @@ public final class CryptexFilesystemPatcher: BufferedPatcher {
             let (targetDevice, targetMount) = try attachImage(path: targetImagePath, forceRW: true)
             defer { try? detachImage(deviceNode: targetDevice) }
 
-            print("- Merging App OS cryptex…")
-            try copyCryptex(targetMount: targetMount, appOS: true)
+            if guestFamily != .watch {
+                print("- Merging App OS cryptex…")
+                try copyCryptex(targetMount: targetMount, appOS: true)
 
-            print("- Merging System OS cryptex…")
-            try copyCryptex(targetMount: targetMount, systemOS: true)
+                print("- Merging System OS cryptex…")
+                try copyCryptex(targetMount: targetMount, systemOS: true)
 
-            print("- Fixing dyld cache…")
-            try addDyldSymlinks(targetMount: targetMount)
+                print("- Fixing dyld cache…")
+                try addDyldSymlinks(targetMount: targetMount)
+            }
 
-            print("- Fixing GPU driver…")
-            try addGpuDriver(targetMount: targetMount)
+            if gate.isEnabled(FirmwareRestoreImagePatchSet.gpuDriver) {
+                print("- Fixing GPU driver…")
+                try addGpuDriver(targetMount: targetMount)
+            }
+            if gate.isEnabled(FirmwareRestoreImagePatchSet.surfaceCompression), isIOS18 {
+                print("- Turning off CoreAnimation's surface compression (iOS 18)…")
+                try addCoreAnimationDefaults(targetMount: targetMount)
+            }
 
-            print("- Patching mobile activation…")
-            try patchMobileActivation(targetMount: targetMount)
+            if gate.isEnabled(FirmwareRestoreImagePatchSet.mobileActivation) {
+                print("- Patching mobile activation…")
+                try patchMobileActivation(targetMount: targetMount)
+            }
 
-            print("- Adding vphoned…")
-            try addVphoned(targetMount: targetMount)
-            try injectLaunchDaemons(targetMount: targetMount)
-            try patchLaunchdCacheLoader(targetMount: targetMount)
+            if gate.isEnabled(FirmwareRestoreImagePatchSet.vphoned) {
+                print("- Adding vphoned…")
+                try addVphoned(targetMount: targetMount)
+                try injectLaunchDaemons(targetMount: targetMount)
+            }
+            if gate.isEnabled(FirmwareRestoreImagePatchSet.launchdCacheLoader) {
+                try patchLaunchdCacheLoader(targetMount: targetMount)
+            }
+            if gate.isEnabled(FirmwareRestoreImagePatchSet.virtualBluetooth) {
+                try CustomFirmwareBluetoothVirtualController.patch(
+                    at: URL(filePath: targetMount).appending(path: CustomFirmwareBluetoothVirtualController.relativePath),
+                )
+                print("  [+] \(CustomFirmwareBluetoothVirtualController.feature) on")
+            }
+            try removeHostEventLog(mount: targetMount)
         }
 
         guard attachedDevices.isEmpty else {

@@ -53,7 +53,7 @@ struct RestoreRamDiskSealPatcherTests {
         )
         let identifier = RestoreRamDiskSealPatcher.patchIdentifier
         #expect(plan.isEnabled(identifier))
-        #expect(pipeline.notApplicablePatches == (hashType == 1 ? Set([identifier]) : []))
+        #expect(pipeline.notApplicablePatches.contains(identifier) == (hashType == 1))
         let components = try pipeline.buildComponentList(
             restoreDir: root,
             iOSBase: VPhoneVersion("27.0.1"),

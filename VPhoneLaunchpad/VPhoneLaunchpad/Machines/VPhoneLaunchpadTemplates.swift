@@ -436,7 +436,7 @@ nonisolated struct VPhoneLaunchpadTemplate: Decodable, Identifiable, Hashable, S
         }
 
         var osName: String {
-            device.hasPrefix("iPad") ? "iPadOS" : "iOS"
+            device.hasPrefix("iPad") ? "iPadOS" : device.hasPrefix("Watch") ? "watchOS" : "iOS"
         }
     }
 

@@ -64,7 +64,12 @@ public enum VPhonePCCGPUDriver {
               "com.apple.driver.AppleParavirtGPUMetalIOGPUFamily"
         else { throw Error.invalidBundle(source) }
         let actual = properties["DTPlatformVersion"] as? String ?? "unknown"
-        guard actual == expectedPlatformVersion else {
+        // A point release's driver names the SDK it was built with: cloudOS
+        // 18.7.2 ships one that says 18.7.
+        func release(_ version: String) -> String {
+            version.split(separator: ".").prefix(2).joined(separator: ".")
+        }
+        guard release(actual) == release(expectedPlatformVersion) else {
             throw Error.wrongPlatformVersion(
                 source,
                 expected: expectedPlatformVersion,

@@ -33,7 +33,6 @@ public final class FirmwarePipeline {
     // MARK: - Variant
 
     public enum Variant: String, Sendable {
-        case less
         case regular
         case dev
         case jb
@@ -85,7 +84,7 @@ public final class FirmwarePipeline {
         /// Whether the pipeline keeps this component's untouched bytes aside and
         /// re-patches those on every run — see FirmwarePipelineOriginals.swift.
         ///
-        /// False for the two `.less` components, and only for them. `Filesystem`
+        /// False for the two restore image components, and only for them. `Filesystem`
         /// and `Manifest` both name `BuildManifest.plist`, but neither is a patcher
         /// over that one file: `CryptexFilesystemPatcher` rewrites cryptex images
         /// across the restore tree, and `ManifestHashPatcher` rewrites hashes to
@@ -93,6 +92,13 @@ public final class FirmwarePipeline {
         /// would describe a tree that no longer exists, so they keep the old
         /// in-place behaviour and opt out here.
         var restorable: Bool = true
+
+        /// A container standing in for the shipped file, and the record of the
+        /// swap: the patchers run over its payload and are saved into it. The
+        /// research board's kernelcache is replaced by its mix this way
+        /// (KernelCacheMixer), whose container carries kmutil's layout
+        /// properties rather than the shipped kernel's.
+        var replacement: (() throws -> (container: Data, record: PatchRecord))? = nil
 
         /// The same descriptor with more patchers appended after the existing ones.
         func appending(_ factories: [(Data, Bool) throws -> any Patcher]) -> ComponentDescriptor {
@@ -103,6 +109,7 @@ public final class FirmwarePipeline {
                 searchPatterns: searchPatterns,
                 patcherFactories: patcherFactories + factories,
                 restorable: restorable,
+                replacement: replacement,
             )
         }
     }
@@ -225,6 +232,12 @@ public final class FirmwarePipeline {
         return allRecords
     }
 
+    /// Whether the restore tree boots the research board's device tree, which
+    /// `FirmwareManifest` takes when the cloudOS has no vphone600ap.
+    public static func researchBoardStandsIn(restoreDir: URL) -> Bool {
+        (try? manifestComponentPath("RestoreDeviceTree", in: restoreDir))?.contains(".vresearch101") ?? false
+    }
+
     func resolveFirmwareApplicability(
         restoreDir: URL,
         iOSBase: VPhoneVersion?,
@@ -232,10 +245,16 @@ public final class FirmwarePipeline {
         plan: VPhonePatchPlan?,
     ) throws {
         notApplicablePatches = []
+        // The research board patches convert what a cloudOS without vphone600
+        // components supplies; any other restore tree has nothing for them.
+        if !Self.researchBoardStandsIn(restoreDir: restoreDir) {
+            let researchBoard = FirmwareResearchBoardPatchSet.manifest.patches.map(\.identifier)
+            notApplicablePatches.formUnion(researchBoard.filter { plan?.isEnabled($0) ?? true })
+        }
         let sealPatch = RestoreRamDiskSealPatcher.patchIdentifier
         let sealSelected = plan?.isEnabled(sealPatch)
             ?? (iOSBase?.major == 27 && cloudOS?.major == 26 && cloudOS?.minor == 4)
-        guard variant != .less, sealSelected else { return }
+        guard sealSelected else { return }
         let hashType = try RestoreRamDiskSealPatcher.systemVolumeHashType(in: restoreDir)
         if hashType == RestoreRamDiskSealPatcher.sha256Type {
             notApplicablePatches.insert(sealPatch)
@@ -303,14 +322,13 @@ public final class FirmwarePipeline {
 
         for component in components {
             let baseDir = component.inRestoreDir ? restoreDir : vmDirectory
-            // `.less` never touches the boot chain: it runs the two whole-tree
-            // patchers and leaves every other component with no factories at all.
-            // Keeping it out of this entirely is what stops a `.less` run over an
-            // already patched VM reading "no patches here" as "put the unpatched
-            // boot chain back".
-            let keepsOriginal = variant != .less && component.restorable
+            // A plan without the boot chain, kernel and TXM sets (the `minimal`
+            // preset) leaves those components with no factories, and the pass
+            // below puts back what an earlier preset patched: a stock boot chain
+            // is what the restore image patches expect.
+            let keepsOriginal = component.restorable
 
-            guard !component.patcherFactories.isEmpty else {
+            guard !component.patcherFactories.isEmpty || component.replacement != nil else {
                 log("  [=] \(component.name): no patches for \(variant.rawValue)")
                 // The preset dropped this component's whole patch set. If an earlier
                 // run patched it, the file on disk is now carrying patches nothing
@@ -345,7 +363,17 @@ public final class FirmwarePipeline {
                         : "  original: re-patching the copy in \(Self.originalsDirectoryName)/")
                 }
             }
-            let rawData = try loader.load(from: sourceURL)
+            var rawData = try loader.load(from: sourceURL)
+            // The stand-in goes where the shipped file was, so `save` below
+            // repackages into its container.
+            var replacementRecord: PatchRecord?
+            if let replacement = component.replacement {
+                let (container, record) = try replacement()
+                try container.write(to: fileURL)
+                rawData = try loader.load(from: fileURL)
+                replacementRecord = record
+                log("  replaced by the stand-in for \(record.patchID)")
+            }
             log("  format: \(rawData.count) bytes")
 
             let currentData: Data
@@ -363,6 +391,17 @@ public final class FirmwarePipeline {
                 guard stashedNow else { throw error }
                 discardStash(for: fileURL)
                 throw staleFirmwareError(component: component.name, underlying: error)
+            }
+
+            if let replacementRecord {
+                // Already in place; the patchers' result, if any, is saved into it.
+                if !componentRecords.isEmpty {
+                    try loader.save(currentData, to: fileURL)
+                }
+                log("  [+] saved")
+                allRecords.append(replacementRecord)
+                allRecords.append(contentsOf: componentRecords)
+                continue
             }
 
             if componentRecords.isEmpty {

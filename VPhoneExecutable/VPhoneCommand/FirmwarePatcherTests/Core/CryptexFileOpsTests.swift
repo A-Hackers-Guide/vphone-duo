@@ -247,6 +247,32 @@ struct CryptexFileOpsTests {
     </plist>
     """
 
+    // MARK: - Seal remap time
+
+    @Test(arguments: [
+        ".               type=dir nlink=19 size=608 time=1792405582.069334279\n",
+        ".               type=dir nlink=19 \\\n                size=608 time=1792405582.069334279\n",
+    ])
+    func `the remap time is the root entry's, not the newest one's`(root: String) throws {
+        let scratch = try makeScratch()
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let mtree = scratch.appendingPathComponent("mtree.txt")
+        try ("""
+        #\t   tree: /Volumes/LuckG23G71.D47OS
+
+        # .
+        /set type=file uid=0 gid=0 mode=0755 nlink=1 flags=none
+
+        """ + root + """
+            .file       gid=80 mode=0 size=0 time=1784253250.000000000
+
+        # ./private/var
+        var             type=dir nlink=31 size=992 time=1792405582.936736187
+
+        """).write(to: mtree, atomically: true, encoding: .utf8)
+        #expect(try makePatcher(scratch).parseRootTime(mtree: mtree) == "1792405582069334279")
+    }
+
     @Test func `the max size comes back as the string diskutil wants back`() throws {
         #expect(try CryptexFilesystemPatcher.maxResizeSize(
             fromDiskutilPlist: Self.sizesPlist,

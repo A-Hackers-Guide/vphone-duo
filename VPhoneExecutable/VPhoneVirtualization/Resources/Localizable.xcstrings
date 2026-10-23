@@ -10,6 +10,15 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "控制中心" } }
       }
     },
+    "Side Button" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Side Button" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "サイドボタン" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "측면 버튼" } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Nút sườn" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "侧边按钮" } }
+      }
+    },
     "Show Attitude Dials" : {
       "extractionState" : "manual",
       "localizations" : {

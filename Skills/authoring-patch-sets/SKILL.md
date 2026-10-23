@@ -19,7 +19,7 @@ warning on every run. Declaring it is what makes it real.
 | A preset | `VPhonePatchPreset` | `VPhoneExecutable/VPhoneVirtualization/Resources/patches_presets/*.plist` |
 
 The types live in `VPhoneExecutable/VPhoneCommand/VPhonePatchKit/PatchSet/`. The
-nine in-tree sets and the two shipped presets live in
+in-tree sets and the shipped presets live in
 `VPhoneExecutable/VPhoneCommand/FirmwarePatcher/PatchSets/`, listed by
 `FirmwarePatchSetCatalog`.
 
@@ -168,7 +168,10 @@ Then:
    records nothing declares, and undeclared records apply. Leaving the set out
    has to mean leaving the patcher out.
 3. Add the set to both shipped preset plists (both name every set; presets differ
-   by their selection, not by which sets they draw on).
+   by their selection, not by which sets they draw on). The one exception is
+   `minimal`, which names only the boot chain, research board, device tree and
+   restore image sets: it customises the system before the restore, the other
+   sets after it.
 4. Run the catalogue tests.
 
 ### Capabilities, Requires, Conflicts, After
@@ -190,7 +193,7 @@ Presets are prewritten and reviewed. Nothing in the tool writes one; a VM record
 only which boxes its owner changed, and those compose on top.
 
 `standard` is what every VM gets. Any other preset must be asked for with
-`--preset`. Both shipped presets name all nine sets and differ only in their
+`--preset`. The shipped presets name every set but the restore image and differ only in their
 selection:
 
 ```xml

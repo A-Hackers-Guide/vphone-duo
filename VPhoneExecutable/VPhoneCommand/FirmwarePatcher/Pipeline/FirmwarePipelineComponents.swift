@@ -44,6 +44,16 @@ extension FirmwarePipeline {
         }
 
         let includeBootChain = includesSet(FirmwareBootChainPatchSet.identifier)
+
+        // Whether the plan turns on any patch for a boot chain component. A
+        // preset that keeps the set for some components only (`minimal`: iBEC and
+        // LLB) leaves the others stock, and a patcher built to write nothing
+        // would only log that it found nothing.
+        func patchesBootChain(_ component: VPhoneFirmwareComponent) -> Bool {
+            guard includeBootChain else { return false }
+            guard let plan else { return true }
+            return plan.declarations.contains { $0.target == .firmware(component) && plan.isEnabled($0.identifier) }
+        }
         let includeKernelBase = includesSet(FirmwareKernelBasePatchSet.identifier)
         let includeKernelCustomFirmware = includesSet(FirmwareKernelCustomFirmwarePatchSet.identifier)
         let includeDeviceTree = includesSet(FirmwareDeviceTreePatchSet.identifier)
@@ -106,8 +116,8 @@ extension FirmwarePipeline {
         // mDNSResponder → no DNS). Empty on 26.x bases (stock boot-args).
         let extraBootArgs = baseIs18 ? "if_attach_nx=0x3" : ""
 
-        // 1. AVPBooter — Apple's ROM, in the VM root. Patched for every non-less
-        //    variant (regular/dev/jb/exp). A machine booting OpenAVB has nothing
+        // 1. AVPBooter — Apple's ROM, in the VM root. Patched when the plan keeps
+        //    the boot chain set. A machine booting OpenAVB has nothing
         //    here to patch: OpenAVB checks no image digest, so the digest
         //    bypass the plan selects already holds, and an Apple ROM kept in
         //    the folder beside it is not the one that boots.
@@ -117,7 +127,7 @@ extension FirmwarePipeline {
                 inRestoreDir: false,
                 searchPatterns: ["AVPBooter*.bin"],
                 patcherFactories: {
-                    if variant != .less, includeBootChain {
+                    if patchesBootChain(.avpBooter) {
                         return [
                             { data, verbose in
                                 let p = AVPBooterPatcher(data: data, verbose: verbose)
@@ -138,16 +148,14 @@ extension FirmwarePipeline {
             searchPatterns: ["Firmware/dfu/iBSS.vresearch101.RELEASE.im4p"],
             patcherFactories: {
                 switch variant {
-                case .less:
-                    []
                 case .regular, .dev:
-                    includeBootChain ? [{ data, verbose in
+                    patchesBootChain(.iBSS) ? [{ data, verbose in
                         let p = IBootPatcher(data: data, mode: .ibss, verbose: verbose)
                         p.gate = gate
                         return p
                     }] : []
                 case .jb, .exp:
-                    includeBootChain ? [
+                    patchesBootChain(.iBSS) ? [
                         { data, verbose in
                             let p = IBootPatcher(data: data, mode: .ibss, verbose: verbose)
                             p.gate = gate
@@ -163,12 +171,12 @@ extension FirmwarePipeline {
             }(),
         ))
 
-        // 3. iBEC - Not required by the less variant, still added for the serial logs.
+        // 3. iBEC
         components.append(ComponentDescriptor(
             name: "iBEC",
             inRestoreDir: true,
             searchPatterns: ["Firmware/dfu/iBEC.vresearch101.RELEASE.im4p"],
-            patcherFactories: includeBootChain ? [{ data, verbose in
+            patcherFactories: patchesBootChain(.iBEC) ? [{ data, verbose in
                 let p = IBootPatcher(data: data, mode: .ibec, verbose: verbose)
                 p.extraBootArgs = extraBootArgs
                 p.gate = gate
@@ -176,12 +184,12 @@ extension FirmwarePipeline {
             }] : [],
         ))
 
-        // 4. LLB - Not required by the less variant, still added for the serial logs.
+        // 4. LLB
         components.append(ComponentDescriptor(
             name: "LLB",
             inRestoreDir: true,
             searchPatterns: ["Firmware/all_flash/LLB.vresearch101.RELEASE.im4p"],
-            patcherFactories: includeBootChain ? [{ data, verbose in
+            patcherFactories: patchesBootChain(.llb) ? [{ data, verbose in
                 let p = IBootPatcher(data: data, mode: .llb, verbose: verbose)
                 p.extraBootArgs = extraBootArgs
                 // The boot video word always says 3x, which is already right
@@ -199,16 +207,14 @@ extension FirmwarePipeline {
             searchPatterns: ["Firmware/txm.iphoneos.research.im4p"],
             patcherFactories: {
                 switch variant {
-                case .less:
-                    []
                 case .regular:
-                    includeBootChain ? [{ data, verbose in
+                    patchesBootChain(.txm) ? [{ data, verbose in
                         let p = TXMPatcher(data: data, verbose: verbose)
                         p.gate = gate
                         return p
                     }] : []
                 case .dev, .jb, .exp:
-                    includeBootChain ? [{ data, verbose in
+                    patchesBootChain(.txm) ? [{ data, verbose in
                         let p = TXMDevPatcher(data: data, verbose: verbose)
                         p.gate = gate
                         return p
@@ -219,8 +225,7 @@ extension FirmwarePipeline {
 
         // 6. Restore ramdisk and trust cache
         let sealPatch = RestoreRamDiskSealPatcher.patchIdentifier
-        let includeSealPatch = variant != .less
-            && includeBootChain
+        let includeSealPatch = includeBootChain
             && isEnabled(sealPatch, fallback: baseIs27 && cloudIs264)
             && !notApplicablePatches.contains(sealPatch)
         let manifestURL = restoreDir.appendingPathComponent("BuildManifest.plist")
@@ -265,14 +270,41 @@ extension FirmwarePipeline {
 
         // 7. Kernel — the public CFW firmware includes the former EXP
         //    hv_vmm rename after the base and custom-firmware patches.
+        //    On a cloudOS without vphone600 components the research board's
+        //    kernelcache has no iPhone virtualisation kexts: its release kernel
+        //    is rebuilt with them first (KernelCacheMixer), and the patchers
+        //    run over that.
+        let kernelMixPatch = FirmwareResearchBoardPatchSet.kernelMix
+        let mixesKernel = includesSet(FirmwareResearchBoardPatchSet.identifier)
+            && isEnabled(kernelMixPatch, fallback: true)
+            && !notApplicablePatches.contains(kernelMixPatch)
+        let restoreKernelPath = try? Self.manifestComponentPath("RestoreKernelCache", in: restoreDir)
+        let kernelMix: (() throws -> (container: Data, record: PatchRecord))? = mixesKernel ? { [self] in
+            guard let restoreKernelPath else {
+                throw PatcherError.fileNotFound("RestoreKernelCache in the restore tree's BuildManifest.plist")
+            }
+            // As shipped: the stash once a run has put it aside.
+            let shipped = try Data(contentsOf: pristineInput(for: restoreDir.appending(path: restoreKernelPath)).url)
+            let mixer = try KernelCacheMixer(recipes: .locate(), verbose: verbose)
+            let input = KernelCacheMixer.Input(kernelcache: shipped, guest: guestDevice.family.rawValue, restoreTree: restoreDir)
+            let base = try mixer.base(for: input)
+            let record = PatchRecord(
+                patchID: kernelMixPatch,
+                component: "kernelcache",
+                fileOffset: 0,
+                virtualAddress: nil,
+                originalBytes: Data(),
+                patchedBytes: Data(),
+                description: "the \(base.id) research board kernelcache, rebuilt with the kexts of \(base.donors.joined(separator: " and "))",
+            )
+            return try (mixer.mix(input), record)
+        } : nil
         components.append(ComponentDescriptor(
             name: "kernelcache",
             inRestoreDir: true,
-            searchPatterns: ["kernelcache.research.vphone600"],
+            searchPatterns: [(try? Self.manifestComponentPath("KernelCache", in: restoreDir)) ?? "kernelcache.research.vphone600"],
             patcherFactories: {
                 switch variant {
-                case .less:
-                    []
                 case .regular:
                     includeKernelBase ? [{ data, verbose in
                         let p = KernelPatcher(
@@ -306,17 +338,43 @@ extension FirmwarePipeline {
                     )
                 }
             }(),
+            replacement: kernelMix,
         ))
+
+        // 7a. The kernel restore boots. On a cloudOS without vphone600 components
+        //     it is the mix as well, with no patcher over it; vphone600's release
+        //     kernel is restored as shipped and needs no component.
+        if includesSet(FirmwareResearchBoardPatchSet.identifier),
+           Self.researchBoardStandsIn(restoreDir: restoreDir),
+           let restoreKernelPath
+        {
+            components.append(ComponentDescriptor(
+                name: "RestoreKernelCache",
+                inRestoreDir: true,
+                searchPatterns: [restoreKernelPath],
+                patcherFactories: [],
+                replacement: kernelMix,
+            ))
+        }
 
         // 8. DeviceTree — JB includes the former EXP identity and camera
         //    properties so the guest presents a consistent iPhone17,3 identity.
         //    A guest that presents its board restores with this tree and boots
         //    its own copy (7b).
+        //    The tree is vphone600's, or the research board's on a cloudOS
+        //    without vphone600 components, which the patcher converts first
+        //    (FirmwareResearchBoardPatchSet). `RestoreDeviceTree` names it either
+        //    way; `DeviceTree` names the board's copy (7b). A tree whose manifest
+        //    names none (catalogue tests) keeps vphone600's.
         let dtIncludeIdentity = variant == .jb || variant == .exp
+        let convertsResearchBoard = includesSet(FirmwareResearchBoardPatchSet.identifier)
+            && !notApplicablePatches.contains(FirmwareResearchBoardPatchSet.deviceTreeConversion)
+        let deviceTreePath = (try? Self.manifestComponentPath("RestoreDeviceTree", in: restoreDir))
+            ?? "Firmware/all_flash/DeviceTree.vphone600ap.im4p"
         components.append(ComponentDescriptor(
             name: "DeviceTree",
             inRestoreDir: true,
-            searchPatterns: ["Firmware/all_flash/DeviceTree.vphone600ap.im4p"],
+            searchPatterns: [deviceTreePath],
             patcherFactories: includeDeviceTree ? [{ data, verbose in
                 let p = DeviceTreePatcher(
                     data: data,
@@ -326,6 +384,7 @@ extension FirmwarePipeline {
                     role: hasGuestTree ? .restore : .shared,
                 )
                 p.gate = gate
+                p.convertsResearchBoard = convertsResearchBoard
                 return p
             }] : [],
         ))
@@ -350,54 +409,69 @@ extension FirmwarePipeline {
                         sourceTree: self.loader.load(from: self.pristineInput(for: boardTreeURL).url),
                     )
                     p.gate = gate
+                    p.convertsResearchBoard = convertsResearchBoard
                     return p
                 }] : [],
             ))
         }
 
-        // 9. Filesystem
+        // 8c. SEP — only the research board's is patched, on a cloudOS without
+        //     vphone600 components (FirmwareResearchBoardPatchSet). vphone600's is
+        //     restored as Apple ships it.
+        let sepPatch = FirmwareResearchBoardPatchSet.sepDispatch
+        if includesSet(FirmwareResearchBoardPatchSet.identifier),
+           Self.researchBoardStandsIn(restoreDir: restoreDir)
+        {
+            components.append(ComponentDescriptor(
+                name: VPhoneFirmwareComponent.sep.rawValue,
+                inRestoreDir: true,
+                searchPatterns: [try Self.manifestComponentPath("RestoreSEP", in: restoreDir)],
+                patcherFactories: isEnabled(sepPatch, fallback: true) ? [{ data, verbose in
+                    let p = SEPResearchBoardPatcher(data: data, verbose: verbose)
+                    p.gate = gate
+                    return p
+                }] : [],
+            ))
+        }
+
+        // 9. Filesystem — the restore image (`minimal` preset): the merged, resealed
+        //    OS image the restore installs instead of a patched boot chain.
         //    Not restorable: it reads BuildManifest.plist but writes cryptex images
         //    all over the restore tree, so putting the manifest back on its own
         //    would describe a tree that no longer exists. See ComponentDescriptor.
+        let includeRestoreImage = includesSet(FirmwareRestoreImagePatchSet.identifier)
+        let applyCryptexMerge = includeRestoreImage
+            && isEnabled(FirmwareRestoreImagePatchSet.cryptexMerge, fallback: false)
         components.append(ComponentDescriptor(
             name: "Filesystem",
             inRestoreDir: true,
             searchPatterns: ["BuildManifest.plist"],
-            patcherFactories: {
-                switch variant {
-                case .less:
-                    [{ data, verbose in
-                        CryptexFilesystemPatcher(
-                            buildManiest: data,
-                            restoreDir: restoreDir,
-                            verbose: verbose,
-                            noBinpack: self.noBinpack,
-                        )
-                    }]
-                case .regular, .dev, .jb, .exp:
-                    []
-                }
-            }(),
+            patcherFactories: applyCryptexMerge ? [{ data, verbose in
+                let p = CryptexFilesystemPatcher(
+                    buildManiest: data,
+                    restoreDir: restoreDir,
+                    verbose: verbose,
+                    noBinpack: self.noBinpack,
+                )
+                p.gate = gate
+                return p
+            }] : [],
             restorable: false,
         ))
 
-        // 10. Firmware Manifest - Only required when excluding the img4 signature patches.
+        // 10. Firmware Manifest — the digests of whatever the restore image changed,
+        //    so the stock boot chain accepts it.
         //    Not restorable, for the same reason as Filesystem: the hashes it writes
         //    describe files other steps produced, not the manifest's own bytes.
+        let applyDigestRehash = includeRestoreImage
+            && isEnabled(FirmwareRestoreImagePatchSet.digestRehash, fallback: false)
         components.append(ComponentDescriptor(
             name: "Manifest",
             inRestoreDir: true,
             searchPatterns: ["BuildManifest.plist"],
-            patcherFactories: {
-                switch variant {
-                case .less:
-                    [{ data, verbose in
-                        ManifestHashPatcher(data: data, restoreDir: restoreDir, verbose: verbose)
-                    }]
-                case .regular, .dev, .jb, .exp:
-                    []
-                }
-            }(),
+            patcherFactories: applyDigestRehash ? [{ data, verbose in
+                ManifestHashPatcher(data: data, restoreDir: restoreDir, verbose: verbose)
+            }] : [],
             restorable: false,
         ))
 

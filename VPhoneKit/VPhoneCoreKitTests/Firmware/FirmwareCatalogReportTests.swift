@@ -28,6 +28,26 @@ struct FirmwareCatalogReportTests {
         #expect(!json.contains("build") && !json.contains("files"))
     }
 
+    @Test func `iOS 26.4 to 26.6 can also run on their own cloudOS, on the research board`() throws {
+        let report = VPhoneFirmwareCatalog.report
+        let own = Dictionary(uniqueKeysWithValues: report.pairings.compactMap { entry in
+            entry.matchingCloudOS.map { (entry.ios.name, $0.name) }
+        })
+        #expect(own["iOS 26.4.2"] == "cloudOS 26.4 (23E244)")
+        #expect(own["iOS 26.5"] == "cloudOS 26.5 (23F75)")
+        #expect(own["iOS 26.6.2"] == "cloudOS 26.6 (23G71)")
+        #expect(own["iOS 26.3.1"] == nil && own["iOS 27.0"] == nil)
+        // The recommendation stays the 26.4 beta, which needs neither root nor ipsw.
+        let ios266 = try #require(report.pairings.first { $0.ios.name == "iOS 26.6" })
+        #expect(ios266.recommendedCloudOS.name == "cloudOS 26.4")
+        // Only the iPhone has run on the research board.
+        let pad = try #require(report.devices.first { $0.family == "iPad" })
+        #expect(pad.pairings.allSatisfy { $0.matchingCloudOS == nil })
+        // An entry without one encodes as before, so an older Launchpad reads it unchanged.
+        let ios27 = try #require(report.pairings.first { $0.ios.name == "iOS 27.0" })
+        #expect(try !String(decoding: JSONEncoder().encode(ios27), as: UTF8.self).contains("matchingCloudOS"))
+    }
+
     @Test func `lists every curated guest`() {
         let report = VPhoneFirmwareCatalog.report
         #expect(report.devices.map(\.productType) == VPhoneGuestDevice.known.map(\.productType))
@@ -126,6 +146,22 @@ struct FirmwareCatalogReportTests {
             }
         }
         #expect(VPhoneFirmwareCatalog.pairings(for: "iPhone18,1") != VPhoneFirmwareCatalog.pairings)
+    }
+
+    @Test func `an i phone XS max pairs each iOS 18 release with its own research board cloud OS, linked kernel-first`() {
+        let pairings = VPhoneFirmwareCatalog.pairings(for: "iPhone11,6")
+        #expect(pairings.map(\.iosName) == ["iOS 18.1", "iOS 18.2.1", "iOS 18.3.1", "iOS 18.5", "iOS 18.6", "iOS 18.7", "iOS 18.7.2"])
+        for p in pairings {
+            let version = p.iosName.dropFirst("iOS ".count)
+            #expect(p.device == "iPhone11,6")
+            #expect((p.iosURL as NSString).lastPathComponent.hasPrefix("iPhone11,2,iPhone11,4,iPhone11,6_\(version)_"))
+            #expect(p.cloudosName.hasPrefix("cloudOS \(version) ("))
+            #expect(p.cloudosURL.contains("/private-cloud-compute/"))
+        }
+        #expect(VPhoneFirmwareCatalog.pairings(for: "iPhone11,4") == pairings)
+        let devices = VPhoneFirmwareCatalog.report.devices
+        #expect(devices.first { $0.productType == "iPhone11,6" }?.kernelcacheLayout == "kernel-first")
+        #expect(devices.filter { $0.kernelcacheLayout != nil }.map(\.productType) == ["iPhone11,6"])
     }
 
     @Test func `cellular i pad gets its wi fi model's pairings`() {

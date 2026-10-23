@@ -59,17 +59,40 @@ public enum VPhoneFirmwareIndex {
     // MARK: - Queries
 
     /// Every released iOS restore URL for one device identifier, newest first.
-    /// AppleDB files an iPad's releases under iPadOS.
+    /// AppleDB files an iPad's releases under iPadOS, a watch's under watchOS.
     public static func restoreURLs(forDevice device: String) async throws -> [String] {
-        try await releases(os: device.hasPrefix("iPad") ? "iPadOS" : "iOS", device: device)
+        try await releases(os: device.hasPrefix("iPad") ? "iPadOS" : device.hasPrefix("Watch") ? "watchOS" : "iOS", device: device)
             .map(\.url.absoluteString)
     }
 
-    /// The released macOS restore image for a marketing version like "26.1".
-    public static func macOSRelease(version: String) async throws -> Release {
-        let matches = try await releases(os: "macOS", device: nil)
-            .filter { $0.version == version }
-        guard let release = matches.first else { throw Error.noRelease("macOS", version) }
+    /// The macOS whose `apfs_sealvolume` seals a system of iOS `version`.
+    ///
+    /// Before 2025 the two did not share a marketing version: iOS 18.x.y goes
+    /// with macOS 15.x.y. Not every iOS release has a macOS twin (18.2.1 has
+    /// only 15.2), and the catalogue misses some releases, so without an exact
+    /// match the newest release of the same major below it is taken.
+    public static func sealToolRelease(forOSVersion version: String) async throws -> Release {
+        let macOS = try await releases(os: "macOS", device: nil)
+        return try sealToolRelease(forOSVersion: version, in: macOS)
+    }
+
+    /// ``sealToolRelease(forOSVersion:)`` over a given list of macOS releases.
+    static func sealToolRelease(forOSVersion version: String, in macOS: [Release]) throws -> Release {
+        func numbers(_ version: String) -> [Int] {
+            version.split(separator: ".").compactMap { Int($0) }
+        }
+        var target = numbers(version)
+        if target.first == 18 {
+            target[0] = 15
+        }
+        // The same major, and not newer than the target.
+        let candidates = macOS.filter {
+            let other = numbers($0.version)
+            return other.first == target.first && !target.lexicographicallyPrecedes(other)
+        }
+        guard let release = candidates.max(by: { numbers($0.version).lexicographicallyPrecedes(numbers($1.version)) }) else {
+            throw Error.noRelease("macOS", target.map(String.init).joined(separator: "."))
+        }
         return release
     }
 

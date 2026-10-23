@@ -19,16 +19,22 @@ extension CryptexFilesystemPatcher {
         identifier: String? = nil,
         entitlements: URL? = nil,
     ) throws -> VPhoneSignOptions {
+        // Apple's ad-hoc shape, as the stock binaries around them: the guest's
+        // TXM is not patched here, and it takes an ad-hoc binary from the
+        // static trust cache but rejects ldid's signature, which has no
+        // ad-hoc flag and an empty CMS blob ("Bad executable").
         try VPhoneSignOptions(
             identifier: identifier,
             entitlements: entitlements.map { try Data(contentsOf: $0, options: .mappedIfSafe) },
             mergesExisting: true,
+            style: .appleAdHoc,
         )
     }
 
     func patchLaunchdCacheLoader(targetMount: String) throws {
         let target = URL(filePath: targetMount)
         let launchdCacheLoaderPath = target.appending(path: "/usr/libexec/launchd_cache_loader")
+        try thinToArm64e(launchdCacheLoaderPath)
         // Patched in place with no `.bak` to restore from, so this is the call
         // site that needs the port's idempotence. No re-attestation: the sign
         // below replaces the whole signature anyway.
@@ -55,10 +61,14 @@ extension CryptexFilesystemPatcher {
             at: vphonedLaunchdPlist,
             to: target.appending(path: "System/Library/LaunchDaemons/vphoned.plist"),
         )
+        try chownRecursively(uid: 0, gid: 0, at: target.appending(path: "System/Library/LaunchDaemons/vphoned.plist"))
         try CustomFirmwareDaemons.injectDaemon(into: launchdPath, name: "vphoned", from: vphonedLaunchdPlist)
         print("  [+] Injected vphoned")
         try FileManager.default.moveItem(at: launchdPath, to: launchdOgPath)
         try setMode(0o644, at: launchdOgPath)
+        // Back as the system has it: the move went through a temporary
+        // directory on the host, which left the host's group on it.
+        try chownRecursively(uid: 0, gid: 0, at: launchdOgPath)
     }
 
     func addVphoned(targetMount: String) throws {
@@ -74,6 +84,8 @@ extension CryptexFilesystemPatcher {
         let targetBin = target.appending(path: "/usr/bin/vphoned")
         try FileManager.default.copyItem(at: vphonedBin, to: targetBin)
         try setMode(0o755, at: targetBin)
+        // The bundle's copy belongs to whoever built it.
+        try chownRecursively(uid: 0, gid: 0, at: targetBin)
     }
 
     /// Copy in the prebuilt guest daemon.
@@ -84,7 +96,7 @@ extension CryptexFilesystemPatcher {
     /// that VM. vphoned is cross-compiled at build time now
     /// by the Xcode guest target and staged into the bundle.
     func stageVphoned(to vphonedBin: URL) throws {
-        let prebuilt = try VPhoneGuestBinaries.resolve("vphoned")
+        let prebuilt = try VPhoneGuestBinaries.resolve(VPhoneResources.vphonedName(for: guestFamily))
         try FileManager.default.copyItem(at: prebuilt, to: vphonedBin)
     }
 
@@ -103,6 +115,9 @@ extension CryptexFilesystemPatcher {
         try FileManager.default.copyItem(at: staged, to: bundle)
         // Clean AppleDouble files if the host copy created any.
         try deleteAppleDoubleFiles(under: bundle)
+        if guestFamily == .watch {
+            try retargetGPUBundle(bundle, to: MachOBuildPlatform.watchOS)
+        }
         try chownRecursively(uid: 0, gid: 0, at: bundle)
         for path in [
             bundle,
@@ -126,9 +141,71 @@ extension CryptexFilesystemPatcher {
         }
     }
 
+    /// Whether the merged system is iOS 18, whose paravirtual IOSurface driver
+    /// takes no compressed surfaces.
+    var isIOS18: Bool {
+        (try? getProductVersion())?.hasPrefix("18.") ?? false
+    }
+
+    /// iOS 18's AppleParavirtIOSurface maps only address format 0 and rejects
+    /// the compressed surfaces CoreAnimation asks for ("invalid address format
+    /// (3)"): backboardd's framebuffer allocation fails at boot, it retries
+    /// forever, and the screen stays black. Turning off IOSurface and
+    /// framebuffer compression and the deep (10-bit) framebuffer in the
+    /// any-user global domain fixes it, checked across a reboot (a backboardd
+    /// restart also comes up without these keys, so it proves nothing).
+    /// backboardd consults neither com.apple.coreanimation nor the managed
+    /// any-user file. The restore copies the image's /private/var into the
+    /// data volume, so the preferences are written there.
+    func addCoreAnimationDefaults(targetMount: String) throws {
+        let directory = URL(filePath: targetMount).appending(path: "private/var/preferences")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let plist = directory.appending(path: ".GlobalPreferences.plist")
+        var preferences: [String: Any] = [:]
+        if let data = try? Data(contentsOf: plist),
+           let existing = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        {
+            preferences = existing
+        }
+        for key in ["CAEnableIOSurfaceCompression", "CAEnableFramebufferCompression", "CAEnableDeepFramebuffer"] {
+            preferences[key] = false
+        }
+        try PropertyListSerialization.data(fromPropertyList: preferences, format: .binary, options: 0).write(to: plist)
+        try chownRecursively(uid: 0, gid: 0, at: plist)
+        try setMode(0o644, at: plist)
+    }
+
+    /// The driver and its compiler plugin are built for iOS, and dyld refuses a
+    /// library of another platform than the process's: on a watch they say
+    /// watchOS, are signed again and the bundle sealed again.
+    func retargetGPUBundle(_ bundle: URL, to platform: UInt32) throws {
+        for name in ["AppleParavirtGPUMetalIOGPUFamily", "libAppleParavirtCompilerPluginIOGPUFamily.dylib"] {
+            let file = bundle.appending(path: name)
+            var data = try Data(contentsOf: file)
+            try MachOBuildPlatform.set(platform, in: &data)
+            try data.write(to: file)
+            try VPhoneSigner.sign(
+                fileAt: file,
+                options: .init(identifier: nil, entitlements: nil, mergesExisting: true, style: .appleAdHoc),
+            )
+        }
+        // No --identifier: codesign keeps the one the bundle already carries.
+        _ = try runProcess("/usr/bin/codesign", ["-f", "-s", "-", "--timestamp=none", bundle.path])
+        print("  [+] GPU driver retargeted to \(platform == MachOBuildPlatform.watchOS ? "watchOS" : "platform \(platform)")")
+    }
+
+    /// A watch's binaries are universal (arm64_32 and arm64e); the VM runs the
+    /// arm64e slice, which is the one the patchers read. Keeps a thin binary.
+    func thinToArm64e(_ file: URL) throws {
+        let data = try Data(contentsOf: file)
+        guard MachOFatSlice.isFat(data) else { return }
+        try MachOFatSlice.slice(data).write(to: file)
+    }
+
     func patchMobileActivation(targetMount: String) throws {
         let target = URL(filePath: targetMount)
         let mobileActivationdPath = target.appending(path: "/usr/libexec/mobileactivationd")
+        try thinToArm64e(mobileActivationdPath)
         // `resign: false` because the sign below replaces the signature, and
         // re-attesting would refuse an unsigned input the Python accepted.
         try CustomFirmwareMobileActivation.patch(fileAt: mobileActivationdPath, resign: false)

@@ -133,8 +133,51 @@ extension CryptexFilesystemPatcher {
         ])
     }
 
-    func unmount(mount: String) throws {
-        _ = try runProcess("/usr/sbin/diskutil", ["unmount", mount])
+    /// Add `bytes` to the image's size, for a tool that needs room on a
+    /// volume `shrinkImage` left at its minimum.
+    func growImage(dmg: URL, by bytes: Int) throws {
+        let size = try FileManager.default.attributesOfItem(atPath: dmg.path)[.size] as? Int ?? 0
+        _ = try runProcess("/usr/sbin/diskutil", [
+            "image", "resize", "-size", String(size + bytes), dmg.path,
+        ])
+    }
+
+    /// Attach an image without mounting anything, and return its APFS volume's
+    /// device node.
+    func attachImageWithoutMounting(path: URL) throws -> String {
+        let output: String
+        do {
+            output = try runProcess("/usr/sbin/diskutil", ["image", "attach", "-noMount", path.path])
+        } catch let ProcessError.failed(status, output) {
+            detachReportedImage(in: output)
+            throw ProcessError.failed(status, output)
+        }
+        for line in output.split(whereSeparator: \.isNewline) {
+            let fields = line.split(whereSeparator: \.isWhitespace)
+            guard fields.count >= 2, fields[0].hasPrefix("/dev/disk"), fields[1] == "Apple_APFS_Volume" else {
+                continue
+            }
+            let device = String(fields[0])
+            attachedDevices.insert(device)
+            return device
+        }
+        detachReportedImage(in: output)
+        throw FirmwareManifest.ManifestError.missingKey("APFS volume in \(path.lastPathComponent)")
+    }
+
+    /// Delete the event log the host's fseventsd keeps on a writable mount.
+    ///
+    /// Apple's system volumes have no `.fseventsd`, and the restore writes
+    /// `.fseventsd/.ramdisk-boot-done` into the one it restores. A log the host
+    /// left in the image shows up in the mtree, the restored volume then no
+    /// longer matches it, and the restore fails at `seal_system_volume`
+    /// ("mtree: cannot generate the XML dictionary"). Deleting the directory on
+    /// the mounted volume also stops fseventsd writing it again for this mount.
+    func removeHostEventLog(mount: String) throws {
+        let log = URL(fileURLWithPath: mount).appending(path: ".fseventsd")
+        if FileManager.default.fileExists(atPath: log.path) {
+            try FileManager.default.removeItem(at: log)
+        }
     }
 
     /// attachImage returns the device and mount point

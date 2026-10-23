@@ -1,0 +1,12 @@
+{
+  "id": "vphone600_26.4_23E5207q",
+  "description": "vphone600 virtualisation kexts of the 26.4 beta cloudOS (the last one shipping vphone600 before 26.4 release)",
+  "kernel": {
+    "file": "kernelcache.release.vphone600",
+    "sha256": "29b0d67ca805679a705e1558e126cedc64d17ab50f7b48cf9a77847dbe59b338",
+    "decompressedSHA256": "681801fe328b00ff8ec2e94a3d84bf9f9a7a1b954640d0c40f8dd02434270935",
+    "kdk": "KDK_26.4_23E5207i.kdk"
+  },
+  "cloudOSSource": "https://updates.cdn-apple.com/private-cloud-compute/c0ecdb4b310cf5239ab2b248dd3098eec297dc5aa3bbe6ada27273262b0b8b64",
+  "symbols": "symbols.json.gz"
+}

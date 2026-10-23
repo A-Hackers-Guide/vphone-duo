@@ -38,6 +38,12 @@
 		</dict>
 		<dict>
 			<key>Identifier</key>
+			<string>com.vphone.patchset.research.board</string>
+			<key>Kind</key>
+			<string>Bundled</string>
+		</dict>
+		<dict>
+			<key>Identifier</key>
 			<string>com.vphone.patchset.devicetree</string>
 			<key>Kind</key>
 			<string>Bundled</string>
@@ -98,6 +104,7 @@
 			<string>preboot-cfw-devicetree_microphone_array</string>
 			<string>restoreramdisk-boot-apfs_sha3_hash</string>
 			<string>system-apps-cfw-attitude</string>
+			<string>system-bluetoothd-cfw-btvc_le_connection</string>
 			<string>system-backboardd-cfw-gyroscope</string>
 			<string>system-backboardd-cfw-accelerometer</string>
 			<string>system-campo-cfw-entitlements</string>

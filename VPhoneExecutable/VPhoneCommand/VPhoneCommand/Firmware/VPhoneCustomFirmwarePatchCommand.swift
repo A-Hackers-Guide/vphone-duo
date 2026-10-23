@@ -179,6 +179,27 @@ struct VPhoneCustomFirmwareInjectDylibCommand: ParsableCommand {
     }
 }
 
+// MARK: - patch-virtual-bluetooth
+
+struct VPhoneCustomFirmwarePatchVirtualBluetoothCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-virtual-bluetooth",
+        abstract: "Enable LE connections over the virtual Bluetooth controller in a staged feature plist",
+        shouldDisplay: false,
+    )
+
+    @Argument(transform: URL.init(fileURLWithPath:))
+    var plist: URL
+
+    @Flag(name: .customLong("dry-run"))
+    var dryRun = false
+
+    func run() throws {
+        let changed = try CustomFirmwareBluetoothVirtualController.patch(at: plist, dryRun: dryRun)
+        print("  [\(changed ? "+" : ".")] \(CustomFirmwareBluetoothVirtualController.feature).Enabled = true\(dryRun ? " (dry-run)" : "")")
+    }
+}
+
 // MARK: - patch-locationd-cohorting
 
 struct VPhoneCustomFirmwarePatchLocationdCohortingCommand: ParsableCommand {

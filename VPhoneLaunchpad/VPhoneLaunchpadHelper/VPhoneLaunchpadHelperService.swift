@@ -98,6 +98,40 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
         )
     }
 
+    func patchRestoreImage(
+        authorization: Data,
+        bundleVersion: String,
+        machineName: String,
+        libraryRoot: String,
+        reply: @escaping @Sendable (Int32, String?) -> Void,
+    ) {
+        runFirmware(
+            .patchRestoreImage,
+            authorization: authorization,
+            bundleVersion: bundleVersion,
+            machineName: machineName,
+            libraryRoot: libraryRoot,
+            reply: reply,
+        )
+    }
+
+    func linkKernelcache(
+        authorization: Data,
+        bundleVersion: String,
+        machineName: String,
+        libraryRoot: String,
+        reply: @escaping @Sendable (Int32, String?) -> Void,
+    ) {
+        runFirmware(
+            .linkKernelcache,
+            authorization: authorization,
+            bundleVersion: bundleVersion,
+            machineName: machineName,
+            libraryRoot: libraryRoot,
+            reply: reply,
+        )
+    }
+
     func updateGuestEnvironment(
         authorization: Data,
         bundleVersion: String,
@@ -132,7 +166,7 @@ final class VPhoneLaunchpadHelperService: NSObject, VPhoneLaunchpadHelperProtoco
         )
     }
 
-    /// All three operations share one slot per machine, so an install and
+    /// All four operations share one slot per machine, so an install and
     /// an update never write the same machine at once, and one cancel for
     /// that machine stops whichever is running.
     private func runFirmware(

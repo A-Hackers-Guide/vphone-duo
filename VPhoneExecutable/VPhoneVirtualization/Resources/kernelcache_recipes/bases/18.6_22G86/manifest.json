@@ -1,0 +1,14 @@
+{
+  "id": "18.6_22G86",
+  "productVersion": "18.6",
+  "kernel": {
+    "file": "kernelcache.release.vresearch101",
+    "sha256": "15f88daf475f4f26f7cf2339273618910de066eafee8381ef0e770dfb1b41e16",
+    "decompressedSHA256": "aae147b30364fc795f53c46788a6b9ca7c4b35141f4ea3466bf1433810a9cfa5",
+    "kdk": "KDK_18.6_22G79.kdk"
+  },
+  "symbols": "symbols.json.gz",
+  "kexts": "kexts.txt",
+  "donor": "vphone600_26.1_23B78",
+  "builderLayout": "kernel-first"
+}
