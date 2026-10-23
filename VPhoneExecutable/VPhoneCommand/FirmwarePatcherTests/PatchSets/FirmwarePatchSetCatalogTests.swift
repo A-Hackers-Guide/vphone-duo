@@ -197,6 +197,7 @@ struct FirmwarePatchSetCatalogTests {
             let applicableManual = Set(FirmwarePatchSetCatalog.allDeclarations.filter {
                 FirmwarePatchSetCatalog.manualOnlyPatches.contains($0.identifier)
                     && $0.identifier != FirmwareGuestSystemPatchSet.homePodTopCap
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodSetupBypass
                     && $0.applicability.matches(iOSBase: version, cloudOS: cloud)
             }.map(\.identifier))
             #expect(experimental.enabled.subtracting(standard.enabled) == applicableManual)

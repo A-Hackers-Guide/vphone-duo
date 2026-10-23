@@ -325,6 +325,13 @@ public enum FirmwareGuestSystemPatchSet {
                 target: .guestFile(path: homePodDisplayPath),
             ),
             VPhonePatchDeclaration(
+                identifier: homePodSetupBypass,
+                title: "HomePod setup completion",
+                summary: "Completes the donor's local AudioAccessory setup state as mobile, prepares SetupAssistant's native launch sentinel and lets SoundBoard initialize its post-setup services. Turning it off restores the prior completion flags at the next boot. Does not provision accounts, activation or a HomeKit home.",
+                target: .guestFile(path: homePodSetupPath),
+                applicability: VPhonePatchApplicability(iOSBase: .major(27)),
+            ),
+            VPhonePatchDeclaration(
                 identifier: "system-launchdaemons-boot-environment",
                 title: "Guest environment",
                 summary: """
@@ -579,6 +586,8 @@ public enum FirmwareGuestSystemPatchSet {
     /// iPad VM patched before `fw patch` copied the board's node.
     public static let homePodTopCap = "system-homepod-exp-top_cap"
     public static let homePodDisplayPath = "/usr/share/vphone/HomePodDisplay.plist"
+    public static let homePodSetupBypass = "system-homepod-exp-setup_bypass"
+    public static let homePodSetupPath = "/usr/share/vphone/HomePodSetup.plist"
 
     public static let prebootBoardAudio = "preboot-cfw-devicetree_board_audio"
 

@@ -68,6 +68,7 @@
 		<key>Patches</key>
 		<array>
 			<string>system-homepod-exp-top_cap</string>
+			<string>system-homepod-exp-setup_bypass</string>
 			<string>system-exp-ota_userland</string>
 			<string>kernel-exp-frida_thread_set_state_entitlement_flag</string>
 			<string>kernel-cfw-paravirt_gpu_task3</string>

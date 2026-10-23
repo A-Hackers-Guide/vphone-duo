@@ -112,6 +112,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         try await vm.start(forceDFU: command.dfu)
 
         let control = VPhoneGuestControl()
+        control.isHomePodGuest = options.isHomePodGuest
         self.control = control
         if !command.dfu {
             control.unlocksAtStartup = vm.unlocksAtStartup

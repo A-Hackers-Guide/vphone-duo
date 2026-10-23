@@ -68,6 +68,7 @@
 		<key>Patches</key>
 		<array>
 			<string>system-homepod-exp-top_cap</string>
+			<string>system-homepod-exp-setup_bypass</string>
 			<string>kernel-exp-frida_thread_set_state_entitlement_flag</string>
 			<string>kernel-cfw-paravirt_gpu_task3</string>
 			<string>kernel-exp-frida_vm_map_delete_immutable_code</string>

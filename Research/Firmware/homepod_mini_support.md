@@ -179,10 +179,14 @@ Frame generation and native report submission remain Apple's. The adapter uses
 a signed load command in SoundBoard and
 preserves its original entitlements.
 
-The Mac window displays a circular diffuser, adding both guest light layers and
-clamping emitted intensity. Its diffuser, color response and layer composition
-are visual approximations; the exact optical/hardware composition is not
-established by the inspected userspace code. Delivery keeps one snapshot request
+The Mac window displays a circular diffuser using runtime-compiled Metal 4
+shaders (with the same shader on the macOS 15 Metal compatibility path). It adds
+both guest light layers, blends neighboring emitters through a normalized
+two-scale point-spread function, attenuates the opaque edge, and draws the
+independent +/- channels as etched markings. Its diffuser, color response and
+layer composition are visual approximations; the exact optical/hardware
+composition is not established by the inspected userspace code. No optional
+Xcode Metal compiler download is needed to build the application. Delivery keeps one snapshot request
 in flight at up to 60 Hz, drops intermediate frames, blanks on connection loss,
 and pauses requests while minimized. No host animation substitutes for output.
 The accessible +/- controls send consumer volume HID down/up (0xE9/0xEA),
@@ -225,3 +229,9 @@ input mapping yet and is excluded from accessibility/tab navigation.
 Runtime artifacts for these checks are under `.build/homepod-ui-research/`.
 Siri activation and its multicolor animations remain unvalidated; report and
 renderer tests exercise RGB channels without claiming those services work.
+
+The subsequent Metal rendering, complete SoundBoard debug controls, and optional
+setup-completion helper are documented in
+[HomePod SoundBoard controls and setup](homepod_soundboard_controls.md). These
+changes have offline validation; the live results above apply to the preceding
+HID/display implementation, not to the new helper or debug effects.

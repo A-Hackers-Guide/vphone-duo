@@ -26,6 +26,24 @@ struct FirmwareGuestPatchResolutionTests {
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true) == [identifier])
     }
 
+    @Test func `HomePod setup bypass is version gated and never selected for other devices`() throws {
+        let identifier = FirmwareGuestSystemPatchSet.homePodSetupBypass
+        for base in ["26.4", "27.0", "27.1"] {
+            for preset in FirmwarePatchSetCatalog.builtInPresets {
+                let plan = try VPhonePatchPlan.resolve(
+                    preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
+                    iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4"),
+                )
+                #expect(plan.isEnabled(identifier) == (base.hasPrefix("27.")
+                    && preset.identifier == VPhonePatchPreset.homePodMiniIdentifier))
+            }
+        }
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [identifier]).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier]) == [identifier])
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true) == [identifier])
+        #expect(FirmwareGuestPatchResolution.guestPatchesOff(selectionEnabled: []).contains(identifier))
+    }
+
     @Test
     func `TV selection keeps vphoned and excludes iOS payloads and cache patches`() throws {
         let standard = try VPhonePatchPlan.resolve(

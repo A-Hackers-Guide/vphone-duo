@@ -1,6 +1,26 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Animation": {
+    },
+    "Commands without a reply report submission. SoundBoard applies them asynchronously.": {
+    },
+    "Copy Reply": {
+    },
+    "HomePod": {
+    },
+    "Phase": {
+    },
+    "Reload Controls": {
+    },
+    "Send Command": {
+    },
+    "SoundBoard Debug Control": {
+    },
+    "SoundBoard Reply": {
+    },
+    "This operation's native signature is unavailable on the guest firmware.": {
+    },
     "Control Center" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Control Center" } },

@@ -58,6 +58,7 @@ final class VPhoneGuestControl {
     @ObservationIgnored private var orderedInput: Task<Void, Never>?
     @ObservationIgnored private var orderedLocation: Task<Void, Never>?
     @ObservationIgnored private var locationGeneration: UInt64 = 0
+    @ObservationIgnored var isHomePodGuest = false
     private(set) var isConnected = false
     private(set) var guestCapabilities: [String] = []
     private(set) var guestIPAddress: String?

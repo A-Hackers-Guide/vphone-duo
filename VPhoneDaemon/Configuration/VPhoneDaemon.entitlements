@@ -53,6 +53,8 @@
 	<true/>
 	<key>com.apple.backboardd.launchapplications</key>
 	<true/>
+	<key>com.apple.debuginfo.soundboard</key>
+	<true/>
 	<key>com.apple.developer.hid.virtual.device</key>
 	<true/>
 	<key>com.apple.developer.networking.HotspotHelper</key>

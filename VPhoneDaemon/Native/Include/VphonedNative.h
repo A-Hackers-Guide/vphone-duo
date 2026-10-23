@@ -21,6 +21,10 @@ void vp_homepod_display_start(void);
 bool vp_homepod_display_is_configured(void);
 /// Latest guest-written MiniDisplay frame and geometry, malloc-owned JSON.
 char *vp_homepod_display_copy_json(void);
+/// SoundBoardServices debug controls, available only on HomePod firmware.
+bool vp_homepod_debug_available(void);
+/// Validated operation result or error, returned as malloc-owned JSON.
+char *vp_homepod_debug_copy_json(const char *operation, const char *arguments_json);
 
 /// Load the IOKit digitizer symbols used for multi-finger injection. Idempotent,
 /// safe to call more than once; returns false (injection then stays a no-op)

@@ -16,6 +16,7 @@ tweak filter plists, and the GPU provenance note:
 | Gravity accelerometer | `accelerometer/libvphoneaccelerometer.dylib` |
 | Device attitude | `attitude/libvphoneattitude.dylib` |
 | HomePod display identity | `homepoddisplay/libvphonehomepoddisplay.dylib` |
+| HomePod setup maintenance | `homepodsetup/vphone-homepod-setup`, `homepodsetup/com.vphone.homepod-setup.plist` |
 | Launchd hook | `launchhook/launchdhook-vphone.dylib` |
 | Process injection bridge | `systemhook/SystemHook-vphone.dylib` |
 | iOS 27 app registrar | `vpregister/vpregister` |

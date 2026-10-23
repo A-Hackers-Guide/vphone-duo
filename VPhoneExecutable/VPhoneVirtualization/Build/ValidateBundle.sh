@@ -122,10 +122,10 @@ fi
 
 for name in vphoned vphoned-tvos launchdhook-vphone.dylib SystemHook-vphone.dylib libcamfix.dylib \
     libvcamcaptured.dylib libmisfix.dylib libhapticsfix.dylib libbatteryhealthfix.dylib libdevicehubfix.dylib libdevicename.dylib \
-    libprefsfix.dylib libsigninfix.dylib libvphonegyro.dylib libvphoneaccelerometer.dylib libvphoneattitude.dylib libvphonehomepoddisplay.dylib libAppleParavirtCompilerPluginIOGPUFamily.dylib; do
+    libprefsfix.dylib libsigninfix.dylib libvphonegyro.dylib libvphoneaccelerometer.dylib libvphoneattitude.dylib libvphonehomepoddisplay.dylib vphone-homepod-setup libAppleParavirtCompilerPluginIOGPUFamily.dylib; do
     require_signed_macho "$guest/$name"
 done
-for name in vphoned.plist libcamfix.plist libvcamcaptured.plist libmisfix.plist; do
+for name in vphoned.plist libcamfix.plist libvcamcaptured.plist libmisfix.plist com.vphone.homepod-setup.plist; do
     [[ -f "$guest/$name" ]] || { print -u2 "Missing guest configuration: $name"; exit 1; }
 done
 # The virtio sound HAL plugin is a whole bundle: audiomxd finds its factory
@@ -176,7 +176,7 @@ while IFS= read -r file; do
         "$frameworks/"*)
             [[ "$platform" != IOS ]] || { print -u2 "iOS binary in Contents/Frameworks: ${file#$bundle/}"; exit 1; }
             ;;
-        "$guest/vphoned-tvos"|"$guest/libvphonehomepoddisplay.dylib")
+        "$guest/vphoned-tvos"|"$guest/libvphonehomepoddisplay.dylib"|"$guest/vphone-homepod-setup")
             # tvOS dyld refuses an iOS-platform daemon on an Apple TV guest.
             [[ "$platform" == TVOS ]] || { print -u2 "Non-tvOS binary: ${file#$bundle/}"; exit 1; }
             ;;

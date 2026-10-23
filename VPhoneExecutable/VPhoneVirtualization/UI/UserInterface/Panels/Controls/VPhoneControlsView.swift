@@ -8,6 +8,9 @@ struct VPhoneControlsView: View {
             Form {
                 displaySection
                 audioSection
+                if model.control.isHomePodGuest {
+                    VPhoneHomePodDebugSection(control: model.control)
+                }
                 powerSection
                 buttonsSection
                 keyboardSection

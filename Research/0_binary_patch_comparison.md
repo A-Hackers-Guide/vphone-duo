@@ -1,5 +1,36 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **HomePod setup completion and controls (2026-10-22, live validation).**
+> New `system-homepod-exp-setup_bypass` is HomePod-only, restricted to 27.x,
+> and selected only by `homepod-mini`. It installs the System marker
+> `/usr/share/vphone/HomePodSetup.plist`. A short-lived mobile helper journals
+> `SetupDone` and `SetupFinishedAllSteps` in `com.apple.purplebuddy`, synchronizes
+> them, and calls the donor's `BYSetupAssistantPrepareLaunchSentinel` before
+> checking the native needs-setup and initial-run APIs. The sentinel is a
+> per-user POSIX semaphore, not a filesystem flag. Removing the marker restores
+> exactly the original two keys, including absent values; the inverse survives
+> until native restoration succeeds. The helper remains installed for rollback
+> even if vphoned is deselected. This completes local setup state; it does not
+> provision an Apple Account or HomeKit home. **Live late-start correction:**
+> an already-running HPSetup retains assistant/voice-trigger assertions even
+> after SoundBoard receives completion and runs post-setup initialization.
+> Native preparation publishes fresh completion; after verification, the helper
+> replays the donor's exported notification only for an existing sentinel and
+> gracefully stops only mobile's exact
+> `/Applications/HPSetup.app/HPSetup`, rechecking identity immediately before
+> SIGTERM. It observes disappearance before reporting success; failures retain
+> the inverse for retry. No SIGKILL, arbitrary process verb or new entitlement.
+> Opt-out does not terminate processes. No new instruction patch.
+> vphoned also exposes all 29 `SBSDebugInterface` methods through a fixed,
+> ABI-checked catalog using `com.apple.debuginfo.soundboard`; the HomePod-only
+> Controls section includes native animation/phase choices and typed button and
+> LED replay adapters. The host top cap now uses runtime-compiled Metal 4 optics
+> with a macOS 15 Metal compatibility path. GPU tests and 35 Xcode catalog and
+> selection tests pass. Final bundle `2.11.0-local.26745ac8` passed live late
+> completion (one native init), fresh/repeated boot, and native Metal display
+> presentation/reconnection. Opt-out restored absent keys and setup behavior.
+> See [implementation, live evidence, and service boundaries](Firmware/homepod_soundboard_controls.md).
+
 > **HomePod top cap (2026-10-22).** `system-homepod-exp-top_cap` installs
 > `/usr/share/vphone/HomePodDisplay.plist`, extracted from the selected board's
 > `/arm-io/dockchannel-rtp/rtp-transport/display` node. It preserves the donor's
