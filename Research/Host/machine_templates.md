@@ -378,11 +378,28 @@ one for iOS 26 and 27 (`GuestServiceProfile.supportedMajors`, mirrored by
 of the setup boot. So `VPhoneMachineTemplateSlimming.fitted(toIOSVersion:)`
 turns `trimmed` into `none` on such a version, where the key is made
 (`VPhoneMachineTemplateKeys.key`) and in `vm template setup`, and
-`--accounts-off`, whose group is part of the list, is refused there before
-anything is built. iOS 26 templates had `services none` until the 26 list
+`--accounts-off`, whose group is part of the list, is skipped too, with a
+notice on stderr to keep JSON reports clean. iOS 26 templates had `services
+none` until the 26 list
 existed (2026-10-09); they now take `trimmed` like iOS 27 ones, so their key
 changes and a 26 template built before is no longer found for a default
 create, only for `--service-profile none`.
+
+Launchpad leaves its service switch enabled and its arguments unchanged
+(issue #679, 2026-10-23). A known unsupported version in the selected IPSW
+name is only an advisory: New Machine shows the compatibility note and an
+alert, without blocking creation or changing file/app choices. An unknown
+name makes no support claim. The actual decision is made by the existing
+`fitted(toIOSVersion:)` path, from IPSW manifests/template records for key
+resolution and from `restore-info.json` for standalone setup, never from a
+filename. Both paths use services `none` and no extra groups on unsupported
+versions, so the template key matches what setup does and retries converge.
+The guest's direct `services.profile.apply trimmed` RPC remains strict.
+
+Validated with 16 core slimming tests and CLI `find --json` against manifest
+fixtures with misleading names: 18.6.2 in a 27.0-named IPSW gives `none`
+and no groups with a stderr notice; 26.0 in an 18.6.2-named IPSW keeps
+`trimmed` and `accounts`. JSON output remains parseable in both cases.
 
 `--slim off` still has a setup boot: skipping Setup and waiting for
 first-boot work are not slimming. Without them every clone would start at the

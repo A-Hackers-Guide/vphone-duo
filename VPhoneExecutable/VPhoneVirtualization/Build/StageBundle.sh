@@ -73,6 +73,15 @@ daemon_sdk="$(/usr/bin/otool -l "$guest/vphoned" | /usr/bin/awk '/LC_BUILD_VERSI
 /usr/bin/xcrun vtool -set-build-version tvos 15.0 "$daemon_sdk" -replace -output "$guest/vphoned-tvos" "$guest/vphoned"
 # The same for watch guests: watchOS 8 is iOS 15's release.
 /usr/bin/xcrun vtool -set-build-version watchos 8.0 "$daemon_sdk" -replace -output "$guest/vphoned-watchos" "$guest/vphoned"
+# iOS before 26 needs Span's back-deployment library. Keep /usr/lib/swift
+# first so newer guests use their system implementation; only the iOS daemon
+# gets this private fallback. TV/watch payloads above remain unchanged.
+guest_compatibility_library="$(/usr/bin/xcrun swift-stdlib-tool --print \
+    --scan-executable "$guest/vphoned" --platform iphoneos | \
+    /usr/bin/grep '/libswiftCompatibilitySpan.dylib$')"
+/bin/cp "$guest_compatibility_library" "$guest/libswiftCompatibilitySpan.dylib"
+/usr/bin/install_name_tool -add_rpath /usr/lib/vphone "$guest/vphoned"
+/usr/bin/codesign --force --sign - "$guest/libswiftCompatibilitySpan.dylib"
 /bin/cp "$root/VPhoneDaemon/Configuration/vphoned.plist" "$guest/vphoned.plist"
 /bin/cp "$guest_products/launchhook/launchdhook-vphone.dylib" "$guest/launchdhook-vphone.dylib"
 /bin/cp "$guest_products/systemhook/SystemHook-vphone.dylib" "$guest/SystemHook-vphone.dylib"
