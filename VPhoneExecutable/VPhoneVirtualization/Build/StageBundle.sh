@@ -147,6 +147,11 @@ fi
 /bin/rm -rf "$resources/kernelcache_recipes"
 /bin/cp -R "$root/VPhoneExecutable/VPhoneVirtualization/Resources/kernelcache_recipes" "$resources/"
 
+# Native KDK extraction ports MIT-licensed reference algorithms.
+/bin/mkdir -p "$resources/Licenses"
+/bin/cp "$root/VPhoneExecutable/VPhoneCommand/FirmwarePatcher/KernelCache/KDK/LICENSE" \
+    "$resources/Licenses/native-kdk-MIT.txt"
+
 "${0:a:h}/SyncStrings.sh"
 /usr/bin/xcrun xcstringstool compile \
     "$root/VPhoneExecutable/VPhoneVirtualization/Resources/Localizable.xcstrings" \

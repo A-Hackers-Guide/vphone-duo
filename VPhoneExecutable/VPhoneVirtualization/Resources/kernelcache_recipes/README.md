@@ -46,20 +46,29 @@ kexts whose imports have no counterpart there (15 donor kexts instead of 18).
 
 ## Requirements
 
-- An `ipsw` with `kernel extract --kdk` (blacktop/ipsw), named by `VPHONE_IPSW`.
-  vphone-cli does not ship it, and runs it only as the invoking user.
+- KDK extraction is native to VPhone.bundle; no external `ipsw` is required.
+  The recipe's gzip symbol map is decompressed in process.
 - Root for the link: kmutil only reads kexts owned by root:wheel, and links the
   host's own kexts in place of any others without a word.
 - A kmutil of the base's `builderLayout`: macOS 26.4 or later for the iOS 26 bases,
   macOS 15 or 26.0 to 26.3 for the iOS 18 ones. A Mac with the other layout
   links over ssh on one that has it (`VPHONE_KMUTIL_SSH`, see
   `Documents/Guides/create-and-run.md`).
+- The kmutil of macOS 27 links `kernel-last` too, but keeps every kext's
+  `__auth_stubs`. After the link, `KernelCollectionStubCalls` makes the calls
+  through them direct again and seals corecrypto's FIPS HMAC again, so the
+  kernel patches find the call sites they find on a macOS 26 link
+  (`Research/0_binary_patch_comparison.md`, "macOS 27's kmutil keeps auth stubs").
 
 `vphone-cli fw kernelcache <vm>` stages the mix as the user (the extractions
 and the volume, in `~/.vphone/kernelcache/staged`), and under sudo links it:
 root copies the volume into a directory of its own, refusing any link out of
 it, and runs kmutil on the copy. `fw patch` then takes the mix from the cache;
-run as `sudo VPHONE_IPSW=<ipsw> vphone-cli fw patch` it does both itself.
+stage first as the invoking user, then run the link or `fw patch` under sudo.
+
+`fw kernelcache --ipsw <path>` remains accepted as an ignored compatibility
+argument in 2.12.x. The native extractor revision participates in both donor
+and mix cache keys, so older external-tool extractions are rebuilt.
 
 Mixed kernelcaches are cached in `~/.vphone/kernelcache/mix`, keyed by the recipe,
 with kmutil's log beside each. Remove `~/.vphone/kernelcache` to rebuild them.

@@ -161,6 +161,13 @@ public enum ARM64Encoder {
         return ARM64.encodeU32(insn)
     }
 
+    /// BRAA Xn, Xm (Xm == 31 means SP). Apple clang -arch arm64e checked;
+    /// Keystone 0.9.2 does not support pointer-authentication mnemonics.
+    public static func encodeBRAA(rn: UInt32, rm: UInt32) -> Data? {
+        guard rn < 31, rm < 32 else { return nil }
+        return ARM64.encodeU32(0xD71F_0800 | (rn << 5) | rm)
+    }
+
     // MARK: - ADRP / ADD Encoding
 
     /// Encode ADRP instruction.
@@ -171,7 +178,7 @@ public enum ARM64Encoder {
     public static func encodeADRP(rd: UInt32, pc: UInt64, target: UInt64) -> Data? {
         let pcPage = pc & ~0xFFF
         let targetPage = target & ~0xFFF
-        let pageDelta = Int64(targetPage) - Int64(pcPage)
+        let pageDelta = Int64(bitPattern: targetPage &- pcPage)
         let immVal = pageDelta >> 12
         guard immVal >= -(1 << 20), immVal < (1 << 20) else { return nil }
         let imm21 = UInt32(bitPattern: Int32(immVal)) & 0x1FFFFF
@@ -358,5 +365,34 @@ public enum ARM64Encoder {
         let signedImm = Int32(bitPattern: imm26 << 6) >> 6
         let offset = Int64(signedImm) * 4
         return UInt64(Int64(pc) + offset)
+    }
+}
+
+public extension ARM64Encoder {
+    /// Scale of the unsigned imm12 load/store family, including SIMD Q loads.
+    /// This changes only an existing instruction's immediate, never its opcode.
+    private static func pageOffsetScale(_ instruction: UInt32) -> UInt32? {
+        if instruction & 0x3B00_0000 == 0x3900_0000 {
+            let size = instruction >> 30
+            if size == 0, instruction & 0x0480_0000 == 0x0480_0000 {
+                return 16
+            }
+            return 1 << size
+        }
+        if instruction & 0xFFC0_0000 == 0x9100_0000 {
+            return 1
+        }
+        return nil
+    }
+
+    static func decodePageOffset(_ instruction: UInt32) -> UInt32? {
+        guard let scale = pageOffsetScale(instruction) else { return nil }
+        return ((instruction >> 10) & 0xFFF) * scale
+    }
+
+    /// Same truncation of low alignment bits as the cache export's OFF12 fixup.
+    static func retargetPageOffset(_ instruction: UInt32, offset: UInt32) -> Data? {
+        guard offset < 4096, let scale = pageOffsetScale(instruction) else { return nil }
+        return ARM64.encodeU32((instruction & 0xFFC0_03FF) | ((offset / scale) << 10))
     }
 }
