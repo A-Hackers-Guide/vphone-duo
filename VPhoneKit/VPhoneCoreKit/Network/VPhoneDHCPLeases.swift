@@ -176,13 +176,15 @@ public struct VPhoneDHCPLeaseAudit: Sendable {
         _ list: VPhoneDHCPLeaseList,
         machines: [VPhoneMACAddress: String],
         sharedSubnet: VPhoneIPv4Subnet,
+        peerSubnet: VPhoneIPv4Subnet? = nil,
         now: Date = Date(),
     ) {
+        let subnets = [sharedSubnet] + (peerSubnet.map { [$0] } ?? [])
         entries = list.leases.map { lease in
             let owner: Owner = if let mac = lease.hardwareAddress, let name = machines[mac] {
                 .machine(name)
             } else if lease.hardwareAddress == nil
-                || !(lease.address.map(sharedSubnet.contains) ?? false)
+                || !(lease.address.map { address in subnets.contains { $0.contains(address) } } ?? false)
                 || !Self.guestHostNames.contains(lease.name ?? "")
             {
                 .foreign

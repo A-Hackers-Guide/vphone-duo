@@ -58,6 +58,8 @@ nonisolated struct VPhoneLaunchpadMachine: Decodable, Hashable, Identifiable, Se
         let localHostName: String?
         /// False when the guest is not given this Mac's name locally.
         let resolvesMacName: Bool?
+        /// False when a nat guest is kept from the other nat machines.
+        let reachesPeers: Bool?
     }
 
     struct OSVersion: Decodable, Hashable, Sendable {

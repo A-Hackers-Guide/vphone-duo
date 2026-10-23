@@ -42,9 +42,9 @@ struct VPhoneVirtualMachineLeasesCommand: ParsableCommand {
             throw ValidationError("Releasing leases changes \(VPhoneDHCPLeaseList.path), which needs root. Run this command with sudo.")
         }
         let machines = try machineMACs()
-        let subnet = VPhoneNetworkHost.current.sharedNATSubnet
+        let host = VPhoneNetworkHost.current
         let audit = { (list: VPhoneDHCPLeaseList) in
-            VPhoneDHCPLeaseAudit(list, machines: machines, sharedSubnet: subnet)
+            VPhoneDHCPLeaseAudit(list, machines: machines, sharedSubnet: host.sharedNATSubnet, peerSubnet: host.peerNATSubnet)
         }
 
         if releaseOrphans {
@@ -77,7 +77,7 @@ struct VPhoneVirtualMachineLeasesCommand: ParsableCommand {
             return
         }
         guard !entries.isEmpty else {
-            print("No guest leases on \(subnet).")
+            print("No guest leases on \(host.sharedNATSubnet) or \(host.peerNATSubnet).")
             return
         }
         let now = Date()
