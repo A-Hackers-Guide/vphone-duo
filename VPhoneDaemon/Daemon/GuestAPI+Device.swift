@@ -77,12 +77,31 @@ extension GuestAPI {
                 // Preserve the physical pose across SpringBoard relaunches.
                 // CoreMotion's app pose provider cannot feed this HID sink.
                 let accelerometer = vp_accelerometer_get()
-                if accelerometer["provider_running"] as? Bool == true {
+                let previousPose = (accelerometer["degrees"] as? NSNumber).map { String($0.intValue) }
+                let publishesPose = accelerometer["provider_running"] as? Bool == true
+                let previousInterface = interfaceRotationDegrees()
+                if publishesPose {
                     guard vp_accelerometer_set_orientation(orientation) else {
                         throw GuestAPIError.operationFailed("Could not publish the accelerometer orientation")
                     }
                 }
-                return try setRotation(orientation)
+                do {
+                    return try setRotation(orientation)
+                } catch {
+                    // A refused rotation leaves the guest as it was. The pose
+                    // is persisted, and a refused request still turns iPadOS's
+                    // pointer: with the screen off, an upside-down request
+                    // left the interface portrait and the pointer upside down,
+                    // so the mouse ran backwards. Asking again for the
+                    // interface's own orientation turns the pointer back.
+                    if publishesPose, let previousPose {
+                        _ = vp_accelerometer_set_orientation(previousPose)
+                    }
+                    if let previousInterface {
+                        _ = try? setRotation(String(previousInterface))
+                    }
+                    throw error
+                }
             }
             var rotation = rotationInfo()
             rotation["accelerometer"] = vp_accelerometer_get()
