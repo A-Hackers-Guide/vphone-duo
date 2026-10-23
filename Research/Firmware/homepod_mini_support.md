@@ -129,12 +129,14 @@ also completed against the actual OTA: 51 payload chunks and 6,721 separate
 hard-link destinations passed full path validation, both target-version
 records identify 27.2/24K120, and the base IPSW manifest remains 27.0/24J361.
 `fw patch` resolved the 27.2 HomePod preset and processed all 11 components,
-applying 241 patches without an undeclared patch warning. The stopped,
-unrestored candidate is under
-`.build/homepod-sound-glow-research/machines/homepod-27-2`; preparation and
-patch logs are beside it in the research artifact directory. No VM was
-launched and no privileged installation was performed during these checks.
-Boot, migration and native Sound Glow still need live validation.
+applying 241 patches without an undeclared patch warning. The candidate was
+then moved to `/Users/insidegui/.vphone/machines/homepod-27-2`, restored and
+installed through Launchpad. Live SystemVersion confirms 27.2 / 24K120.
+Music/AirPlay audio, native Sound Glow artwork colors, pause/resume, Siri
+interruption/return and patch opt-out are verified; the original 27.0 guest is
+preserved. See [Sound Glow](homepod_sound_glow.md) for evidence and build details.
+The host label now records the actual installed userland after disk commit,
+preserving cloudOS; preparation alone continues to report the restore base.
 
 ## Validation
 

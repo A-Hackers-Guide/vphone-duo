@@ -1,6 +1,6 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
-> **HomePod 27.2 OTA and native Sound Glow (2026-10-23, offline candidate).**
+> **HomePod 27.2 OTA and native Sound Glow (2026-10-23, live verified).**
 > The 27.0 donor lacks the artwork/color extraction and native media animation
 > cases introduced in 27.2. `system-homepod-exp-ota_userland` stages the full
 > Apple HomePod mini OTA over the same device's 27.0 IPSW, retaining its restore
@@ -23,7 +23,16 @@
 > produce distinct native animated colors; pause fades to idle and resume works.
 > A follow-up to the existing Siri speech patch uses a mixable, ducking auxiliary
 > session with notify-on-deactivation after the live interruption test made
-> Music abandon the receiver. Its AirPlay handoff still needs live verification.
+> Music abandon the receiver. The owner confirmed full speech while Music stayed
+> on HomePod; native frames handed off to Siri and returned to colored music.
+> Successful installation now records the actual mounted HomePod SystemVersion
+> after disk commit, preserving cloudOS and variant. Preparing an OTA alone does
+> not promote the host label; full-install command/creator variant recording
+> retains HomePod identity. Restore-info tests cover this merge.
+> Opt-out removes the policy and injected load command and restores white native
+> playback. Re-enable plus cold boot restores audible music and colored native
+> animation, confirmed by the owner and changing valid RGB reports. Final live
+> bundle: `2.11.0-local.8e60e757`; original 27.0 VM and default bundle preserved.
 
 > **HomePod Siri speech policy (2026-10-23, live speech verified).**
 > New optional `system-homepod-exp-siri_speech` generates

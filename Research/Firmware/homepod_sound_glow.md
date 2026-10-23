@@ -2,8 +2,9 @@
 
 The candidate follows the Apple TV OTA approach: restore the HomePod mini's
 27.0 IPSW, use the full 27.2 OTA for System, then apply the selected guest patches
-to that System. Nothing has been installed into the running 27.0 VM. Live boot
-and Sound Glow verification remain pending administrator availability.
+to that System. The separate 27.2 VM boots and plays native Sound Glow through
+Music/AirPlay, including artwork changes, pause/resume and Siri handoff. The
+original 27.0 VM remains intact. Live details and final checks appear below.
 
 ## Donor identity and acquisition
 
@@ -83,8 +84,10 @@ While enabled, the getter returns native value 1. The original setter still
 receives Home updates; disabling policy exposes the actual setting again.
 Deselection restores the backed-up native executable, reseals the app and
 removes the policy. No Home account or accessory preferences are rewritten.
-There is no host scheduler, synthesized LED animation, artwork scraper, global
-MobileGestalt change or audio-session modification.
+The Sound Glow adapter uses no host scheduler, synthesized LED animation,
+artwork scraper, global MobileGestalt change or audio-session modification.
+The separate Siri session policy correction found during live interruption
+testing is described below.
 
 ## Verification boundary
 
@@ -95,12 +98,12 @@ resolution checks cover version gating, default selection, TV rejection and
 missing prerequisites. Archive tests cover ZIP metadata ordering and rejection
 of duplicate entries; existing archive path/size bounds remain in force.
 
-Static native control flow establishes the candidate's enable mechanism; it
-does not prove real AirPlay artwork delivery, brightness, animation timing or
-27.2 boot compatibility. A live candidate must establish all of those, then
-verify pause/resume, a change between distinctly colored album covers, Siri
-interruption and return to music, policy opt-out and restart persistence. The
-original 27.0 VM and its once-only welcome claim must remain recoverable.
+Static native control flow establishes the enable mechanism; runtime proof is
+recorded below. Live tests cover 27.2 boot, AirPlay artwork delivery, changing
+colored native frames, pause/resume and Siri interruption/return. Exact beat
+phase alignment has not been instrumented. Policy opt-out/re-enable is checked
+through the normal installer. The original 27.0 VM and its once-only welcome
+claim remain recoverable.
 
 Analysis artifacts and saved REA snapshots live locally under
 `.build/homepod-sound-glow-research/`. They are not shipped runtime resources.
@@ -128,13 +131,14 @@ Analysis artifacts and saved REA snapshots live locally under
 - The production Mach-O injector successfully adds the weak guest adapter load
   command to a separate copy of the 24K120 NowPlayingCap executable.
 
-The prepared candidate is
-`.build/homepod-sound-glow-research/machines/homepod-27-2`. Its Disk.img is a
-new, unrestored VM. Firmware preparation/patching and raw payload staging are
-complete; restore, CFW installation, boot and playback have **not** run. Logs
-are `prepare.log`, `patch.log`, `bundle-build.log` and `*-dry-run.log` beside it
-in the research artifact folder. The original running `homepod-mini` remains
-bound to `2.11.0-local.3f1d474e` and software 27.0; it was not stopped or updated.
+The candidate was prepared under
+`.build/homepod-sound-glow-research/machines/homepod-27-2` and moved to
+`/Users/insidegui/.vphone/machines/homepod-27-2` for live installation. Preparation
+logs remain in the research artifact folder, alongside restore, installation,
+build and native runtime evidence. The original `homepod-mini` retains bundle
+`2.11.0-local.3f1d474e` and software 27.0. It was stopped during these tests to
+avoid two identically named AirPlay receivers; its disk and welcome claim were
+not updated.
 
 ### Live continuation
 
@@ -172,15 +176,38 @@ the owner observed Music switching output back to the Mac at speech start.
 The existing auxiliary Playback session used categoryOptions=0, interrupting
 tvairplayd. Its policy now uses the public AVFAudio MixWithOthers|DuckOthers
 options and NotifyOthersOnDeactivation, without touching the shared session.
-The native lifetime/error harness and complete bundle pass. Live verification
-of the AirPlay-preserving speech handoff remains pending that build's deploy.
+The native lifetime/error harness and complete bundle pass. In build
+`2.11.0-local.b28f6d9a`, the owner confirmed full speech with Music staying on
+HomePod. Native playback state remained 1 before and after speech; the Siri
+bank acquired the display during speech and returned to the colored music bank
+afterward. Frame samples are saved in the local research evidence.
 
-Install the prepared bundle through Launchpad when authorization is available.
-Use the returned installed version, preserving the default bundle and all other
-VM bindings. Restore and install the prepared 27.2 candidate as a separate VM,
-then verify boot, exact device/OS identity, audio and native top-cap delivery
-before sending Music/AirPlay to it. Confirm native artwork colors change with
-tracks and the animation reacts during playback, pauses/resumes, yields to Siri
-and returns to music. Exercise Sound Glow opt-out through the patch selection
-and environment update, then re-enable and reboot. Keep the original 27.0 VM
-until the candidate passes these live checks.
+The live list also exposed stale host bookkeeping: it retained the 27.0 restore
+base and generic iPhone device. The installer now reads SystemVersion from the
+mounted installed System after applying patches and records it only after
+disk commit, with invoking-user credentials. Full install, creator and
+environment redeploy share this installer path; subsequent variant recording
+keeps actual HomePod identity. It preserves cloudOS and the installed variant,
+and preparation/base restore do not promote the version. Nineteen restore-info
+tests pass, including the explicit installed-userland merge and later variant
+recording. The final build is `2.11.0-local.8e60e757`; its successful environment
+redeploy corrects Launchpad to 27.2 / 24K120, with cloudOS still 26.4 / 23E5207q.
+
+Opt-out via fw set-patches and cfw update-environment removes the policy and
+restores NowPlayingCap. A bounded read of all 62 Mach-O load commands from the
+live opted-out app confirms the guest adapter is absent.
+Music playback in that opted-out boot produces white native frames, with
+equal RGB channels and no rejected reports. Re-enabling through the preset and
+environment update reinstalls the policy, and the final build cold-boots with
+Enabled=true. The owner confirmed audible music and colored animation in that
+final boot. Native frame generations 1836, 1947 and 2071 contain unequal RGB
+channels with zero rejected reports, independently confirming colored motion
+after opt-out, re-enable and cold boot. The final candidate is left running on
+`2.11.0-local.8e60e757`; all changes remain uncommitted.
+
+The default bundle remains 2.10.1. The original homepod-mini remains stopped,
+bound to its original 27.0 bundle; only homepod-27-2 is bound to the final build.
+The two receivers share the native AirPlay name HomePod, so keep one stopped
+when selecting the other for playback. The original disk and durable welcome
+claim were not modified. No general migration of an existing 27.0 VM is claimed:
+these tests use a separately restored 27.2 OTA candidate.
