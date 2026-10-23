@@ -1,5 +1,84 @@
 # The two gates between Xcode and a vphone guest
 
+## HomePod 27 port (2026-10-23)
+
+TempPod 27.2/24K120 (AudioAccessory5,1) reached three independent installation
+gates through Xcode 27.2 Run, after the DDI and UserManager lookup repairs:
+
+1. The public tvOS SDK drops device family 5 while generating `UIDeviceFamily`,
+   even with `TARGETED_DEVICE_FAMILY = 3,5`. Its `SupportedTargets.appletvos`
+   `DeviceFamilies` array defines only Apple TV (3).
+2. With the family repaired, a developer-signed app reaches an absent
+   `com.apple.misagent` service and fails installing its embedded profile.
+   HomePod ships neither the daemon nor its launch plist. The app instead uses
+   ad-hoc signing through the user's `researchsdk` mechanism.
+3. MIS accepts the local signature with the existing signature options, but
+   MobileInstallation then fails to extract a certificate signer identity
+   (`MIInstallerErrorDomain` 13, `LibMISErrorNumber` -402620415, verifier line
+   422). Its existing `allowAdhocSigning` property is needed too.
+
+`system-installd-exp-homepod_adhoc` ports these two signature adapters to a
+dedicated TVOS arm64e library loaded only into HomePod's installd. The
+`VPHONE_MIS_SIGNATURE_ONLY` build excludes the embedded-profile bypass; no
+identity, profile scope or general environment hooks are linked. Both native
+validation stages still produce their real signature metadata. The patch is
+27-only, enabled by `homepod-mini`, and blocked by the iPhone and TV presets.
+Opt-out restores installd from `.bak` before removing `/hm` and the library.
+
+The researchsdk generator at `/Users/insidegui/Developer/_projects/researchsdk`
+now adds HomePod's numeric family to **both** SDKSettings formats in the cloned
+tvOS SDK. It also selects Apple TV resource compilation because Interface
+Builder rejects a `homepod` storyboard target. HomePodApp uses the full research
+SDK path, `TARGETED_DEVICE_FAMILY = 3,5`, manual local signing and normal Xcode
+CodeSign. Its temporary metadata/signing build phase was removed. Xcode
+generates `[3,5]` itself, and `codesign --verify --strict` passes with no embedded
+profile. The app also needs the standard `application-identifier` entitlement
+(`$(PRODUCT_BUNDLE_IDENTIFIER)` for this local research signature), in addition
+to `get-task-allow` for LLDB. Without it, installd correctly returns error 63.
+
+On TempPod with bundle `2.12.0-local.92401773`, Xcode Run installed the app and
+launched PID 230 under LLDB. `process status` and `bt 5` returned a stopped
+process and symbolicated system stack after the UIKit template asserted on its
+missing HomePod display configuration. The installd capture
+`/tmp/temppod-homepod-signature-installer.json` shows MIS result 0, native
+`CdHash`, `SigningID`, `SignerType=1`, `ValidatedByProfile=false`,
+`IsNativeForPlatform=true`, and “Install successful” in 0.05 seconds. A plain
+UIScene cannot substitute for UIWindowScene under the application's system
+role; UIKit reports that minimum-class constraint separately. These errors
+demonstrate working launch/debugger communication, not support for HomePod UI.
+
+The full VPhone bundle passes admission and 77 selected catalogue, selection,
+version, declaration, plan, gate and guest-resolution tests pass. The persona
+native ABI/policy harness also passes. SDK-family insertion was applied twice
+to scratch copies of Apple's settings: both JSON/plist formats retain exactly
+two dictionary entries (3 and 5) with no duplicate; shell syntax and plist
+validation pass.
+
+Live opt-out restored installd byte-identically to its original backup
+(SHA-256 `6dd955e206ca3227ad28bda202718b7357c019e107ed79132f61a6a36d9b21cd`),
+and removed `/hm` and the HomePod signature library. The persona patch was
+disabled in the same run and launchd also matched its original backup. TempPod
+booted successfully with both adapters disabled. The normal preset was then
+restored for the final installation/debugger check.
+
+After restoring the preset (no overrides), Xcode installed and launched the
+headless Foundation version as PID 210. It uses a run-loop timer rather than
+UIApplicationMain, preserving the template UI source files for future work.
+LLDB stopped at `researchHeartbeat`, `main.m:8`; `p heartbeatCount` returned 2,
+`thread step-over` advanced it to 3, and
+`po [NSProcessInfo processInfo].processName` returned `HomePodApp`. The breakpoint
+was deleted and execution resumed. CoreDevice's process enumeration independently
+listed PID 210, and `ddiServices` reported the 27B48 cryptex compatible and usable
+after the reboot. Xcode's device picker identifies `TempPod (Internal)` with
+the `tvOS 27.2 Research` SDK. Template window scenes remain unsupported because
+HomePod has no display; the headless process is the validated research target.
+The process continued logging five-second heartbeats after resuming, without
+the earlier UIKit assertion. It is left running under Xcode's debugger, and
+the temporary MIS `LogQueries` configuration has been removed. Olive and the
+default bundle were not changed.
+
+## Original iPhone investigation
+
 Measured 2026-09-30 on `05-mis-test` (iPhone base 26.6.2 / 23G90, cloudOS 26.4
 / 23E5207q, `jb` variant), booted, with `mis_trust_auth` applied.
 

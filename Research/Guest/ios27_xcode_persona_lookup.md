@@ -24,8 +24,17 @@ and marker rejection cases. No iPhone spawn/display/jetsam hooks are loaded.
 The marker, alias and library are removed after restoring launchd on opt-out;
 an unrelated `/vp` is refused instead of replaced or removed.
 
-Live installation/launch validation is in progress. Evidence captures:
+Xcode subsequently completed installation and launched HomePodApp under LLDB
+(PID 230). The initial template then asserted while creating a UIWindowScene
+without a display configuration; this is separate from UserManager and DDI
+communication. `process status` and a symbolicated backtrace worked through
+Xcode's debugger. Further signature and SDK setup is recorded in
+`xcode_install_signature_gate.md`. Evidence captures:
 `/tmp/temppod-persona-proxy-log.json` and `/tmp/temppod-persona-kernel-log.json`.
+
+Live opt-out on TempPod restored `/sbin/launchd` byte-identically to its original
+backup (SHA-256 `6081657a8dbddfec0aca6e12990ca04dc6bdc5370b431b9c3b608c032012fbfa`),
+and removed `/vp`, the scoped marker and its library. The guest booted normally.
 
 ## Original iPhone investigation
 

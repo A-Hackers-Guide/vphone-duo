@@ -57,6 +57,7 @@ public enum FirmwareGuestPatchResolution {
                 FirmwareGuestSystemPatchSet.homePodOTAUserland, FirmwareGuestSystemPatchSet.homePodSoundGlow,
                 FirmwareGuestSystemPatchSet.homePodCryptexStaging, FirmwareGuestSystemPatchSet.homePodCryptexClass,
                 FirmwareGuestSystemPatchSet.installCoordinationPersona,
+                FirmwareGuestSystemPatchSet.homePodAdHocInstall,
                 FirmwareGuestSystemPatchSet.virtioSoundDriver])
         .union(FirmwarePatchSetCatalog.tvOS27UserlandPatches)
 

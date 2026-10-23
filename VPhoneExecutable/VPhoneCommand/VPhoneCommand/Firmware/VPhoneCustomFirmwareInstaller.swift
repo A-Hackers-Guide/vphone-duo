@@ -226,7 +226,7 @@ struct VPhoneCustomFirmwareInstaller {
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodSiriSpeech), device.family != .homePod {
             throw ValidationError("The HomePod Siri-speech patch is supported only for a HomePod guest.")
         }
-        if !effectiveEnabled.isDisjoint(with: [FirmwareGuestSystemPatchSet.homePodCryptexStaging, FirmwareGuestSystemPatchSet.homePodCryptexClass]), device.family != .homePod {
+        if !effectiveEnabled.isDisjoint(with: [FirmwareGuestSystemPatchSet.homePodCryptexStaging, FirmwareGuestSystemPatchSet.homePodCryptexClass, FirmwareGuestSystemPatchSet.homePodAdHocInstall]), device.family != .homePod {
             throw ValidationError("The HomePod cryptex staging patch is supported only for a HomePod guest.")
         }
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodSoundGlow), device.family != .homePod {
@@ -1923,7 +1923,44 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
 
-        isolate([]) { try restoreMISFixTargets(system: system) }
+        if !isHomePod {
+            isolate([]) { try restoreMISFixTargets(system: system) }
+        }
+
+        // HomePod has no misagent/provisioning service. Its research SDK signs
+        // apps ad hoc; load only the existing MIS signature-option adapter in
+        // installd, without iPhone identity, profile or spawn hooks.
+        let adHocInstall = FirmwareGuestSystemPatchSet.homePodAdHocInstall
+        isolate([adHocInstall]) {
+            let library = FirmwareGuestSystemPatchSet.homePodMISFixLibrary
+            let path = String(library.dropFirst())
+            let executable = "usr/libexec/installd"
+            if on(adHocInstall) {
+                guard isHomePod else {
+                    throw ValidationError("HomePod ad-hoc installation requires a HomePod guest.")
+                }
+                let payload = try VPhoneGuestBinaries.resolve((library as NSString).lastPathComponent)
+                try system.replaceFile(path, fromFileAt: payload, mode: 0o755, owner: Self.guestOwner)
+                try installLibraryAlias(system: system, alias: "hm", target: library)
+                try patchMachO(system: system, work: work, path: executable,
+                               preserveEntitlements: true, injectedDylibPath: "/hm")
+                live.insert(adHocInstall)
+            } else if isHomePod || priorGuest.contains(adHocInstall) {
+                if try revertMachO(system: system, work: work, path: executable) {
+                    print("  [+] \(adHocInstall): restored installd from backup")
+                } else if priorGuest.contains(adHocInstall) {
+                    live.insert(adHocInstall)
+                    throw ValidationError("HomePod ad-hoc installation has no installd backup; cannot safely remove its library.")
+                }
+                if try system.exists("hm") {
+                    guard try system.readLink("hm") == library else {
+                        throw ValidationError("Another file uses /hm; leaving it intact.")
+                    }
+                    try system.removeItem("hm")
+                }
+                try system.removeItem(path)
+            }
+        }
 
         isolate(["system-debugserver-cfw-install"]) {
             if on("system-debugserver-cfw-install") {

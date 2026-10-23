@@ -8,11 +8,16 @@ CoreDevice reports `connected`, `isCryptexDDI: true`, `contentIsCompatible:
 true`, and `isUsable: true`. Process, app, device-detail and crash-log file
 queries succeed. Xcode 27.2's Device Hub lists it under Available and shows
 DDI Services Enabled, File System Live, and Tunnel State Connected. Its Apps
-inspector completes. Display preview still stays at “Connecting display…”;
-DeviceKit error 4002 reports DDI services available but FramebufferProviderStates
-`none`, timing out after 60 seconds. This is a separate live-view failure.
-Debugger attachment, app installation/launch and every Xcode feature have not
-been validated. DDI readiness does not establish those features.
+inspector completes. HomePod has no display, so live preview is unsupported as
+expected. DeviceKit's FramebufferProviderStates `none` and preview timeout do
+not indicate a DDI failure.
+Xcode app installation, launch and LLDB attachment/stack inspection now pass
+with the separate persona, signature and research SDK setup described in
+`ios27_xcode_persona_lookup.md` and `xcode_install_signature_gate.md`. The UIKit
+template's display-backed window scene asserts on HomePod; that limitation is
+independent of DDI communication. The headless Foundation test app now runs
+under Xcode: source breakpoint, stepping, variable inspection and Objective-C
+expression evaluation pass. Other Xcode features remain unverified.
 
 `system-cryptexd-exp-homepod_staging` injects a small TVOS arm64e library
 directly into HomePod 27's cryptexd, preserving entitlements and its original

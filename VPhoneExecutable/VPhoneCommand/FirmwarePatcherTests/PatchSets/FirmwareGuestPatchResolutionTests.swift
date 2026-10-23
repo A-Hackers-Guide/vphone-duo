@@ -34,8 +34,8 @@ struct FirmwareGuestPatchResolutionTests {
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true) == [identifier])
     }
 
-    @Test(arguments: [FirmwareGuestSystemPatchSet.homePodCryptexStaging, FirmwareGuestSystemPatchSet.homePodCryptexClass])
-    func `HomePod cryptex staging is independent of the iPhone environment and reversible in selection`(identifier: String) throws {
+    @Test(arguments: [FirmwareGuestSystemPatchSet.homePodCryptexStaging, FirmwareGuestSystemPatchSet.homePodCryptexClass, FirmwareGuestSystemPatchSet.homePodAdHocInstall])
+    func `HomePod developer compatibility is independent of the iPhone environment and reversible in selection`(identifier: String) throws {
         for base in ["26.4", "27.0", "27.2", "28.0"] {
             for preset in FirmwarePatchSetCatalog.builtInPresets {
                 let plan = try VPhonePatchPlan.resolve(
@@ -59,8 +59,12 @@ struct FirmwareGuestPatchResolutionTests {
         #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [identifier]).isEmpty)
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true) == [identifier])
         let declaration = try #require(FirmwarePatchSetCatalog.allDeclarations.first { $0.identifier == identifier })
-        #expect(declaration.target == (identifier == FirmwareGuestSystemPatchSet.homePodCryptexStaging
-            ? .guestExecutable(path: "/usr/libexec/cryptexd") : .prebootDeviceTree))
+        let expectedTarget: VPhonePatchTarget = switch identifier {
+        case FirmwareGuestSystemPatchSet.homePodCryptexStaging: .guestExecutable(path: "/usr/libexec/cryptexd")
+        case FirmwareGuestSystemPatchSet.homePodAdHocInstall: .guestExecutable(path: "/usr/libexec/installd")
+        default: .prebootDeviceTree
+        }
+        #expect(declaration.target == expectedTarget)
         #expect(!declaration.bootEssential)
     }
 

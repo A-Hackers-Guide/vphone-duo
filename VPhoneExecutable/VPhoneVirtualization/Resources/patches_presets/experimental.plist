@@ -99,6 +99,7 @@
 			<string>system-homepod-exp-siri_speech</string>
 			<string>system-homepod-exp-ota_userland</string>
 			<string>system-homepod-exp-sound_glow</string>
+			<string>system-installd-exp-homepod_adhoc</string>
 			<string>system-cryptexd-exp-homepod_staging</string>
 			<string>preboot-homepod-exp-cryptex_class</string>
 			<string>preboot-homepod-exp-audio_product</string>

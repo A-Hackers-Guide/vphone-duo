@@ -22,6 +22,8 @@ public enum FirmwareGuestSystemPatchSet {
     public static let installCoordinationPersona = "system-installcoordination_proxy-cfw-persona_lookup"
     public static let installCoordinationPersonaMarker = "/usr/lib/vphone-installcoordination-persona-lookup"
     public static let homePodInstallPersonaLibrary = "/usr/lib/libvphoneinstallpersona.dylib"
+    public static let homePodAdHocInstall = "system-installd-exp-homepod_adhoc"
+    public static let homePodMISFixLibrary = "/usr/lib/libvphonehomepodmisfix.dylib"
     public static let metalCacheReuse = "system-systemhook-cfw-metal_cache_reuse"
     public static let metalCacheReuseMarker = "/usr/lib/vphone-metal-cache-reuse"
     public static let gyroscope = "system-backboardd-cfw-gyroscope"
@@ -80,6 +82,13 @@ public enum FirmwareGuestSystemPatchSet {
                 title: "HomePod Cryptex product class",
                 summary: "Sets the research kernel's Cryptex product class to the native tvOS/HomePod value so signed tvOS developer images pass Image4 equality validation. Changes only /product/cryptex1-product-class; preserves the global product token.",
                 target: .prebootDeviceTree,
+                applicability: ios27,
+            ),
+            VPhonePatchDeclaration(
+                identifier: homePodAdHocInstall,
+                title: "HomePod local app signatures",
+                summary: "Ports the existing MIS signature-option adapter to HomePod installd so locally signed research apps install without the provisioning service HomePod does not ship. Keeps MIS's native signature validation and returned metadata; no device identity or profile scope hooks.",
+                target: .guestExecutable(path: "/usr/libexec/installd"),
                 applicability: ios27,
             ),
             VPhonePatchDeclaration(
