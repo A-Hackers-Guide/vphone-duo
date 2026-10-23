@@ -98,6 +98,7 @@ enum GuestAPI {
             "capabilities": [
                 "touch",
                 "touch2",
+                "touch_edge",
                 "hid",
                 "apps",
                 "ota_system_apps",
@@ -312,6 +313,15 @@ enum GuestAPI {
         case "input.touch":
             guard let phase = (params["phase"] as? String).flatMap(TouchPhase.init(rawValue:)) else {
                 throw GuestAPIError.invalidRequest("phase must be down, move or up")
+            }
+            // A touch that starts at a screen edge needs the digitizer edge
+            // flags, which icli does not set; vphoned injects those itself.
+            if let edge = params["edge"] as? Int, edge != 0 {
+                guard params["normalized"] as? Bool ?? true else {
+                    throw GuestAPIError.invalidRequest("edge touch coordinates are normalized 0..1 only")
+                }
+                vp_hid_touch_edge(touchPhaseCode(phase), number(params, "x"), number(params, "y"), Int32(edge))
+                return ["phase": phase.rawValue, "edge": edge]
             }
             return try touch(
                 phase, x: number(params, "x"), y: number(params, "y"),
