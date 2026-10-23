@@ -12,16 +12,18 @@
 //   3. keeps the recipe's bundle list: the base without its research-board-only
 //      kexts, plus the donor's virtualisation kexts;
 //   4. stages the bundles as a volume and links it with kmutil;
-//   5. restores Apple's CPU subtype if the builder wrote another, checks every
-//      bundle was linked, and caches the result.
+//   5. restores Apple's CPU subtype if the builder wrote another, branches
+//      straight past the auth stubs macOS 27's builder keeps
+//      (KernelCollectionStubCalls), checks every bundle was linked, and caches
+//      the result.
 //
 // The maps are research results: BinDiff symbolication against a symbolicated
 // KDK of the same family, plus verified fixes (see the README beside the
-// recipes). Extracting needs an `ipsw` with `kernel extract --kdk`, which
-// vphone-cli does not ship: `VPHONE_IPSW` names it.
+// recipes). Extraction runs natively in this process; kmutil still performs the link.
 
 import Foundation
 import Img4tool
+import VPhoneArchiveKit
 import VPhoneCoreKit
 import VPhonePatchKit
 
@@ -48,8 +50,9 @@ public final class KernelCacheMixer {
     }
 
     /// Bump when the steps change, so cached mixes are rebuilt.
-    static let revision = 3
+    static let revision = 6
 
+    /// Legacy source-compatibility constant. Native extraction does not read it.
     public static let ipswEnvironmentVariable = "VPHONE_IPSW"
 
     public init(
@@ -110,8 +113,8 @@ public final class KernelCacheMixer {
         guard try geteuid() == 0 || mixer.linksRemotely(input) else {
             throw PatcherError.invalidFormat(linkInstructions(staged: state == .staged))
         }
-        if state == .missing {
-            _ = try ipsw()
+        if state == .missing, geteuid() == 0 {
+            throw PatcherError.invalidFormat(linkInstructions(staged: false))
         }
     }
 
@@ -143,7 +146,7 @@ public final class KernelCacheMixer {
 
     /// The mixed kernelcache (an IMG4 `krnl` container) for a research board
     /// one: from the cache, linked from a staged volume (root), or staged and
-    /// linked in one go (root with `VPHONE_IPSW`).
+    /// linked from a volume staged by the invoking user.
     public func mix(_ input: Input) throws -> Data {
         let (base, paths) = try locations(for: input)
         log("  [kc] base \(base.id) (\(base.productVersion)), donors \(base.donors.joined(separator: ", "))")
@@ -161,17 +164,17 @@ public final class KernelCacheMixer {
     }
 
     /// Extracts both kernelcaches and stages the volume kmutil links, as the
-    /// invoking user: the one step that runs `ipsw`. Does nothing when the mix
+    /// invoking user, entirely in process. Does nothing when the mix
     /// or its volume is already in the cache.
-    public func stage(_ input: Input, ipsw ipswPath: String? = nil) throws {
+    /// The legacy ipsw argument is accepted as a no-op throughout 2.12.x.
+    public func stage(_ input: Input, ipsw _: String? = nil) throws {
         let (base, paths) = try locations(for: input)
         guard !FileManager.default.fileExists(atPath: paths.mixed.path), !Self.isStaged(paths.staged) else { return }
         guard geteuid() != 0 else {
-            throw PatcherError.invalidFormat("Stage the kernelcache as your user first with `VPHONE_IPSW=<ipsw> vphone-cli fw kernelcache <vm>`, then run `sudo vphone-cli fw kernelcache <vm> --link-only`. External extraction tools never run as root.")
+            throw PatcherError.invalidFormat("Stage the kernelcache as your user first with `vphone-cli fw kernelcache <vm>`, then run `sudo vphone-cli fw kernelcache <vm> --link-only`. Extraction writes to the invoking user's cache; root only links a staged volume.")
         }
         let location = try KernelCollectionBuilder.location(for: base)
         let donors = try base.donors.map { try recipes.donor(id: $0) }
-        let ipsw = try Self.ipsw(ipswPath)
 
         let fm = FileManager.default
         try? fm.removeItem(at: paths.staged)
@@ -179,7 +182,7 @@ public final class KernelCacheMixer {
         try fm.createDirectory(at: work, withIntermediateDirectories: true)
         log("  [kc] staging in \(paths.staged.path)")
 
-        let donorKDKs = try donors.map { try donorKDK($0, restoreTree: input.restoreTree, ipsw: ipsw) }
+        let donorKDKs = try donors.map { try donorKDK($0, restoreTree: input.restoreTree) }
         let payload = try Self.payload(of: input.kernelcache)
         try Self.check(payload, base.kernel.decompressedSHA256, "decompressed \(base.kernel.file)")
         let decompressed = work.appending(path: "\(base.kernel.file).decompressed")
@@ -187,7 +190,7 @@ public final class KernelCacheMixer {
         log("  [kc] extracting the base kernelcache with its symbol map")
         let baseKDK = try extract(
             kernelcache: decompressed, symbols: base.symbolsURL, kdk: base.kernel.kdk,
-            into: work.appending(path: "base"), ipsw: ipsw.url,
+            into: work.appending(path: "base"),
         )
 
         let identifiers = try base.kextIdentifiers()
@@ -200,7 +203,7 @@ public final class KernelCacheMixer {
         log("  [kc] mix: \(identifiers.count) kexts, \(removed.count) research board kexts removed, \(addedText)")
         try KernelCacheKDK.makeVolume(kdk: mixKDK, identifiers: identifiers, output: paths.staged.appending(path: "volume"))
         try fm.removeItem(at: work)
-        try Data(ipsw.hash.utf8).write(to: paths.staged.appending(path: "ipsw.sha256"))
+        try Data(KDKExtraction.revision.utf8).write(to: paths.staged.appending(path: "extractor.version"))
         try Data().write(to: paths.staged.appending(path: Self.stagedMarker))
         // Under sudo, so the user's later runs can replace it.
         if geteuid() == 0 {
@@ -213,7 +216,7 @@ public final class KernelCacheMixer {
         }
     }
 
-    /// Links a staged volume, as root, and caches the result. Runs no `ipsw`:
+    /// Links a staged volume, as root, and caches the result:
     /// the volume is copied into a directory only root can reach, with nothing
     /// in it that points outside, and kmutil links that copy.
     @discardableResult
@@ -227,7 +230,7 @@ public final class KernelCacheMixer {
             throw PatcherError.invalidFormat(Self.linkInstructions(staged: Self.isStaged(paths.staged)))
         }
         guard Self.isStaged(paths.staged) else {
-            throw PatcherError.fileNotFound("the staged \(base.id) kernelcache volume in \(paths.staged.path); run `vphone-cli fw kernelcache` with \(Self.ipswEnvironmentVariable) first")
+            throw PatcherError.fileNotFound("the staged \(base.id) kernelcache volume in \(paths.staged.path); run `vphone-cli fw kernelcache` as your user first")
         }
 
         let payload = try Self.payload(of: input.kernelcache)
@@ -370,7 +373,7 @@ public final class KernelCacheMixer {
         let link = "sudo vphone-cli fw kernelcache <vm>"
         return staged
             ? "the kernelcache mix is staged; linking it needs root (kmutil only reads kexts owned by root). Run `\(link)`, or this command with sudo."
-            : "the kernelcache mix is not built yet. Stage it as your user with `\(ipswEnvironmentVariable)=<ipsw> vphone-cli fw kernelcache <vm>`, then link it with `\(link) --link-only`."
+            : "the kernelcache mix is not built yet. Stage it as your user with `vphone-cli fw kernelcache <vm>`, then link it with `\(link) --link-only`."
     }
 
     // MARK: - Steps
@@ -389,38 +392,54 @@ public final class KernelCacheMixer {
         guard missing.isEmpty else {
             throw PatcherError.invalidFormat("kexts missing from the linked kernelcache: \(missing.joined(separator: ", "))")
         }
+        var changed = false
         let start = payload.startIndex
         let subtype = payload[start + 8 ..< start + 12]
         let wanted = original[original.startIndex + 8 ..< original.startIndex + 12]
-        guard subtype != wanted else { return im4pData }
-        log("  [kc] restoring CPU subtype \(Data(wanted).hex) (the builder wrote \(Data(subtype).hex))")
-        payload.replaceSubrange(start + 8 ..< start + 12, with: wanted)
-        let url = work.appending(path: "subtype.im4p")
+        if subtype != wanted {
+            log("  [kc] restoring CPU subtype \(Data(wanted).hex) (the builder wrote \(Data(subtype).hex))")
+            payload.replaceSubrange(start + 8 ..< start + 12, with: wanted)
+            changed = true
+        }
+        let stubs = try KernelCollectionStubCalls.directCalls(in: payload)
+        if stubs.branches > 0 {
+            log("  [kc] the builder kept \(stubs.stubs) auth stubs; \(stubs.branches) calls now branch to their targets directly")
+            payload = stubs.payload
+            changed = true
+        }
+        guard changed else { return im4pData }
+        let url = work.appending(path: "finalized.im4p")
         try IM4PHandler.save(patchedData: payload, originalIM4P: im4p, to: url)
         return try Data(contentsOf: url)
     }
 
-    /// `ipsw kernel extract --kdk` into `directory`, returning the KDK named
-    /// `kdk`. A kernelcache whose kexts carry no `DTPlatformBuild` gives
-    /// `KDK_<version>_.kdk`; the recipe supplies the build.
-    func extract(kernelcache: URL, symbols: URL?, kdk: String, into directory: URL, ipsw: URL) throws -> URL {
+    /// Extract natively. A kernelcache whose kexts carry no DTPlatformBuild
+    /// gives KDK_<version>_.kdk; the recipe supplies the build.
+    func extract(kernelcache: URL, symbols: URL?, kdk: String, into directory: URL) throws -> URL {
         let fm = FileManager.default
         try? fm.removeItem(at: directory)
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
-        let log = directory.appending(path: "extract.log")
-        var arguments = ["kernel", "extract", "--kdk", "--force"]
+        var messages: [String] = []
+        defer { try? messages.joined(separator: "\n").write(to: directory.appending(path: "extract.log"), atomically: true, encoding: .utf8) }
+        var known: [UInt64: [String]] = [:]
         if let symbols {
-            let compressed = directory.appending(path: "symbols.json.gz")
-            try fm.copyItem(at: symbols, to: compressed)
-            try Self.run("/usr/bin/gzip", ["-d", compressed.path], log: log)
-            arguments += ["--symbols", directory.appending(path: "symbols.json").path]
+            let json = directory.appending(path: "symbols.json")
+            try VPhoneArchiveWriter.decompress(symbols, to: json)
+            known = try KDKLinkSymbols.loadKnown(Data(contentsOf: json))
+            try fm.removeItem(at: json)
         }
-        arguments += [kernelcache.path, "-o", directory.path]
-        try Self.run(ipsw.path, arguments, environment: ["NO_COLOR": "1"], log: log)
+        do {
+            _ = try KDKExtraction.extract(Data(contentsOf: kernelcache, options: .mappedIfSafe), to: directory, known: known) {
+                messages.append($0)
+            }
+        } catch {
+            messages.append("ERROR: \(error)")
+            throw error
+        }
 
         let produced = try fm.contentsOfDirectory(atPath: directory.path).filter { $0.hasPrefix("KDK_") && $0.hasSuffix(".kdk") }
         guard produced.count == 1, let name = produced.first else {
-            throw PatcherError.fileNotFound("the KDK `ipsw kernel extract --kdk` wrote into \(directory.path) (found \(produced))")
+            throw PatcherError.fileNotFound("the native KDK extraction wrote into \(directory.path) (found \(produced))")
         }
         var url = directory.appending(path: name)
         if name != kdk {
@@ -440,7 +459,7 @@ public final class KernelCacheMixer {
     }
 
     /// The donor's KDK, extracted once into `donors/<id>`.
-    func donorKDK(_ donor: KernelCacheDonor, restoreTree: URL, ipsw: (url: URL, hash: String)) throws -> URL {
+    func donorKDK(_ donor: KernelCacheDonor, restoreTree: URL) throws -> URL {
         let fm = FileManager.default
         let directory = cacheDirectory.appending(path: "donors/\(donor.id)")
         let kdk = directory.appending(path: "extract/\(donor.kernel.kdk)")
@@ -449,7 +468,7 @@ public final class KernelCacheMixer {
         if let symbols = donor.symbolsURL {
             keyMaterial += try Data(contentsOf: symbols)
         }
-        keyMaterial += Data(ipsw.hash.utf8)
+        keyMaterial += Data(KDKExtraction.revision.utf8)
         let key = KernelCacheRecipes.sha256(keyMaterial)
         if (try? String(contentsOf: marker, encoding: .utf8)) == key, fm.fileExists(atPath: kdk.path) {
             log("  [kc] using the cached donor KDK \(kdk.path)")
@@ -464,7 +483,7 @@ public final class KernelCacheMixer {
         log("  [kc] extracting the donor kernelcache \(donor.id)")
         let extracted = try extract(
             kernelcache: decompressed, symbols: donor.symbolsURL, kdk: donor.kernel.kdk,
-            into: directory.appending(path: "extract"), ipsw: ipsw.url,
+            into: directory.appending(path: "extract"),
         )
         try key.write(to: marker, atomically: true, encoding: .utf8)
         return extracted
@@ -504,9 +523,7 @@ public final class KernelCacheMixer {
     // MARK: - Helpers
 
     /// What decides the output: the kernelcaches, maps and bundle list, the
-    /// layout and this file's steps. Not the ipsw, which the root link does not
-    /// run: a stage records which one made it (`ipsw.sha256`), and removing
-    /// `~/.vphone/kernelcache` rebuilds everything.
+    /// layout, native extractor revision and this file's steps.
     func cacheKey(base: KernelCacheBase, donors: [KernelCacheDonor]) throws -> String {
         var material = Data("\(Self.identity(base.kernel))|".utf8)
         for donor in donors {
@@ -515,7 +532,7 @@ public final class KernelCacheMixer {
         for url in [base.symbolsURL, base.kextsURL] + donors.compactMap(\.symbolsURL) {
             material += try Data(contentsOf: url)
         }
-        material += Data("\(Self.revision)|\(base.builderLayout.rawValue)".utf8)
+        material += Data("\(Self.revision)|\(base.builderLayout.rawValue)|\(KDKExtraction.revision)".utf8)
         // A recipe with its own source order is keyed on it too.
         if base.sources != nil {
             material += Data("|\(base.kextSources.joined(separator: ","))".utf8)
@@ -539,25 +556,6 @@ public final class KernelCacheMixer {
             return try im4p.payload()
         }
         return data
-    }
-
-    /// The `ipsw` given, or else named by `VPHONE_IPSW`, with `kernel extract --kdk`.
-    static func ipsw(_ given: String? = nil) throws -> (url: URL, hash: String) {
-        let hint = "The kernelcache mix needs an ipsw with `kernel extract --kdk`; set \(ipswEnvironmentVariable) to its path "
-            + "(under sudo: `sudo \(ipswEnvironmentVariable)=<path> vphone-cli ...`)."
-        guard let path = given ?? ProcessInfo.processInfo.environment[ipswEnvironmentVariable], !path.isEmpty else {
-            throw PatcherError.fileNotFound("ipsw. \(hint)")
-        }
-        let url = URL(fileURLWithPath: path)
-        guard FileManager.default.isExecutableFile(atPath: url.path),
-              let help = try? VPhoneProcessRunner.runCapturing(url, ["kernel", "extract", "--help"]),
-              help.stdout.contains("--kdk"), help.stdout.contains("--symbols")
-        else {
-            throw PatcherError.invalidFormat("\(path) is not an ipsw with `kernel extract --kdk --symbols`. \(hint)")
-        }
-        // Its own hash, not `ipsw version`, which a local build leaves empty.
-        let binary = try Data(contentsOf: url, options: .mappedIfSafe)
-        return (url, KernelCacheRecipes.sha256(binary))
     }
 
     /// Runs a tool with its output in `log`, which a failure quotes the end of.
