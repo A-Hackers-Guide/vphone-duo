@@ -1,6 +1,6 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
-> **HomePod audio-only identity correction (2026-10-23).**
+> **HomePod audio-only identity correction (2026-10-22, live validation).**
 > An A/B boot of the same installed bundle, changing only the validated donor
 > product token back to its prior virtual value, restores the native red replay;
 > restoring the donor token blacks the same fixture. The donor identity enables
@@ -13,8 +13,11 @@
 > The old repair remains declared for explicit research and reversible migration.
 > No display workaround or new instruction patch. All 88 focused Xcode firmware
 > tests, four audio transport harnesses, the unchanged display adapter harness,
-> the full bundle build and strict signature verification pass. Final install
-> and combined audio/display validation await the owner's availability.
+> the full bundle build and strict signature verification pass. Installed
+> `2.11.0-local.40cd1d45` restores the exact original Preboot tree; MobileGestalt
+> retains the virtual product enum while VirtualAudio uses route 4. The owner
+> confirms clear tones. LED replay and native identify output work across two
+> cold boots; the second playback run has zero starvation/drops in all cycles.
 
 > **HomePod audio port (2026-10-22, live routing validation).**
 > New `preboot-homepod-exp-audio_product` restores the donor's exact 20-byte

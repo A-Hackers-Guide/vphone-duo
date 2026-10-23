@@ -17,7 +17,7 @@ physical endpoint are verified. Both 48 kHz and 44.1 kHz source WAVs play
 without a preferred-sample-rate override. The earlier failed iterations and
 their discriminating probes are retained below.
 
-### Product identity regression and audio-only correction (2026-10-23)
+### Product identity regression and audio-only correction (2026-10-22)
 
 The donor product token used by that audio build also changes unrelated
 MobileGestalt clients. An A/B boot using the same bundle and device tree,
@@ -46,27 +46,65 @@ This VM's backup contains the original virtual token. A boot baseline already
 containing a donor token is not reconstructed by disabling that repair; retain
 its original research tree before migration. No display shim changes remain.
 
-The owner asked to defer further authenticated bundle updates. The installed
-display candidate is not the final audio-only build; final install and cold-boot
-audio/display validation remain pending availability. Research artifacts are
-under `.build/homepod-audio-research/display-regression-*`.
+The owner initially deferred authenticated bundle updates. The failed display
+candidate remained installed until they returned; the final audio-only build's
+live results are below. Investigation artifacts are under
+`.build/homepod-audio-research/display-regression-*`.
 
 Local verification: all **88** focused Xcode firmware tests pass, including
 the original-token fixture, all-preset donor-repair exclusion, shipped/built-in
 preset agreement, and shared Preboot inverse composition. Four audio transport
 harnesses and the unchanged display identity harness pass. The full `VPhone`
 bundle build and `codesign --verify --deep --strict` pass. The final bundle is
-`.build/XcodeBundle/Build/Products/Debug/VPhone.bundle`; it was not installed.
+`.build/XcodeBundle/Build/Products/Debug/VPhone.bundle`.
 
 A guest-only read/write Preboot remount was rejected by automatic approval
 review because it changes boot-volume protection. That probe was not executed
-or retried. Use the normal authorized Launchpad environment update when the
-owner returns. The temporary audio override was restored to its originally
-absent state, other diagnostic preferences were restored, and the VM was
-stopped. Its installed host/guest bundle remains `2.11.0-local.f695af7f` (the
-failed limiter candidate), with the donor token still installed. The final
-source contains no display workaround; the next environment update must
-replace that candidate and apply the newly disabled donor repair's inverse.
+or retried. The temporary audio override and other diagnostic preferences were
+restored, and the VM was stopped while waiting. The final source contains no
+display workaround. The later authorized Launchpad update applied the normal
+Preboot inverse, without the rejected guest-only remount.
+
+### Audio-only live validation (2026-10-22)
+
+Launchpad installed `2.11.0-local.40cd1d45`, passed preflight and updated only
+`homepod-mini`. Its first cold boot answered vphoned after four seconds. The
+entire installed 77,138-byte personalized Preboot tree is byte-identical to
+the original saved before the audio identity change (SHA-256
+`65716513bd65ff960c1670a5586658ed8e9dc8894e13c21ac0428288567a6d0e`).
+The native mobile probe reports `MGGetProductType=3832856627` (`0xe474c033`),
+with `ProductType=AudioAccessory5,1`, `hw.model=B520AP` and short model B520.
+VirtualAudio's separate stored `ProductIDOverride` is integer 4. Driver startup
+logs confirm that value was present before VirtualAudio loaded.
+
+The same red replay previously blacked by donor identity now reports RGB/icons
+0.749996, with no rejected HID reports or error, and is visibly red in the Mac
+window. Native `identify`/`On` produces white inner-ring and center LEDs near
+full scale. A second cold boot again answers after four seconds, retains route
+4 and produces the native identify output. No display shim changes are needed.
+
+Ordinary AVAudioPlayer sessions play 48/44.1/48 kHz source WAVs through Speaker
+`PuffinOutput` at a 48 kHz physical rate. The owner confirms **“Yes, clear
+tones.”** A VM-scoped unmuted host tap records 1,142,314 nonzero Float32 samples,
+peak 0.00598199 and RMS 0.00216457, over about 11.9 seconds of active content;
+the tap and private aggregate are destroyed at exit. The first run's transfer
+summaries have 60/56/70 writes, no starvation, and 49,152 dropped bytes in the
+first cycle only. The repeat after a second cold boot has **63/59/56 writes,
+zero starvation and zero dropped bytes in every cycle**. audiomxd remains PID
+116 before and after that repeat, without a manual service restart.
+
+The bounded 28-second error capture contains 281 entries and is not truncated;
+none match the prior speaker-DSP buffer overruns. It still contains zero-channel
+and 14-channel converter errors; microphone routing remains outside this output
+port's validated scope. These short tests do not establish long-duration clock
+accuracy. The replay/spinner/identify diagnostics are cleared, probe jobs are
+unloaded and temporary files removed. The VM remains running on the corrected
+bundle, with the library default and other VMs unchanged.
+
+Evidence: `audio-only-live-{tree,native-identity,red-display,identify-display,
+playback,driver,audio-errors}.json`, `audio-only-host-tap.log`, and
+`audio-only-second-boot-{display,playback,driver,audiomxd-before,audiomxd-after}.json`
+under `.build/homepod-audio-research/`.
 
 ## Native reveal procedure
 
