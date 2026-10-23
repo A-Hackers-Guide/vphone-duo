@@ -46,8 +46,11 @@ struct KernelCacheMixerTests {
 
     @Test("Firmware snapshot excludes disks and untrusted tools, and publication replaces links")
     func confinedFirmwareSnapshot() throws {
-        let base = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString).resolvingSymlinksInPath()
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let temporary = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        guard let path = realpath(temporary.path, nil) else { throw POSIXError(.ENOENT) }
+        let base = URL(fileURLWithPath: String(cString: path))
+        free(path)
         defer { try? FileManager.default.removeItem(at: base) }
         let vm = base.appending(path: "vm")
         let restore = vm.appending(path: "Test_Restore")

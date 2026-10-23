@@ -64,7 +64,9 @@ struct CryptexFileOpsTests {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("vphone-fileops-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
+        guard let path = realpath(url.path, nil) else { throw POSIXError(.ENOENT) }
+        defer { free(path) }
+        return URL(fileURLWithPath: String(cString: path))
     }
 
     private func mode(of url: URL) throws -> Int {
