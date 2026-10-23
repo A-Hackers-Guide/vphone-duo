@@ -1,5 +1,18 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **vphoned on iOS 18 (2026-10-23):** the daemon strongly imports Span types
+> from `@rpath/libswiftCompatibilitySpan.dylib`, but the guest payload omitted
+> the back-deployment library. The bundle now carries the signed iPhoneOS
+> library, and the existing vphoned installation steps (both restore-image
+> injection and full/environment-only CFW install) copy it to
+> `/usr/lib/vphone/libswiftCompatibilitySpan.dylib`. The iOS daemon gains that
+> fallback rpath after `/usr/lib/swift`, preserving the system implementation
+> on iOS 26+. The restore-image trust-cache scan includes the added file.
+> Bundle admission checks its signature/platform and the daemon's search path.
+> No new patch, preset, instruction replacement, or version change is needed;
+> TV/watch daemon payloads are unchanged. This fixes a confirmed missing
+> dependency; an iOS 18 guest boot still needs runtime validation.
+
 > **iPhone Duo bring-up (2026-10-23, first boot fails):**
 > `iPhone19,4` / V68AP, iOS 27.1 (24A94425), is registered with one outer
 > display and paired with cloudOS 26.4 (23E5207q). Its device tree reports

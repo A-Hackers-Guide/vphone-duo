@@ -69,6 +69,13 @@ extension CryptexFilesystemPatcher {
         defer { try? FileManager.default.removeItem(at: vphonedBin) }
 
         let confined = try VPhoneConfinedDirectory.pin(absolutePath: targetMount)
+        if guestFamily == .iPhone || guestFamily == .iPad {
+            // Included in createTrustcache's scan of the finished filesystem.
+            _ = try confined.directory("usr/lib/vphone", create: true)
+            try confined.replaceFile("usr/lib/vphone/libswiftCompatibilitySpan.dylib",
+                                     fromFileAt: VPhoneGuestBinaries.resolve("libswiftCompatibilitySpan.dylib"),
+                                     mode: 0o755, owner: (0, 0))
+        }
         try confined.replaceFile("usr/bin/vphoned", fromFileAt: vphonedBin, mode: 0o755, owner: (0, 0))
     }
 
