@@ -143,6 +143,8 @@ extension CryptexFilesystemPatcher {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
         let mountPoint = try createTmpDir().appending(path: "volume")
+        // diskutil refuses a mount point that does not exist.
+        try FileManager.default.createDirectory(at: mountPoint, withIntermediateDirectories: false)
         process.arguments = if readonly {
             [
                 "image", "attach", "-mountPoint", mountPoint.path, "-nobrowse",
