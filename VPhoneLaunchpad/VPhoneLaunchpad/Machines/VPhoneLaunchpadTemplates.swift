@@ -78,6 +78,19 @@ nonisolated struct VPhoneLaunchpadSlimming: Hashable, Sendable {
 
     // MARK: Effective values
 
+    /// A UI hint only. The Core Bundle fits services using the real firmware
+    /// version; an unknown or misleading filename must never change options.
+    static func warnsAboutServiceTrimming(iphoneSource: String) -> Bool {
+        let source = iphoneSource.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = source.contains("://") ? URL(string: source) : URL(fileURLWithPath: source)
+        guard let name = url?.lastPathComponent,
+              name.hasPrefix("iPhone") || name.hasPrefix("iPad"),
+              let facts = VPhoneLaunchpadIPSW(fileName: name),
+              let major = facts.version.split(separator: ".").first.flatMap({ Int($0) })
+        else { return false }
+        return ![26, 27].contains(major)
+    }
+
     /// The kept languages as the CLI takes them, or nil for the default (or
     /// when no tier removes language data).
     var languagesArgument: String? {

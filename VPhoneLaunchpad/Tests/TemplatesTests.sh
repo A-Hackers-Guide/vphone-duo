@@ -7,6 +7,7 @@ trap '/bin/rm -rf "$temporary"' EXIT
 
 /usr/bin/xcrun swiftc -swift-version 6 -strict-concurrency=complete \
     -parse-as-library \
+    "$launchpad/VPhoneLaunchpad/IPSWCache/VPhoneLaunchpadIPSW.swift" \
     "$launchpad/VPhoneLaunchpadShared/VPhoneLaunchpadBundleStore.swift" \
     "$launchpad/VPhoneLaunchpad/Machines/VPhoneLaunchpadMachine.swift" \
     "$launchpad/VPhoneLaunchpad/Machines/VPhoneLaunchpadTemplates.swift" \

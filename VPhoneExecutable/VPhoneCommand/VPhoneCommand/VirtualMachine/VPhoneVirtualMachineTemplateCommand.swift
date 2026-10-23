@@ -418,7 +418,7 @@ struct VPhoneVirtualMachineTemplateSetupCommand: ParsableCommand {
         wanted.trimTier = trimmed
         // Checked before booting: a machine adopt would refuse is not worth it.
         let recorded = try VPhoneMachineTemplateKeys.recorded(bundle)
-        wanted = try Self.fitted(wanted, toIOSVersion: recorded.key.iOSVersion)
+        wanted = try VPhoneMachineTemplateKeys.fitted(wanted, toIOSVersion: recorded.key.iOSVersion)
         if let snapshots = try? VPhoneMachineSnapshots.list(of: bundle), !snapshots.isEmpty {
             print("warning: \(target) has \(snapshots.count) snapshot(s); vm template adopt refuses it until they are deleted")
         }
@@ -459,7 +459,7 @@ struct VPhoneVirtualMachineTemplateSetupCommand: ParsableCommand {
         }
         let request = try slimming.request
         if !request.isEmpty {
-            let wanted = try Self.fitted(slimming.resolve(), toIOSVersion: record.key.iOSVersion)
+            let wanted = try VPhoneMachineTemplateKeys.fitted(slimming.resolve(), toIOSVersion: record.key.iOSVersion)
             guard wanted == record.key.slimming else {
                 throw ValidationError("\(target) is built to its key: \(record.key.slimming.summary). Leave the slimming switches out.")
             }
@@ -488,15 +488,6 @@ struct VPhoneVirtualMachineTemplateSetupCommand: ParsableCommand {
         print("[+] Template \(template.identifier) frozen at \(template.url.path)")
     }
 
-    /// The slimming asked for, as the guest's iOS can take it: no trimmed
-    /// service profile where vphoned has no list for that version (before iOS 26).
-    static func fitted(_ slimming: VPhoneMachineTemplateSlimming, toIOSVersion iOSVersion: String) throws -> VPhoneMachineTemplateSlimming {
-        do {
-            return try slimming.fitted(toIOSVersion: iOSVersion)
-        } catch let error as VPhoneTemplateSlimmingError {
-            throw ValidationError(error.description)
-        }
-    }
 }
 
 // MARK: - adopt

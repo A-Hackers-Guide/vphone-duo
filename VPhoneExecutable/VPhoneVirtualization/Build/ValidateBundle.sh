@@ -144,11 +144,27 @@ if /usr/bin/grep -q 'AVPSEPBooter-' "$resources/OpenSEP/OpenSEP.bin"; then
     exit 1
 fi
 
-for name in vphoned vphoned-tvos vphoned-watchos launchdhook-vphone.dylib SystemHook-vphone.dylib libcamfix.dylib \
+for name in vphoned vphoned-tvos vphoned-watchos libswiftCompatibilitySpan.dylib launchdhook-vphone.dylib SystemHook-vphone.dylib libcamfix.dylib \
     libvcamcaptured.dylib libmisfix.dylib libhapticsfix.dylib libbatteryhealthfix.dylib libdevicehubfix.dylib libdevicename.dylib \
     libprefsfix.dylib libsigninfix.dylib libvphonegyro.dylib libvphoneaccelerometer.dylib libvphoneattitude.dylib libvphonehomepoddisplay.dylib libvphonecryptexstaging.dylib libvphoneinstallpersona.dylib libvphonehomepodmisfix.dylib vphone-homepod-setup libAppleParavirtCompilerPluginIOGPUFamily.dylib; do
     require_signed_macho "$guest/$name"
 done
+# iOS 18 must be able to resolve the compatibility library without Xcode.
+# /usr/lib/swift remains first for guests whose standard library has Span.
+daemon_rpaths="$(/usr/bin/otool -l "$guest/vphoned" | /usr/bin/awk '
+    $2 == "LC_RPATH" { rpath = 1; next }
+    rpath && $1 == "path" { print $2; rpath = 0 }
+')"
+[[ "${daemon_rpaths%%$'\n'*}" == /usr/lib/swift &&
+   "$daemon_rpaths" == *$'\n/usr/lib/vphone' ]] || {
+    print -u2 "vphoned must search system Swift libraries before its bundled fallback"
+    exit 1
+}
+/usr/bin/otool -L "$guest/vphoned" | /usr/bin/awk 'NR > 1 {print $1}' |
+    /usr/bin/grep -Fx '@rpath/libswiftCompatibilitySpan.dylib' >/dev/null || {
+        print -u2 "vphoned does not use the bundled Span compatibility library"
+        exit 1
+    }
 for name in vphoned.plist libcamfix.plist libvcamcaptured.plist libmisfix.plist com.vphone.homepod-setup.plist; do
     [[ -f "$guest/$name" ]] || { print -u2 "Missing guest configuration: $name"; exit 1; }
 done

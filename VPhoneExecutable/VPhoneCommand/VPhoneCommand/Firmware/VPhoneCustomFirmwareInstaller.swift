@@ -2747,6 +2747,14 @@ struct VPhoneCustomFirmwareInstaller {
         let vphoned = try VPhoneGuestBinaries.resolve(VPhoneResources.vphonedName(for: guestDevice.family))
         let staged = work.file("vphoned")
         try fm.copyItem(at: vphoned, to: staged)
+        if guestDevice.family == .iPhone || guestDevice.family == .iPad {
+            // Install on both full and environment-only updates, before the
+            // daemon that needs it. The payload is already signed in the bundle.
+            _ = try system.directory("usr/lib/vphone", create: true)
+            try system.replaceFile("usr/lib/vphone/libswiftCompatibilitySpan.dylib",
+                                   fromFileAt: VPhoneGuestBinaries.resolve("libswiftCompatibilitySpan.dylib"),
+                                   mode: 0o755, owner: Self.guestOwner)
+        }
         try system.replaceFile("usr/bin/vphoned", fromFileAt: staged, mode: 0o755, owner: Self.guestOwner)
         let daemon = resources.guestResources.appendingPathComponent("vphoned.plist")
         try system.replaceFile(

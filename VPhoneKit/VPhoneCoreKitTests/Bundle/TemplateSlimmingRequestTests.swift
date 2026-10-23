@@ -168,9 +168,19 @@ struct TemplateSlimmingRequestTests {
         #expect(try none.fitted(toIOSVersion: "26.6.2") == none)
     }
 
-    @Test func `accounts-off is refused on an iOS without the trimmed service list`() throws {
+    @Test func `unsupported iOS skips services and accounts without changing file or app trimming`() throws {
         let slimming = try Request(accountsOff: true).resolve()
-        #expect(throws: VPhoneTemplateSlimmingError.self) { try slimming.fitted(toIOSVersion: "25.4") }
+        let withoutServices = try Request(serviceProfile: "none").resolve()
+        for version in ["18.6.2", "25.4", "28.0"] {
+            let fitted = try slimming.fitted(toIOSVersion: version)
+            #expect(fitted == withoutServices)
+            #expect(try fitted.fitted(toIOSVersion: version) == fitted)
+            #expect(
+                try MachineTemplateKeyTests.key(slimming: fitted).identifier
+                    == MachineTemplateKeyTests.key(slimming: withoutServices).identifier,
+            )
+        }
         #expect(try slimming.fitted(toIOSVersion: "26.6.2") == slimming)
+        #expect(try slimming.fitted(toIOSVersion: "27.0") == slimming)
     }
 }

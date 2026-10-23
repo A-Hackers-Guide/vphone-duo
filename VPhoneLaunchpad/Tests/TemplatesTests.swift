@@ -5,6 +5,7 @@ import Foundation
 struct TemplatesTests {
     static func main() async throws {
         slimmingArguments()
+        slimmingCompatibility()
         commandArguments()
         patchOverrides()
         creationPlan()
@@ -87,6 +88,32 @@ struct TemplatesTests {
     }
 
     // MARK: - Commands
+
+    static func slimmingCompatibility() {
+        for source in [
+            "https://example.invalid/iPhone17,3_18.6.2_22G100_Restore.ipsw?download=1",
+            "/tmp/iPhone17,3_25.4_22G100_Restore.ipsw",
+            "/tmp/iPhone17,3_28.0_25A1_Restore.ipsw",
+        ] {
+            precondition(VPhoneLaunchpadSlimming.warnsAboutServiceTrimming(iphoneSource: source), source)
+        }
+        for source in [
+            "https://example.invalid/iPhone17,3_26.6.2_23G90_Restore.ipsw",
+            "/tmp/iPad_Pro_M4_27.0.1_24A446_Restore.ipsw",
+            "file:///tmp/iPhone17_3_27.0_24A435_Restore-3c6d6dc0803d.ipsw",
+            "/tmp/custom.ipsw", "https://example.invalid/download?id=26", "",
+        ] {
+            precondition(!VPhoneLaunchpadSlimming.warnsAboutServiceTrimming(iphoneSource: source), source)
+        }
+        let requested = VPhoneLaunchpadSlimming()
+        let request = VPhoneLaunchpadTemplateCommands.Request(
+            iphoneSource: "/tmp/iPhone17,3_18.6.2_22G100_Restore.ipsw", cloudOSSource: "cloud",
+            preset: "standard", diskSizeGB: 64, slimming: requested,
+        )
+        precondition(VPhoneLaunchpadTemplateCommands.find(request).contains("--accounts-off"), "Filename hints do not filter Find options")
+        precondition(VPhoneLaunchpadTemplateCommands.setup("ios18", requested).contains("--accounts-off"), "The CLI decides from real firmware records")
+        print("Slimming warning tests passed")
+    }
 
     static func commandArguments() {
         var slimming = VPhoneLaunchpadSlimming()
