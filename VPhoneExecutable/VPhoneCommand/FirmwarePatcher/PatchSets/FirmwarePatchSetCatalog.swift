@@ -61,7 +61,7 @@ public enum FirmwarePatchSetCatalog {
         Set(FirmwareKernelFridaPatchSet.manifest.patches.map(\.identifier))
             .union(hypervisorConcealmentPatches)
             .union(experimentalIdentityPatches)
-            .union([FirmwareGuestSystemPatchSet.otaUserland, FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass])
+            .union([FirmwareGuestSystemPatchSet.otaUserland, FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass, FirmwareGuestSystemPatchSet.homePodAudioProduct])
             .union([FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers, misTrustAuthPatch, FirmwareGuestSystemPatchSet.settingsRootRows, FirmwareGuestSystemPatchSet.settingsSoftwareUpdate, FirmwareGuestSystemPatchSet.tvTPRO, FirmwareGuestSystemPatchSet.tvOTAUserland])
 
     /// ProMotion: the 120 Hz timing for the paravirtual display.
@@ -219,7 +219,7 @@ public enum FirmwarePatchSetCatalog {
         freshly restored 26.4 guest does not survive. The HomePod-only top cap is off.
         """,
         patchSets: bundledReferences,
-        selection: .block([FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass]),
+        selection: .block([FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass, FirmwareGuestSystemPatchSet.homePodAudioProduct]),
     )
 
     /// The iOS payloads, hooks and shared-cache patches an Apple TV guest has no
@@ -317,15 +317,16 @@ public enum FirmwarePatchSetCatalog {
 
     /// HomePod mini uses its own monolithic arm64e TVOS IPSW. Keep the 27
     /// kernel compatibility patches, but never swap in an Apple TV OTA or
-    /// install the iPhone GPU/audio environment on this headless accessory.
+    /// install the iPhone GPU/routing environment. The shared virtio audio
+    /// driver uses HomePod's own product identity and routing implementation.
     public static let homePodMiniPreset = VPhonePatchPreset(
         identifier: VPhonePatchPreset.homePodMiniIdentifier,
         title: "HomePod mini",
-        summary: "Research: HomePod mini's own arm64e TVOS IPSW with vphoned, its donor-driven top cap and local setup completion, without Apple TV OTA replacement or iPhone display, camera and audio hooks.",
+        summary: "Research: HomePod mini's own arm64e TVOS IPSW with vphoned, its donor-driven top cap, local setup completion and virtio audio using its native identity, without Apple TV OTA replacement or iPhone display, camera and routing hooks.",
         patchSets: bundledReferences,
         selection: .block(
-            manualOnlyPatches.subtracting([FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass])
-                .union(tvOSBlockedPatches.subtracting(tvOS27UserlandPatches)),
+            manualOnlyPatches.subtracting([FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass, FirmwareGuestSystemPatchSet.homePodAudioProduct])
+                .union(tvOSBlockedPatches.subtracting(tvOS27UserlandPatches).subtracting([FirmwareGuestSystemPatchSet.virtioSoundDriver])),
         ),
     )
 

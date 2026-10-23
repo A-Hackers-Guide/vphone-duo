@@ -37,6 +37,7 @@
 // server the node promises. See `removeHaptics(from:)`.
 
 import Foundation
+import Img4tool
 import VPhoneCoreKit
 import VPhonePatchKit
 
@@ -184,6 +185,8 @@ extension DeviceTreePatcher {
                 edits.append(GuestEdit(nodePath: product, property: name,
                                        action: action, patchID: homePodProductPatch))
             }
+            edits.append(GuestEdit(nodePath: product, property: "product-id",
+                                   action: .set(try homePodAudioProductID(from: source)), patchID: homePodProductPatch))
         }
 
         for (name, patchID) in copiedProductProperties {
@@ -242,6 +245,67 @@ extension DeviceTreePatcher {
     }
 
     // MARK: - Audio
+
+    /// MobileGestalt matches this exact 20-byte donor token against its product
+    /// table; VirtualAudio uses that result to select the HomePod mini's enum 4
+    /// routing. Root model strings alone do not select the native audio family.
+    /// Accept a retained donor IM4P or its decoded flat payload, never a payload
+    /// invented from the product name or an iPhone ProductIDOverride.
+    public static func homePodAudioProductID(from data: Data) throws -> Data {
+        let payload: Data
+        if let im4p = try? IM4P(data) {
+            guard im4p.fourcc == "dtre", !im4p.isEncrypted else {
+                throw PatcherError.invalidFormat("HomePod audio product: expected an unencrypted dtre IM4P")
+            }
+            payload = try im4p.payload()
+        } else {
+            payload = data
+        }
+        let parser = DeviceTreePatcher(data: payload, verbose: false)
+        return try homePodAudioProductID(from: parser.parsePayload(payload))
+    }
+
+    private static func requireHomePodMini(_ root: DTNode) throws {
+        let models = root.properties.filter { $0.name == "model" }
+        guard models.count == 1, let model = models.first, model.flags == 0,
+              String(decoding: model.value.prefix { $0 != 0 }, as: UTF8.self) == "AudioAccessory5,1"
+        else {
+            throw PatcherError.invalidFormat("HomePod audio product: expected the AudioAccessory5,1 board tree")
+        }
+    }
+
+    static func homePodAudioProductID(from source: DTNode) throws -> Data {
+        try requireHomePodMini(source)
+        let product = try child(of: source, named: "product")
+        let properties = product.properties.filter { $0.name == "product-id" }
+        guard properties.count == 1, let property = properties.first,
+              property.flags == 0, property.value.count == 20
+        else {
+            throw PatcherError.invalidFormat("HomePod audio product: donor product-id must be one concrete 20-byte value")
+        }
+        return property.value
+    }
+
+    /// Replace only the HomePod's audio product token. The Preboot repair uses
+    /// this independently of the board-audio-node repair and keeps the VM's
+    /// virtual audio hardware and unrelated product capabilities unchanged.
+    static func presentHomePodAudioProduct(in root: DTNode, from source: DTNode) throws -> (before: Data?, after: Data)? {
+        try requireHomePodMini(root)
+        let value = try homePodAudioProductID(from: source)
+        let product = try child(of: root, named: "product")
+        guard product.properties.filter({ $0.name == "product-id" }).count <= 1 else {
+            throw PatcherError.invalidFormat("HomePod audio product: installed product-id is duplicated")
+        }
+        if let existing = product.properties.first(where: { $0.name == "product-id" }) {
+            guard existing.value != value || existing.flags != 0 else { return nil }
+            let before = existing.value
+            existing.value = value
+            existing.flags = 0
+            return (before, value)
+        }
+        product.properties.append(DTProperty(name: "product-id", flags: 0, value: value, valueOffset: 0))
+        return (nil, value)
+    }
 
     /// What `presentBoardAudio` changed: the audio node's serialized bytes
     /// before and after, empty when there was no node.

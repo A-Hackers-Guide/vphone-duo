@@ -41,8 +41,10 @@ family. The HomePod mini uses the existing TVOS-retargeted vphoned executable.
 
 `homepod-mini` selects the existing 27 userland/kernel compatibility patches
 and vphoned. GPU injection, iPhone audio/camera/sensor/environment hooks,
-Apple TV OTA replacement and plain-arm64 TPRO workarounds stay off. HomePod
-audio routing and physical accessory transports require separate validation.
+Apple TV OTA replacement and plain-arm64 TPRO workarounds stay off. The shared
+virtio-snd driver and donor product identity repair now load on HomePod;
+[audio routing and live findings](../Guest/homepod_audio.md) track the remaining
+output work. Physical accessory transports require separate validation.
 
 The new `devicetree-cfw-homepod_product` declaration copies `horseman`,
 `siri-hub` and app architecture from the actual donor tree, only for B520's
@@ -114,8 +116,10 @@ The research VM is `~/.vphone/machines/homepod-mini`. Evidence is retained under
 process lists and boot results); its console is
 `~/Library/Logs/vphone-launchpad/homepod-mini.log`.
 
-Audio output and microphone capture, Siri, AirPlay playback, activation and
-pairing with the Home app have not been validated. The top-cap UI described
+Local audio output is verified on the Mac's selected speakers; see
+[HomePod audio](../Guest/homepod_audio.md) for the native identity, HAL mode
+and 48 kHz endpoint requirements. Microphone capture, Siri, AirPlay playback,
+activation and pairing with the Home app have not been validated. The top-cap UI described
 below replaces the diagnostic framebuffer for interactive HomePod windows.
 
 ## Top-cap display
@@ -179,7 +183,7 @@ Frame generation and native report submission remain Apple's. The adapter uses
 a signed load command in SoundBoard and
 preserves its original entitlements.
 
-The Mac window displays a circular diffuser using runtime-compiled Metal 4
+The Mac window defaults to 480 × 480 points and displays a circular diffuser using runtime-compiled Metal 4
 shaders (with the same shader on the macOS 15 Metal compatibility path). It adds
 both guest light layers, blends neighboring emitters through a normalized
 two-scale point-spread function, attenuates the opaque edge, and draws the
@@ -190,7 +194,8 @@ Xcode Metal compiler download is needed to build the application. Delivery keeps
 in flight at up to 60 Hz, drops intermediate frames, blanks on connection loss,
 and pauses requests while minimized. No host animation substitutes for output.
 The accessible +/- controls send consumer volume HID down/up (0xE9/0xEA),
-including holds and immediate releases on focus loss. Quick taps last at least
+including holds and immediate releases on focus loss. They omit focus rings
+while retaining keyboard and accessibility activation. Quick taps last at least
 700 ms after the guest acknowledges key-down. Timing from the mouse event can
 collapse a tap's down/up into adjacent RPCs when input delivery is delayed.
 This preserves a usable consumer-key hold for instantaneous mouse/AX taps.

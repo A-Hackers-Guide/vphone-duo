@@ -1,5 +1,27 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **HomePod audio port (2026-10-22, live routing validation).**
+> New `preboot-homepod-exp-audio_product` restores the donor's exact 20-byte
+> `/product/product-id` in Preboot through the existing reversible repair
+> composition; new HomePod boot trees receive it too. MobileGestalt then resolves
+> HomePod mini's native VirtualAudio product 4 instead of the VM's unknown 0.
+> `homepod-mini` selects the shared virtio-snd HAL driver, retargeted/resealed
+> for tvOS, publishing its output as the native `PuffinOutput` endpoint. It does
+> not apply the iPhone 8010 override or VirtualAudio instruction/tuning patches.
+> Other presets keep the new identity repair off and TV excludes the driver.
+> First live run proves native product 4, B520 tuning selection and driver load;
+> routing requires the HomePod-only raw UInt32 `mode/glob/0` custom property.
+> The driver advertises this through `cust`, retains the native `defa`/`raww`/
+> `tphn`/`meas` mode and reports changes. Corrected build `61d08ba5` routes to
+> `PuffinOutput`; six playback cycles have zero starvation/drop counters.
+> Final build `b284734a` plays ordinary-session test tones on the Mac's selected
+> Studio Display speakers; the owner confirms clear tones.
+> Live silence traced to B520 speaker DSP buffer overruns at 44.1 kHz.
+> HomePod output now advertises only its 48 kHz wire rate; forcing a 48 kHz
+> session removes the errors and produces nonzero PCM in a scoped host tap.
+> iPhone/iPad retain their alternate-rate support.
+> No new instruction patch. See [native evidence and validation](Guest/homepod_audio.md).
+
 > **HomePod setup completion and controls (2026-10-22, live validation).**
 > New `system-homepod-exp-setup_bypass` is HomePod-only, restricted to 27.x,
 > and selected only by `homepod-mini`. It installs the System marker

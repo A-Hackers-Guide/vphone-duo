@@ -89,6 +89,7 @@
 		<array>
 			<string>system-homepod-exp-top_cap</string>
 			<string>system-homepod-exp-setup_bypass</string>
+			<string>preboot-homepod-exp-audio_product</string>
 		</array>
 	</dict>
 </dict>

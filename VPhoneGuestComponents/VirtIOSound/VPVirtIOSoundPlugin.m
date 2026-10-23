@@ -21,7 +21,7 @@
 // once when audiomxd loads the plugin:
 //   VPhoneVirtIOSoundTransportType   four-character transport ("usb ", "bltn")
 //   VPhoneVirtIOSoundDeviceUID       speaker device UID (default "PuffinOutput"
-//                                    on an iPad or iPhone guest,
+//                                    on iPad, iPhone and HomePod mini guests,
 //                                    "VPhoneVirtIOSound:0" elsewhere)
 //   VPhoneVirtIOSoundInputDeviceUID  microphone device UID (default "Digital
 //                                    Mic" on an iPad or iPhone guest,
@@ -263,8 +263,9 @@ static const char *VPMachine(void) {
     return machine;
 }
 
-/// The ProductID VirtualAudio should route this guest with, or 0 for a guest
-/// the speaker route has not been set up and verified on.
+/// A VirtualAudio routing override, or 0 to retain native product selection.
+/// HomePod mini selects its own routing from the donor product digest; only
+/// its output device UID is adapted below, without using an iPhone override.
 ///
 /// VirtualAudio derives its ProductID from a MobileGestalt class answer, and
 /// vphone600 lands on a simulator class — 196 presenting an iPad, 195 an
@@ -313,6 +314,13 @@ static NSString *VPDeviceUID(ASDStreamDirection direction, unsigned index) {
     // sub-ports for. Under any name of our own a device is claimed by nothing.
     // Only where the route is set up: a speaker route on a VirtualAudio that
     // was not deadlocked audiomxd and crash-looped it across launches.
+    // HomePod mini's native B238 routing also claims PuffinOutput. Its
+    // ProductID comes from the donor product digest in the installed tree,
+    // not the iPhone routing override. Leave its input unclaimed: microphone
+    // routing needs the physical array and is not part of this output port.
+    if (!input && index == 0 && strcmp(VPMachine(), "AudioAccessory5,1") == 0) {
+        return @"PuffinOutput";
+    }
     if (index == 0 && VPGuestProductID() != 0) {
         return input ? @"Digital Mic" : @"PuffinOutput";
     }
@@ -688,7 +696,7 @@ typedef struct {
         .mChannelsPerFrame = _format.channels,
         .mBitsPerChannel = _format.bitsPerChannel,
     };
-    ASDStreamFormat *format = [[ASDStreamFormat alloc] initWithAudioStreamBasicDescription:description];
+    ASDStreamFormat *format = [[ASDStreamFormat alloc] initWithAudioStreamBasicDescription:&description];
     format.minimumSampleRate = rate;
     format.maximumSampleRate = rate;
     return format;
@@ -936,7 +944,7 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
     // virtio stream itself stays at the wire rate; the mix resamples. The
     // current format follows the nominal-rate override so the device boots
     // already answering 44100, matching how the vdef composes.
-    if (format.sampleRate == 48000.0) {
+    if (self.offersAlternateRate) {
         ASDStreamFormat *reduced = [self physicalFormatAtRate:kVPAlternateRate];
         self.physicalFormats = @[self.physicalFormat, reduced];
         self.physicalFormatSettable = YES;
@@ -978,17 +986,28 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
 }
 
 - (BOOL)offersAlternateRate {
-    return _format.sampleRate == 48000.0;
+    // B520's speaker DSP requires a 48 kHz physical endpoint. Advertising
+    // 44.1 kHz makes its 1024-frame graph read 1115 frames from that buffer,
+    // producing silence before the PCM reaches us. Source audio at 44.1 kHz
+    // still plays through CoreAudio's converter with the endpoint at 48 kHz.
+    return _format.sampleRate == 48000.0 && strcmp(VPMachine(), "AudioAccessory5,1") != 0;
 }
 
 // MARK: Rate changes
 
-- (void)deviceChangedToSamplingRate:(double)rate {
+- (BOOL)deviceChangedToSamplingRate:(double)rate {
+    // ASD returns YES even when no physical format supports the new rate.
+    // Only accept rates this stream actually configured above.
+    if (rate != _format.sampleRate && !(rate == kVPAlternateRate && self.offersAlternateRate)) {
+        return NO;
+    }
     os_log(VPLog(), "rate-probe: stream %u deviceChangedToSamplingRate %.0f (hal %.0f, format %.0f)",
         _streamID, rate, (double)atomic_load(&_halRate), self.physicalFormat.sampleRate);
     VPLogToFile("rate-probe: stream %u deviceChangedToSamplingRate %.0f (hal %.0f, format %.0f)",
         _streamID, rate, (double)atomic_load(&_halRate), self.physicalFormat.sampleRate);
-    [super deviceChangedToSamplingRate:rate];
+    if (![super deviceChangedToSamplingRate:rate] || self.physicalFormat.sampleRate != rate) {
+        return NO;
+    }
     uint32_t previous = atomic_load(&_halRate);
     if (rate > 0 && (uint32_t)rate != previous) {
         atomic_store(&_halRate, (uint32_t)rate);
@@ -996,6 +1015,7 @@ static void VPWriteCompleted(void *refcon, IOReturn result, void **arguments, UI
         os_log(VPLog(), "stream %u: device rate %.0f -> %.0f, physical format %.0f Hz",
             _streamID, (double)previous, rate, self.physicalFormat.sampleRate);
     }
+    return YES;
 }
 
 // MARK: Device commands
@@ -1485,8 +1505,13 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
 
 // MARK: Rate changes
 
-- (void)deviceChangedToSamplingRate:(double)rate {
-    [super deviceChangedToSamplingRate:rate];
+- (BOOL)deviceChangedToSamplingRate:(double)rate {
+    if (rate != _format.sampleRate && !(rate == kVPAlternateRate && self.offersAlternateRate)) {
+        return NO;
+    }
+    if (![super deviceChangedToSamplingRate:rate] || self.physicalFormat.sampleRate != rate) {
+        return NO;
+    }
     uint32_t previous = atomic_load(&_capture.halRate);
     if (rate > 0 && (uint32_t)rate != previous) {
         atomic_store(&_capture.halRate, (uint32_t)rate);
@@ -1495,6 +1520,7 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
         VPLogToFile("stream %u: device rate %.0f -> %.0f, physical format %.0f Hz",
             _streamID, (double)previous, rate, self.physicalFormat.sampleRate);
     }
+    return YES;
 }
 
 /// What the reader keeps between the host's capture and the guest's read.
@@ -1912,6 +1938,10 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
     /// control because the control's own value is only reachable through its
     /// 'bcvl' property, whose getter shape the guest ASD does not publish.
     UInt32 _muteState;
+    /// B520 routing selects a hardware processing mode on PuffinOutput.
+    /// The virtual device has no board DSP; retain the requested native mode
+    /// as a synchronous HAL property while the host receives ordinary PCM.
+    _Atomic UInt32 _homePodMode;
     /// The speaker's output latency and its parts, on `_latencyQueue`: what
     /// the stream keeps queued ahead of the host (wire frames), what the
     /// Mac's output device adds (seconds), and the figure last handed to the
@@ -1934,6 +1964,7 @@ static void VPCaptureRead(VPCaptureState *capture, void *buffer, UInt32 frameCou
     }
     _connection = connection;
     _direction = direction;
+    atomic_init(&_homePodMode, 'defa');
     BOOL input = direction == ASDStreamDirectionInput;
 
     double sampleRate = 0;
@@ -2224,9 +2255,36 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
             || address->mElement == 0);
 }
 
+- (BOOL)isHomePodModeAddress:(const AudioObjectPropertyAddress *)address {
+    return _direction == ASDStreamDirectionOutput
+        && strcmp(VPMachine(), "AudioAccessory5,1") == 0
+        && address->mSelector == 'mode'
+        && address->mScope == kAudioObjectPropertyScopeGlobal
+        && address->mElement == kAudioObjectPropertyElementMain;
+}
+
+/// The HAL host marshals unknown selectors only when 'cust' advertises
+/// them. All three fields match AudioServerPlugInCustomPropertyInfo. The
+/// guest ASD emits 'raww' for raw payloads and zero for no qualifier; its
+/// addCustomProperty: rejects a zero payload type.
+typedef struct {
+    UInt32 selector;
+    UInt32 propertyDataType;
+    UInt32 qualifierDataType;
+} VPHomePodCustomPropertyInfo;
+
+- (BOOL)isHomePodCustomPropertiesAddress:(const AudioObjectPropertyAddress *)address {
+    return _direction == ASDStreamDirectionOutput
+        && strcmp(VPMachine(), "AudioAccessory5,1") == 0
+        && address->mSelector == 'cust'
+        && address->mScope == kAudioObjectPropertyScopeGlobal
+        && address->mElement == kAudioObjectPropertyElementMain;
+}
+
 - (BOOL)hasProperty:(AudioObjectPropertyAddress *)address {
     VPLogSelectorQuery("has", address);
-    if (VPIsDeviceMuteAddress(address, _direction)) {
+    if (VPIsDeviceMuteAddress(address, _direction) || [self isHomePodModeAddress:address]
+        || [self isHomePodCustomPropertiesAddress:address]) {
         return YES;
     }
     return [super hasProperty:address];
@@ -2234,7 +2292,11 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
 
 - (BOOL)isPropertySettable:(AudioObjectPropertyAddress *)address {
     VPLogSelectorQuery("settable", address);
-    if (VPIsDeviceMuteAddress(address, _direction) || VPIsDeviceRateAddress(address)) {
+    if ([self isHomePodCustomPropertiesAddress:address]) {
+        return NO;
+    }
+    if (VPIsDeviceMuteAddress(address, _direction) || VPIsDeviceRateAddress(address)
+        || [self isHomePodModeAddress:address]) {
         return YES;
     }
     return [super isPropertySettable:address];
@@ -2244,7 +2306,11 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
            withQualifierSize:(UInt32)qualifierSize
            andQualifierData:(const void *)qualifierData {
     VPLogSelectorQuery("size", address);
-    if (VPIsDeviceMuteAddress(address, _direction)) {
+    if ([self isHomePodCustomPropertiesAddress:address]) {
+        return [super dataSizeForProperty:address withQualifierSize:qualifierSize
+                        andQualifierData:qualifierData] + sizeof(VPHomePodCustomPropertyInfo);
+    }
+    if (VPIsDeviceMuteAddress(address, _direction) || [self isHomePodModeAddress:address]) {
         return sizeof(UInt32);
     }
     return [super dataSizeForProperty:address withQualifierSize:qualifierSize
@@ -2258,6 +2324,32 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
                  andData:(void *)data
               forClient:(UInt32)clientID {
     VPLogSelectorQuery("get", address);
+    if ([self isHomePodCustomPropertiesAddress:address]) {
+        UInt32 inheritedSize = [super dataSizeForProperty:address withQualifierSize:qualifierSize
+                                        andQualifierData:qualifierData];
+        UInt32 requiredSize = inheritedSize + sizeof(VPHomePodCustomPropertyInfo);
+        if (dataSize == NULL || *dataSize < requiredSize || data == NULL) {
+            return NO;
+        }
+        UInt32 actualSize = inheritedSize;
+        if (inheritedSize != 0 && (![super getProperty:address withQualifierSize:qualifierSize
+            qualifierData:qualifierData dataSize:&actualSize andData:data forClient:clientID]
+            || actualSize != inheritedSize)) {
+            return NO;
+        }
+        const VPHomePodCustomPropertyInfo mode = {'mode', 'raww', 0};
+        memcpy((uint8_t *)data + inheritedSize, &mode, sizeof(mode));
+        *dataSize = requiredSize;
+        return YES;
+    }
+    if ([self isHomePodModeAddress:address]) {
+        if (dataSize == NULL || *dataSize < sizeof(UInt32) || data == NULL) {
+            return NO;
+        }
+        *(UInt32 *)data = atomic_load(&_homePodMode);
+        *dataSize = sizeof(UInt32);
+        return YES;
+    }
     if (VPIsDeviceMuteAddress(address, _direction)) {
         if (dataSize == NULL || *dataSize < sizeof(UInt32)) {
             return NO;
@@ -2298,6 +2390,23 @@ static BOOL VPIsDeviceRateAddress(const AudioObjectPropertyAddress *address) {
                  andData:(const void *)data
               forClient:(UInt32)clientID {
     VPLogSelectorQuery("set", address);
+    if ([self isHomePodModeAddress:address]) {
+        if (dataSize != sizeof(UInt32) || data == NULL) {
+            return NO;
+        }
+        UInt32 mode = *(const UInt32 *)data;
+        if (mode != 'defa' && mode != 'raww' && mode != 'tphn' && mode != 'meas') {
+            return NO;
+        }
+        UInt32 previous = atomic_exchange(&_homePodMode, mode);
+        if (previous != mode) {
+            [self.plugin changedProperty:address forObject:self];
+            VPLogToFile("HomePod speaker mode '%c%c%c%c'",
+                (int)(mode >> 24), (int)((mode >> 16) & 0xff),
+                (int)((mode >> 8) & 0xff), (int)(mode & 0xff));
+        }
+        return YES;
+    }
     if (VPIsDeviceMuteAddress(address, _direction)) {
         if (dataSize < sizeof(UInt32) || data == NULL) {
             return NO;

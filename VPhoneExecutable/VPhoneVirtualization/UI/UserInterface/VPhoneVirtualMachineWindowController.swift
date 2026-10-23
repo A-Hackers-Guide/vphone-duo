@@ -57,7 +57,7 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         view.clipboardSync = VPhoneClipboardSync(control: control)
         virtualMachineView = view
         let scale = CGFloat(screenScale)
-        let windowSize = homePodGuest ? NSSize(width: 360, height: 360) : NSSize(
+        let windowSize = homePodGuest ? VPhoneHomePodDisplayView.defaultContentSize : NSSize(
             width: CGFloat(screenWidth) / scale,
             height: CGFloat(screenHeight) / scale,
         )

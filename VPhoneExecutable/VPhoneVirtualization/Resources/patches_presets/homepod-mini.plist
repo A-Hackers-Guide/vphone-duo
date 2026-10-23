@@ -116,7 +116,6 @@
 			<string>system-paravirt_gpu-cfw-heap_index_offset</string>
 			<string>system-systemhook-cfw-metal_cache_reuse</string>
 			<string>system-systemversion-cfw-build_version</string>
-			<string>system-virtiosound-cfw-hal_plugin</string>
 			<string>system-virtualaudio-cfw-microphone_graph_chains</string>
 			<string>system-virtualaudio-cfw-mute_set_throw</string>
 			<string>system-virtualaudio-cfw-speaker_graph_chains</string>
@@ -129,7 +128,7 @@
 		</array>
 	</dict>
 	<key>Summary</key>
-	<string>Research: HomePod mini's own arm64e TVOS IPSW with vphoned, its donor-driven top cap and local setup completion, without Apple TV OTA replacement or iPhone display, camera and audio hooks.</string>
+	<string>Research: HomePod mini's own arm64e TVOS IPSW with vphoned, its donor-driven top cap, local setup completion and virtio audio using its native identity, without Apple TV OTA replacement or iPhone display, camera and routing hooks.</string>
 	<key>Title</key>
 	<string>HomePod mini</string>
 </dict>

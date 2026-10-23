@@ -7,6 +7,8 @@ import VPhoneCoreKit
 /// from the latest guest frame; this view has no autonomous animation clock.
 @MainActor
 final class VPhoneHomePodDisplayView: NSView {
+    static let defaultContentSize = NSSize(width: 480, height: 480)
+
     enum Control: Hashable {
         case volumeDown
         case volumeUp
@@ -62,7 +64,7 @@ final class VPhoneHomePodDisplayView: NSView {
     required init?(coder: NSCoder) { nil }
 
     override var isFlipped: Bool { true }
-    override var intrinsicContentSize: NSSize { NSSize(width: 360, height: 360) }
+    override var intrinsicContentSize: NSSize { Self.defaultContentSize }
 
     /// A geometry change invalidates the previous frame. Never retain old LED
     /// indices against a new device layout, or display a partial snapshot.
@@ -146,7 +148,7 @@ private final class VPhoneHomePodCapControl: NSButton {
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
     override var isFlipped: Bool { true }
-    override var focusRingType: NSFocusRingType { get { .exterior } set {} }
+    override var focusRingType: NSFocusRingType { get { .none } set {} }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
@@ -210,9 +212,6 @@ private final class VPhoneHomePodCapControl: NSButton {
     }
 
     // Visual markings belong to the optical shader; these views supply native
-    // button semantics and the system focus ring above the Metal surface.
+    // button, keyboard, and accessibility semantics above the Metal surface.
     override func draw(_ dirtyRect: NSRect) {}
-
-    override func drawFocusRingMask() { NSBezierPath(ovalIn: bounds.insetBy(dx: 2, dy: 2)).fill() }
-    override var focusRingMaskBounds: NSRect { bounds }
 }

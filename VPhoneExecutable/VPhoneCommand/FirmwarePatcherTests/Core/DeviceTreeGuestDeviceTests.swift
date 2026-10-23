@@ -186,6 +186,7 @@ struct DeviceTreeGuestDeviceTests {
             .string("fdr-product-type", model),
             .string("sub-product-type", model),
             .string("unique-model", "B520AP"),
+            Property(name: "product-id", flags: 0, value: Data(base64Encoded: "l2aw/kQAaW9zNqWJvWMfJJjJKt0=")!),
             placeholderCapabilities ? .placeholder("horseman", "hrsm")
                 : .integer("horseman", 1),
             placeholderCapabilities ? .placeholder("siri-hub", "shub")
@@ -329,7 +330,9 @@ struct DeviceTreeGuestDeviceTests {
         #expect(hub.0 == 0 && hub.1.isEmpty)
         #expect(Self.string(product["app-macho-architecture"]) == "arm64")
         #expect(product["app-macho-architecture"]?.0 == 0)
-        #expect(records.filter { $0.patchID == DeviceTreePatcher.homePodProductPatch }.count == 3)
+        #expect(product["product-id"]?.1 == Data(base64Encoded: "l2aw/kQAaW9zNqWJvWMfJJjJKt0="))
+        #expect(product["product-id"]?.0 == 0)
+        #expect(records.filter { $0.patchID == DeviceTreePatcher.homePodProductPatch }.count == 4)
         #expect(!records.contains { $0.patchID == DeviceTreePatcher.tvAppArchitecturePatch })
         // Restore sees the same virtual board and product as before HomePod support.
         let restore = DeviceTreePatcher(
@@ -357,7 +360,7 @@ struct DeviceTreeGuestDeviceTests {
         patcher.gate = VPhonePatchGate(declared: declared, enabled: declared.subtracting([identifier]))
         let records = try patcher.findAll()
         let product = try #require(Self.read(patcher.patchedData)["device-tree/product"])
-        for name in ["horseman", "siri-hub", "app-macho-architecture"] {
+        for name in ["horseman", "siri-hub", "app-macho-architecture", "product-id"] {
             #expect(product[name] == nil)
         }
         #expect(!records.contains { $0.patchID == identifier })

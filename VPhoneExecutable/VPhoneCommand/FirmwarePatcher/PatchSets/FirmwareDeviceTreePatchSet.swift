@@ -218,7 +218,7 @@ public enum FirmwareDeviceTreePatchSet {
             property(
                 "devicetree-cfw-homepod_product",
                 "HomePod product capabilities",
-                "Copies the HomePod mini's horseman, siri-hub and app architecture properties from its own board tree, so MobileGestalt recognizes an audio accessory. Other boards and the restore tree are unchanged.",
+                "Copies the HomePod mini's horseman, siri-hub, app architecture and concrete 20-byte product-id properties from its own board tree, so MobileGestalt recognizes the accessory and selects its native audio family. Other boards and the restore tree are unchanged.",
             ),
 
             // MARK: TV Guest

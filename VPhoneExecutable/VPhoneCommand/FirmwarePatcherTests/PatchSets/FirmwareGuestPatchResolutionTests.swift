@@ -26,8 +26,8 @@ struct FirmwareGuestPatchResolutionTests {
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true) == [identifier])
     }
 
-    @Test func `HomePod setup bypass is version gated and never selected for other devices`() throws {
-        let identifier = FirmwareGuestSystemPatchSet.homePodSetupBypass
+    @Test(arguments: [FirmwareGuestSystemPatchSet.homePodSetupBypass, FirmwareGuestSystemPatchSet.homePodAudioProduct])
+    func `HomePod optional guest repairs are version gated and never selected for other devices`(identifier: String) throws {
         for base in ["26.4", "27.0", "27.1"] {
             for preset in FirmwarePatchSetCatalog.builtInPresets {
                 let plan = try VPhonePatchPlan.resolve(
@@ -148,6 +148,32 @@ struct FirmwareGuestPatchResolutionTests {
         #expect(tvHD.enabled.isSuperset(of: tpro))
         // Otherwise the two agree.
         #expect(tv4K.enabled.symmetricDifference(tvHD.enabled) == tpro.union([gpu, ota]))
+    }
+
+    @Test
+    func `HomePod audio uses its native identity and shared driver without iPhone routing patches`() throws {
+        let driver = FirmwareGuestSystemPatchSet.virtioSoundDriver
+        let product = FirmwareGuestSystemPatchSet.homePodAudioProduct
+        let plan = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.homePodMiniPreset,
+            patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("27.0"), cloudOS: VPhoneVersion("26.4"),
+        )
+        #expect(plan.isEnabled(driver))
+        #expect(plan.isEnabled(product))
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [driver, product]).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [driver]) == [driver])
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [driver], arm64eUserland: true) == [driver])
+        let iPhoneRouting: Set<String> = [
+            FirmwareGuestSystemPatchSet.virtualAudioSpeakerRouteThrows,
+            FirmwareGuestSystemPatchSet.virtualAudioMuteSetThrow,
+            FirmwareGuestSystemPatchSet.virtualAudioSpeakerProtectionGate,
+            FirmwareGuestSystemPatchSet.virtualAudioVolumeModePrecondition,
+            FirmwareGuestSystemPatchSet.virtualAudioGraphConfigurations,
+            FirmwareGuestSystemPatchSet.virtualAudioSpeakerRawChains,
+            FirmwareGuestSystemPatchSet.virtualAudioMicrophoneChains,
+        ]
+        #expect(plan.enabled.isDisjoint(with: iPhoneRouting))
     }
 
     @Test

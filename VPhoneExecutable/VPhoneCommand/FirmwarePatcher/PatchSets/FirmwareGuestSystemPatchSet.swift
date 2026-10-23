@@ -493,6 +493,13 @@ public enum FirmwareGuestSystemPatchSet {
                 target: .prebootDeviceTree,
             ),
             VPhonePatchDeclaration(
+                identifier: homePodAudioProduct,
+                title: "HomePod native audio identity",
+                summary: "Copies the HomePod mini donor's concrete 20-byte product-id into its installed Preboot device tree. MobileGestalt then selects the native HomePod audio family instead of the virtual phone's, without an iPhone ProductIDOverride. Rebuilt from the shared Preboot repair backup when disabled.",
+                target: .prebootDeviceTree,
+                applicability: VPhonePatchApplicability(iOSBase: .major(27)),
+            ),
+            VPhonePatchDeclaration(
                 identifier: prebootIPhoneProduct,
                 title: "iPhone product description",
                 summary: """
@@ -590,6 +597,7 @@ public enum FirmwareGuestSystemPatchSet {
     public static let homePodSetupPath = "/usr/share/vphone/HomePodSetup.plist"
 
     public static let prebootBoardAudio = "preboot-cfw-devicetree_board_audio"
+    public static let homePodAudioProduct = "preboot-homepod-exp-audio_product"
 
     /// The iPhone product description in the restored Preboot device tree,
     /// taken from the iPhone's own tree: see `DeviceTreePatcher.presentPhoneProduct`.

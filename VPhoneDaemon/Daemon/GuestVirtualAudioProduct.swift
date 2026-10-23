@@ -47,7 +47,8 @@ enum GuestVirtualAudioProduct {
     }
 
     /// The same answer as the plugin's `VPGuestProductID`: 8010 on an iPad or
-    /// iPhone guest, 0 (none) on anything else, unless one was chosen.
+    /// iPhone guest, 0 (no override) on anything else, unless one was chosen.
+    /// HomePod mini keeps native routing through its donor product identity.
     static func product(machine: String, chosen: Int?) -> Int {
         if let chosen, chosen >= 0 {
             return chosen

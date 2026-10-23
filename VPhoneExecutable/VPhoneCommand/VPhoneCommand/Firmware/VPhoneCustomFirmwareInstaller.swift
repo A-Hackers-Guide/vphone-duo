@@ -206,6 +206,9 @@ struct VPhoneCustomFirmwareInstaller {
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodSetupBypass), device.family != .homePod {
             throw ValidationError("The HomePod setup-completion patch is supported only for a HomePod guest.")
         }
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodAudioProduct), device.family != .homePod {
+            throw ValidationError("The HomePod audio-product patch is supported only for a HomePod guest.")
+        }
         // Research: an Apple TV 4K userland staged from its OTA, which
         // `system-tv-exp-ota_userland` puts in place of the restored one.
         let hasOTAUserland = (try? bundleDirectory.isDirectory(VPhoneOTAArchive.userlandDirectoryName)) == true
@@ -266,6 +269,14 @@ struct VPhoneCustomFirmwareInstaller {
         }
         try requireFreeSpace(at: [bundlePath, work.url.path])
         let boardDeviceTree = try stageBoardDeviceTree(in: bundleDirectory, work: work, device: device)
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodAudioProduct) {
+            guard let boardDeviceTree else {
+                throw ValidationError("HomePod audio identity needs the original board device tree in FirmwareOriginals. Recover it from this VM's IPSW before updating the environment.")
+            }
+            // Validate the exact donor model and token before cloning or
+            // writing any guest filesystem, including malformed/placeholder data.
+            _ = try DeviceTreePatcher.homePodAudioProductID(from: Data(contentsOf: boardDeviceTree))
+        }
         let homePodDisplay: Data?
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodTopCap) {
             guard let boardDeviceTree else {
@@ -501,6 +512,9 @@ struct VPhoneCustomFirmwareInstaller {
         }
         if device.family != .iPhone {
             notApplicableGuest.insert(FirmwareGuestSystemPatchSet.prebootIPhoneProduct)
+        }
+        if device.family != .homePod {
+            notApplicableGuest.insert(FirmwareGuestSystemPatchSet.homePodAudioProduct)
         }
         if !device.usesTVOS {
             notApplicableGuest.insert(FirmwareGuestSystemPatchSet.tvTPRO)
@@ -1583,7 +1597,7 @@ struct VPhoneCustomFirmwareInstaller {
 
         if on(FirmwareGuestSystemPatchSet.virtioSoundDriver) {
             isolate([FirmwareGuestSystemPatchSet.virtioSoundDriver]) {
-                try installVirtioSoundDriver(system: system)
+                try installVirtioSoundDriver(system: system, work: work, guestDevice: guestDevice)
                 live.insert(FirmwareGuestSystemPatchSet.virtioSoundDriver)
             }
         } else {
@@ -2510,7 +2524,7 @@ struct VPhoneCustomFirmwareInstaller {
     /// the kernel driver, AppleVirtIOSound, but no plugin for it, so audiomxd
     /// has nothing to play through. The bundle is replaced whole; its
     /// signature seals the binary and Info.plist together.
-    private func installVirtioSoundDriver(system: VPhoneConfinedDirectory) throws {
+    private func installVirtioSoundDriver(system: VPhoneConfinedDirectory, work: WorkDirectory, guestDevice: VPhoneGuestDevice) throws {
         let name = "VPhoneVirtIOSound.driver"
         let source = try VPhoneConfinedDirectory(root: VPhoneGuestBinaries.resolve(name).path)
         let target = "System/Library/Audio/Plug-Ins/HAL/\(name)"
@@ -2522,6 +2536,31 @@ struct VPhoneCustomFirmwareInstaller {
         try system.setMode("\(target)/VPhoneVirtIOSound", 0o755)
         for file in ["\(target)/Info.plist", "\(target)/_CodeSignature/CodeResources"] {
             try system.setMode(file, 0o644)
+        }
+        if guestDevice.family == .homePod {
+            // The shared driver is built for iOS. HomePod's arm64e TVOS ASD
+            // has the same verified interfaces, but dyld requires its platform
+            // and CFBundle metadata to agree with the loading process.
+            let name = "VPhoneVirtIOSound-tvos"
+            try work.directory.removeItem(name)
+            try system.copyFile(from: "\(target)/VPhoneVirtIOSound", to: name, in: work.directory)
+            let staged = work.file(name)
+            var data = try Data(contentsOf: staged)
+            try MachOBuildPlatform.set(MachOBuildPlatform.tvOS, in: &data)
+            try data.write(to: staged)
+            try VPhoneSigner.sign(
+                fileAt: staged,
+                options: .init(identifier: nil, entitlements: nil, mergesExisting: true, style: .appleAdHoc),
+            )
+            try system.replaceFile("\(target)/VPhoneVirtIOSound", fromFileAt: staged, mode: 0o755, owner: Self.guestOwner)
+            let infoPath = "\(target)/Info.plist"
+            guard var info = try PropertyListSerialization.propertyList(from: system.readData(infoPath), format: nil) as? [String: Any] else {
+                throw ValidationError("The virtio sound driver has no valid bundle metadata.")
+            }
+            info["CFBundleSupportedPlatforms"] = ["AppleTVOS"]
+            try system.writeFile(infoPath, contents: PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0), mode: 0o644, owner: Self.guestOwner)
+            try sealGuestBundle(system: system, bundle: target)
+            print("  [+] Virtio sound driver retargeted to tvOS")
         }
         print("  [+] /\(target)")
     }
@@ -2676,6 +2715,15 @@ struct VPhoneCustomFirmwareInstaller {
             if guestDevice.family == .iPhone {
                 repairGroup.append((FirmwareGuestSystemPatchSet.prebootIPhoneProduct, "patch-dt-iphone-product", [boardDeviceTree.path]))
             }
+        }
+        if guestDevice.family == .homePod {
+            // Keep the repair in the inverse composition even with no donor
+            // when it is off: restoring the clean backup needs no source tree.
+            if enabled(FirmwareGuestSystemPatchSet.homePodAudioProduct), boardDeviceTree == nil {
+                throw ValidationError("HomePod audio identity needs its original donor device tree.")
+            }
+            repairGroup.append((FirmwareGuestSystemPatchSet.homePodAudioProduct, "patch-dt-homepod-audio-product",
+                                boardDeviceTree.map { [$0.path] } ?? []))
         }
         repairGroup.append((FirmwareGuestSystemPatchSet.prebootHaptics, "patch-dt-haptics", []))
         repairGroup.append((FirmwareGuestSystemPatchSet.prebootMicrophoneArray, "patch-dt-microphone-array", []))
@@ -2902,6 +2950,8 @@ struct VPhoneCustomFirmwareInstaller {
     /// which MobileGestalt reads Siri, Camera Control, the Action Button and the
     /// model name as absent; `fw patch` does not keep the iPhone17,3's, so it
     /// always comes from here.
+    /// A HomePod mini also needs its donor's native product-id token for audio
+    /// routing; its selected repair refuses to proceed without a valid donor.
     ///
     /// The IPSW cache and the VM folder are the caller's, so the search and
     /// the write run with the caller's credentials, as `cfw install` records
@@ -2910,8 +2960,9 @@ struct VPhoneCustomFirmwareInstaller {
     /// The write still goes through the pinned VM folder, and the tree is then
     /// staged from there like one `fw patch` kept.
     ///
-    /// Never fails the run: without the tree only the repair is left out, and
-    /// that is said in one `[!]` line naming what is missing and the fix.
+    /// Recovery itself never fails the run: it reports the missing source and
+    /// fix. Selected repairs that require validated donor data check it before
+    /// guest filesystem writes.
     private func recoverBoardDeviceTree(
         in bundleDirectory: VPhoneConfinedDirectory,
         restore: VPhoneConfinedDirectory?,
@@ -2919,11 +2970,15 @@ struct VPhoneCustomFirmwareInstaller {
         invokingUser: VPhoneInvokingUser?,
     ) {
         let device = configuredGuestDevice(in: bundleDirectory) ?? guestDevice(of: restore)
-        let repair = device.presentsBoard ? FirmwareGuestSystemPatchSet.prebootBoardAudio : FirmwareGuestSystemPatchSet.prebootIPhoneProduct
-        guard plan?.isEnabled(repair) ?? true else { return }
+        let repairs = device.family == .homePod
+            ? [FirmwareGuestSystemPatchSet.prebootBoardAudio, FirmwareGuestSystemPatchSet.homePodAudioProduct]
+            : [device.presentsBoard ? FirmwareGuestSystemPatchSet.prebootBoardAudio : FirmwareGuestSystemPatchSet.prebootIPhoneProduct]
+        guard repairs.contains(where: { plan?.isEnabled($0) ?? true }) else { return }
         let tree = (device.boardDeviceTreePath as NSString).lastPathComponent
         let originals = VPhoneBundleOperations.firmwareOriginalsDirectoryName
-        let skipped = device.presentsBoard
+        let skipped = device.family == .homePod
+            ? "[!] HomePod audio identity repair skipped, so native audio routing may not initialize:"
+            : device.presentsBoard
             ? "[!] Board audio repair skipped, so this \(device.productType) guest will have no sound:"
             : "[!] iPhone product repair skipped, so this \(device.productType) guest will have no Siri, Camera Control, Action Button or Model Name:"
         do {

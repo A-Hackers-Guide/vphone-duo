@@ -175,3 +175,119 @@ struct HomePodDisplayMetadataTests {
         }
     }
 }
+
+@Suite("HomePod native audio product identity")
+struct HomePodAudioProductTests {
+    private typealias Node = FlatDeviceTreeNode
+
+    // B520AP / AudioAccessory5,1 27.0 (24J361) /product/product-id.
+    // MobileGestalt table row 17 maps these bytes to 0xc79439ac; VirtualAudio
+    // maps that to its native enum 4. Runtime code always reads the donor.
+    private static let donorID = Data(base64Encoded: "l2aw/kQAaW9zNqWJvWMfJJjJKt0=")!
+    private static let virtualID = Data(repeating: 0xA5, count: 20)
+
+    private static func tree(model: String = "AudioAccessory5,1", token: Data? = donorID,
+                             flags: UInt16 = 0, acousticID: UInt32 = 0) -> Data {
+        var properties: [(String, Data)] = [("graphics-featureset-class", Data("APPLE7\0".utf8))]
+        if let token { properties.append(("product-id", token)) }
+        return Node("device-tree", [("model", Data((model + "\0").utf8))], children: [
+            Node("product", properties, flags: ["product-id": flags], children: [
+                Node("audio", [("acoustic-id", Node.uint32(acousticID))]),
+            ]),
+            Node("arm-io", [("virtual-hardware", Node.uint32(1))]),
+        ]).serialized
+    }
+
+    @Test func `copies exactly the donor token and leaves virtual audio hardware unchanged`() throws {
+        let original = Self.tree(token: Self.virtualID)
+        let board = Self.tree(acousticID: 99)
+        let (patched, changes, delta) = try CustomFirmwarePostRestoreDeviceTree.withHomePodAudioProduct(original, board: board)
+        #expect(patched == Self.tree())
+        #expect(delta == 0 && patched.count == original.count)
+        #expect(changes.map(\.property) == ["product/product-id"])
+        #expect(changes.first?.before == Self.virtualID.map { String(format: "%02x", $0) }.joined())
+        #expect(try DeviceTreePatcher.homePodAudioProductID(from: patched) == Self.donorID)
+        let (again, noChanges, noDelta) = try CustomFirmwarePostRestoreDeviceTree.withHomePodAudioProduct(patched, board: board)
+        #expect(again == patched && noChanges.isEmpty && noDelta == 0)
+    }
+
+    @Test func `adds a missing token and clears only its placeholder flag`() throws {
+        let board = Self.tree()
+        let missing = Self.tree(token: nil)
+        let (added, changes, delta) = try CustomFirmwarePostRestoreDeviceTree.withHomePodAudioProduct(missing, board: board)
+        #expect(added == board && delta == 56 && changes.first?.before == "absent")
+        let placeholder = Self.tree(token: Self.donorID, flags: 0x8000)
+        let (filled, flaggedChanges, flaggedDelta) = try CustomFirmwarePostRestoreDeviceTree.withHomePodAudioProduct(placeholder, board: board)
+        #expect(filled == board && flaggedChanges.count == 1 && flaggedDelta == 0)
+    }
+
+    @Test func `rejects uninspected families malformed and unresolved donor tokens`() throws {
+        let original = Self.tree(token: Self.virtualID)
+        for donor in [Self.tree(model: "iPhone17,3"), Self.tree(model: "AudioAccessory6,1"),
+                      Self.tree(token: nil), Self.tree(token: Data(repeating: 0, count: 19)),
+                      Self.tree(token: Data(repeating: 0, count: 21)), Self.tree(flags: 0x8000)] {
+            #expect(throws: (any Error).self) {
+                try CustomFirmwarePostRestoreDeviceTree.withHomePodAudioProduct(original, board: donor)
+            }
+            #expect(throws: (any Error).self) { try DeviceTreePatcher.homePodAudioProductID(from: donor) }
+        }
+        for model in ["iPhone99,11", "iPhone17,3", "AppleTV14,1", "AudioAccessory6,1"] {
+            #expect(throws: (any Error).self) {
+                try CustomFirmwarePostRestoreDeviceTree.withHomePodAudioProduct(Self.tree(model: model), board: Self.tree())
+            }
+        }
+        let duplicate = Node("device-tree", [("model", Data("AudioAccessory5,1\0".utf8))], children: [
+            Node("product", [("product-id", Self.donorID), ("product-id", Self.donorID)]),
+        ]).serialized
+        #expect(throws: (any Error).self) { try DeviceTreePatcher.homePodAudioProductID(from: duplicate) }
+        #expect(throws: (any Error).self) {
+            try CustomFirmwarePostRestoreDeviceTree.withHomePodAudioProduct(duplicate, board: Self.tree())
+        }
+    }
+
+    @Test func `shared repair backup composes audio node and identity independently in both directions`() throws {
+        let backup = Self.tree(token: Self.virtualID)
+        let board = Self.tree(acousticID: 99)
+        let (audioOnly, _, _) = try CustomFirmwarePostRestoreDeviceTree.withBoardAudio(backup, board: board)
+        let (both, _, _) = try CustomFirmwarePostRestoreDeviceTree.withHomePodAudioProduct(audioOnly, board: board)
+        #expect(both == board)
+        // Opt out of identity: rebuild from the same clean inverse and keep the
+        // still-selected audio-node repair. No previous repaired output is its own inverse.
+        let (identityOff, _, _) = try CustomFirmwarePostRestoreDeviceTree.withBoardAudio(backup, board: board)
+        #expect(identityOff == Self.tree(token: Self.virtualID, acousticID: 99))
+        let (reenabled, _, _) = try CustomFirmwarePostRestoreDeviceTree.withHomePodAudioProduct(identityOff, board: board)
+        #expect(reenabled == both)
+        // Opt out of audio-node repair while retaining identity.
+        let (audioOff, _, _) = try CustomFirmwarePostRestoreDeviceTree.withHomePodAudioProduct(backup, board: board)
+        #expect(audioOff == Self.tree())
+        #expect(backup == Self.tree(token: Self.virtualID))
+    }
+
+    @Test func `installed IMG4 retains personalized metadata and supports dry run and repeat application`() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let target = directory.appendingPathComponent("devicetree.img4")
+        let donor = directory.appendingPathComponent("donor.im4p")
+        let oldPayload = Self.tree(token: Self.virtualID)
+        let im4p = try IM4P(fourcc: "dtre", description: "HomePod native identity test", payload: oldPayload).data
+        let manifest = DERTestEncoder.element(tag: 0xA0, value: Data(repeating: 0x71, count: 47))
+        let restoreInfo = DERTestEncoder.element(tag: 0xA1, value: Data(repeating: 0x29, count: 19))
+        let original = DERTestEncoder.sequence([DERTestEncoder.ia5String("IMG4"), im4p, manifest, restoreInfo])
+        try original.write(to: target)
+        try IM4P(fourcc: "dtre", description: "B520 donor", payload: Self.tree()).data.write(to: donor)
+        #expect(try DeviceTreePatcher.homePodAudioProductID(from: Data(contentsOf: donor)) == Self.donorID)
+        let dry = try CustomFirmwarePostRestoreDeviceTree.presentHomePodAudioProduct(at: target, board: donor, dryRun: true, verbose: false)
+        let afterDryRun = try Data(contentsOf: target)
+        #expect(!dry.wrote && dry.changes.count == 1 && afterDryRun == original)
+        let applied = try CustomFirmwarePostRestoreDeviceTree.presentHomePodAudioProduct(at: target, board: donor, verbose: false)
+        #expect(applied.wrote)
+        let output = try Data(contentsOf: target)
+        let children = try DERTestEncoder.children(of: output)
+        #expect(children[2] == manifest && children[3] == restoreInfo)
+        #expect(try IM4P(children[1]).payload() == Self.tree())
+        let repeatOutcome = try CustomFirmwarePostRestoreDeviceTree.presentHomePodAudioProduct(at: target, board: donor, verbose: false)
+        #expect(!repeatOutcome.wrote && repeatOutcome.changes.isEmpty)
+        #expect(try Data(contentsOf: target) == output)
+    }
+}
