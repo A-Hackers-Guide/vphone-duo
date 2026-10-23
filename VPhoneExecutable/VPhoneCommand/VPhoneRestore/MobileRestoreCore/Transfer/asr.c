@@ -29,6 +29,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <poll.h>
 #include <libimobiledevice/libimobiledevice.h>
 
 #include <libimobiledevice-glue/sha.h>
@@ -46,6 +47,8 @@
 #define ASR_PAYLOAD_PACKET_SIZE 1450
 #define ASR_PAYLOAD_CHUNK_SIZE 131072
 #define ASR_CHECKSUM_CHUNK_SIZE 131072
+/* How long a send may make no progress, in 100 ms waits, before it fails. */
+#define ASR_SEND_IDLE_WAITS 600
 
 int asr_open_with_timeout(idevice_t device, asr_client_t* asr, uint16_t port)
 {
@@ -175,15 +178,46 @@ int asr_send(asr_client_t asr, plist_t data)
 	return 0;
 }
 
+/* Wait up to 100 ms for the connection to take more data. */
+static void asr_wait_writable(asr_client_t asr)
+{
+	int fd = -1;
+	if (idevice_connection_get_fd(asr->connection, &fd) == IDEVICE_E_SUCCESS && fd >= 0) {
+		struct pollfd pfd = { .fd = fd, .events = POLLOUT, .revents = 0 };
+		poll(&pfd, 1, 100);
+	} else {
+		usleep(100000);
+	}
+}
+
 int asr_send_buffer(asr_client_t asr, const void* data, size_t size)
 {
-	uint32_t bytes = 0;
+	const char* next = data;
+	size_t left = size;
+	int idle = 0;
 	idevice_error_t device_error = IDEVICE_E_SUCCESS;
 
-	device_error = idevice_connection_send(asr->connection, data, (uint32_t)size, &bytes);
-	if (device_error != IDEVICE_E_SUCCESS || bytes != size) {
-		logger(LL_ERROR, "Unable to send data to ASR. Sent %u of %zu bytes.\n", bytes, size);
-		return -1;
+	/* The socket takes less than all of it while the guest is slow to read,
+	 * as when its ASR starts restoring the image. Send the rest instead of
+	 * failing: a caller that sends the chunk again, or the next one, has
+	 * corrupted the stream, and the guest closes the connection. */
+	while (left > 0) {
+		uint32_t bytes = 0;
+		device_error = idevice_connection_send(asr->connection, next, (uint32_t)left, &bytes);
+		next += bytes;
+		left -= bytes;
+		if (left == 0) {
+			break;
+		}
+		if (bytes > 0) {
+			idle = 0;
+			continue;
+		}
+		if (++idle > ASR_SEND_IDLE_WAITS) {
+			logger(LL_ERROR, "Unable to send data to ASR. Sent %zu of %zu bytes (error %d).\n", size - left, size, device_error);
+			return -1;
+		}
+		asr_wait_writable(asr);
 	}
 
 	return 0;
@@ -387,9 +421,10 @@ int asr_send_payload(asr_client_t asr, ipsw_file_handle_t file)
 			sendsize += 20;
 		}
 		if (asr_send_buffer(asr, data, sendsize) < 0) {
-			logger(LL_ERROR, "Unable to send filesystem payload chunk, retrying...\n");
-			retry--;
-			continue;
+			/* Part of it may have gone out: sending this chunk or the next
+			 * one now would corrupt the stream, so stop. */
+			logger(LL_ERROR, "Unable to send filesystem payload chunk\n");
+			break;
 		}
 
 		bytes += size;
