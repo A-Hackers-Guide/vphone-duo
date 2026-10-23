@@ -59,6 +59,7 @@ struct VPhoneLaunchpadNewMachineView: View {
     /// The page the Advanced Options sheet shows: the one last shown.
     @State private var page = Page.hardware
     @State private var showsAdvanced = false
+    @State private var showsServiceTrimmingNotice = false
 
     /// The basic page, then the advanced ones.
     enum Page: Hashable {
@@ -90,6 +91,11 @@ struct VPhoneLaunchpadNewMachineView: View {
             return iphone.isEmpty || cloudOS.isEmpty ? nil : (iphone, cloudOS)
         }
         return selectedPairing.map { ($0.ios.url, ownCloudOS?.url ?? $0.recommendedCloudOS.url) }
+    }
+
+    private var warnsAboutServiceTrimming: Bool {
+        slimming.slim && slimming.trimsServices
+            && VPhoneLaunchpadSlimming.warnsAboutServiceTrimming(iphoneSource: sources?.0 ?? "")
     }
 
     /// The release's own cloudOS, when chosen and the pairing has one.
@@ -248,6 +254,18 @@ struct VPhoneLaunchpadNewMachineView: View {
         .sheet(isPresented: $showsAdvanced) {
             advancedSheet
                 .environment(model)
+                .alert("Service trimming is available only for iOS 26 and iOS 27.", isPresented: $showsServiceTrimmingNotice) {
+                    Button("OK", role: .cancel) {}
+                }
+        }
+        .alert("Service trimming is available only for iOS 26 and iOS 27.", isPresented: Binding(
+            get: { showsServiceTrimmingNotice && !showsAdvanced },
+            set: { showsServiceTrimmingNotice = $0 },
+        )) {
+            Button("OK", role: .cancel) {}
+        }
+        .onChange(of: warnsAboutServiceTrimming) { _, warns in
+            showsServiceTrimmingNotice = warns
         }
         // Each bundle version has its own firmware pairings and patch sets.
         .task(id: bundleVersion) { await loadCatalog() }
@@ -310,9 +328,9 @@ struct VPhoneLaunchpadNewMachineView: View {
                         hardwarePage
                         advancedSections(.hardware)
                     case .template:
-                        VPhoneLaunchpadSlimmingSections(part: .template, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, forAppleTV: isAppleTVGuest, forRestoredSystem: patches.customisesRestoredSystem)
+                        VPhoneLaunchpadSlimmingSections(part: .template, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, warnsAboutServiceTrimming: warnsAboutServiceTrimming, forAppleTV: isAppleTVGuest, forRestoredSystem: patches.customisesRestoredSystem)
                     case .slimming:
-                        VPhoneLaunchpadSlimmingSections(part: .slimming, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, forAppleTV: isAppleTVGuest, forRestoredSystem: patches.customisesRestoredSystem)
+                        VPhoneLaunchpadSlimmingSections(part: .slimming, usesTemplate: $usesTemplate, templateAvailable: templateAvailable, slimming: $slimming, warnsAboutServiceTrimming: warnsAboutServiceTrimming, forAppleTV: isAppleTVGuest, forRestoredSystem: patches.customisesRestoredSystem)
                     case .firmware:
                         bundleSection
                         firmwareSourceSection

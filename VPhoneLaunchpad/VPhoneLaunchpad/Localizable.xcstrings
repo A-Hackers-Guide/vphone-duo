@@ -1,6 +1,15 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Service trimming is available only for iOS 26 and iOS 27." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Service trimming is available only for iOS 26 and iOS 27." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "サービスの削減は iOS 26 と iOS 27 でのみ利用できます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "서비스 줄이기는 iOS 26 및 iOS 27에서만 사용할 수 있습니다." } },
+        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chỉ iOS 26 và iOS 27 hỗ trợ tinh gọn dịch vụ." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仅 iOS 26 和 iOS 27 支持服务裁剪。" } }
+      }
+    },
     "An Apple TV is restored on its own, with keys of its own. Templates are made for iPhone and iPad." : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "An Apple TV is restored on its own, with keys of its own. Templates are made for iPhone and iPad." } },

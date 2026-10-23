@@ -15,6 +15,7 @@ struct VPhoneLaunchpadSlimmingSections: View {
     /// IPSWs, which the list cannot be matched against.
     var templateAvailable: Bool?
     @Binding var slimming: VPhoneLaunchpadSlimming
+    let warnsAboutServiceTrimming: Bool
     /// An Apple TV is restored on its own and not slimmed: templates and
     /// slimming drive iOS Setup Assistant and its apps.
     var forAppleTV = false
@@ -138,7 +139,10 @@ struct VPhoneLaunchpadSlimmingSections: View {
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
                 Text("About 140 launch daemons a research machine rarely needs, Apple Account's among them.")
-                if slimming.trimsServices {
+                if warnsAboutServiceTrimming {
+                    Text("Service trimming is available only for iOS 26 and iOS 27.")
+                }
+                if !warnsAboutServiceTrimming, slimming.trimsServices {
                     // terminusd and the nano daemons are among them.
                     Text("A phone with these services off cannot pair an Apple Watch.")
                 }

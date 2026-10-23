@@ -86,12 +86,7 @@ enum VPhoneMachineTemplateKeys {
         )
         // The slimming this iOS can take: `trimmed` is `none` where vphoned
         // has no service list (VPhoneMachineTemplateSlimming.fitted).
-        let fitted: VPhoneMachineTemplateSlimming
-        do {
-            fitted = try slimming.fitted(toIOSVersion: ios.version)
-        } catch let error as VPhoneTemplateSlimmingError {
-            throw ValidationError(error.description)
-        }
+        let fitted = try self.fitted(slimming, toIOSVersion: ios.version)
         return VPhoneMachineTemplateKey(
             device: device,
             iOSVersion: ios.version,
@@ -107,6 +102,21 @@ enum VPhoneMachineTemplateKeys {
             diskSizeGB: diskSizeGB,
             slimming: fitted,
         )
+    }
+
+    /// Use manifest/restore-record versions, never a source filename. Keep
+    /// notices off stdout so `vm template find --json` remains valid JSON.
+    static func fitted(_ slimming: VPhoneMachineTemplateSlimming, toIOSVersion version: String) throws -> VPhoneMachineTemplateSlimming {
+        do {
+            let fitted = try slimming.fitted(toIOSVersion: version)
+            if fitted.serviceProfile != slimming.serviceProfile {
+                let note = "note: skipping service trimming (including extra service groups): no trimmed service list for iOS \(version); keeping services\n"
+                FileHandle.standardError.write(Data(note.utf8))
+            }
+            return fitted
+        } catch let error as VPhoneTemplateSlimmingError {
+            throw ValidationError(error.description)
+        }
     }
 
     // MARK: Builds of a request
