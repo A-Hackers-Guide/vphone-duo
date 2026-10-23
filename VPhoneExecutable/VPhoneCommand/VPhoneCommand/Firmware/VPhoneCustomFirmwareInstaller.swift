@@ -209,6 +209,20 @@ struct VPhoneCustomFirmwareInstaller {
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodAudioProduct), device.family != .homePod {
             throw ValidationError("The HomePod audio-product patch is supported only for a HomePod guest.")
         }
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodWelcome), device.family != .homePod {
+            throw ValidationError("The HomePod welcome patch is supported only for a HomePod guest.")
+        }
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodSiriSpeech), device.family != .homePod {
+            throw ValidationError("The HomePod Siri-speech patch is supported only for a HomePod guest.")
+        }
+        let missingSpeechDependencies = FirmwareGuestPatchResolution.missingHomePodSiriSpeechDependencies(enabled: effectiveEnabled)
+        guard missingSpeechDependencies.isEmpty else {
+            throw ValidationError("The HomePod Siri-speech patch requires these selected guest patches: \(missingSpeechDependencies.joined(separator: ", ")).")
+        }
+        let missingWelcomeDependencies = FirmwareGuestPatchResolution.missingHomePodWelcomeDependencies(enabled: effectiveEnabled)
+        guard missingWelcomeDependencies.isEmpty else {
+            throw ValidationError("The HomePod welcome patch requires these selected guest patches: \(missingWelcomeDependencies.joined(separator: ", ")).")
+        }
         // Research: an Apple TV 4K userland staged from its OTA, which
         // `system-tv-exp-ota_userland` puts in place of the restored one.
         let hasOTAUserland = (try? bundleDirectory.isDirectory(VPhoneOTAArchive.userlandDirectoryName)) == true
@@ -1379,6 +1393,34 @@ struct VPhoneCustomFirmwareInstaller {
             live.insert(setup)
         } else {
             try system.removeItem(setupPath)
+        }
+        let speech = FirmwareGuestSystemPatchSet.homePodSiriSpeech
+        let speechPath = String(FirmwareGuestSystemPatchSet.homePodSiriSpeechPath.dropFirst())
+        if plan?.isEnabled(speech) == true {
+            guard guestDevice.family == .homePod else {
+                throw ValidationError("HomePod Siri speech requires a HomePod guest.")
+            }
+            _ = try system.directory("usr/share/vphone", create: true, mode: 0o755)
+            let policy = try PropertyListSerialization.data(fromPropertyList: ["Enabled": true], format: .binary, options: 0)
+            try system.writeFile(speechPath, contents: policy, mode: 0o644, owner: Self.guestOwner)
+            live.insert(speech)
+        } else {
+            try system.removeItem(speechPath)
+        }
+        let welcome = FirmwareGuestSystemPatchSet.homePodWelcome
+        let welcomePath = String(FirmwareGuestSystemPatchSet.homePodWelcomePath.dropFirst())
+        if plan?.isEnabled(welcome) == true {
+            guard guestDevice.family == .homePod else {
+                throw ValidationError("HomePod welcome requires a HomePod guest.")
+            }
+            _ = try system.directory("usr/share/vphone", create: true, mode: 0o755)
+            let policy = try PropertyListSerialization.data(fromPropertyList: ["Enabled": true], format: .binary, options: 0)
+            try system.writeFile(welcomePath, contents: policy, mode: 0o644, owner: Self.guestOwner)
+            live.insert(welcome)
+        } else {
+            // Once-only state belongs to the guest's writable Data volume and
+            // survives opt-out, re-enabling and bundle/environment updates.
+            try system.removeItem(welcomePath)
         }
         for (identifier, library) in [
             (FirmwareGuestSystemPatchSet.gyroscope, "libvphonegyro.dylib"),

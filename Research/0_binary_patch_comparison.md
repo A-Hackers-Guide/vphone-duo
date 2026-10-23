@@ -1,5 +1,43 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **HomePod Siri speech policy (2026-10-22, repair runtime unverified).**
+> New optional `system-homepod-exp-siri_speech` generates
+> `/usr/share/vphone/HomePodSiriSpeech.plist` with `Enabled=true`, restricted to
+> 27.x HomePod guests and selected by default only in `homepod-mini`. Installation
+> requires vphoned, the top-cap adapter and virtio sound; welcome additionally
+> requires this speech policy. Opt-out removes only the selected policy.
+> The native branch supports an output-only auxiliary AVAudioSession ID carried
+> on a normal type 13 SVXSystemEvent, allowing SoundBoard's existing Siri lifecycle
+> and completion to handle speech without entering physical recording setup.
+> The candidate repair is scoped to the existing SoundBoard adapter; global
+> product identity, audio route and microphone capability flags remain intact.
+> Native branch analysis is verified; repair playback remains unverified.
+> See [welcome and speech policy](Firmware/homepod_welcome.md).
+
+> **HomePod welcome policy (2026-10-22, runtime validation pending).**
+> New optional `system-homepod-exp-welcome` is restricted to 27.x and admitted
+> only for HomePod guests. Only `homepod-mini` selects it by default. The guest
+> installer checks that vphoned, the HomePod top cap, local setup completion and
+> virtio sound and native Siri speech are selected, then generates
+> `/usr/share/vphone/HomePodWelcome.plist` with `Enabled=true`. Opt-out removes
+> only that policy; once-only Data state remains owned by the guest runtime.
+> The coordinator runs in SoundBoard's existing injected HomePod adapter, using
+> native tone completion, a coordinated Identify activity and Siri finalization
+> after boot readiness. A durable guest-identity claim prevents replay across
+> restarts and updates while allowing each template clone its own welcome.
+> Catalogue and standalone runtime/state tests pass. Audible synthesis, native
+> flourish and end-to-end first-boot behavior still require live validation.
+> See [welcome policy and pending native behavior](Firmware/homepod_welcome.md).
+
+> **HomePod welcome pre-live ABI audit (2026-10-23).**
+> Direct 24J361 donor-cache metadata establishes UInt32 tone playback
+> (`SBUITonePlaybackManager play:completion:`, `v28@0:8I16@?20`). The candidate's
+> initial UInt64 mock and guard agreed with each other but would reject the real
+> guest method. Both are corrected, with an independent donor-signature fixture
+> and rejection coverage for the old shape. Native Siri state/selector analysis
+> also confirms a presenting-state activity path separate from microphone audio
+> activation; live animation, metering and audibility remain pending.
+
 > **HomePod audio-only identity correction (2026-10-22, live validation).**
 > An A/B boot of the same installed bundle, changing only the validated donor
 > product token back to its prior virtual value, restores the native red replay;

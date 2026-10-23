@@ -198,6 +198,8 @@ struct FirmwarePatchSetCatalogTests {
                 FirmwarePatchSetCatalog.manualOnlyPatches.contains($0.identifier)
                     && $0.identifier != FirmwareGuestSystemPatchSet.homePodTopCap
                     && $0.identifier != FirmwareGuestSystemPatchSet.homePodSetupBypass
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodWelcome
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodSiriSpeech
                     && $0.identifier != FirmwareGuestSystemPatchSet.homePodAudioProduct
                     && $0.applicability.matches(iOSBase: version, cloudOS: cloud)
             }.map(\.identifier))

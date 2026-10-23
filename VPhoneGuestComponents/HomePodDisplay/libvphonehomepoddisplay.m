@@ -1,6 +1,9 @@
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 #include <dlfcn.h>
+#import "VPHomePodSiriSpeech.h"
+
+void VPHomePodWelcomeInstall(void);
 
 // IOHIDUserDevice deliberately rejects reserved IOKit properties, including
 // IOClass. MiniDisplay's HW3 path tests that property before reading MDHWVersion.
@@ -167,6 +170,10 @@ __attribute__((constructor)) static void VPHomePodDisplayInitialize(void) {
             NSLog(@"vphone HomePod display: MiniDisplay identity adapter unavailable");
         } else {
             NSLog(@"vphone HomePod display: virtual MiniDisplay identity adapter ready");
+            if (VPHomePodSiriSpeechInstall()) {
+                NSLog(@"vphone HomePod Siri speech: isolated playback session adapter ready");
+                VPHomePodWelcomeInstall();
+            }
         }
     }
 }

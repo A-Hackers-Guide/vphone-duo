@@ -52,11 +52,40 @@ public enum FirmwareGuestPatchResolution {
     public static let homePodSupportedGuestPatches = tvSupportedGuestPatches
         .subtracting([FirmwareGuestSystemPatchSet.tvTPRO])
         .union([FirmwareGuestSystemPatchSet.homePodTopCap, FirmwareGuestSystemPatchSet.homePodSetupBypass,
-                FirmwareGuestSystemPatchSet.homePodAudioProduct, FirmwareGuestSystemPatchSet.virtioSoundDriver])
+                FirmwareGuestSystemPatchSet.homePodAudioProduct, FirmwareGuestSystemPatchSet.homePodWelcome,
+                FirmwareGuestSystemPatchSet.homePodSiriSpeech,
+                FirmwareGuestSystemPatchSet.virtioSoundDriver])
         .union(FirmwarePatchSetCatalog.tvOS27UserlandPatches)
 
     public static func unvalidatedHomePodGuestPatches(enabled: Set<String>) -> [String] {
         enabled.intersection(guestTargetIdentifiers).subtracting(homePodSupportedGuestPatches).sorted()
+    }
+
+    public static let homePodWelcomeDependencies: Set<String> = [
+        "system-vphoned-boot-install",
+        FirmwareGuestSystemPatchSet.homePodTopCap,
+        FirmwareGuestSystemPatchSet.homePodSetupBypass,
+        FirmwareGuestSystemPatchSet.virtioSoundDriver,
+        FirmwareGuestSystemPatchSet.homePodSiriSpeech,
+    ]
+
+    /// A welcome opt-out remains installable when any prerequisite is also off.
+    /// This checks the current guest selection before any filesystem writes;
+    /// the guest runtime must still verify readiness before consuming its claim.
+    public static func missingHomePodWelcomeDependencies(enabled: Set<String>) -> [String] {
+        guard enabled.contains(FirmwareGuestSystemPatchSet.homePodWelcome) else { return [] }
+        return homePodWelcomeDependencies.subtracting(enabled).sorted()
+    }
+
+    public static let homePodSiriSpeechDependencies: Set<String> = [
+        "system-vphoned-boot-install",
+        FirmwareGuestSystemPatchSet.homePodTopCap,
+        FirmwareGuestSystemPatchSet.virtioSoundDriver,
+    ]
+
+    public static func missingHomePodSiriSpeechDependencies(enabled: Set<String>) -> [String] {
+        guard enabled.contains(FirmwareGuestSystemPatchSet.homePodSiriSpeech) else { return [] }
+        return homePodSiriSpeechDependencies.subtracting(enabled).sorted()
     }
 
     /// Every bundled-set patch whose bytes the guest half of an install writes —

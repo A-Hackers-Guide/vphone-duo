@@ -97,6 +97,7 @@ ATTITUDE_SOURCES := $(call find_sources,Attitude)
 ATTITUDE_INPUTS := $(call find_headers,Attitude) $(call find_folders,Attitude) Shared/AttitudeProcess.h
 HOMEPODDISPLAY := $(STAGE)/homepoddisplay/libvphonehomepoddisplay.dylib
 HOMEPODDISPLAY_SOURCES := $(call find_sources,HomePodDisplay)
+HOMEPODDISPLAY_INPUTS := $(call find_headers,HomePodDisplay) $(call find_folders,HomePodDisplay)
 HOMEPODSETUP := $(STAGE)/homepodsetup/vphone-homepod-setup
 HOMEPODSETUP_SOURCES := $(call find_sources,HomePodSetup)
 HOMEPODSETUP_INPUTS := $(call find_headers,HomePodSetup) HomePodSetup/com.vphone.homepod-setup.plist
@@ -150,6 +151,23 @@ test-homepod-display:
 	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror -DVP_HOMEPOD_DISPLAY_TESTING \
 		-o $(OUT)/HomePodDisplayIdentityTests Tests/HomePodDisplayIdentityTests.m $(HOMEPODDISPLAY_SOURCES) -framework Foundation
 	@$(OUT)/HomePodDisplayIdentityTests
+
+.PHONY: test-homepod-welcome
+test-homepod-welcome:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror -IHomePodDisplay \
+		-o $(OUT)/HomePodWelcomeStateTests Tests/HomePodWelcomeStateTests.m HomePodDisplay/VPHomePodWelcomeState.m -framework Foundation
+	@$(OUT)/HomePodWelcomeStateTests
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror -IHomePodDisplay \
+		-o $(OUT)/HomePodWelcomeTests Tests/HomePodWelcomeTests.m HomePodDisplay/VPHomePodWelcomeState.m -framework Foundation
+	@$(OUT)/HomePodWelcomeTests
+
+.PHONY: test-homepod-siri-speech
+test-homepod-siri-speech:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -fobjc-arc -Wall -Wextra -Werror \
+		-o $(OUT)/HomePodSiriSpeechTests Tests/HomePodSiriSpeechTests.m -framework Foundation
+	@$(OUT)/HomePodSiriSpeechTests
 
 gpu: $(GPU_PLUGIN)
 
@@ -348,7 +366,7 @@ $(ATTITUDE): $(ATTITUDE_SOURCES) $(ATTITUDE_INPUTS) | $(STAGE)/attitude
 		-framework Foundation -framework CoreMotion -Wl,-not_for_dyld_shared_cache
 	@codesign --force --sign - $@
 
-$(HOMEPODDISPLAY): $(HOMEPODDISPLAY_SOURCES)
+$(HOMEPODDISPLAY): $(HOMEPODDISPLAY_SOURCES) $(HOMEPODDISPLAY_INPUTS)
 	@mkdir -p $(STAGE)/homepoddisplay
 	xcrun --sdk appletvos clang -arch arm64e -mtvos-version-min=27.0 -Os -fobjc-arc \
 		-Wall -Wextra -Werror -dynamiclib -install_name /usr/lib/libvphonehomepoddisplay.dylib \

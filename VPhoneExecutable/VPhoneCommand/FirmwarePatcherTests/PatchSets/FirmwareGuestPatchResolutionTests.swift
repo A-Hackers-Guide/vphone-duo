@@ -26,7 +26,8 @@ struct FirmwareGuestPatchResolutionTests {
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true) == [identifier])
     }
 
-    @Test(arguments: [FirmwareGuestSystemPatchSet.homePodSetupBypass, FirmwareGuestSystemPatchSet.homePodAudioProduct])
+    @Test(arguments: [FirmwareGuestSystemPatchSet.homePodSetupBypass, FirmwareGuestSystemPatchSet.homePodAudioProduct,
+                      FirmwareGuestSystemPatchSet.homePodWelcome, FirmwareGuestSystemPatchSet.homePodSiriSpeech])
     func `HomePod optional guest repairs are version gated and never selected for other devices`(identifier: String) throws {
         for base in ["26.4", "27.0", "27.1"] {
             for preset in FirmwarePatchSetCatalog.builtInPresets {
@@ -43,6 +44,59 @@ struct FirmwareGuestPatchResolutionTests {
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier]) == [identifier])
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true) == [identifier])
         #expect(FirmwareGuestPatchResolution.guestPatchesOff(selectionEnabled: []).contains(identifier))
+    }
+
+    @Test func `HomePod welcome requires every selected runtime prerequisite but opt out is independent`() throws {
+        let welcome = FirmwareGuestSystemPatchSet.homePodWelcome
+        let dependencies = FirmwareGuestPatchResolution.homePodWelcomeDependencies
+        #expect(dependencies == ["system-vphoned-boot-install", FirmwareGuestSystemPatchSet.homePodTopCap,
+                                 FirmwareGuestSystemPatchSet.homePodSetupBypass, FirmwareGuestSystemPatchSet.virtioSoundDriver,
+                                 FirmwareGuestSystemPatchSet.homePodSiriSpeech])
+        let complete = dependencies.union([welcome])
+        #expect(FirmwareGuestPatchResolution.missingHomePodWelcomeDependencies(enabled: complete).isEmpty)
+        for dependency in dependencies {
+            #expect(FirmwareGuestPatchResolution.missingHomePodWelcomeDependencies(enabled: complete.subtracting([dependency])) == [dependency])
+        }
+        #expect(FirmwareGuestPatchResolution.missingHomePodWelcomeDependencies(enabled: [welcome]) == dependencies.sorted())
+        #expect(FirmwareGuestPatchResolution.missingHomePodWelcomeDependencies(enabled: []).isEmpty)
+        #expect(FirmwareGuestPatchResolution.missingHomePodWelcomeDependencies(enabled: dependencies).isEmpty)
+        let plan = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.homePodMiniPreset, patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("27.0"), cloudOS: VPhoneVersion("26.4"),
+        )
+        #expect(plan.isEnabled(welcome))
+        #expect(FirmwareGuestPatchResolution.missingHomePodWelcomeDependencies(enabled: plan.enabled).isEmpty)
+        let declaration = try #require(FirmwarePatchSetCatalog.allDeclarations.first { $0.identifier == welcome })
+        #expect(declaration.target == .guestFile(path: "/usr/share/vphone/HomePodWelcome.plist"))
+        #expect(!declaration.bootEssential)
+    }
+
+    @Test func `HomePod Siri speech requires its native output dependencies and can be disabled independently`() throws {
+        let speech = FirmwareGuestSystemPatchSet.homePodSiriSpeech
+        let dependencies = FirmwareGuestPatchResolution.homePodSiriSpeechDependencies
+        #expect(dependencies == ["system-vphoned-boot-install", FirmwareGuestSystemPatchSet.homePodTopCap,
+                                 FirmwareGuestSystemPatchSet.virtioSoundDriver])
+        let complete = dependencies.union([speech])
+        #expect(FirmwareGuestPatchResolution.missingHomePodSiriSpeechDependencies(enabled: complete).isEmpty)
+        for dependency in dependencies {
+            #expect(FirmwareGuestPatchResolution.missingHomePodSiriSpeechDependencies(enabled: complete.subtracting([dependency])) == [dependency])
+        }
+        #expect(FirmwareGuestPatchResolution.missingHomePodSiriSpeechDependencies(enabled: [speech]) == dependencies.sorted())
+        #expect(FirmwareGuestPatchResolution.missingHomePodSiriSpeechDependencies(enabled: []).isEmpty)
+        #expect(FirmwareGuestPatchResolution.missingHomePodSiriSpeechDependencies(enabled: dependencies).isEmpty)
+        #expect(!dependencies.contains(FirmwareGuestSystemPatchSet.homePodSetupBypass))
+        #expect(!dependencies.contains(FirmwareGuestSystemPatchSet.homePodWelcome))
+        let plan = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.homePodMiniPreset, patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("27.0"), cloudOS: VPhoneVersion("26.4"),
+        )
+        #expect(plan.isEnabled(speech))
+        #expect(FirmwareGuestPatchResolution.missingHomePodSiriSpeechDependencies(enabled: plan.enabled).isEmpty)
+        let declaration = try #require(FirmwarePatchSetCatalog.allDeclarations.first { $0.identifier == speech })
+        #expect(declaration.target == .guestFile(path: "/usr/share/vphone/HomePodSiriSpeech.plist"))
+        #expect(!declaration.bootEssential)
+        // Welcome cannot remain enabled after opting out of its speech repair.
+        #expect(FirmwareGuestPatchResolution.missingHomePodWelcomeDependencies(enabled: plan.enabled.subtracting([speech])) == [speech])
     }
 
     @Test
