@@ -38,6 +38,25 @@ struct HostFilePermissionsTests {
 
     // MARK: - Hard links and symlinked directories
 
+    @Test func `Only an entry not exactly 0777 that this process may change is changed`() {
+        func entry(_ mode: mode_t, owner: uid_t) -> stat {
+            var metadata = stat()
+            metadata.st_mode = S_IFREG | mode
+            metadata.st_uid = owner
+            return metadata
+        }
+        let me = geteuid()
+        #expect(VPhoneHostFilePermissions.needsModeChange(entry(0o644, owner: me)))
+        #expect(!VPhoneHostFilePermissions.needsModeChange(entry(0o777, owner: me)))
+        // A setuid, setgid or sticky bit is cleared, so the entry still changes.
+        #expect(VPhoneHostFilePermissions.needsModeChange(entry(0o4777, owner: me)))
+        #expect(VPhoneHostFilePermissions.needsModeChange(entry(0o1777, owner: me)))
+        // Without root, another account's entry is left to the kernel's checks.
+        let other = me == 0 ? 501 : me &+ 1
+        #expect(VPhoneHostFilePermissions.needsModeChange(entry(0o644, owner: other)) == (me == 0))
+        #expect(!VPhoneHostFilePermissions.needsModeChange(entry(0o777, owner: other)))
+    }
+
     @Test func `A hard link into the tree keeps the linked file's mode`() throws {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let vm = base.appendingPathComponent("VM")

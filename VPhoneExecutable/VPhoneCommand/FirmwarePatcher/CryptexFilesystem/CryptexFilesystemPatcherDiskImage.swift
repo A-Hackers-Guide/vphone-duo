@@ -107,13 +107,26 @@ extension CryptexFilesystemPatcher {
     /// Such an image grows by extending the file and letting the container
     /// fill it.
     func growImage(dmg: URL, by bytes: Int64) throws {
-        let size = try FileManager.default.attributesOfItem(atPath: dmg.path)[.size] as? Int64 ?? 0
+        // Extending a file whose size is unknown would cut it to `bytes`.
+        guard let size = (try FileManager.default.attributesOfItem(atPath: dmg.path)[.size] as? NSNumber)?.int64Value,
+              size > 0
+        else {
+            throw ProcessError.failed(0, "could not read the size of \(dmg.lastPathComponent) to grow it")
+        }
         let sizes = try runProcess("/usr/sbin/diskutil", ["image", "resize", "-plist", dmg.path])
-        if let limit = try Int64(Self.maxResizeSize(fromDiskutilPlist: sizes)), size + bytes <= limit {
+        let limit = try Int64(Self.maxResizeSize(fromDiskutilPlist: sizes))
+        if let limit, size + bytes <= limit {
             _ = try runProcess("/usr/sbin/diskutil", [
                 "image", "resize", "-size", String(size + bytes), dmg.path,
             ])
             return
+        }
+        // Only a container on the whole file grows with it: behind a partition
+        // map, the map and its backup header would still end at the old size.
+        let probe = try runProcess("/usr/sbin/diskutil", ["image", "attach", "-noMount", dmg.path])
+        detachReportedImage(in: probe)
+        guard !Self.hasPartitionMap(attachOutput: probe) else {
+            throw ProcessError.failed(0, "\(dmg.lastPathComponent) has a partition map, and diskutil grows it no further than \(limit.map(String.init) ?? "its current size") bytes; the seal needs \(bytes) more")
         }
         let handle = try FileHandle(forWritingTo: dmg)
         try handle.truncate(atOffset: UInt64(size + bytes))
@@ -124,6 +137,16 @@ extension CryptexFilesystemPatcher {
         let container = volume.replacingOccurrences(of: #"s[0-9]+$"#, with: "", options: .regularExpression)
         _ = try runProcess("/usr/sbin/diskutil", ["apfs", "resizeContainer", container, "0"])
         print("  [+] Grew \(dmg.lastPathComponent)'s container past diskutil's limit by \(bytes) bytes")
+    }
+
+    /// Whether `diskutil image attach` reported a partition map (a
+    /// `…_partition_scheme` disk or an `Apple_APFS` partition) rather than an
+    /// APFS container on the whole image.
+    static func hasPartitionMap(attachOutput output: String) -> Bool {
+        output.split(whereSeparator: \.isNewline).contains { line in
+            let fields = line.split(whereSeparator: \.isWhitespace)
+            return fields.count >= 2 && (fields[1].hasSuffix("_partition_scheme") || fields[1] == "Apple_APFS")
+        }
     }
 
     /// Attach an image without mounting anything, and return its APFS volume's

@@ -21,7 +21,7 @@ import Foundation
 enum GuestServiceProfile {
     /// Raised whenever a label list changes, and kept in the record, so a
     /// guest shows which list its overrides came from.
-    static let listVersion = 1
+    static let listVersion = 2
     static let recordPath = "/var/db/vphoned/service-profile.plist"
     static let trimmed = "trimmed"
     static let none = "none"
@@ -80,8 +80,9 @@ enum GuestServiceProfile {
     static let groups27 = catalog(base: base27)
 
     /// Appendix A of the 2026-10-07 measurement on `svctest-a` (iPhone, 27.0
-    /// 24A435): 137 LaunchDaemons that were loaded at boot and stayed unloaded
-    /// after the override, with the four traps below already taken out.
+    /// 24A435): the LaunchDaemons that were loaded at boot and stayed unloaded
+    /// after the override, with the four traps below already taken out: 137,
+    /// less siriactionsd since list version 2 (see `neverDisable`).
     static let base27: [String] = [
         "com.apple.CallHistorySyncHelper",
         "com.apple.Maps.mapspushd",
@@ -189,7 +190,6 @@ enum GuestServiceProfile {
         "com.apple.servicesintelligenced",
         "com.apple.seserviced",
         "com.apple.siri.sirireaderd",
-        "com.apple.siriactionsd",
         "com.apple.siriinferenced",
         "com.apple.siriknowledged",
         "com.apple.sociallayerd",
@@ -280,6 +280,11 @@ enum GuestServiceProfile {
         "com.apple.ReportCrash", "com.apple.osanalytics.osanalyticshelper",
         "com.apple.audiomxd", "com.apple.mediaplaybackd", "com.apple.mediaremoted", "com.apple.cameracaptured",
         "com.apple.mobileactivationd",
+        // App Intents: every Control Center control and App Intents widget
+        // serializes its intent through siriactionsd's VoiceShortcuts service;
+        // without it WidgetKit traps in each extension and the controls draw
+        // blank.
+        "com.apple.siriactionsd",
     ]
 
     // MARK: - Selection

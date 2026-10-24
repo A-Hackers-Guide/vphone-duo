@@ -69,7 +69,7 @@ extension CryptexFilesystemPatcher {
         return path
     }
 
-    func createDigestAndHash(filesystem: URL, mtree: URL, remap: Bool) throws -> (URL, URL) {
+    func createDigestAndHash(filesystem: URL, mtree: URL, remap: Bool, editedSince: Date) throws -> (URL, URL) {
         // Not mounted: apfs_sealvolume needs only the device, and a mount would
         // change the volume after the mtree described it, so the root hash here
         // would differ from the one the restore computes from that mtree.
@@ -83,7 +83,7 @@ extension CryptexFilesystemPatcher {
         let sealLogPath = tmpDir.appending(path: "seal.log")
 
         // The modification time the restore will derive from the mtree.
-        let modificationTime = try parseRootTime(mtree: mtree)
+        let modificationTime = try remap ? parseEditTime(mtree: mtree, since: editedSince) : ""
         let remapContent = """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -119,37 +119,39 @@ extension CryptexFilesystemPatcher {
         return (digestDbPath, rootHashPath)
     }
 
-    /// The root directory's modification time in the mtree, in nanoseconds.
+    /// The modification time of the first mtree entry edited since `since`, in
+    /// nanoseconds.
     ///
     /// The restore seals the volume with the time its own `mtree -m` derives,
-    /// which is the root entry's (`.`), not the newest entry's. Any other value
-    /// gives this side a root hash the restore rejects ("Invalid root hash").
-    func parseRootTime(mtree: URL) throws -> String {
+    /// and `mtree -m` takes it from the first entry, in walk order, whose time
+    /// differs from the mtree. The restore gets the image as it was encrypted,
+    /// before `removeSpecificSystemFiles`, so that is the first entry this run
+    /// edited afterwards: the root when removing a host `.fseventsd` edited
+    /// it, otherwise `/private/var` (`-nobrowse` mounts get no `.fseventsd`,
+    /// so the root keeps the IPSW's time). The mtree lists entries in
+    /// walk order. Any other value gives this side a root hash the restore
+    /// rejects ("Invalid root hash").
+    func parseEditTime(mtree: URL, since: Date) throws -> String {
         guard let mtreeData = FileManager.default.contents(atPath: mtree.path),
               let text = String(data: mtreeData, encoding: .utf8)
         else {
             throw FirmwareManifest.ManifestError.fileNotFound(mtree.path)
         }
-        let lines = text.split(whereSeparator: \.isNewline).map(String.init)
-
-        // The first section, "# .", describes the root; its entry is named ".".
-        guard let sectionIndex = lines.firstIndex(of: "# ."),
-              let entryIndex = lines[(sectionIndex + 1)...].firstIndex(where: { $0.hasPrefix(". ") })
-        else {
-            throw FirmwareManifest.ManifestError.fileNotFound("the root entry in \(mtree.path)")
+        // File times have nanoseconds, so the edits are in the second `since`
+        // falls in or later; everything before the edits is older.
+        let threshold = Int(since.timeIntervalSince1970.rounded(.down))
+        // An entry continues on the next line after a trailing backslash, so
+        // each line is searched on its own and entries need not be joined.
+        for line in text.split(whereSeparator: \.isNewline) where !line.hasPrefix("/set") {
+            guard let match = line.range(of: #"time=[0-9]+\.[0-9]+"#, options: .regularExpression) else {
+                continue
+            }
+            let value = line[match].dropFirst("time=".count)
+            let parts = value.split(separator: ".")
+            guard let seconds = Int(parts[0]), seconds >= threshold else { continue }
+            return parts.joined()
         }
-        // An entry continues on the next line after a trailing backslash.
-        var entry = ""
-        for line in lines[entryIndex...] {
-            entry += line
-            guard line.hasSuffix("\\") else { break }
-        }
-        guard let match = entry.range(of: #"time=([0-9]+(?:\.[0-9]+)?)"#, options: .regularExpression) else {
-            throw FirmwareManifest.ManifestError.fileNotFound("the root modification time in \(mtree.path)")
-        }
-        return String(entry[match])
-            .replacingOccurrences(of: "time=", with: "")
-            .replacingOccurrences(of: ".", with: "")
+        throw FirmwareManifest.ManifestError.fileNotFound("an entry edited since \(since) in \(mtree.path)")
     }
 
     func createMtree(filesystem: URL) throws -> URL {

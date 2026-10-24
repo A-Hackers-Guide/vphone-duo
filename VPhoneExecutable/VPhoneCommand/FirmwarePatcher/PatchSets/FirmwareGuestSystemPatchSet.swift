@@ -21,6 +21,9 @@ public enum FirmwareGuestSystemPatchSet {
 
     public static let installCoordinationPersona = "system-installcoordination_proxy-cfw-persona_lookup"
     public static let installCoordinationPersonaMarker = "/usr/lib/vphone-installcoordination-persona-lookup"
+    public static let homePodInstallPersonaLibrary = "/usr/lib/libvphoneinstallpersona.dylib"
+    public static let homePodAdHocInstall = "system-installd-exp-homepod_adhoc"
+    public static let homePodMISFixLibrary = "/usr/lib/libvphonehomepodmisfix.dylib"
     public static let metalCacheReuse = "system-systemhook-cfw-metal_cache_reuse"
     public static let metalCacheReuseMarker = "/usr/lib/vphone-metal-cache-reuse"
     public static let gyroscope = "system-backboardd-cfw-gyroscope"
@@ -46,6 +49,9 @@ public enum FirmwareGuestSystemPatchSet {
     /// staged from its OTA. Research only: no IPSW exists for that device.
     public static let tvOTAUserland = "system-tv-exp-ota_userland"
     public static let homePodOTAUserland = "system-homepod-exp-ota_userland"
+    public static let homePodCryptexClass = "preboot-homepod-exp-cryptex_class"
+    public static let homePodCryptexStaging = "system-cryptexd-exp-homepod_staging"
+    public static let homePodCryptexStagingLibrary = "/usr/lib/libvphonecryptexstaging.dylib"
     public static let homePodSoundGlow = "system-homepod-exp-sound_glow"
     public static let homePodSoundGlowPath = "/usr/share/vphone/HomePodSoundGlow.plist"
     public static let otaUserland = "system-exp-ota_userland"
@@ -73,6 +79,27 @@ public enum FirmwareGuestSystemPatchSet {
         name: "Guest System",
         summary: "Shared-cache policy gates, patched system daemons and the vphone guest payload",
         patches: [
+            VPhonePatchDeclaration(
+                identifier: homePodCryptexClass,
+                title: "HomePod Cryptex product class",
+                summary: "Sets the research kernel's Cryptex product class to the native tvOS/HomePod value so signed tvOS developer images pass Image4 equality validation. Changes only /product/cryptex1-product-class; preserves the global product token.",
+                target: .prebootDeviceTree,
+                applicability: ios27,
+            ),
+            VPhonePatchDeclaration(
+                identifier: homePodAdHocInstall,
+                title: "HomePod local app signatures",
+                summary: "Ports the existing MIS signature-option adapter to HomePod installd so locally signed research apps install without the provisioning service HomePod does not ship. Keeps MIS's native signature validation and returned metadata; no device identity or profile scope hooks.",
+                target: .guestExecutable(path: "/usr/libexec/installd"),
+                applicability: ios27,
+            ),
+            VPhonePatchDeclaration(
+                identifier: homePodCryptexStaging,
+                title: "HomePod developer image staging",
+                summary: "Lets HomePod 27 cryptexd stage and activate developer images on the research guest: accepts unsupported protection classes, uses until-reboot DDI lifetime, and tolerates the research SEP's unavailable digest storage only for the verified DDI. Retains Apple personalization, signature, root-hash and trust-cache checks.",
+                target: .guestExecutable(path: "/usr/libexec/cryptexd"),
+                applicability: ios27,
+            ),
             VPhonePatchDeclaration(
                 identifier: homePodOTAUserland,
                 title: "HomePod userland from OTA",
@@ -309,7 +336,7 @@ public enum FirmwareGuestSystemPatchSet {
             VPhonePatchDeclaration(
                 identifier: installCoordinationPersona,
                 title: "Xcode installation persona lookup",
-                summary: "Allows only the CoreDevice installation proxy to look up UserManager through the launchd hook on the hybrid guest.",
+                summary: "Allows only the CoreDevice installation proxy to look up UserManager through launchd on the hybrid guest. HomePod uses a dedicated tvOS adapter with the same audit-token checks, independently of the iPhone environment.",
                 target: .guestFile(path: installCoordinationPersonaMarker),
                 applicability: ios27,
             ),

@@ -172,6 +172,11 @@ struct FirmwareCatalogReportTests {
         // tvOS 27.0 and HomePod Software 27.2 compress their chunks with LZRAVEN.
         let lzraven = VPhoneFirmwareCatalog.otaReleases.filter { $0.minimumHostMacOS == 27 }
         #expect(Set(lzraven.map(\.build)) == ["24J361", "24K120"])
+        // Every 27-series OTA is LZRAVEN so far: a new one must say so, or an
+        // older Mac would be offered it and fail only after its downloads.
+        for release in VPhoneFirmwareCatalog.otaReleases where Int(release.version.split(separator: ".")[0]) ?? 0 >= 27 {
+            #expect(release.minimumHostMacOS == VPhoneOTARelease.lzravenMinimumMacOS, "\(release.productType) \(release.version)")
+        }
         for release in lzraven {
             #expect(!release.unpacks(onMacOS: 26) && release.unpacks(onMacOS: 27))
         }

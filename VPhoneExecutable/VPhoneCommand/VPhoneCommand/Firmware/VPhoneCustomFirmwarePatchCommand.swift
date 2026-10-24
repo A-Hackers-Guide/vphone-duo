@@ -535,6 +535,19 @@ struct VPhoneCustomFirmwarePatchBoardAudioCommand: ParsableCommand {
 
 // MARK: - patch-dt-homepod-audio-product
 
+struct VPhoneCustomFirmwarePatchHomePodCryptexClassCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-dt-homepod-cryptex-class",
+        abstract: "Give a HomePod device tree its native Cryptex product class",
+    )
+    @Argument(transform: URL.init(fileURLWithPath:)) var deviceTree: URL
+    @Flag(name: .customLong("dry-run")) var dryRun = false
+
+    func run() throws {
+        try CustomFirmwarePostRestoreDeviceTree.presentHomePodCryptexClass(at: deviceTree, dryRun: dryRun)
+    }
+}
+
 struct VPhoneCustomFirmwarePatchHomePodAudioProductCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "patch-dt-homepod-audio-product",

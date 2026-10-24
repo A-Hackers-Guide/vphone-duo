@@ -126,6 +126,9 @@ struct VPhoneLaunchpadMachineInspector: View {
                         )
                     }
                 }
+                if let run = library.maintenance[machine.path] {
+                    maintenanceRow(run)
+                }
                 if let started = library.startedAt[machine.path] {
                     LabeledContent("Started", value: started.formatted(date: .omitted, time: .shortened))
                 }
@@ -275,6 +278,41 @@ struct VPhoneLaunchpadMachineInspector: View {
                     }
                     .help("Update the guest environment to match the host programs")
                 }
+            }
+        }
+    }
+
+    // MARK: - Maintenance
+
+    /// The machine's latest CFW install or update this session: the step it
+    /// is on, or how it ended, and a way back to its progress and output.
+    private func maintenanceRow(_ run: VPhoneLaunchpadMaintenanceRun) -> some View {
+        LabeledContent {
+            HStack(spacing: 6) {
+                VPhoneLaunchpadMaintenanceElapsed(run: run)
+                Button("Show…") { model.machineSheetRequest = .maintenance(machine.path) }
+                    .controlSize(.small)
+            }
+        } label: {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: run.kind.title)
+                        .lineLimit(1)
+                    if let line = run.isRunning ? run.progress.stage : run.failure?.message {
+                        Text(verbatim: line)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(line)
+                    } else if run.progress.warningCount > 0 {
+                        Text("^[\(run.progress.warningCount) warning](inflect: true)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } icon: {
+                VPhoneLaunchpadStatusIcon(status: run.status)
             }
         }
     }

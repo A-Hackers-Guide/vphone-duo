@@ -244,6 +244,9 @@ struct FirmwarePatchSetCatalogTests {
                     && $0.identifier != FirmwareGuestSystemPatchSet.homePodSoundGlow
                     && $0.identifier != FirmwareGuestSystemPatchSet.tvSetupDisplayLookup
                     && $0.identifier != FirmwareGuestSystemPatchSet.tvLegacySetup
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodCryptexStaging
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodCryptexClass
+                    && $0.identifier != FirmwareGuestSystemPatchSet.homePodAdHocInstall
                     && $0.applicability.matches(iOSBase: version, cloudOS: cloud)
             }.map(\.identifier))
             #expect(experimental.enabled.subtracting(standard.enabled) == applicableManual)

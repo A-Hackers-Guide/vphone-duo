@@ -74,7 +74,7 @@ public enum VPhoneOTAArchive {
             case let .deltaUpdate(file):
                 "\(file.lastPathComponent) requires a pristine prerequisite build. A modified vphone system needs a full OTA, without PrerequisiteBuild."
             case let .needsNewerMacOS(file, minimum):
-                "\(file.lastPathComponent) is compressed with LZRAVEN, which macOS \(minimum) and later unpack; this Mac runs macOS \(hostVersion). Create this machine on macOS \(minimum) or later, or choose an earlier release."
+                "\(file.lastPathComponent) is compressed with LZRAVEN, which macOS \(minimum) and later unpack; this Mac runs macOS \(VPhoneOTARelease.hostMacOSVersion). Create this machine on macOS \(minimum) or later, or choose an earlier release."
             }
         }
     }
@@ -308,18 +308,11 @@ public enum VPhoneOTAArchive {
     /// LZRAVEN (`pbzm`) came with macOS 27's libcompression: an older Mac
     /// cannot unpack a payload compressed with it.
     static let lzravenMagic = Data("pbzm".utf8)
-    static let lzravenMinimumMacOS = 27
 
     static func checkCompression(_ magic: Data, of file: URL) throws {
-        guard magic.prefix(4) == lzravenMagic,
-              ProcessInfo.processInfo.operatingSystemVersion.majorVersion < lzravenMinimumMacOS
-        else { return }
-        throw Error.needsNewerMacOS(file, minimum: lzravenMinimumMacOS)
-    }
-
-    static var hostVersion: String {
-        let version = ProcessInfo.processInfo.operatingSystemVersion
-        return "\(version.majorVersion).\(version.minorVersion)"
+        let minimum = VPhoneOTARelease.lzravenMinimumMacOS
+        guard magic.prefix(4) == lzravenMagic, VPhoneOTARelease.hostMacOS < minimum else { return }
+        throw Error.needsNewerMacOS(file, minimum: minimum)
     }
 
     private static func readMagic(_ file: URL) throws -> Data {
@@ -531,10 +524,9 @@ public enum VPhoneOTAArchive {
                 linkList = data
             } else {
                 let name = String(path.dropFirst(payloadPrefix.count))
-                // Before the rest of the payload is written.
-                if chunks.isEmpty {
-                    try checkCompression(readMagic(pending.appendingPathComponent(name)), of: ota)
-                }
+                // Each chunk as it lands, so an LZRAVEN payload is refused at
+                // its first chunk, before the rest is written.
+                try checkCompression(readMagic(pending.appendingPathComponent(name)), of: ota)
                 chunks.append(name)
                 progress?(name)
             }

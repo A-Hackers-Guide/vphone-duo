@@ -13,6 +13,7 @@ struct VPhoneLaunchpadMachinesView: View {
         case clone(MachinePath)
         case snapshots(MachinePath)
         case console(MachinePath)
+        case maintenance(MachinePath)
         case guestSystem(MachinePath)
         case commands
 
@@ -26,6 +27,7 @@ struct VPhoneLaunchpadMachinesView: View {
             case let .clone(machine): "clone-\(machine.url.path)"
             case let .snapshots(machine): "snapshots-\(machine.url.path)"
             case let .console(machine): "console-\(machine.url.path)"
+            case let .maintenance(machine): "maintenance-\(machine.url.path)"
             case let .guestSystem(machine): "guest-system-\(machine.url.path)"
             case .commands: "commands"
             }
@@ -121,6 +123,19 @@ struct VPhoneLaunchpadMachinesView: View {
         }
         // So New Machine opens on the catalog rather than loading it.
         .task(id: model.bundles.defaultVersion) { await VPhoneLaunchpadNewMachineView.prefetchCatalog(model) }
+        // A CFW install or update started here shows its progress at once.
+        // Another sheet open keeps its place; the inspector offers the
+        // progress then. A run already over by the time the list is back
+        // on screen does not open.
+        .onChange(of: library.maintenanceSheetRequest, initial: true) {
+            guard let machine = library.maintenanceSheetRequest else {
+                return
+            }
+            library.maintenanceSheetRequest = nil
+            if sheet == nil, library.maintenance[machine]?.isRunning == true {
+                sheet = .maintenance(machine)
+            }
+        }
         .onChange(of: model.deletionRequest, initial: true) {
             if !model.deletionRequest.isEmpty {
                 deletion = model.deletionRequest
@@ -440,6 +455,8 @@ struct VPhoneLaunchpadMachinesView: View {
             VPhoneLaunchpadSnapshotsView(machine: path)
         case let .console(path):
             VPhoneLaunchpadConsoleView(title: "\(path.name) Console", url: VPhoneLaunchpadMachineLibrary.consoleLog(path))
+        case let .maintenance(path):
+            VPhoneLaunchpadMaintenanceView(machine: path)
         case let .guestSystem(path):
             VPhoneLaunchpadGuestSystemView(machine: path)
         case .commands:

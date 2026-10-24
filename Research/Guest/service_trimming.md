@@ -44,7 +44,7 @@ load a disabled job at the next boot. It is the same mechanism
 
 | Group | Default | Labels | Why they can go |
 | --- | --- | --- | --- |
-| `base` | on | 137 | Appendix A of the measurement below. Nothing in vphone, IcliKit or the guest hooks talks to them |
+| `base` | on | 136 | Appendix A of the measurement below, less `siriactionsd` (list version 2). Nothing in vphone, IcliKit or the guest hooks talks to them |
 | `app_store` | on | `com.apple.appstored`, `com.apple.itunesstored` | Off with the App Store and iTunes Store apps a template removes. `appstorecomponentsd` is already in `base` |
 | `signin_followup` | on | `com.apple.followupd`, `com.apple.appleidsetupd` | The sign-in follow-up and Apple Account setup prompts. They complement `libsigninfix`'s pane suppression. A guest that went through `setup.skip` has no follow-up items, so no orphaned badge is left |
 | `accounts` | off, `groups: ["accounts"]` | `com.apple.akd`, `com.apple.amsaccountsd`, `com.apple.appleaccountd` | Only for guests that never sign in: with these off, the guest cannot sign in to an Apple Account |
@@ -53,7 +53,7 @@ The `base` group, by area:
 
 | Area | Examples | Kind |
 | --- | --- | --- |
-| Siri and intelligence | assistantd, siriinferenced, intelligenceflowd, siriactionsd, modelmanagerd, corespeechd | Not used. siriactionsd also serves Shortcuts and App Intents, and corespeechd and modelmanagerd serve dictation |
+| Siri and intelligence | assistantd, siriinferenced, intelligenceflowd, modelmanagerd, corespeechd | Not used. corespeechd and modelmanagerd serve dictation. siriactionsd stays: see below |
 | Photos and media analysis | mediaanalysisd, photoanalysisd, photosface | mediaanalysisd alone wrote 79 MiB in a 15-minute idle window |
 | Ads, content and recommendations | amsengagementd, promotedcontentd, tipsd, weatherd, gamed | amsengagementd was the top idle CPU and write consumer |
 | Find My | findmydeviced, searchpartyd, findmylocated, fmflocatord | No Apple Account |
@@ -66,6 +66,18 @@ The `base` group, by area:
 | Accessory firmware | accessoryupdaterd, uarpd and helpers | No accessories. accessoryupdaterd used 18 s of CPU at boot |
 | OTA | softwareupdateservicesd, mobile.softwareupdated, OTATaskingAgent, OTACrashCopier | Same as the [OTA block](ota_software_update_block.md) |
 | Cellular extras and prediction | WirelessRadioManager, carkitd, vmd, PowerUIAgent, duetexpertd, ospredictiond | CommCenter itself stays |
+
+**siriactionsd stays (list version 2, 2026-10-24).** It was in the measured
+base list, but it also serves `com.apple.siri.VoiceShortcuts.xpc`, through
+which every Control Center control and App Intents widget serializes its
+intent (`-[INAppIntent initWithAppBundleIdentifier:linkAction:linkActionMetadata:]`).
+With it disabled, each such extension traps in WidgetKit
+(`ControlAction.swift: Fatal error: Can't create CHSIntentReference from
+BarcodeScannerIntent: nilError`), and Control Center draws Timer, Calculator,
+Camera, Code Scanner, Alarm, Magnifier and Voice Memo as blank circles. Seen
+on an iPhone Duo 27.1 guest; allowing the label and restarting restored every
+control. It is now in `neverDisable`, so `trimmed` no longer selects it and a
+guest that applies the profile again turns it back on.
 
 Some of these are only optional: Shortcuts, dictation, HomeKit, Maps,
 Mail, Reminders, iMessage and Safari bookmark sync. A research target that

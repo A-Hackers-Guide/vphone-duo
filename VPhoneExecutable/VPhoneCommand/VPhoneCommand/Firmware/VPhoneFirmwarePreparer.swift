@@ -49,9 +49,10 @@ enum VPhoneFirmwarePreparer {
         // got, restores the OTA's base IPSW and stages that OTA.
         var iPhoneSource = iPhoneSource, otaSource = otaSource, productType = productType
         let requestedOTA = VPhoneFirmwareCatalog.otaRelease(source: iPhoneSource)
+        // An OTA this Mac cannot unpack is refused before any IPSW is
+        // downloaded for it, whether it comes as the iPhone source or on its own.
+        try (requestedOTA ?? otaSource.flatMap(VPhoneFirmwareCatalog.otaRelease(source:)))?.checkHost()
         if let release = requestedOTA {
-            // Before any IPSW is downloaded or restored for it.
-            try release.checkHost()
             guard let base = VPhoneFirmwareCatalog.restoreBaseURL(for: release) else {
                 throw ValidationError("The firmware catalog has no \(release.baseVersion) IPSW to restore the \(release.productType) OTA \(release.version) over.")
             }
@@ -264,6 +265,8 @@ enum VPhoneFirmwarePreparer {
         if let ota, let productType, ota.productType != productType {
             throw Error.deviceNotInSource(productType, available: [ota.productType])
         }
+        // Before its base IPSW is downloaded (`fw ota` and template builds come here first).
+        try ota?.checkHost()
         let iPhoneSource = ota.flatMap(VPhoneFirmwareCatalog.restoreBaseURL(for:)) ?? iPhoneSource
         let productType = productType ?? ota?.productType
         // Remote IPSWs go to one cache shared by every machine; keeping them
