@@ -387,7 +387,11 @@ struct VPhoneTCPForwarderTests {
     /// to be told to stop -- a zero window -- and answering that by spinning
     /// would starve every other flow sharing the queue.
     @Test func `the upload direction applies back pressure instead of spinning`() throws {
-        let total = 1 << 20
+        // More than the kernel can buffer. A megabyte was not: the server's
+        // receive buffer grew to 1.1 MiB unread in one run and took it all, so
+        // the window never had to shut. Each side grows to 4 MiB at most
+        // (net.inet.tcp.autorcvbufmax, autosndbufmax).
+        let total = 16 << 20
         let server = try LoopbackServer { client, server in
             sleep(1) // refuse to read, so the socket buffers fill
             server.drain(client, until: total)
