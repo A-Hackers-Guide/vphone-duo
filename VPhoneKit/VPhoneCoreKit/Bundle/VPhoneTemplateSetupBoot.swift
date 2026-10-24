@@ -869,25 +869,17 @@ public final class VPhoneTemplateSetupBoot {
             // Undo a profile only when one is recorded; a fresh guest has none.
             let state = try call("services.profile", [:], deadline: end)
             if state["profile"] as? String ?? "none" != "none" {
-                try requireApplied(call("services.profile.apply", ["profile": "none", "force": true], deadline: end))
+                try requireApplied(applyProfile(["profile": "none", "force": true], deadline: end))
             }
             outcome.serviceProfile = "none"
             outcome.serviceGroups = []
             log("  service profile none")
             return
         }
-        let params: [String: Any] = ["profile": plan.serviceProfile, "groups": plan.serviceGroups, "force": true]
-        var applied = try call("services.profile.apply", params, deadline: end)
-        // launchd can refuse a disable this early in the boot and take it a
-        // moment later: "disable requires root (launchd status 1)" for
-        // com.apple.seserviced on iOS 26.5 and com.apple.fitnesscoachingd on
-        // iPadOS 27.0.1 (2026-10-23). The apply records only what it changed,
-        // so applying again redoes just the rest.
-        for wait in [5.0, 15.0] where !Self.failures(applied).isEmpty && clock.now().addingTimeInterval(wait) < end {
-            log("  retrying the service profile in \(Int(wait)) s: \(Self.failures(applied).joined(separator: "; "))")
-            clock.sleep(wait)
-            applied = try call("services.profile.apply", params, deadline: end)
-        }
+        let applied = try applyProfile(
+            ["profile": plan.serviceProfile, "groups": plan.serviceGroups, "force": true],
+            deadline: end,
+        )
         try requireApplied(applied)
         guard applied["profile"] as? String == plan.serviceProfile else {
             throw StepError("services.profile.apply answered profile \(applied["profile"] ?? "nil"), not \(plan.serviceProfile)")
@@ -920,6 +912,32 @@ public final class VPhoneTemplateSetupBoot {
         guard deviations.isEmpty else {
             throw StepError("strict: the setup boot fell short of the requested slimming: \(deviations.joined(separator: "; "))")
         }
+    }
+
+    /// `services.profile.apply`, applied again 5 and 15 s later while launchd
+    /// refuses some of its changes this early in the boot and takes them a
+    /// moment later: "disable requires root (launchd status 1)" for
+    /// com.apple.seserviced on iOS 26.5 and com.apple.fitnesscoachingd on
+    /// iPadOS 27.0.1 (2026-10-23). vphoned records only what an apply changed,
+    /// so another apply redoes just the rest; what each one disabled is added up.
+    private func applyProfile(_ params: [String: Any], deadline end: Date) throws -> [String: Any] {
+        var applied = try call("services.profile.apply", params, deadline: end)
+        var disabled = strings(applied["disabled"])
+        for wait in [5.0, 15.0] where Self.isEarlyBootRefusal(applied) && clock.now().addingTimeInterval(wait) < end {
+            log("  retrying the service profile in \(Int(wait)) s: \(Self.failures(applied).joined(separator: "; "))")
+            clock.sleep(wait)
+            applied = try call("services.profile.apply", params, deadline: end)
+            disabled += strings(applied["disabled"])
+        }
+        applied["disabled"] = disabled
+        return applied
+    }
+
+    /// Whether every change an apply could not make was launchd refusing it,
+    /// as icli reports its EPERM and EACCES. Anything else fails at once.
+    static func isEarlyBootRefusal(_ result: [String: Any]) -> Bool {
+        let failed = result["failed"] as? [[String: Any]] ?? []
+        return !failed.isEmpty && failed.allSatisfy { ($0["error"] as? String ?? "").contains("requires root (launchd status") }
     }
 
     private func requireApplied(_ result: [String: Any]) throws {
