@@ -12,6 +12,62 @@ import VPhonePatchKit
 
 @Suite("Guest patch resolution")
 struct FirmwareGuestPatchResolutionTests {
+    @Test func `HomePod persona lookup uses isolated tvOS deployment and follows selection`() throws {
+        let identifier = FirmwareGuestSystemPatchSet.installCoordinationPersona
+        for base in ["26.4", "27.0", "27.2", "28.0"] {
+            let plan = try VPhonePatchPlan.resolve(
+                preset: FirmwarePatchSetCatalog.homePodMiniPreset, patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4"),
+            )
+            #expect(plan.isEnabled(identifier) == base.hasPrefix("27."))
+            #expect(!plan.isEnabled("system-launchdaemons-boot-environment"))
+            #expect(!plan.isEnabled(FirmwareGuestSystemPatchSet.arm64eX1LaunchdBootstrap))
+            #expect(!plan.isEnabled("system-launchd-boot-jetsam_panic_guard_bypass"))
+        }
+        let disabled = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.homePodMiniPreset, patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("27.2"), cloudOS: VPhoneVersion("26.4"), blocked: [identifier],
+        )
+        #expect(!disabled.isEnabled(identifier))
+        #expect(FirmwareGuestPatchResolution.guestPatchesOff(selectionEnabled: disabled.enabled).contains(identifier))
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [identifier]).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true) == [identifier])
+    }
+
+    @Test(arguments: [FirmwareGuestSystemPatchSet.homePodCryptexStaging, FirmwareGuestSystemPatchSet.homePodCryptexClass, FirmwareGuestSystemPatchSet.homePodAdHocInstall])
+    func `HomePod developer compatibility is independent of the iPhone environment and reversible in selection`(identifier: String) throws {
+        for base in ["26.4", "27.0", "27.2", "28.0"] {
+            for preset in FirmwarePatchSetCatalog.builtInPresets {
+                let plan = try VPhonePatchPlan.resolve(
+                    preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
+                    iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4"),
+                )
+                #expect(plan.isEnabled(identifier) == (base.hasPrefix("27.")
+                    && preset.identifier == VPhonePatchPreset.homePodMiniIdentifier))
+                if plan.isEnabled(identifier) {
+                    #expect(!plan.isEnabled("system-launchdaemons-boot-environment"))
+                    let disabled = try VPhonePatchPlan.resolve(
+                        preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
+                        iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4"),
+                        blocked: [identifier],
+                    )
+                    #expect(!disabled.isEnabled(identifier))
+                    #expect(FirmwareGuestPatchResolution.guestPatchesOff(selectionEnabled: disabled.enabled).contains(identifier))
+                }
+            }
+        }
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [identifier]).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true) == [identifier])
+        let declaration = try #require(FirmwarePatchSetCatalog.allDeclarations.first { $0.identifier == identifier })
+        let expectedTarget: VPhonePatchTarget = switch identifier {
+        case FirmwareGuestSystemPatchSet.homePodCryptexStaging: .guestExecutable(path: "/usr/libexec/cryptexd")
+        case FirmwareGuestSystemPatchSet.homePodAdHocInstall: .guestExecutable(path: "/usr/libexec/installd")
+        default: .prebootDeviceTree
+        }
+        #expect(declaration.target == expectedTarget)
+        #expect(!declaration.bootEssential)
+    }
+
     @Test(arguments: [FirmwareGuestSystemPatchSet.homePodOTAUserland, FirmwareGuestSystemPatchSet.homePodSoundGlow])
     func `HomePod OTA and Sound Glow require 27 point 2 and stay out of other presets`(identifier: String) throws {
         for version in ["26.6", "27.0", "27.1", "27.2", "27.3"] {

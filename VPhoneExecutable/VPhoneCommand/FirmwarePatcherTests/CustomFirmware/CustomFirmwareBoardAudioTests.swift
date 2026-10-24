@@ -291,3 +291,42 @@ struct HomePodAudioProductTests {
         #expect(try Data(contentsOf: target) == output)
     }
 }
+
+@Suite("HomePod Cryptex product class")
+struct HomePodCryptexClassTests {
+    private typealias Node = FlatDeviceTreeNode
+
+    private func tree(model: String = "AudioAccessory5,1", value: Data? = Node.uint32(0xf2), flags: UInt16 = 0) -> Data {
+        var properties: [(String, Data)] = [("product-id", Data(repeating: 0xA5, count: 20))]
+        if let value { properties.append(("cryptex1-product-class", value)) }
+        return Node("device-tree", [("model", Data((model + "\0").utf8))], children: [
+            Node("product", properties, flags: ["cryptex1-product-class": flags], children: [
+                Node("audio", [("acoustic-id", Node.uint32(99))]),
+            ]),
+            Node("arm-io", [("virtual-hardware", Node.uint32(1))]),
+        ]).serialized
+    }
+
+    @Test func `sets only native Cryptex identity and is idempotent`() throws {
+        let original = tree()
+        let (patched, changes, delta) = try CustomFirmwarePostRestoreDeviceTree.withHomePodCryptexClass(original)
+        #expect(patched == tree(value: Node.uint32(0xf4)))
+        #expect(patched.count == original.count && delta == 0)
+        #expect(changes.map(\.property) == ["product/cryptex1-product-class"])
+        let (again, noChanges, noDelta) = try CustomFirmwarePostRestoreDeviceTree.withHomePodCryptexClass(patched)
+        #expect(again == patched && noChanges.isEmpty && noDelta == 0)
+        let missing = tree(value: nil)
+        let (added, addedChanges, addedDelta) = try CustomFirmwarePostRestoreDeviceTree.withHomePodCryptexClass(missing)
+        #expect(added == patched && addedDelta == 40 && added.count == missing.count + 40)
+        #expect(addedChanges.first?.before == "absent")
+    }
+
+    @Test func `rejects other families malformed and unexpected classes`() {
+        for malformed in [tree(model: "AppleTV14,1"), tree(value: Data([0xf2])),
+                          tree(value: Node.uint32(0xf3)), tree(flags: 0x8000)] {
+            #expect(throws: (any Error).self) {
+                try CustomFirmwarePostRestoreDeviceTree.withHomePodCryptexClass(malformed)
+            }
+        }
+    }
+}

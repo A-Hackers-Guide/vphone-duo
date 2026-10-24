@@ -1,5 +1,10 @@
 # DeviceHub screen viewing
 
+For host DDI selection, the newer cryptex protocol and the HomePod-specific
+staging investigation, see [Developer disk images on virtual guests](developer_disk_images.md)
+(2026-10-23). Its live HomePod result does not extend the validation below to
+HomePod screen streaming.
+
 Xcode 27 ships `DeviceHub.app` (`Xcode.app/Contents/Applications`, bundle id
 `com.apple.dt.Devices`). It lists vphone guests as "iPad / iPhone — Virtual
 Machine" and, for a paired guest with its developer disk image (DDI) mounted,

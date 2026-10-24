@@ -226,6 +226,9 @@ struct VPhoneCustomFirmwareInstaller {
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodSiriSpeech), device.family != .homePod {
             throw ValidationError("The HomePod Siri-speech patch is supported only for a HomePod guest.")
         }
+        if !effectiveEnabled.isDisjoint(with: [FirmwareGuestSystemPatchSet.homePodCryptexStaging, FirmwareGuestSystemPatchSet.homePodCryptexClass, FirmwareGuestSystemPatchSet.homePodAdHocInstall]), device.family != .homePod {
+            throw ValidationError("The HomePod cryptex staging patch is supported only for a HomePod guest.")
+        }
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodSoundGlow), device.family != .homePod {
             throw ValidationError("The HomePod Sound Glow patch is supported only for a HomePod guest.")
         }
@@ -1434,6 +1437,33 @@ struct VPhoneCustomFirmwareInstaller {
                 live.insert("system-launchdaemons-boot-environment")
             }
         }
+        // HomePod deliberately excludes the iPhone environment. Inject only the
+        // cryptex staging compatibility, directly into its platform executable.
+        let staging = FirmwareGuestSystemPatchSet.homePodCryptexStaging
+        isolate([staging]) {
+            let library = FirmwareGuestSystemPatchSet.homePodCryptexStagingLibrary
+            let libraryPath = String(library.dropFirst())
+            let executable = "usr/libexec/cryptexd"
+            if plan?.isEnabled(staging) == true {
+                guard guestDevice.family == .homePod else {
+                    throw ValidationError("HomePod cryptex staging requires a HomePod guest.")
+                }
+                let payload = try VPhoneGuestBinaries.resolve((library as NSString).lastPathComponent)
+                try system.replaceFile(libraryPath, fromFileAt: payload, mode: 0o755, owner: Self.guestOwner)
+                try patchMachO(system: system, work: work, path: executable,
+                               preserveEntitlements: true, injectedDylibPath: library)
+                live.insert(staging)
+            } else if guestDevice.family == .homePod || priorGuest.contains(staging) {
+                if try revertMachO(system: system, work: work, path: executable) {
+                    print("  [+] \(staging): restored cryptexd from backup")
+                } else if priorGuest.contains(staging) {
+                    // Keep the dependency while a patched daemon still needs it.
+                    live.insert(staging)
+                    throw ValidationError("HomePod cryptex staging has no cryptexd backup; cannot safely remove its library.")
+                }
+                try system.removeItem(libraryPath)
+            }
+        }
         // Geometry and its SoundBoard-only identity shim belong to one patch:
         // the daemon still exchanges every LED frame through the native HID.
         let topCap = FirmwareGuestSystemPatchSet.homePodTopCap
@@ -1833,7 +1863,42 @@ struct VPhoneCustomFirmwareInstaller {
 
         let launchdJetsam = "system-launchd-boot-jetsam_panic_guard_bypass"
         let launchdX1 = FirmwareGuestSystemPatchSet.arm64eX1LaunchdBootstrap
-        isolate([launchdJetsam, launchdX1]) {
+        let personaPatch = FirmwareGuestSystemPatchSet.installCoordinationPersona
+        let personaMarker = String(FirmwareGuestSystemPatchSet.installCoordinationPersonaMarker.dropFirst())
+        let isHomePod = guestDevice.family == .homePod
+        isolate([launchdJetsam, launchdX1] + (isHomePod ? [personaPatch] : [])) {
+            if isHomePod {
+                let library = FirmwareGuestSystemPatchSet.homePodInstallPersonaLibrary
+                let path = String(library.dropFirst())
+                if on(personaPatch) {
+                    let payload = try VPhoneGuestBinaries.resolve((library as NSString).lastPathComponent)
+                    try system.replaceFile(path, fromFileAt: payload, mode: 0o755, owner: Self.guestOwner)
+                    // launchd needs a short load command; this alias is owned
+                    // only by HomePod's isolated installation compatibility.
+                    try installLibraryAlias(system: system, alias: "vp", target: library)
+                    try patchMachO(system: system, work: work, path: "sbin/launchd",
+                                   preserveEntitlements: true, injectedDylibPath: "/vp")
+                    try system.writeFile(personaMarker, contents: Data("1\n".utf8), mode: 0o644, owner: Self.guestOwner)
+                    live.insert(personaPatch)
+                    print("  [+] \(personaPatch): installed scoped HomePod UserManager adapter")
+                } else {
+                    if try revertMachO(system: system, work: work, path: "sbin/launchd") {
+                        print("  [+] \(personaPatch): restored HomePod launchd from backup")
+                    } else if priorGuest.contains(personaPatch) {
+                        live.insert(personaPatch)
+                        throw ValidationError("HomePod persona compatibility has no launchd backup; cannot safely remove its library.")
+                    }
+                    try system.removeItem(personaMarker)
+                    if try system.exists("vp") {
+                        guard try system.readLink("vp") == library else {
+                            throw ValidationError("Another file uses /vp; leaving it intact.")
+                        }
+                        try system.removeItem("vp")
+                    }
+                    try system.removeItem(path)
+                }
+                return
+            }
             let enabled = [launchdJetsam, launchdX1].filter(on)
             if !enabled.isEmpty {
                 var verbs: [String] = []
@@ -1858,7 +1923,44 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
 
-        isolate([]) { try restoreMISFixTargets(system: system) }
+        if !isHomePod {
+            isolate([]) { try restoreMISFixTargets(system: system) }
+        }
+
+        // HomePod has no misagent/provisioning service. Its research SDK signs
+        // apps ad hoc; load only the existing MIS signature-option adapter in
+        // installd, without iPhone identity, profile or spawn hooks.
+        let adHocInstall = FirmwareGuestSystemPatchSet.homePodAdHocInstall
+        isolate([adHocInstall]) {
+            let library = FirmwareGuestSystemPatchSet.homePodMISFixLibrary
+            let path = String(library.dropFirst())
+            let executable = "usr/libexec/installd"
+            if on(adHocInstall) {
+                guard isHomePod else {
+                    throw ValidationError("HomePod ad-hoc installation requires a HomePod guest.")
+                }
+                let payload = try VPhoneGuestBinaries.resolve((library as NSString).lastPathComponent)
+                try system.replaceFile(path, fromFileAt: payload, mode: 0o755, owner: Self.guestOwner)
+                try installLibraryAlias(system: system, alias: "hm", target: library)
+                try patchMachO(system: system, work: work, path: executable,
+                               preserveEntitlements: true, injectedDylibPath: "/hm")
+                live.insert(adHocInstall)
+            } else if isHomePod || priorGuest.contains(adHocInstall) {
+                if try revertMachO(system: system, work: work, path: executable) {
+                    print("  [+] \(adHocInstall): restored installd from backup")
+                } else if priorGuest.contains(adHocInstall) {
+                    live.insert(adHocInstall)
+                    throw ValidationError("HomePod ad-hoc installation has no installd backup; cannot safely remove its library.")
+                }
+                if try system.exists("hm") {
+                    guard try system.readLink("hm") == library else {
+                        throw ValidationError("Another file uses /hm; leaving it intact.")
+                    }
+                    try system.removeItem("hm")
+                }
+                try system.removeItem(path)
+            }
+        }
 
         isolate(["system-debugserver-cfw-install"]) {
             if on("system-debugserver-cfw-install") {
@@ -1888,9 +1990,7 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
 
-        let personaPatch = FirmwareGuestSystemPatchSet.installCoordinationPersona
-        let personaMarker = String(FirmwareGuestSystemPatchSet.installCoordinationPersonaMarker.dropFirst())
-        isolate([personaPatch]) {
+        if !isHomePod { isolate([personaPatch]) {
             // Undo the experimental entitlement-only patch if this machine
             // received it. Platform Protobox profiles ignore that exception.
             let proxy = "System/Library/PrivateFrameworks/InstallCoordination.framework/Support/installcoordination_proxy"
@@ -1904,7 +2004,7 @@ struct VPhoneCustomFirmwareInstaller {
             } else {
                 try system.removeItem(personaMarker)
             }
-        }
+        } }
 
         // SystemHook sets FS_CACHE_REUSE_ON_REBOOT while this marker exists.
         let metalCachePatch = FirmwareGuestSystemPatchSet.metalCacheReuse
@@ -2934,6 +3034,9 @@ struct VPhoneCustomFirmwareInstaller {
             // when it is off: restoring the clean backup needs no source tree.
             if enabled(FirmwareGuestSystemPatchSet.homePodAudioProduct), boardDeviceTree == nil {
                 throw ValidationError("HomePod audio identity needs its original donor device tree.")
+            }
+            if plan != nil || priorGuest.contains(FirmwareGuestSystemPatchSet.homePodCryptexClass) {
+                repairGroup.append((FirmwareGuestSystemPatchSet.homePodCryptexClass, "patch-dt-homepod-cryptex-class", []))
             }
             repairGroup.append((FirmwareGuestSystemPatchSet.homePodAudioProduct, "patch-dt-homepod-audio-product",
                                 boardDeviceTree.map { [$0.path] } ?? []))

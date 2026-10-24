@@ -150,7 +150,7 @@ fi
 
 for name in vphoned vphoned-tvos vphoned-watchos libswiftCompatibilitySpan.dylib launchdhook-vphone.dylib SystemHook-vphone.dylib libcamfix.dylib \
     libvcamcaptured.dylib libmisfix.dylib libhapticsfix.dylib libbatteryhealthfix.dylib libdevicehubfix.dylib libdevicename.dylib \
-    libprefsfix.dylib libsigninfix.dylib libvphonegyro.dylib libvphoneaccelerometer.dylib libvphoneattitude.dylib libvphonehomepoddisplay.dylib vphone-homepod-setup libAppleParavirtCompilerPluginIOGPUFamily.dylib; do
+    libprefsfix.dylib libsigninfix.dylib libvphonegyro.dylib libvphoneaccelerometer.dylib libvphoneattitude.dylib libvphonehomepoddisplay.dylib libvphonecryptexstaging.dylib libvphoneinstallpersona.dylib libvphonehomepodmisfix.dylib vphone-homepod-setup libAppleParavirtCompilerPluginIOGPUFamily.dylib; do
     require_signed_macho "$guest/$name"
 done
 # iOS 18 must be able to resolve the compatibility library without Xcode.
@@ -220,7 +220,7 @@ while IFS= read -r file; do
         "$frameworks/"*)
             [[ "$platform" != IOS ]] || { print -u2 "iOS binary in Contents/Frameworks: ${file#$bundle/}"; exit 1; }
             ;;
-        "$guest/vphoned-tvos"|"$guest/libvphonehomepoddisplay.dylib"|"$guest/vphone-homepod-setup")
+        "$guest/vphoned-tvos"|"$guest/libvphonehomepoddisplay.dylib"|"$guest/libvphonecryptexstaging.dylib"|"$guest/libvphoneinstallpersona.dylib"|"$guest/libvphonehomepodmisfix.dylib"|"$guest/vphone-homepod-setup")
             # tvOS dyld refuses an iOS-platform daemon on an Apple TV guest.
             [[ "$platform" == TVOS ]] || { print -u2 "Non-tvOS binary: ${file#$bundle/}"; exit 1; }
             ;;

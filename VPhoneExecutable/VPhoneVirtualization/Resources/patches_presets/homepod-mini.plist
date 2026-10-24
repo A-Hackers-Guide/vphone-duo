@@ -115,7 +115,6 @@
 			<string>system-extensions-boot-gpu_bundle</string>
 			<string>system-tv-exp-ota_userland</string>
 			<string>system-fsck-boot-arm64e_x1_bootstrap</string>
-			<string>system-installcoordination_proxy-cfw-persona_lookup</string>
 			<string>system-jetsamproperties-cfw-disable_allowed</string>
 			<string>system-launchd-boot-arm64e_x1_bootstrap</string>
 			<string>system-launchd-boot-jetsam_panic_guard_bypass</string>

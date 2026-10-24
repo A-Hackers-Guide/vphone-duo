@@ -1,5 +1,43 @@
 # Xcode installation and UserManager on the iOS 27 hybrid guest
 
+## HomePod port (2026-10-23)
+
+TempPod (UDID `0000FE01-EEC843C8BD20F085`, HomePod mini 27.2/24K120 over
+cloudOS 26.4, Xcode 27.2/27B48) reproduced the same failure with HomePodApp:
+CoreDevice 3002, MIInstallerErrorDomain 4, NSCocoaErrorDomain 4099. usermanagerd
+was running as root and its plist registered the expected service. A live kernel
+capture at 15:06:08 UTC confirmed:
+
+```text
+Protobox: installcoordination_proxy(251) deny(1) mach-lookup com.apple.mobile.usermanagerd.xpc
+```
+
+The HomePod preset previously excluded the persona patch along with the iPhone
+environment that supplied its launchd hook. The existing persona declaration
+now admits HomePod 27 and installs a dedicated TVOS arm64e library in launchd,
+via `/vp`, retaining the daemon's entitlements and original `.bak`. It shares
+`InstallCoordinationPersona.h`'s marker/path/signing-identity/audit-token policy.
+The arm64 entry shim preserves the indirectly passed 32-byte audit token and
+tail-forwards rejected calls with their original registers and variadic stack.
+Its harness checks zero, one and multiple arguments, plus the existing caller
+and marker rejection cases. No iPhone spawn/display/jetsam hooks are loaded.
+The marker, alias and library are removed after restoring launchd on opt-out;
+an unrelated `/vp` is refused instead of replaced or removed.
+
+Xcode subsequently completed installation and launched HomePodApp under LLDB
+(PID 230). The initial template then asserted while creating a UIWindowScene
+without a display configuration; this is separate from UserManager and DDI
+communication. `process status` and a symbolicated backtrace worked through
+Xcode's debugger. Further signature and SDK setup is recorded in
+`xcode_install_signature_gate.md`. Evidence captures:
+`/tmp/temppod-persona-proxy-log.json` and `/tmp/temppod-persona-kernel-log.json`.
+
+Live opt-out on TempPod restored `/sbin/launchd` byte-identically to its original
+backup (SHA-256 `6081657a8dbddfec0aca6e12990ca04dc6bdc5370b431b9c3b608c032012fbfa`),
+and removed `/vp`, the scoped marker and its library. The guest booted normally.
+
+## Original iPhone investigation
+
 Environment: pcc-research-01; iOS 27.0.1 (24A446), cloudOS 26.4 (23E5207q);
 Xcode 27.0 (27A266a). Investigated 2026-10-07.
 

@@ -1,5 +1,69 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **HomePod local app installation (2026-10-23).**
+> `system-installd-exp-homepod_adhoc` is selected only by `homepod-mini` on
+> HomePod 27. It loads a dedicated TVOS arm64e build of the existing MIS
+> signature-option and MobileInstallation ad-hoc adapters into installd via
+> `/hm`. Native MIS still validates the signature and produces its metadata;
+> the verifier's `allowAdhocSigning` switch accepts the missing certificate.
+> No embedded-profile bypass, device identity, profile scope or spawn hooks
+> are compiled into this library. Opt-out restores installd's original backup
+> before removing the alias and library. HomePod lacks misagent, so the test
+> app uses the research tvOS SDK and a local signature with no profile.
+> See `Research/Guest/xcode_install_signature_gate.md` for validation.
+> TempPod passes real Xcode installation, headless execution, source breakpoint,
+> stepping, variable inspection and Objective-C expression evaluation. Live
+> opt-out restores installd and launchd byte-identically to their original
+> backups and removes the owned aliases/marker/libraries; the default preset
+> has been restored. Full bundle admission, 77 selected Swift tests and the
+> persona ABI/policy harness pass.
+
+> **HomePod Xcode installation persona (2026-10-23).**
+> The existing `system-installcoordination_proxy-cfw-persona_lookup` now has a
+> HomePod 27 deployment, selected by `homepod-mini`. TempPod reproduced the
+> iPhone's Protobox denial of the installation proxy's UserManager lookup.
+> HomePod loads a dedicated TVOS arm64e `libvphoneinstallpersona.dylib` in
+> launchd via the short `/vp` alias. It reuses the existing root-owned marker,
+> exact service/path/signing-identity and kernel-validated audit-token checks.
+> Other sandbox calls retain their arguments and native result. No spawn,
+> jetsam or iPhone environment hooks are included. Opt-out restores launchd
+> from its original backup before removing the marker, alias and library.
+> Xcode installation, process launch and LLDB stack inspection pass; see
+> `Research/Guest/ios27_xcode_persona_lookup.md`.
+
+> **HomePod cryptex DDI staging (2026-10-23).**
+> `system-cryptexd-exp-homepod_staging` is a selectable HomePod 27 guest patch,
+> enabled by `homepod-mini` and excluded from the iOS/Apple TV presets. It
+> injects the TVOS arm64e `libvphonecryptexstaging.dylib` into cryptexd through
+> a load command, preserving the daemon's entitlements and an original `.bak`.
+> Deselecting restores the daemon before removing the library. Only failed
+> `F_SETPROTECTIONCLASS` calls returning `EPERM` become `ENOTSUP`, the daemon's
+> existing unsupported-filesystem fallback. Other fcntl calls tail-forward
+> their complete ABI arguments. Apple ticket/signature/trust-cache/graft checks
+> remain on the native path. DDI persistence and nonce persistence use Apple's
+> until-reboot mode. The research SEP's digest-storage failure is tolerated only
+> for error 104 in the cryptex POSIX domain and an info plist naming Apple's DDI,
+> `/System/Developer`, and DeveloperModeRequired true; the preceding native
+> signature lock is unchanged. This does not enable the broad iPhone environment or its
+> display hooks. Validation and deployment results are recorded in
+> `Research/Guest/developer_disk_images.md`.
+> TempPod confirmed the staging errno, then exposed an authenticated APFS
+> `clas` mismatch (tvOS ticket `0xf4`, research kernel `0xf2`). The independent
+> `preboot-homepod-exp-cryptex_class` repair sets or adds only the concrete uint32
+> `/product/cryptex1-product-class` to `0xf4`, which the kernel's native Image4
+> runtime reads. It preserves equality verification and global product-id;
+> Preboot backup composition makes it reversible. No kernel instruction is
+> patched. Reveal/validation procedure is in the same research document.
+> TempPod now reports `connected` with a compatible, usable 27B48 tvOS cryptex
+> DDI. Device/process/app/file queries and Xcode Device Hub DDI readiness pass.
+> HomePod has no display, so Device Hub live preview is unsupported as expected;
+> Xcode app installation, launch and LLDB stack inspection now pass. The
+> initial UIKit template asserts when it requests a display-backed window
+> scene; application UI support is separate from DDI readiness.
+> Live opt-out restores cryptexd and the whole personalized DeviceTree to their
+> pre-patch bytes, removing the injected library. Full bundle admission, 76
+> selected Swift tests, and the scoped native adapter harness pass.
+
 > **vphoned on iOS 18 (2026-10-23):** the daemon strongly imports Span types
 > from `@rpath/libswiftCompatibilitySpan.dylib`, but the guest payload omitted
 > the back-deployment library. The bundle now carries the signed iPhoneOS
