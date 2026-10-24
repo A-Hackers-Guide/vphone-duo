@@ -121,9 +121,6 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         }
         window.setFrameAutosaveName(sceneName)
         observeKeyState(of: window)
-        // A frame saved while the guest was sideways is turned back: the guest
-        // boots in portrait, and the orientation poll turns it again if not.
-        if !homePodGuest { applyOrientation(.portrait, to: window, force: true) }
 
         // An empty unified toolbar gives the title bar its full height. The Home
         // button is a titlebar accessory rather than a toolbar item so that a
@@ -146,6 +143,11 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         let controller = NSWindowController(window: window)
         controller.showWindow(nil)
         windowController = controller
+        // AppKit constrains the initial frame when showing it. Fit the panel
+        // after the toolbar and actual screen are known, including a wide TV
+        // panel whose saved frame may otherwise be clamped out of proportion.
+        // The guest starts unturned; the orientation poll follows it later.
+        if !homePodGuest { applyOrientation(.portrait, to: window, force: true) }
 
         keySender.window = window
         NSApp.activate(ignoringOtherApps: true)
@@ -392,14 +394,15 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         ])
     }
 
-    /// `iOS <version> - <address>` from vphoned's health report, which picks
+    /// OS version and address from vphoned's health report, which picks
     /// the IPv4 address first and falls back to IPv6; hidden until it connects.
     private func updateSubtitle(control: VPhoneGuestControl) {
         guard let window = windowController?.window else { return }
         var parts: [String] = []
         if control.isConnected {
             if let version = control.guestIOSVersion, !version.isEmpty {
-                parts.append("\(homePodGuest ? "HomePod" : "iOS") \(version)")
+                let osName = homePodGuest ? "HomePod" : homeButtonHoldsInGuest ? "tvOS" : "iOS"
+                parts.append("\(osName) \(version)")
             }
             if let address = control.guestIPAddress, !address.isEmpty {
                 parts.append(address)

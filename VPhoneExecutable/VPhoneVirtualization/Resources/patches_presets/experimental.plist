@@ -94,6 +94,8 @@
 		<key>Patches</key>
 		<array>
 			<string>system-homepod-exp-top_cap</string>
+			<string>system-setupbackground-exp-pineboard_lookup</string>
+			<string>system-tv-exp-legacy_setup</string>
 			<string>system-homepod-exp-setup_bypass</string>
 			<string>system-homepod-exp-welcome</string>
 			<string>system-homepod-exp-siri_speech</string>

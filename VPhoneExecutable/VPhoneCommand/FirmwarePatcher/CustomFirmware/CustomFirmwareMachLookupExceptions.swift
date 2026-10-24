@@ -63,7 +63,11 @@ public enum CustomFirmwareMachLookupExceptions {
     /// format, which is what `plistlib.dump()` defaults to and what `ldid`
     /// expects on the way back in.
     @discardableResult
-    public static func merge(at url: URL, verbose: Bool = true) throws -> Outcome {
+    public static func merge(
+        at url: URL,
+        services: [String] = CustomFirmwareMachLookupExceptions.services,
+        verbose: Bool = true,
+    ) throws -> Outcome {
         let data: Data
         do {
             data = try Data(contentsOfFileToRewrite: url)
@@ -97,7 +101,7 @@ public enum CustomFirmwareMachLookupExceptions {
         try output.write(to: url)
 
         if verbose {
-            print("  [+] Campo mach-lookup exception count: \(merged.count) (+\(added.count) added)")
+            print("  [+] mach-lookup exception count: \(merged.count) (+\(added.count) added)")
         }
         return Outcome(total: merged.count, added: added.count)
     }

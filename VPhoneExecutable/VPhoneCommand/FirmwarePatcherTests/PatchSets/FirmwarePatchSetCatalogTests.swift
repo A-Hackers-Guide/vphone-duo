@@ -217,7 +217,7 @@ struct FirmwarePatchSetCatalogTests {
     }
 
     @Test
-    func `Extended adds the applicable manual patches except the HomePod-only device`() throws {
+    func `Extended adds the applicable manual patches except device-specific repairs`() throws {
         for base in ["18.6.2", "26.4", "27.0", "27.1", "27.2"] {
             let version = VPhoneVersion(base)
             let cloud = VPhoneVersion("26.4")
@@ -242,6 +242,8 @@ struct FirmwarePatchSetCatalogTests {
                     && $0.identifier != FirmwareGuestSystemPatchSet.homePodAudioProduct
                     && $0.identifier != FirmwareGuestSystemPatchSet.homePodOTAUserland
                     && $0.identifier != FirmwareGuestSystemPatchSet.homePodSoundGlow
+                    && $0.identifier != FirmwareGuestSystemPatchSet.tvSetupDisplayLookup
+                    && $0.identifier != FirmwareGuestSystemPatchSet.tvLegacySetup
                     && $0.applicability.matches(iOSBase: version, cloudOS: cloud)
             }.map(\.identifier))
             #expect(experimental.enabled.subtracting(standard.enabled) == applicableManual)

@@ -211,6 +211,12 @@ struct VPhoneCustomFirmwareInstaller {
             ? try restoreTree(in: bundleDirectory, path: bundlePath, owner: callerUID)
             : nil
         let device = configuredGuestDevice(in: bundleDirectory) ?? guestDevice(of: restore)
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.tvLegacySetup), device.family != .appleTV {
+            throw ValidationError("The TV setup compatibility patch is supported only for an Apple TV guest.")
+        }
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.tvSetupDisplayLookup), device.family != .appleTV {
+            throw ValidationError("The TV setup display-connection patch is supported only for an Apple TV guest.")
+        }
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodTopCap), device.family != .homePod {
             throw ValidationError("The HomePod top-cap patch is supported only for a HomePod guest.")
         }
@@ -1886,6 +1892,38 @@ struct VPhoneCustomFirmwareInstaller {
                     print("  [!] system-campo-cfw-entitlements: off now but no backup to revert (not revertible)")
                     live.insert("system-campo-cfw-entitlements")
                 }
+            }
+        }
+
+        let tvLegacySetup = FirmwareGuestSystemPatchSet.tvLegacySetup
+        let tvSetupFlags = CustomFirmwareTVSetup.relativePath
+        isolate([tvLegacySetup]) {
+            if (version == "27.2" || version.hasPrefix("27.2.")), on(tvLegacySetup), guestDevice.family == .appleTV {
+                try patchCopy(
+                    of: tvSetupFlags, in: system, work: work,
+                    verb: "patch-tv-setup", backupSafe: backupSafe(tvLegacySetup),
+                )
+                live.insert(tvLegacySetup)
+            } else if try revertCopy(of: tvSetupFlags, in: system) {
+                print("  [+] \(tvLegacySetup): restored CompanionServices feature flags")
+            } else if priorGuest.contains(tvLegacySetup) {
+                print("  [!] \(tvLegacySetup): no backup to revert (not revertible)")
+                live.insert(tvLegacySetup)
+            }
+        }
+
+        let tvSetupLookup = FirmwareGuestSystemPatchSet.tvSetupDisplayLookup
+        let tvSetupBackground = "Applications/SetupBackground.app/SetupBackground"
+        isolate([tvSetupLookup]) {
+            if on(tvSetupLookup), guestDevice.family == .appleTV {
+                if try patchTVSetupDisplayLookup(system: system, work: work, backupSafe: backupSafe(tvSetupLookup)) {
+                    live.insert(tvSetupLookup)
+                }
+            } else if try revertMachO(system: system, work: work, path: tvSetupBackground) {
+                print("  [+] \(tvSetupLookup): restored SetupBackground from backup")
+            } else if priorGuest.contains(tvSetupLookup) {
+                print("  [!] \(tvSetupLookup): off now but no backup to revert (not revertible)")
+                live.insert(tvSetupLookup)
             }
         }
 
@@ -3619,6 +3657,27 @@ struct VPhoneCustomFirmwareInstaller {
                 mergesExisting: true,
                 style: .appleAdHoc,
             ),
+        )
+        try system.replaceFile(target, fromFileAt: staged, mode: 0o755, owner: Self.guestOwner)
+        return true
+    }
+
+    /// The cloudOS application sandbox does not include the TV service name.
+    /// SetupBackground's only other entitlements are its identity, container
+    /// requirement and platform bit; keep them and add just this lookup.
+    private func patchTVSetupDisplayLookup(system: VPhoneConfinedDirectory, work: WorkDirectory, backupSafe: Bool) throws -> Bool {
+        let target = "Applications/SetupBackground.app/SetupBackground"
+        guard let staged = try stageOptional(target, from: system, work: work, label: "SetupBackground") else { return false }
+        guard let source = try VPhoneSigner.entitlements(ofFileAt: staged).first(where: { !$0.isEmpty }) else {
+            throw ValidationError("SetupBackground has no readable entitlements")
+        }
+        let ent = work.file("SetupBackground.entitlements")
+        try source.write(to: ent)
+        try CustomFirmwareMachLookupExceptions.merge(at: ent, services: ["com.apple.PineBoardServices"])
+        try backupEntitlementTarget(target, in: system, backupSafe: backupSafe)
+        try VPhoneSigner.sign(
+            fileAt: staged,
+            options: .init(entitlements: Data(contentsOf: ent), style: .appleAdHoc),
         )
         try system.replaceFile(target, fromFileAt: staged, mode: 0o755, owner: Self.guestOwner)
         return true

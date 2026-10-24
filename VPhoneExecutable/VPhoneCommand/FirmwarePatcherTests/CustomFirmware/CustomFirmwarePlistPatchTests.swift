@@ -429,6 +429,27 @@ struct CustomFirmwareMachLookupExceptionTests {
             .write(to: url)
     }
 
+    @Test func `TV setup adds only PineBoard lookup and preserves its sandbox`() throws {
+        let directory = try CustomFirmwarePatchFixtures.makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appending(path: "SetupBackground.entitlements")
+        try write([
+            "application-identifier": "com.apple.SetupBackground",
+            "platform-application": true,
+            "com.apple.private.security.container-required": true,
+            CustomFirmwareMachLookupExceptions.exceptionKey: ["com.apple.existing.service"],
+        ], to: url)
+        try CustomFirmwareMachLookupExceptions.merge(at: url, services: ["com.apple.PineBoardServices"], verbose: false)
+        let patched = try #require(PlistComparison.load(url) as? [String: Any])
+        #expect(patched.count == 4)
+        #expect(patched["application-identifier"] as? String == "com.apple.SetupBackground")
+        #expect(patched["platform-application"] as? Bool == true)
+        #expect(patched["com.apple.private.security.container-required"] as? Bool == true)
+        #expect(patched[CustomFirmwareMachLookupExceptions.exceptionKey] as? [String] == ["com.apple.existing.service", "com.apple.PineBoardServices"])
+        let repeated = try CustomFirmwareMachLookupExceptions.merge(at: url, services: ["com.apple.PineBoardServices"], verbose: false)
+        #expect(repeated.added == 0 && repeated.total == 2)
+    }
+
     @Test func `adds every service when the key is absent`() throws {
         let directory = try CustomFirmwarePatchFixtures.makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

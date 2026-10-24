@@ -40,6 +40,8 @@ public enum FirmwareGuestPatchResolution {
     public static let tvArm64eGuestPatches: Set<String> = Set([
         "system-extensions-boot-gpu_bundle",
         FirmwareGuestSystemPatchSet.tvOTAUserland,
+        FirmwareGuestSystemPatchSet.tvSetupDisplayLookup,
+        FirmwareGuestSystemPatchSet.tvLegacySetup,
     ]).union(FirmwarePatchSetCatalog.tvOS27UserlandPatches)
 
     public static func unvalidatedTVGuestPatches(enabled: Set<String>, arm64eUserland: Bool = false) -> [String] {

@@ -391,12 +391,43 @@
 > OTA (`24K120`; asset alias `24K6120` shares the archive). OTA manifest
 > validation refuses other OS versions for this board. Patch discovery preserves
 > the recorded J265 identity over the HD manifest, and Launchpad selects the 4K
-> preset. No new binary patch or preset is introduced. The real OTA staged its
+> preset. The real OTA staged its
 > J265 tree and all 42 chunks; `fw patch` processed all 11 components with 239
 > patches, and the selected cache patchers passed dry runs against its userland.
 > Launchpad and the bundle move to series 2.13 so earlier Launchpad builds cannot
-> choose the HD preset for the new device. Privileged installation and a live
-> boot remain pending. See [bring-up notes](Firmware/tvos_support.md#apple-tv-4k-4th-generation).
+> choose the HD preset for the new device. Restore and full CFW installation
+> completed on 2026-10-24. The guest daemon reports AppleTV18,1 / 27.2.0;
+> rendering initially stalled in SetupBackground and then reached the animated
+> 4K Hello screen after repairing its service lookup. Select did not advance
+> the new Setup scene; no Hello-handler entry appeared in a live log capture.
+> Live validation exposed a missing sandbox lookup in the new SetupBackground
+> app: a native probe with its original three entitlements took 15.049 seconds
+> to initialize PBSDisplayManager; adding only
+> `com.apple.security.exception.mach-lookup.global-name = [com.apple.PineBoardServices]`
+> reduced that to 0.005 seconds. The 10-second scene watchdog kills the original
+> before initialization returns. New declaration
+> `system-setupbackground-exp-pineboard_lookup` targets that app's entitlements,
+> applies only to 27.2, and remains opt-in; the installer also
+> requires an Apple TV identity. It preserves all existing entitlements and
+> backs up the executable for reversal through `cfw update-environment`.
+> The supported `tvos-4k` preset instead selects `system-tv-exp-legacy_setup`
+> for 27.2: `TVSetupV2.Enabled = false` and `TVSetupV2HW.Enabled = false` in
+> `System/Library/FeatureFlags/Domain/CompanionServices.plist`. PineBoard then
+> selects the native TVSetup retained in this OTA. A cold-boot experiment
+> reached its 4K Language screen; consumer HID and native keyboard Down/Up
+> moved focus to Simplified Chinese and restored English. This does not
+> complete setup or select a language. Both feature dictionaries are required;
+> metadata, unrelated flags and encoding are preserved, and a `.bak` supports
+> reversal through the normal guest patch selection. All 59 focused tests
+> passed. The installed final bundle `2.13.0-local.aaf2152c` cold-boots to
+> Language on two cold boots (vphoned in six and five seconds) with the
+> temporary override removed and no crash reports. Its System `.bak` matches the
+> original plist and SetupBackground is restored byte-identically. Native
+> Return advances to Region; Escape returns to Language, without completing
+> setup. No instruction patch or new preset is introduced. The installer promotes the
+> installed TV OTA's SystemVersion after committing its private disk clone,
+> fixing the host's stale 26.6 restore-base label. See
+> [bring-up notes](Firmware/tvos_support.md#apple-tv-4k-4th-generation).
 
 > **tvOS 27 on the Apple TV 4K (2026-10-16).** No new patch. The 4K's tvOS 27.0
 > (24J361) OTA goes over the HD's 26.6 IPSW, and the plan resolves for the OTA's

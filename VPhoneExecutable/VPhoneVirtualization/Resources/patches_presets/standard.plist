@@ -102,6 +102,8 @@
 			<string>system-dyld-exp-tv_tpro</string>
 			<string>kernel-exp-tv_tpro_pagers</string>
 			<string>system-tv-exp-ota_userland</string>
+			<string>system-setupbackground-exp-pineboard_lookup</string>
+			<string>system-tv-exp-legacy_setup</string>
 			<string>system-exp-ota_userland</string>
 		</array>
 	</dict>
