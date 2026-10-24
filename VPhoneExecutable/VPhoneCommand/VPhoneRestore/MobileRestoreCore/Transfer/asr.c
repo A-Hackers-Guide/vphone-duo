@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <poll.h>
+#include <time.h>
 #include <libimobiledevice/libimobiledevice.h>
 
 #include <libimobiledevice-glue/sha.h>
@@ -47,8 +48,8 @@
 #define ASR_PAYLOAD_PACKET_SIZE 1450
 #define ASR_PAYLOAD_CHUNK_SIZE 131072
 #define ASR_CHECKSUM_CHUNK_SIZE 131072
-/* How long a send may make no progress, in 100 ms waits, before it fails. */
-#define ASR_SEND_IDLE_WAITS 600
+/* How long a send may make no progress before it fails, in seconds. */
+#define ASR_SEND_IDLE_SECONDS 60
 
 int asr_open_with_timeout(idevice_t device, asr_client_t* asr, uint16_t port)
 {
@@ -194,7 +195,7 @@ int asr_send_buffer(asr_client_t asr, const void* data, size_t size)
 {
 	const char* next = data;
 	size_t left = size;
-	int idle = 0;
+	uint64_t idle_since = 0;
 	idevice_error_t device_error = IDEVICE_E_SUCCESS;
 
 	/* The socket takes less than all of it while the guest is slow to read,
@@ -210,10 +211,15 @@ int asr_send_buffer(asr_client_t asr, const void* data, size_t size)
 			break;
 		}
 		if (bytes > 0) {
-			idle = 0;
+			idle_since = 0;
 			continue;
 		}
-		if (++idle > ASR_SEND_IDLE_WAITS) {
+		/* By the clock: a send that takes nothing can itself block for
+		 * seconds, so counting attempts would wait far longer. */
+		uint64_t now = clock_gettime_nsec_np(CLOCK_MONOTONIC);
+		if (idle_since == 0) {
+			idle_since = now;
+		} else if (now - idle_since > (uint64_t)ASR_SEND_IDLE_SECONDS * 1000000000ULL) {
 			logger(LL_ERROR, "Unable to send data to ASR. Sent %zu of %zu bytes (error %d).\n", size - left, size, device_error);
 			return -1;
 		}
@@ -412,6 +418,9 @@ int asr_send_payload(asr_client_t asr, ipsw_file_handle_t file)
 		if (ipsw_file_read(file, data, size) != (int64_t)size) {
 			logger(LL_ERROR, "Error reading filesystem\n");
 			retry--;
+			/* Read the same chunk again: the next one would skip what this
+			 * read left out. */
+			ipsw_file_seek(file, (int64_t)(length - i), SEEK_SET);
 			continue;
 		}
 
