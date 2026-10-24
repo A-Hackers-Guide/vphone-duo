@@ -97,6 +97,16 @@ public struct VPhoneOTARelease: Sendable, Equatable {
         ProcessInfo.processInfo.operatingSystemVersion.majorVersion
     }
 
+    /// The macOS this process runs on, as `major.minor`.
+    public static var hostMacOSVersion: String {
+        let host = ProcessInfo.processInfo.operatingSystemVersion
+        return "\(host.majorVersion).\(host.minorVersion)"
+    }
+
+    /// The first macOS whose libcompression decodes LZRAVEN (`pbzm`), the
+    /// compression of the 27-series OTAs' payload.
+    public static let lzravenMinimumMacOS = 27
+
     /// Whether a Mac running `hostMacOS` unpacks the payload.
     public func unpacks(onMacOS hostMacOS: Int = Self.hostMacOS) -> Bool {
         minimumHostMacOS.map { hostMacOS >= $0 } ?? true
@@ -107,10 +117,9 @@ public struct VPhoneOTARelease: Sendable, Equatable {
     public func checkHost() throws {
         guard let minimumHostMacOS, !unpacks() else { return }
         let name = VPhoneGuestDevice.named(productType)?.family.osName ?? productType
-        let host = ProcessInfo.processInfo.operatingSystemVersion
         throw VPhoneOTAHostError(
             message: "\(name) \(version) (\(build)) compresses its userland with LZRAVEN, which macOS \(minimumHostMacOS) and later unpack; "
-                + "this Mac runs macOS \(host.majorVersion).\(host.minorVersion). Choose an earlier release, or create this machine on macOS \(minimumHostMacOS) or later.",
+                + "this Mac runs macOS \(Self.hostMacOSVersion). Choose an earlier release, or create this machine on macOS \(minimumHostMacOS) or later.",
         )
     }
 
@@ -567,7 +576,7 @@ public enum VPhoneFirmwareCatalog {
             size: 4_831_838_208,
             key: "L3wZrfSYx2pFDbJSYtEteNDspB26qBv0lxLlkWrKTYk=",
             baseVersion: "26.6",
-            minimumHostMacOS: 27,
+            minimumHostMacOS: VPhoneOTARelease.lzravenMinimumMacOS,
         ),
         // HomePod's newer software ships as a full ZIP OTA. Keep its own
         // 27.0 restore IPSW as the base; the OTA supplies only the userland
@@ -580,7 +589,7 @@ public enum VPhoneFirmwareCatalog {
             url: "https://updates.cdn-apple.com/2026FallFCS/b191c01c-8e6e-4b74-8b84-015131f696b8/com_apple_MobileAsset_SoftwareUpdate/861a9e7426795ddb3eac86cd0b089e5bf7939258.zip",
             size: 3_051_441_612,
             baseVersion: "27.0",
-            minimumHostMacOS: 27,
+            minimumHostMacOS: VPhoneOTARelease.lzravenMinimumMacOS,
         ),
     ]
 
