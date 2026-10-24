@@ -1,6 +1,8 @@
 #include <assert.h>
 #include <limits.h>
 #include <stdint.h>
+#include <stdarg.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -31,6 +33,22 @@ int test_csops(pid_t pid, unsigned int op, void *buffer, size_t size, vp_audit_t
     snprintf((char *)buffer + 8, size - 8, "%s", wrongIdentity ? "other" : "com.apple.installcoordination_proxy");
     return 0;
 }
+#define VP_HOMEPOD_PERSONA_TESTING
+#include "../HomePodInstallPersona/libvphoneinstallpersona.c"
+
+int vpTestSandboxCheck(vp_audit_token_t token, const char *operation, unsigned int filter, ...) {
+    assert(token.val[5] == 404 && token.val[7] == 42);
+    if (filter == 99) {
+        va_list arguments;
+        va_start(arguments, filter);
+        assert(va_arg(arguments, const char *) == operation);
+        assert(va_arg(arguments, int) == 567);
+        assert(va_arg(arguments, void *) == &markerMode);
+        va_end(arguments);
+    }
+    errno = EACCES;
+    return 73;
+}
 int main(void) {
     vp_audit_token_t token = {{0}};
     token.val[5] = 404;
@@ -55,5 +73,13 @@ int main(void) {
     markerMode = S_IFREG | 0644;
     markerOwner = 501;
     assert(!vpInstallProxyPersonaAllowed(token, "mach-lookup", 2, VP_PERSONA_SERVICE));
+    markerOwner = 0;
+    errno = EDOM;
+    assert(vpHomePodSandboxCheck(token, "mach-lookup", 2, VP_PERSONA_SERVICE) == 0);
+    assert(errno == EDOM);
+    assert(vpHomePodSandboxCheck(token, NULL, 0) == 73 && errno == EACCES);
+    assert(vpHomePodSandboxCheck(token, "mach-lookup", 2, "com.apple.other") == 73);
+    const char *op = "other-operation";
+    assert(vpHomePodSandboxCheck(token, op, 99, op, 567, &markerMode) == 73);
     puts("InstallCoordination persona lookup scope tests passed");
 }

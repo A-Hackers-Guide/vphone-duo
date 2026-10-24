@@ -302,6 +302,35 @@ extension DeviceTreePatcher {
 
     // MARK: - Audio
 
+    /// AppleImage4's uint32 identity callback reads this exact four-byte
+    /// property from /product. The research kernel's iOS value rejects a tvOS
+    /// DDI's signed CLAS before APFS can mount it. Keep equality verification
+    /// and supply the native HomePod class instead. See developer_disk_images.md.
+    static func presentHomePodCryptexClass(in root: DTNode) throws -> (before: Data?, after: Data)? {
+        try requireHomePodMini(root)
+        let product = try child(of: root, named: "product")
+        let values = product.properties.filter { $0.name == "cryptex1-product-class" }
+        guard values.count <= 1 else {
+            throw PatcherError.invalidFormat("HomePod cryptex class: duplicated product class")
+        }
+        var value = UInt32(0xf4).littleEndian
+        let bytes = withUnsafeBytes(of: &value) { Data($0) }
+        // TempPod's restored tree omits this property and the running kernel
+        // reports the research iOS class. Supply the native class explicitly.
+        guard let property = values.first else {
+            product.properties.append(DTProperty(name: "cryptex1-product-class", flags: 0, value: bytes, valueOffset: 0))
+            return (nil, bytes)
+        }
+        guard property.flags == 0, property.value.count == 4,
+              [UInt32(0xf2), UInt32(0xf4)].contains(property.value.loadLE(UInt32.self, at: 0)) else {
+            throw PatcherError.invalidFormat("HomePod cryptex class: expected one concrete iOS or tvOS uint32 product class")
+        }
+        guard property.value.loadLE(UInt32.self, at: 0) != 0xf4 else { return nil }
+        let before = property.value
+        property.value = bytes
+        return (before, property.value)
+    }
+
     /// MobileGestalt matches this exact 20-byte donor token against its product
     /// table; VirtualAudio uses that result to select the HomePod mini's enum 4
     /// routing. Root model strings alone do not select the native audio family.

@@ -156,6 +156,7 @@ static IMP vpSwizzle(const char *className, const char *selectorName, IMP replac
 /// A caller handed `YES` alongside a populated `NSError *` is a shape no
 /// ordinary method produces, and installd does read the out-parameter. The
 /// error object itself is left to the autorelease pool it came from.
+#ifndef VPHONE_MIS_SIGNATURE_ONLY
 static void vpClearError(void *error) {
     if (error != NULL)
         *(void **)error = NULL;
@@ -172,6 +173,7 @@ static BOOL vpInstallEmbeddedProfiles(id self, SEL selector, void *error) {
     MISFixNote("embedded profile refused; installing without one");
     return YES;
 }
+#endif
 
 // MARK: - The signer identity
 
@@ -194,10 +196,12 @@ static BOOL vpAllowAdhocSigning(id self, SEL selector) {
 __attribute__((constructor)) static void vpInstallPolicyHooks(void) {
     if (!MISFixProcessIs("installd"))
         return;
+#ifndef VPHONE_MIS_SIGNATURE_ONLY
     vpOriginalInstallProfiles = (MISFixCheckIMP)vpSwizzle(
         "MIInstallableBundle",
         "_installEmbeddedProfilesWithError:",
         (IMP)&vpInstallEmbeddedProfiles
     );
+#endif
     vpSwizzle("MICodeSigningVerifier", "allowAdhocSigning", (IMP)&vpAllowAdhocSigning);
 }

@@ -1,5 +1,69 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **HomePod local app installation (2026-10-23).**
+> `system-installd-exp-homepod_adhoc` is selected only by `homepod-mini` on
+> HomePod 27. It loads a dedicated TVOS arm64e build of the existing MIS
+> signature-option and MobileInstallation ad-hoc adapters into installd via
+> `/hm`. Native MIS still validates the signature and produces its metadata;
+> the verifier's `allowAdhocSigning` switch accepts the missing certificate.
+> No embedded-profile bypass, device identity, profile scope or spawn hooks
+> are compiled into this library. Opt-out restores installd's original backup
+> before removing the alias and library. HomePod lacks misagent, so the test
+> app uses the research tvOS SDK and a local signature with no profile.
+> See `Research/Guest/xcode_install_signature_gate.md` for validation.
+> TempPod passes real Xcode installation, headless execution, source breakpoint,
+> stepping, variable inspection and Objective-C expression evaluation. Live
+> opt-out restores installd and launchd byte-identically to their original
+> backups and removes the owned aliases/marker/libraries; the default preset
+> has been restored. Full bundle admission, 77 selected Swift tests and the
+> persona ABI/policy harness pass.
+
+> **HomePod Xcode installation persona (2026-10-23).**
+> The existing `system-installcoordination_proxy-cfw-persona_lookup` now has a
+> HomePod 27 deployment, selected by `homepod-mini`. TempPod reproduced the
+> iPhone's Protobox denial of the installation proxy's UserManager lookup.
+> HomePod loads a dedicated TVOS arm64e `libvphoneinstallpersona.dylib` in
+> launchd via the short `/vp` alias. It reuses the existing root-owned marker,
+> exact service/path/signing-identity and kernel-validated audit-token checks.
+> Other sandbox calls retain their arguments and native result. No spawn,
+> jetsam or iPhone environment hooks are included. Opt-out restores launchd
+> from its original backup before removing the marker, alias and library.
+> Xcode installation, process launch and LLDB stack inspection pass; see
+> `Research/Guest/ios27_xcode_persona_lookup.md`.
+
+> **HomePod cryptex DDI staging (2026-10-23).**
+> `system-cryptexd-exp-homepod_staging` is a selectable HomePod 27 guest patch,
+> enabled by `homepod-mini` and excluded from the iOS/Apple TV presets. It
+> injects the TVOS arm64e `libvphonecryptexstaging.dylib` into cryptexd through
+> a load command, preserving the daemon's entitlements and an original `.bak`.
+> Deselecting restores the daemon before removing the library. Only failed
+> `F_SETPROTECTIONCLASS` calls returning `EPERM` become `ENOTSUP`, the daemon's
+> existing unsupported-filesystem fallback. Other fcntl calls tail-forward
+> their complete ABI arguments. Apple ticket/signature/trust-cache/graft checks
+> remain on the native path. DDI persistence and nonce persistence use Apple's
+> until-reboot mode. The research SEP's digest-storage failure is tolerated only
+> for error 104 in the cryptex POSIX domain and an info plist naming Apple's DDI,
+> `/System/Developer`, and DeveloperModeRequired true; the preceding native
+> signature lock is unchanged. This does not enable the broad iPhone environment or its
+> display hooks. Validation and deployment results are recorded in
+> `Research/Guest/developer_disk_images.md`.
+> TempPod confirmed the staging errno, then exposed an authenticated APFS
+> `clas` mismatch (tvOS ticket `0xf4`, research kernel `0xf2`). The independent
+> `preboot-homepod-exp-cryptex_class` repair sets or adds only the concrete uint32
+> `/product/cryptex1-product-class` to `0xf4`, which the kernel's native Image4
+> runtime reads. It preserves equality verification and global product-id;
+> Preboot backup composition makes it reversible. No kernel instruction is
+> patched. Reveal/validation procedure is in the same research document.
+> TempPod now reports `connected` with a compatible, usable 27B48 tvOS cryptex
+> DDI. Device/process/app/file queries and Xcode Device Hub DDI readiness pass.
+> HomePod has no display, so Device Hub live preview is unsupported as expected;
+> Xcode app installation, launch and LLDB stack inspection now pass. The
+> initial UIKit template asserts when it requests a display-backed window
+> scene; application UI support is separate from DDI readiness.
+> Live opt-out restores cryptexd and the whole personalized DeviceTree to their
+> pre-patch bytes, removing the injected library. Full bundle admission, 76
+> selected Swift tests, and the scoped native adapter harness pass.
+
 > **vphoned on iOS 18 (2026-10-23):** the daemon strongly imports Span types
 > from `@rpath/libswiftCompatibilitySpan.dylib`, but the guest payload omitted
 > the back-deployment library. The bundle now carries the signed iPhoneOS
@@ -3738,6 +3802,21 @@ it was not ("Invalid root hash", `apfs_sealvolume` exit 65 in
   for `apfs_sealvolume`, which needs the device; the mount changed the volume
   after the mtree described it. It attaches the image with `-noMount` now.
 
+On macOS 26.6.2 two more steps failed (2026-10-23, Mac mini M4):
+
+- `diskutil image attach -mountPoint` refuses a folder that does not exist
+  ("Mount point … doesn't exist", exit 64), and the merge attached at a fresh
+  `<tmp>/volume` it had not created. Every preset that merges the restore
+  image (watchos, minimal) stopped there. The folder is created first now.
+- The watchOS 26.4 system image has no partition map: its APFS container
+  spans the whole file, and `diskutil image resize` grows it no further than
+  that ("Requested size exceeds maximum size"; min 11.05 GB, max = current =
+  11.26 GB once merged). Left at that size, `apfs_sealvolume` ran out of space
+  remapping the fsroot tree with 541 MB free (ENOSPC, exit 65). `growImage`
+  now extends the file and runs `diskutil apfs resizeContainer <container> 0`,
+  which gave the same image 2.7 GB free. The iOS images, which diskutil can
+  grow, are resized as before.
+
 The binaries the merge patches (`launchd_cache_loader`, `mobileactivationd`)
 are re-signed in Apple's ad-hoc shape (`VPhoneSignOptions.Style.appleAdHoc`),
 like the stock binaries around them. The guest's TXM is stock here: it takes
@@ -3816,7 +3895,7 @@ it finds the recipe in `Contents/Resources/kernelcache_recipes` by SHA-256, then
 
 1. extracts the donor, the vphone600 kernelcache of the 26.4 beta (23E5207q,
    read once from its cloudOS IPSW), and the base into KDKs with
-   `ipsw kernel extract --kdk --symbols`, naming the stripped symbols from the
+   the native `KDKExtraction` pipeline, naming the stripped symbols from the
    recipe's maps;
 2. keeps the recipe's bundle list: the base without its research-board-only
    kexts, plus the donor kexts that link against the base kernel;
@@ -3824,8 +3903,10 @@ it finds the recipe in `Contents/Resources/kernelcache_recipes` by SHA-256, then
    takes the host's own in their place without a word) and links it with
    `kmutil create -a arm64e -n boot -s all -z -x --compress --img4-encode
    --split-ro-rx-tags`;
-4. puts back Apple's CPU subtype if the builder wrote another, and checks that
-   every requested bundle was linked.
+4. puts back Apple's CPU subtype if the builder wrote another, makes calls
+   through the auth stubs the macOS 27 builder keeps direct again
+   (`KernelCollectionStubCalls`, below), and checks that every requested bundle
+   was linked.
 
 The mix replaces both `KernelCache` and `RestoreKernelCache`, so restore boots
 it too. The pipeline keeps kmutil's container (its `PAYP` properties describe
@@ -3834,7 +3915,7 @@ the new layout) and saves the preset's kernel patches into it
 in `FirmwareOriginals`. Mixes are cached in `~/.vphone/kernelcache/mix`, keyed
 by the kernelcaches, the maps and bundle list and the builder layout.
 
-Only the link needs root, and root runs no `ipsw`. `fw kernelcache <vm>` stages
+Only the link needs root; native extraction runs as the invoking user. `fw kernelcache <vm>` stages
 the mix as the user (both extractions and the volume) and links it under sudo:
 root copies the staged volume into a fresh root-only directory, walking it by
 descriptor, refusing every symbolic link but the KDK's pointer to the volume's
@@ -3847,12 +3928,57 @@ Apple linked the base in, read from the base's own prelink info, so a mix no
 longer depends on where it is built. The 26.6 mix then has the segment layout
 of the hand-built research mix that booted.
 
-Requirements: an `ipsw` with `kernel extract --kdk`, named by `VPHONE_IPSW`
-(vphone-cli does not ship it); root; and for every base here (26.4–26.7, all
+Requirements: root for linking; and for every base here (26.4–26.7, all
 `kernel-last`) the kmutil of macOS 26.4 or later. `fw prepare` now pairs a
 cloudOS without vphone600ap and refuses one whose kernelcache no recipe covers.
 `cfw update-kernel` refuses on a mixed kernel, whose originals are the research
 board's.
+
+Native extraction checked on 2026-10-23: all 264 fileset images of the 26.4
+beta vphone600 and vresearch101 collections match the pinned reference in
+recovered references, synthesized symbols and exported bytes. The full KDK
+trees match 313/263 files, with plist values compared semantically. See
+[native KDK extraction](Kernel/native_kdk_export.md). On the 26.6 base
+(23G71), the volume it stages for kmutil matches what the reference extractor
+gives: all 151 executables byte for byte, all 160 Info.plists in value.
+
+**macOS 27's kmutil keeps auth stubs.** The kmutil of macOS 27.0.1 (26A434)
+links the same volume with every kext's `__TEXT_EXEC,__auth_stubs` left in place
+(apfs: 0x2340 bytes), and a call to another image goes `BL stub` → `ADRP/ADD
+x17` (the `__auth_got` slot) → `LDR x16, [x17]` → `BRAA x16, x17`. Apple's own
+iOS 27 kernelcaches keep them as well (iPhone17,3 27.0 apfs: 0x2360 bytes), so
+this is the new toolchain's layout, not a flag: `kmutil create` has none for it.
+Apple's 26.6 `vresearch101` kernelcache has them at size 0, every call direct,
+and the kernel patches look for those direct calls. On the stub-kept mix,
+`kernel-boot-apfs_seal_broken`, `kernel-boot-apfs_mount_upgrade_checks.mov_w0_0`,
+the three `kernel-boot-syscallmask` sites and both `kernel-cfw-debugger` sites
+missed (24 base patches instead of 28), and the guest panicked at its first boot
+after `cfw install` disabled the root snapshot: `"root volume seal is broken"
+@authapfs.c:698`. Trimming is not the cause; `--slim off` panics the same way.
+
+`KernelCollectionStubCalls` runs after the link. For each stub it checks the
+four-instruction shape and reads the target from the `__auth_got` slot, a
+`DYLD_CHAINED_PTR_64_KERNEL_CACHE` pointer into this collection's code (any
+other format, cache level or target is refused). Every `B`/`BL` in a kext's
+code sections that lands on a stub is re-encoded with `ARM64Encoder` to land on
+the target. That is what the macOS 26 builder emits, and the stubs are left
+unreferenced. Rewriting corecrypto's code breaks its FIPS power-on self test
+(`"FIPS Kernel POST Failed (-2074)!" @corecrypto_kext.c:356`, in the restore
+ramdisk), so an image with `__TEXT,__fips_hmacs` is sealed again: HMAC-SHA256,
+keyed with the byte 0, of its `__text`. The existing seal must equal that HMAC
+of the code as linked, or the step refuses. A collection that calls directly
+is left alone. When anything changes, the container is rewritten uncompressed,
+as patched components are.
+
+Checked on 2026-10-23 on macOS 27.0.1: the 26.6 mix has 12,096 stubs and
+131,560 calls retargeted. The seven call-site patches above are found again,
+and none that was found before is lost: 28 kernelcache patches applied. The
+template of iPhone17,3 26.6.2 (23G90) on cloudOS 26.6 (23G71), standard preset,
+restored, took the CFW install and the trim, and its setup boot connected.
+Booted again on its own, it reported Darwin 25.6.0 with iOS 26.6.2, no panic
+in its log, and vphoned answered `device.info`. The setup's first-boot step,
+the template adoption and the clone were not finished: Launchpad restarted at
+that point, which ends a creation in progress.
 
 Checked on 2026-10-19: a `minimal` VM of iOS 26.6 on cloudOS 26.6 (23G71) restores
 and boots, and vphoned answers. Checked on 2026-10-20 with the standard preset:

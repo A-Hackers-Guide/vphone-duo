@@ -93,13 +93,37 @@ extension CryptexFilesystemPatcher {
         ])
     }
 
+    /// Room `apfs_sealvolume` needs on the merged volume to remap its fsroot tree.
+    static let sealHeadroom: Int64 = 2 << 30
+
     /// Add `bytes` to the image's size, for a tool that needs room on a
     /// volume `shrinkImage` left at its minimum.
-    func growImage(dmg: URL, by bytes: Int) throws {
-        let size = try FileManager.default.attributesOfItem(atPath: dmg.path)[.size] as? Int ?? 0
-        _ = try runProcess("/usr/sbin/diskutil", [
-            "image", "resize", "-size", String(size + bytes), dmg.path,
-        ])
+    ///
+    /// diskutil grows an image only up to the size its container already
+    /// spans. A system image with no partition map sits on the whole file, so
+    /// once it is merged at that size there is nothing left: watchOS 26.4's
+    /// stopped at 11.2 GB on macOS 26.6.2 ("Requested size exceeds maximum
+    /// size"), and the seal then ran out of space remapping its fsroot tree.
+    /// Such an image grows by extending the file and letting the container
+    /// fill it.
+    func growImage(dmg: URL, by bytes: Int64) throws {
+        let size = try FileManager.default.attributesOfItem(atPath: dmg.path)[.size] as? Int64 ?? 0
+        let sizes = try runProcess("/usr/sbin/diskutil", ["image", "resize", "-plist", dmg.path])
+        if let limit = try Int64(Self.maxResizeSize(fromDiskutilPlist: sizes)), size + bytes <= limit {
+            _ = try runProcess("/usr/sbin/diskutil", [
+                "image", "resize", "-size", String(size + bytes), dmg.path,
+            ])
+            return
+        }
+        let handle = try FileHandle(forWritingTo: dmg)
+        try handle.truncate(atOffset: UInt64(size + bytes))
+        try handle.close()
+        let volume = try attachImageWithoutMounting(path: dmg)
+        defer { try? detachImage(deviceNode: volume) }
+        // disk7s1 → disk7: `0` makes the container take all of its physical store.
+        let container = volume.replacingOccurrences(of: #"s[0-9]+$"#, with: "", options: .regularExpression)
+        _ = try runProcess("/usr/sbin/diskutil", ["apfs", "resizeContainer", container, "0"])
+        print("  [+] Grew \(dmg.lastPathComponent)'s container past diskutil's limit by \(bytes) bytes")
     }
 
     /// Attach an image without mounting anything, and return its APFS volume's
@@ -143,7 +167,8 @@ extension CryptexFilesystemPatcher {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
         let mountPoint = try createTmpDir().appending(path: "volume")
-        // diskutil refuses a mount point that does not exist.
+        // diskutil image attach refuses a mount point that does not exist
+        // ("Mount point … doesn't exist", macOS 26.6.2).
         try FileManager.default.createDirectory(at: mountPoint, withIntermediateDirectories: false)
         process.arguments = if readonly {
             [

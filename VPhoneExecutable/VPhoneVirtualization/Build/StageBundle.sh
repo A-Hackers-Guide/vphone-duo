@@ -100,6 +100,9 @@ guest_compatibility_library="$(/usr/bin/xcrun swift-stdlib-tool --print \
 /bin/cp "$guest_products/gyroscope/libvphonegyro.dylib" "$guest/libvphonegyro.dylib"
 /bin/cp "$guest_products/accelerometer/libvphoneaccelerometer.dylib" "$guest/libvphoneaccelerometer.dylib"
 /bin/cp "$guest_products/attitude/libvphoneattitude.dylib" "$guest/libvphoneattitude.dylib"
+/bin/cp "$guest_products/cryptexstaging/libvphonecryptexstaging.dylib" "$guest/libvphonecryptexstaging.dylib"
+/bin/cp "$guest_products/homepodpersona/libvphoneinstallpersona.dylib" "$guest/libvphoneinstallpersona.dylib"
+/bin/cp "$guest_products/homepodmisfix/libvphonehomepodmisfix.dylib" "$guest/libvphonehomepodmisfix.dylib"
 /bin/cp "$guest_products/homepoddisplay/libvphonehomepoddisplay.dylib" "$guest/libvphonehomepoddisplay.dylib"
 /bin/cp "$guest_products/homepodsetup/vphone-homepod-setup" "$guest/vphone-homepod-setup"
 /bin/cp "$guest_products/homepodsetup/com.vphone.homepod-setup.plist" "$guest/com.vphone.homepod-setup.plist"
@@ -146,6 +149,11 @@ fi
 # What `fw patch` rebuilds a research board kernelcache from; see its README.
 /bin/rm -rf "$resources/kernelcache_recipes"
 /bin/cp -R "$root/VPhoneExecutable/VPhoneVirtualization/Resources/kernelcache_recipes" "$resources/"
+
+# Native KDK extraction ports MIT-licensed reference algorithms.
+/bin/mkdir -p "$resources/Licenses"
+/bin/cp "$root/VPhoneExecutable/VPhoneCommand/FirmwarePatcher/KernelCache/KDK/LICENSE" \
+    "$resources/Licenses/native-kdk-MIT.txt"
 
 "${0:a:h}/SyncStrings.sh"
 /usr/bin/xcrun xcstringstool compile \

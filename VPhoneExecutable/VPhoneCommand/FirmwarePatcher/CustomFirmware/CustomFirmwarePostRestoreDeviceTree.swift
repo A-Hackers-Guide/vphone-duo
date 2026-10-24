@@ -440,6 +440,22 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         return (serializeNode(root), [record], delta)
     }
 
+    @discardableResult
+    public static func presentHomePodCryptexClass(at url: URL, dryRun: Bool = false, verbose: Bool = true) throws -> Outcome {
+        try rewrite(at: url, dryRun: dryRun, verbose: verbose) { blob in
+            let (newBlob, changes, delta) = try withHomePodCryptexClass(blob)
+            return (newBlob, changes, blob.count + delta)
+        }
+    }
+
+    public static func withHomePodCryptexClass(_ blob: Data) throws -> (Data, [Change], Int) {
+        let root = try parseTree(blob, label: "HomePod DT")
+        guard let change = try DeviceTreePatcher.presentHomePodCryptexClass(in: root) else { return (blob, [], 0) }
+        return (serializeNode(root), [Change(property: "product/cryptex1-product-class",
+                                            before: change.before?.hex ?? "absent", after: change.after.hex)],
+                change.before == nil ? 40 : 0)
+    }
+
     /// `blob` without `/product/haptics`, through
     /// `DeviceTreePatcher.removeHaptics(from:)`, which fw patch uses for every
     /// new guest. Returns the size change with the changes, as `withBoardAudio`

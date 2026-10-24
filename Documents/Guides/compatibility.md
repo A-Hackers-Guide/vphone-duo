@@ -25,7 +25,7 @@ These are the two iPhone17,3 combinations exercised with the native JB pipeline 
 
 The cloudOS 26.4 beta image (`26.4-23E5207q`) is the newest one that contains `vphone600ap`, the identity the guest's kernel, SEP and device tree come from, and it stays the recommended cloudOS: it needs nothing beyond vphone-cli. Every cloudOS release after it was checked on 2026-10-03 and lists only the PCC boards and `vresearch101ap`: `iPhone99,11` is gone from `SupportedProductTypes`, and there is no `kernelcache.*.vphone600`, `sep-firmware.vphone600` or `DeviceTree.vphone600ap`.
 
-On such a cloudOS the research board stands in (the Research Board patch set): `fw patch` turns its device tree and SEP into vphone600's and rebuilds its kernelcache with the vphone600 virtualisation kexts, from a recipe for that kernelcache. That needs an `ipsw` with `kernel extract --kdk` and root for the link (`vphone-cli fw kernelcache`; see [the recipes](../../VPhoneExecutable/VPhoneVirtualization/Resources/kernelcache_recipes/README.md)). `fw prepare` refuses a cloudOS no recipe covers. `fw catalog` lists each iOS release's own cloudOS beside the recommended one, and Launchpad offers it under Firmware.
+On such a cloudOS the research board stands in (the Research Board patch set): `fw patch` turns its device tree and SEP into vphone600's and rebuilds its kernelcache with the vphone600 virtualisation kexts, from a recipe for that kernelcache. KDK extraction is native; the link still needs root (`vphone-cli fw kernelcache`; see [the recipes](../../VPhoneExecutable/VPhoneVirtualization/Resources/kernelcache_recipes/README.md)). `fw prepare` refuses a cloudOS no recipe covers. `fw catalog` lists each iOS release's own cloudOS beside the recommended one, and Launchpad offers it under Firmware.
 
 iOS 18.1 to 18.7.2 run the same way on their own release's cloudOS, with the userland of the iPhone XS family's IPSWs (`vm create --device iPhone11,6`, the Minimal preset; `fw catalog --device iPhone11,6` lists them). Their kernels are kernel-first: from macOS 26.4 on, another Mac or a macOS VM running macOS 15 or 26.0 to 26.3 links the mix over ssh (`VPHONE_KMUTIL_SSH`, see [Creating and running](create-and-run.md)); Launchpad offers them as the iPhone XS Max, with that Mac as the macOS builder. 18.1, 18.5 and 18.7.2 are checked on VMs; the other four recipes have not been booted yet.
 
@@ -50,6 +50,36 @@ selector-24 pre-check rejects every binary at init and the boot panics with
 day: `iPhone17,3 27.0.1 + 26.4-23E5207q` with the patch boots to the guest
 and answers a vphoned `device.info`. Bundle 2.6.0 is the first release that
 carries it.
+
+## macOS 26.6.2 hosts
+
+Checked on 2026-10-23 on Mac mini M4 hosts (Mac16,10, 16 GB, macOS 26.6.2 25G83) with Core Bundle 2.12.1. Every machine was created from nothing, from the CLI: the research-board pairings stage their kernelcache mix as the user and link it with sudo, then `sudo vphone-cli vm create`. A default is the newest pairing `fw catalog` gives that device on this Mac, as Launchpad's New Machine selects. Each machine then booted twice headless: vphoned answered, `device.info` reported the release, and the guest's serial log showed no panic.
+
+| Guest | Firmware | cloudOS | Result |
+| --- | --- | --- | --- |
+| iPhone17,3 | iOS 27.0.1 (default) | `26.4-23E5207q` | template build, clone, two boots |
+| iPhone18,2 | iOS 27.0.1 (default) | `26.4-23E5207q` | template build, clone, two boots |
+| iPad16,1 | iPadOS 27.0.1 (default) | `26.4-23E5207q` | template build, clone, two boots |
+| iPhone17,3 | iOS 26.6.2 | `26.4-23E5207q` | template build, clone, two boots |
+| iPhone17,3 | iOS 26.6.2 | `26.6-23G71` | research board: native KDK extraction, macOS 26 link with no auth stubs left, 28 kernelcache patches, two boots |
+| iPhone17,3 | iOS 26.5 | `26.5-23F75` | research board, as above |
+| iPhone17,3 | iOS 26.4 | `26.4-23E244` | research board, as above |
+| iPhone17,3 | iOS 18.6.2 | `26.1-23B85` | template build, clone, two boots |
+| iPhone11,6 | iOS 18.7.2 (default) | `18.7.2-22H43` | Minimal, mix linked over ssh by the kmutil of a macOS 15.7.7 VM, two boots |
+| iPhone11,6 | iOS 18.6 | `18.6-22G86` | as above: the first boot of this recipe |
+| iPhone11,6 | iOS 18.7 | `18.7-22H20` | as above: the first boot of this recipe |
+| Watch7,18 | watchOS 26.4 (default) | `26.4-23E244` | `watchos` preset, watch kernelcache mix, two boots |
+| AppleTV5,3 | tvOS 26.6 (default) | `26.4-23E5207q` | `tvos` preset, two boots |
+| AppleTV14,1 | tvOS 26.6 (default on macOS 26) | `26.4-23E5207q` | `tvos-4k` preset, 26.6 OTA userland, two boots |
+| AudioAccessory5,1 | HomePod Software 27.0 (default on macOS 26) | `26.4-23E5207q` | `homepod-mini` preset, two boots |
+| AppleTV14,1 | tvOS 27.0 | — | refused before any download: needs macOS 27 |
+| AudioAccessory5,1 | HomePod Software 27.2 | — | refused before any download: needs macOS 27 |
+
+The tvOS 27.0 (24J361) and HomePod Software 27.2 (24K120) OTAs compress their payload with LZRAVEN, which only macOS 27 unpacks. On an older Mac `fw catalog` leaves them out, so Launchpad's default for those devices is tvOS 26.6 and HomePod Software 27.0, and naming one is refused before anything is downloaded.
+
+cloudOS 26.7 (23H20) has no iPhone release to pair with. Staged with iOS 26.6.2's userland, its mix links and its 28 kernelcache patches apply; the CFW patch `_vm_fault_enter_prepare` finds no site in that kernel. It has not booted.
+
+`vphone-escalator`'s allowlist is kept in amfid's memory, so it is lost when amfid restarts, as it did once on these hosts mid-run. Launchpad allows the bundle again when AMFI refuses it; from the CLI, run the `vphone-escalator allow` command `host preflight` prints again.
 
 ## Other iPhone models
 

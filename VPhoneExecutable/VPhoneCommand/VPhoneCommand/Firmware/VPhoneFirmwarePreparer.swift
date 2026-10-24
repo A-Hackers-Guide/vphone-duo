@@ -50,6 +50,8 @@ enum VPhoneFirmwarePreparer {
         var iPhoneSource = iPhoneSource, otaSource = otaSource, productType = productType
         let requestedOTA = VPhoneFirmwareCatalog.otaRelease(source: iPhoneSource)
         if let release = requestedOTA {
+            // Before any IPSW is downloaded or restored for it.
+            try release.checkHost()
             guard let base = VPhoneFirmwareCatalog.restoreBaseURL(for: release) else {
                 throw ValidationError("The firmware catalog has no \(release.baseVersion) IPSW to restore the \(release.productType) OTA \(release.version) over.")
             }
@@ -310,6 +312,7 @@ enum VPhoneFirmwarePreparer {
         // when it is restored over its base's last release.
         let release = source.flatMap(VPhoneFirmwareCatalog.otaRelease(source:))
             ?? VPhoneFirmwareCatalog.otaRelease(for: device.productType, build: build)
+        try release?.checkHost()
         let build = release?.build ?? build
         guard source != nil || release != nil else {
             throw ValidationError("The firmware catalog has no \(device.productType) OTA for build \(build). Pass the device's full OTA of that build with --ota-source, and its key with --ota-key.")

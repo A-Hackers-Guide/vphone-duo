@@ -1,0 +1,84 @@
+diff --git a/pkg/kernelcache/kdk/extract.go b/pkg/kernelcache/kdk/extract.go
+index 7a08f98..b0eaa1e 100644
+--- a/pkg/kernelcache/kdk/extract.go
++++ b/pkg/kernelcache/kdk/extract.go
+@@ -162,6 +162,9 @@ func Extract(kc *macho.File, cfg Config) error {
+ 		if synthesized != nil {
+ 			exportOpts = append(exportOpts, macho.WithAddressOnlyBinds())
+ 		}
++		if err := dumpExportInputs(cfg.Output, fse.EntryID, fname, entryBase, synthesized != nil, syms, references[fse.EntryID]); err != nil {
++			return err
++		}
+ 		if err := mfse.Export(fname, dcf, entryBase, syms, exportOpts...); err != nil {
+ 			return fmt.Errorf("failed to export KEXT %s: %v", fse.EntryID, err)
+ 		}
+diff --git a/pkg/kernelcache/kdk/dump_inputs.go b/pkg/kernelcache/kdk/dump_inputs.go
+new file mode 100644
+--- /dev/null
++++ b/pkg/kernelcache/kdk/dump_inputs.go
+@@ -0,0 +1,65 @@
++package kdk
++
++// Parity hook for vphone-cli's Swift port (not upstream): with
++// KDK_DUMP_INPUTS=<dir>, writes the inputs of every File.Export call as JSON.
++
++import (
++	"encoding/json"
++	"os"
++	"path/filepath"
++
++	"github.com/blacktop/go-macho"
++	"github.com/blacktop/go-macho/types"
++)
++
++type dumpSymbol struct {
++	Name         string `json:"name"`
++	IndirectName string `json:"indirectName,omitempty"`
++	Type         uint8  `json:"type"`
++	Sect         uint8  `json:"sect"`
++	Desc         uint16 `json:"desc"`
++	Value        uint64 `json:"value"`
++}
++
++type dumpReference struct {
++	Kind   uint8  `json:"kind"`
++	Source uint64 `json:"source"`
++	Target uint64 `json:"target"`
++	Extra  uint64 `json:"extra,omitempty"`
++}
++
++type dumpInputs struct {
++	EntryID          string          `json:"entryID"`
++	Output           string          `json:"output"`
++	BaseAddress      uint64          `json:"baseAddress"`
++	AddressOnlyBinds bool            `json:"addressOnlyBinds"`
++	Symbols          []dumpSymbol    `json:"symbols"`
++	References       []dumpReference `json:"references"`
++}
++
++func dumpExportInputs(root, entryID, output string, base uint64, addressOnly bool, syms []macho.Symbol, refs []*types.SplitInfoEntry) error {
++	dir := os.Getenv("KDK_DUMP_INPUTS")
++	if dir == "" {
++		return nil
++	}
++	rel, err := filepath.Rel(root, output)
++	if err != nil {
++		return err
++	}
++	in := dumpInputs{EntryID: entryID, Output: rel, BaseAddress: base, AddressOnlyBinds: addressOnly,
++		Symbols: []dumpSymbol{}, References: []dumpReference{}}
++	for _, s := range syms {
++		in.Symbols = append(in.Symbols, dumpSymbol{s.Name, s.IndirectName, uint8(s.Type), s.Sect, uint16(s.Desc), s.Value})
++	}
++	for _, r := range refs {
++		in.References = append(in.References, dumpReference{uint8(r.Kind), r.SourceVmAddr, r.TargetVmAddr, r.ExtraVmAddr})
++	}
++	data, err := json.Marshal(in)
++	if err != nil {
++		return err
++	}
++	if err := os.MkdirAll(dir, 0o755); err != nil {
++		return err
++	}
++	return os.WriteFile(filepath.Join(dir, entryID+".json"), data, 0o644)
++}
