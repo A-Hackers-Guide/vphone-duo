@@ -41,10 +41,23 @@ extension CryptexFilesystemPatcher {
             "image", "resize", "-plist", output.path,
         ])
         let maxsize = try Self.maxResizeSize(fromDiskutilPlist: sizes)
-        _ = try runProcess("/usr/sbin/diskutil", [
-            "image", "resize", "-size", maxsize, output.path,
-        ])
+        let size = (try FileManager.default.attributesOfItem(atPath: output.path)[.size] as? NSNumber)?.int64Value ?? 0
+        if let limit = Int64(maxsize), limit > size {
+            _ = try runProcess("/usr/sbin/diskutil", [
+                "image", "resize", "-size", maxsize, output.path,
+            ])
+            return
+        }
+        // An OS image with no partition map (iOS 26.5's 094-54920-099, 9.3 GB
+        // with 537 MB free) has its container on the whole file, and diskutil's
+        // max is then its current size: merging the System OS cryptex ran out
+        // of space in the image. It grows as growImage grows such an image;
+        // the room is sparse, and shrinkImage gives it back after the merge.
+        try growImage(dmg: output, by: Self.mergeHeadroom)
     }
+
+    /// Room the cryptexes and the guest additions need on the OS volume.
+    static let mergeHeadroom: Int64 = 16 << 30
 
     /// The `max` value out of `diskutil image resize --plist`, as the string
     /// `--size` wants back.
@@ -126,7 +139,7 @@ extension CryptexFilesystemPatcher {
         let probe = try runProcess("/usr/sbin/diskutil", ["image", "attach", "-noMount", dmg.path])
         detachReportedImage(in: probe)
         guard !Self.hasPartitionMap(attachOutput: probe) else {
-            throw ProcessError.failed(0, "\(dmg.lastPathComponent) has a partition map, and diskutil grows it no further than \(limit.map(String.init) ?? "its current size") bytes; the seal needs \(bytes) more")
+            throw ProcessError.failed(0, "\(dmg.lastPathComponent) has a partition map, and diskutil grows it no further than \(limit.map(String.init) ?? "its current size") bytes; \(bytes) more are needed")
         }
         let handle = try FileHandle(forWritingTo: dmg)
         try handle.truncate(atOffset: UInt64(size + bytes))

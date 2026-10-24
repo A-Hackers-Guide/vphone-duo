@@ -3817,6 +3817,18 @@ On macOS 26.6.2 two more steps failed (2026-10-23, Mac mini M4):
   which gave the same image 2.7 GB free. The iOS images, which diskutil can
   grow, are resized as before.
 
+Corrected 2026-10-24 (macOS 26.5.1, Minimal preset): the iOS OS images have
+no partition map either. iPhone17,3 26.5 23F77's `094-54920-099` converts to a
+9.31 GB RAW image with 537 MB free, and `diskutil image resize -plist` reports
+max = current for it, so `convertToRawImage`'s resize to max left it as it
+was. Merging the System OS cryptex (5.2 GB) then ran out of space in the image
+("dyld_shared_cache_arm64e.09: No space left on device"), for iOS 18.6 22G86
+as well; a 2.12.0 bundle that had built both a day earlier failed the same
+way on the same host. `convertToRawImage` keeps the resize to max where it
+grows the image and otherwise grows it as `growImage` does, by 16 GiB
+(`mergeHeadroom`): the room is sparse, and `shrinkImage` gives it back after
+the merge.
+
 The binaries the merge patches (`launchd_cache_loader`, `mobileactivationd`)
 are re-signed in Apple's ad-hoc shape (`VPhoneSignOptions.Style.appleAdHoc`),
 like the stock binaries around them. The guest's TXM is stock here: it takes
