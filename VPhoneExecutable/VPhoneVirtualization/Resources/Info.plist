@@ -9,7 +9,7 @@
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleVersion</key>
-	<string>47</string>
+	<string>48</string>
 	<key>CFBundleShortVersionString</key>
 	<string>2.13.0</string>
 	<key>NSMicrophoneUsageDescription</key>
