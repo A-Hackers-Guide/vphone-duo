@@ -46,6 +46,15 @@ final class VPhoneLaunchpadMachineLibrary {
     /// machine's disk image, the machine's own VM included.
     private var diskHolders: [Path: [VPhoneLaunchpadDiskHolder]] = [:]
     private var activities: [Path: String] = [:]
+    /// The last `cfw install` or update run on each machine this session,
+    /// kept once it ends so its sheet and the inspector can say how it went.
+    private(set) var maintenance: [Path: VPhoneLaunchpadMaintenanceRun] = [:]
+    /// Machines whose maintenance sheet is open: their failures show there,
+    /// not as an alert.
+    var showsMaintenance: Set<Path> = []
+    /// A run that has just started from Launchpad itself, for the machines
+    /// view to open its sheet. It clears this once it has.
+    var maintenanceSheetRequest: Path?
     private var isRefreshing = false
     private var timer: Timer?
 
@@ -551,7 +560,7 @@ final class VPhoneLaunchpadMachineLibrary {
     }
 
     /// Runs `cfw install` again through the helper, for a machine whose last
-    /// install did not finish. Output goes to the machine's console log.
+    /// install did not finish.
     func installCustomFirmware(_ machine: Path) async {
         guard let version = bundleVersion(for: machine) else {
             actionError = VPhoneLaunchpadError(String(localized: "No Core Bundle version is installed. Install one in Core Bundle."))
@@ -560,31 +569,17 @@ final class VPhoneLaunchpadMachineLibrary {
         guard await requireDiskUnheld(machine) else {
             return
         }
-        activities[machine] = String(localized: "Installing custom firmware…")
-        defer { activities[machine] = nil }
-        appendConsoleLog(machine, "$ vphone-cli cfw install \(machine.name)")
-        let log = Self.consoleLog(machine)
-        do {
-            let status = try await helper.installCustomFirmware(
+        let installed = await performMaintenance(.installCustomFirmware, on: machine) { onLine in
+            try await helper.installCustomFirmware(
                 bundleVersion: version,
                 machineName: machine.name,
                 libraryRoot: machine.libraryRoot,
                 keepArtifacts: true,
-                onLine: { line in Self.append(line, to: log) },
+                onLine: onLine,
             )
-            if status != 0 {
-                actionError = VPhoneLaunchpadError(
-                    String(localized: "Unable to install custom firmware. Check the log for details."),
-                    detail: String(localized: "Choose Show Console Log for the full output."),
-                )
-            } else {
-                recordGuestEnvironment(machine, version)
-            }
-        } catch {
-            if !(error is CancellationError) {
-                actionError = error as? VPhoneLaunchpadError
-                    ?? VPhoneLaunchpadError(String(localized: "Unable to install custom firmware. Check the log for details."), detail: error.localizedDescription)
-            }
+        }
+        if installed {
+            recordGuestEnvironment(machine, version)
         }
         await refresh()
     }
@@ -607,32 +602,16 @@ final class VPhoneLaunchpadMachineLibrary {
         guard await requireDiskUnheld(machine, explain: explain) else {
             return false
         }
-        var updated = false
-        activities[machine] = String(localized: "Updating guest environment…")
-        defer { activities[machine] = nil }
-        appendConsoleLog(machine, "$ vphone-cli cfw update-environment \(machine.name)")
-        let log = Self.consoleLog(machine)
-        do {
-            let status = try await helper.updateGuestEnvironment(
+        let updated = await performMaintenance(.updateGuestEnvironment, on: machine, explain: explain) { onLine in
+            try await helper.updateGuestEnvironment(
                 bundleVersion: version,
                 machineName: machine.name,
                 libraryRoot: machine.libraryRoot,
-                onLine: { line in Self.append(line, to: log) },
+                onLine: onLine,
             )
-            if status != 0 {
-                actionError = explain(VPhoneLaunchpadError(
-                    String(localized: "Unable to update the guest environment."),
-                    detail: String(localized: "Choose Show Console Log for the full output."),
-                ))
-            } else {
-                recordGuestEnvironment(machine, version)
-                updated = true
-            }
-        } catch {
-            if !(error is CancellationError) {
-                actionError = explain(error as? VPhoneLaunchpadError
-                    ?? VPhoneLaunchpadError(String(localized: "Unable to update the guest environment."), detail: error.localizedDescription))
-            }
+        }
+        if updated {
+            recordGuestEnvironment(machine, version)
         }
         await refresh()
         return updated
@@ -649,30 +628,90 @@ final class VPhoneLaunchpadMachineLibrary {
         guard await requireDiskUnheld(machine) else {
             return
         }
-        activities[machine] = String(localized: "Updating kernel…")
-        defer { activities[machine] = nil }
-        appendConsoleLog(machine, "$ vphone-cli cfw update-kernel \(machine.name)")
-        let log = Self.consoleLog(machine)
-        do {
-            let status = try await helper.updateKernel(
+        await performMaintenance(.updateKernel, on: machine) { onLine in
+            try await helper.updateKernel(
                 bundleVersion: version,
                 machineName: machine.name,
                 libraryRoot: machine.libraryRoot,
-                onLine: { line in Self.append(line, to: log) },
+                onLine: onLine,
             )
-            if status != 0 {
-                actionError = VPhoneLaunchpadError(
-                    String(localized: "Unable to update the kernel."),
-                    detail: String(localized: "Choose Show Console Log for the full output."),
-                )
-            }
-        } catch {
-            if !(error is CancellationError) {
-                actionError = error as? VPhoneLaunchpadError
-                    ?? VPhoneLaunchpadError(String(localized: "Unable to update the kernel."), detail: error.localizedDescription)
-            }
         }
         await refresh()
+    }
+
+    // MARK: - Maintenance runs
+
+    /// Runs one of the helper's maintenance commands with the machine shown
+    /// busy. Each line goes to the machine's console log, as it always has,
+    /// to the run's own log, which its sheet follows, and to `forward`; the
+    /// few that mark a step or a warning reach the run itself. `presents`
+    /// asks the machines view to open the sheet. A failure is recorded on the
+    /// run in the words its sheet and an alert use; what the helper throws is
+    /// thrown on.
+    func runMaintenance(
+        _ run: VPhoneLaunchpadMaintenanceRun,
+        presents: Bool,
+        forward: (@Sendable (String) -> Void)? = nil,
+        _ command: (@escaping @Sendable (String) -> Void) async throws -> Int32,
+    ) async throws -> Int32 {
+        let machine = run.machine
+        maintenance[machine] = run
+        activities[machine] = run.kind.activity
+        defer { activities[machine] = nil }
+        if presents {
+            maintenanceSheetRequest = machine
+        }
+        let banner = "$ vphone-cli \(run.kind.command) \(machine.name)"
+        appendConsoleLog(machine, banner)
+        run.log.write(banner)
+        let console = Self.consoleLog(machine)
+        let log = run.log
+        let output: @Sendable (String) -> Void = { [weak run] line in
+            Self.append(line, to: console)
+            log.write(line)
+            forward?(line)
+            if VPhoneLaunchpadMaintenanceProgress.isNotable(line) {
+                Task { @MainActor in run?.read(line) }
+            }
+        }
+        do {
+            let status = try await command(output)
+            if status != 0 {
+                run.failure = VPhoneLaunchpadError(run.kind.failure, detail: log.tail)
+            }
+            run.finish(succeeded: status == 0)
+            return status
+        } catch {
+            if !(error is CancellationError) {
+                run.failure = error as? VPhoneLaunchpadError
+                    ?? VPhoneLaunchpadError(run.kind.failure, detail: error.localizedDescription)
+            }
+            run.finish(succeeded: false)
+            throw error
+        }
+    }
+
+    /// `runMaintenance` for a button or a menu item: its sheet opens, and a
+    /// failure, reworded by `explain`, becomes `actionError` unless that
+    /// sheet is open to show it. True once the command has succeeded.
+    @discardableResult
+    private func performMaintenance(
+        _ kind: VPhoneLaunchpadMaintenanceRun.Kind,
+        on machine: Path,
+        explain: (VPhoneLaunchpadError) -> VPhoneLaunchpadError = { $0 },
+        _ command: (@escaping @Sendable (String) -> Void) async throws -> Int32,
+    ) async -> Bool {
+        let run = VPhoneLaunchpadMaintenanceRun(kind: kind, machine: machine)
+        if (try? await runMaintenance(run, presents: true, command)) == 0 {
+            return true
+        }
+        if let failure = run.failure {
+            run.failure = explain(failure)
+            if !showsMaintenance.contains(machine) {
+                actionError = run.failure
+            }
+        }
+        return false
     }
 
     /// Stops a machine. The guest is asked to shut down first, so it quits its
