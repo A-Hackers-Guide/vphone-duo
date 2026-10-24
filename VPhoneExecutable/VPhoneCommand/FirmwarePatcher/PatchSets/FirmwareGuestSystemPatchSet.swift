@@ -43,6 +43,8 @@ public enum FirmwareGuestSystemPatchSet {
     public static let virtualBluetooth = "system-bluetoothd-cfw-btvc_le_connection"
     public static let jetsamDisableAllowed = "system-jetsamproperties-cfw-disable_allowed"
     public static let tvTPRO = "system-dyld-exp-tv_tpro"
+    public static let tvSetupDisplayLookup = "system-setupbackground-exp-pineboard_lookup"
+    public static let tvLegacySetup = "system-tv-exp-legacy_setup"
     /// Replaces the restored System volume with an Apple TV 4K userland
     /// staged from its OTA. Research only: no IPSW exists for that device.
     public static let tvOTAUserland = "system-tv-exp-ota_userland"
@@ -125,6 +127,20 @@ public enum FirmwareGuestSystemPatchSet {
                 summary: "Plain-arm64 TVOS compatibility: stops standalone and cached dyld enabling cloudOS-advertised hardware TPRO and pager modes, preserving page-in linking and all fixups.",
                 target: .guestExecutable(path: "/usr/lib/dyld"),
                 applicability: VPhonePatchApplicability(iOSBase: .major(26)),
+            ),
+            VPhonePatchDeclaration(
+                identifier: tvLegacySetup,
+                title: "TV setup virtual remote compatibility",
+                summary: "Selects the native TVSetup app retained in tvOS 27.2 by disabling TVSetupV2 and TVSetupV2HW. Its language screen accepts virtual keyboard and consumer remote input. Setup choices and completion remain under user control.",
+                target: .guestFile(path: "/" + CustomFirmwareTVSetup.relativePath),
+                applicability: VPhonePatchApplicability(iOSBase: .release(major: 27, minor: 2)),
+            ),
+            VPhonePatchDeclaration(
+                identifier: tvSetupDisplayLookup,
+                title: "TV setup display connection",
+                summary: "Lets tvOS 27.2 SetupBackground look up PineBoardServices on the cloudOS kernel. Without this one sandbox exception, its display-state request times out and setup stays black.",
+                target: .guestEntitlements(path: "/Applications/SetupBackground.app/SetupBackground"),
+                applicability: VPhonePatchApplicability(iOSBase: .release(major: 27, minor: 2)),
             ),
             VPhonePatchDeclaration(
                 identifier: tvOTAUserland,

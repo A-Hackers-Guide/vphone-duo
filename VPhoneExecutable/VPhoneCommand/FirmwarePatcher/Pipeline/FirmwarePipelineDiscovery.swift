@@ -88,8 +88,8 @@ extension FirmwarePipeline {
         // An Apple TV 4K has no IPSW: it is built over an Apple TV HD restore
         // and takes its userland from an OTA, so the HD's manifest never lists
         // it. Its own device tree, placed in the restore tree, presents it.
-        if recorded?.guestDevice == .appleTV14_1 {
-            return .appleTV14_1
+        if let guest = recorded?.guestDevice, guest.restoreBase != nil {
+            return guest
         }
         return VPhoneGuestDevice.detect(
             buildManifestAt: restoreDir.appendingPathComponent("iPhone-BuildManifest.plist"),

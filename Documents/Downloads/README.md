@@ -36,6 +36,7 @@ Use a `VPhone.bundle` from the same series as Launchpad. The series is the first
 
 | Launchpad | VPhone.bundle |
 | --- | --- |
+| 2.13.x | 2.13.x |
 | 2.12.x | 2.12.x |
 | 2.11.x | 2.11.x |
 | 2.10.x | 2.10.x |
@@ -51,6 +52,9 @@ Use a `VPhone.bundle` from the same series as Launchpad. The series is the first
 | 2.0.x | 2.0.x |
 
 Within a series, install the newest `VPhone.bundle`. Patch releases fix problems without changing how Launchpad and the bundle work together.
+
+Series 2.13 adds Apple TV 4K (4th generation). Use Launchpad 2.13 with its
+bundle so New Machine selects the `tvos-4k` preset for `AppleTV18,1`.
 
 Launchpad refuses a `VPhone.bundle` that is too old for it, but it may still list bundles from a newer series. Do not install those; update Launchpad to that series first. Launchpad does not update itself: download the new version from the release page and replace the old app.
 

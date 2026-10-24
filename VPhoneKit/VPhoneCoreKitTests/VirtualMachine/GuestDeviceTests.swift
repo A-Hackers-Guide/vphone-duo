@@ -76,6 +76,24 @@ struct GuestDeviceTests {
     }
 
     @Test
+    func `the fourth generation Apple TV keeps its J265 identity and 4K canvas`() throws {
+        let device = try #require(VPhoneGuestDevice.named("AppleTV18,1"))
+        #expect(device == .appleTV18_1 && device.family == .appleTV)
+        #expect(device.productName == "Apple TV 4K (4th generation)")
+        #expect(device.boardDeviceTreePath == "Firmware/all_flash/DeviceTree.j265ap.im4p")
+        #expect(device.restoreBase == .appleTV5_3)
+        #expect(device.usesTVOS && device.presentsBoard && !device.hasPlainArm64Userland)
+        #expect(device.screen == VPhoneGuestDevice.appleTV14_1.screen)
+        #expect(VPhoneGuestDevice.detect(buildManifest: ["SupportedProductTypes": ["AppleTV18,1"]]) == device)
+        let manifest = VPhoneVirtualMachineManifest.newVM().updating(guestDevice: device)
+        let decoded = try PropertyListDecoder().decode(
+            VPhoneVirtualMachineManifest.self, from: PropertyListEncoder().encode(manifest)
+        )
+        #expect(decoded.guestDevice == device && decoded.screenConfig == device.screen)
+        #expect(decoded.updating(cpuCount: 4).guestProductType == "AppleTV18,1")
+    }
+
+    @Test
     func `a TV guest persists its identity and provisional landscape canvas`() throws {
         let manifest = VPhoneVirtualMachineManifest.newVM().updating(guestDevice: .appleTV5_3)
         #expect(manifest.guestProductType == "AppleTV5,3")

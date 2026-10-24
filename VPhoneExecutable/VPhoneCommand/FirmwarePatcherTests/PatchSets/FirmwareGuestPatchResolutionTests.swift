@@ -12,6 +12,35 @@ import VPhonePatchKit
 
 @Suite("Guest patch resolution")
 struct FirmwareGuestPatchResolutionTests {
+    @Test func `TV legacy setup is limited to the 27 point 2 4K preset`() throws {
+        let identifier = FirmwareGuestSystemPatchSet.tvLegacySetup
+        for version in ["26.6", "27.0", "27.1", "27.2", "27.3"] {
+            for preset in FirmwarePatchSetCatalog.builtInPresets {
+                let plan = try VPhonePatchPlan.resolve(
+                    preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
+                    iOSBase: VPhoneVersion(version), cloudOS: VPhoneVersion("26.4"),
+                )
+                #expect(plan.isEnabled(identifier) == (version == "27.2" && preset.identifier == VPhonePatchPreset.tvOS4KIdentifier))
+            }
+        }
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [identifier]) == [identifier])
+        #expect(FirmwareGuestPatchResolution.guestPatchesOff(selectionEnabled: []).contains(identifier))
+    }
+
+    @Test func `new TV setup display repair remains opt in`() throws {
+        let identifier = FirmwareGuestSystemPatchSet.tvSetupDisplayLookup
+        for preset in FirmwarePatchSetCatalog.builtInPresets {
+            let plan = try VPhonePatchPlan.resolve(
+                preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
+                iOSBase: VPhoneVersion("27.2"), cloudOS: VPhoneVersion("26.4"),
+            )
+            #expect(!plan.isEnabled(identifier))
+        }
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [identifier]) == [identifier])
+    }
+
     @Test func `HomePod persona lookup uses isolated tvOS deployment and follows selection`() throws {
         let identifier = FirmwareGuestSystemPatchSet.installCoordinationPersona
         for base in ["26.4", "27.0", "27.2", "28.0"] {
@@ -240,8 +269,8 @@ struct FirmwareGuestPatchResolutionTests {
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: ["dyld-cfw-camera"], arm64eUserland: true) == ["dyld-cfw-camera"])
     }
 
-    @Test
-    func `the Apple TV 4K preset swaps in the OTA userland with the GPU driver and no TPRO patches`() throws {
+    @Test(arguments: ["27.0", "27.2"])
+    func `the Apple TV 4K preset swaps in the OTA userland with the GPU driver and no TPRO patches`(version: String) throws {
         let gpu = "system-extensions-boot-gpu_bundle"
         let ota = FirmwareGuestSystemPatchSet.tvOTAUserland
         let tpro: Set = [FirmwareGuestSystemPatchSet.tvTPRO, FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers]
@@ -266,7 +295,7 @@ struct FirmwareGuestPatchResolutionTests {
         let tv4K27 = try VPhonePatchPlan.resolve(
             preset: FirmwarePatchSetCatalog.tvOS4KPreset,
             patchSets: FirmwarePatchSetCatalog.bundled,
-            iOSBase: VPhoneVersion("27.0"),
+            iOSBase: VPhoneVersion(version),
             cloudOS: VPhoneVersion("26.4"),
         )
         // The userland swap and the GPU driver carry on to the 27 OTA.

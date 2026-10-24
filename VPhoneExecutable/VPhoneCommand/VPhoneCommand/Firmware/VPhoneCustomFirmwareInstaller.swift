@@ -211,6 +211,12 @@ struct VPhoneCustomFirmwareInstaller {
             ? try restoreTree(in: bundleDirectory, path: bundlePath, owner: callerUID)
             : nil
         let device = configuredGuestDevice(in: bundleDirectory) ?? guestDevice(of: restore)
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.tvLegacySetup), device.family != .appleTV {
+            throw ValidationError("The TV setup compatibility patch is supported only for an Apple TV guest.")
+        }
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.tvSetupDisplayLookup), device.family != .appleTV {
+            throw ValidationError("The TV setup display-connection patch is supported only for an Apple TV guest.")
+        }
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodTopCap), device.family != .homePod {
             throw ValidationError("The HomePod top-cap patch is supported only for a HomePod guest.")
         }
@@ -447,7 +453,7 @@ struct VPhoneCustomFirmwareInstaller {
         // Resolved once the system volume is mounted (it needs the "was
         // installed" signal there), then used again by the Preboot pass.
         var priorGuest = Set<String>()
-        var installedHomePodUserland: VPhoneRestoreInfo.OSVersion?
+        var installedOTAUserland: VPhoneRestoreInfo.OSVersion?
         do {
             // Every descriptor on a guest volume lives in this scope, so none
             // is left open to hold the volume busy when it is unmounted.
@@ -517,7 +523,8 @@ struct VPhoneCustomFirmwareInstaller {
                     environmentOnly: true,
                 )
             }
-            if device.family == .homePod, liveGuest.contains(FirmwareGuestSystemPatchSet.homePodOTAUserland) {
+            if liveGuest.contains(FirmwareGuestSystemPatchSet.homePodOTAUserland)
+                || liveGuest.contains(FirmwareGuestSystemPatchSet.tvOTAUserland) {
                 // Read the installed bytes while the private System is still
                 // mounted. Preparation/base restore must never promote this
                 // host label before a successful OTA System installation.
@@ -525,9 +532,9 @@ struct VPhoneCustomFirmwareInstaller {
                 guard let version = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
                       let product = version["ProductVersion"] as? String,
                       let build = version["ProductBuildVersion"] as? String else {
-                    throw ValidationError("Installed HomePod userland has no SystemVersion identity.")
+                    throw ValidationError("Installed OTA userland has no SystemVersion identity.")
                 }
-                installedHomePodUserland = .init(version: product, build: build)
+                installedOTAUserland = .init(version: product, build: build)
             }
         }
         // The selected Preboot identity can also reach an installed guest through
@@ -623,19 +630,19 @@ struct VPhoneCustomFirmwareInstaller {
             in: bundleDirectory,
             owner: invokingUser.map { ($0.uid, $0.gid) },
         )
-        if let installedHomePodUserland {
+        if let installedOTAUserland {
             let installedBundle = URL(fileURLWithPath: bundlePath, isDirectory: true)
             let record: () throws -> Void = {
                 let vm = try VPhoneBundle.load(at: installedBundle)
                 let variant = VPhoneRestoreInfo.load(fromBundle: vm)?.variant ?? "jb"
                 _ = try VPhoneRestoreInfo.recordVariant(variant, toBundle: vm,
-                                                        installedUserland: installedHomePodUserland)
+                                                        installedUserland: installedOTAUserland)
             }
             do {
                 if let invokingUser { try invokingUser.withUserCredentials(record) }
                 else { try record() }
             } catch {
-                fputs("warning: could not record installed HomePod userland: \(error)\n", stderr)
+                fputs("warning: could not record installed OTA userland: \(error)\n", stderr)
             }
         }
         switch mode {
@@ -1987,6 +1994,38 @@ struct VPhoneCustomFirmwareInstaller {
                     print("  [!] system-campo-cfw-entitlements: off now but no backup to revert (not revertible)")
                     live.insert("system-campo-cfw-entitlements")
                 }
+            }
+        }
+
+        let tvLegacySetup = FirmwareGuestSystemPatchSet.tvLegacySetup
+        let tvSetupFlags = CustomFirmwareTVSetup.relativePath
+        isolate([tvLegacySetup]) {
+            if (version == "27.2" || version.hasPrefix("27.2.")), on(tvLegacySetup), guestDevice.family == .appleTV {
+                try patchCopy(
+                    of: tvSetupFlags, in: system, work: work,
+                    verb: "patch-tv-setup", backupSafe: backupSafe(tvLegacySetup),
+                )
+                live.insert(tvLegacySetup)
+            } else if try revertCopy(of: tvSetupFlags, in: system) {
+                print("  [+] \(tvLegacySetup): restored CompanionServices feature flags")
+            } else if priorGuest.contains(tvLegacySetup) {
+                print("  [!] \(tvLegacySetup): no backup to revert (not revertible)")
+                live.insert(tvLegacySetup)
+            }
+        }
+
+        let tvSetupLookup = FirmwareGuestSystemPatchSet.tvSetupDisplayLookup
+        let tvSetupBackground = "Applications/SetupBackground.app/SetupBackground"
+        isolate([tvSetupLookup]) {
+            if on(tvSetupLookup), guestDevice.family == .appleTV {
+                if try patchTVSetupDisplayLookup(system: system, work: work, backupSafe: backupSafe(tvSetupLookup)) {
+                    live.insert(tvSetupLookup)
+                }
+            } else if try revertMachO(system: system, work: work, path: tvSetupBackground) {
+                print("  [+] \(tvSetupLookup): restored SetupBackground from backup")
+            } else if priorGuest.contains(tvSetupLookup) {
+                print("  [!] \(tvSetupLookup): off now but no backup to revert (not revertible)")
+                live.insert(tvSetupLookup)
             }
         }
 
@@ -3721,6 +3760,27 @@ struct VPhoneCustomFirmwareInstaller {
                 mergesExisting: true,
                 style: .appleAdHoc,
             ),
+        )
+        try system.replaceFile(target, fromFileAt: staged, mode: 0o755, owner: Self.guestOwner)
+        return true
+    }
+
+    /// The cloudOS application sandbox does not include the TV service name.
+    /// SetupBackground's only other entitlements are its identity, container
+    /// requirement and platform bit; keep them and add just this lookup.
+    private func patchTVSetupDisplayLookup(system: VPhoneConfinedDirectory, work: WorkDirectory, backupSafe: Bool) throws -> Bool {
+        let target = "Applications/SetupBackground.app/SetupBackground"
+        guard let staged = try stageOptional(target, from: system, work: work, label: "SetupBackground") else { return false }
+        guard let source = try VPhoneSigner.entitlements(ofFileAt: staged).first(where: { !$0.isEmpty }) else {
+            throw ValidationError("SetupBackground has no readable entitlements")
+        }
+        let ent = work.file("SetupBackground.entitlements")
+        try source.write(to: ent)
+        try CustomFirmwareMachLookupExceptions.merge(at: ent, services: ["com.apple.PineBoardServices"])
+        try backupEntitlementTarget(target, in: system, backupSafe: backupSafe)
+        try VPhoneSigner.sign(
+            fileAt: staged,
+            options: .init(entitlements: Data(contentsOf: ent), style: .appleAdHoc),
         )
         try system.replaceFile(target, fromFileAt: staged, mode: 0o755, owner: Self.guestOwner)
         return true

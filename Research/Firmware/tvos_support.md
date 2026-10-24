@@ -1,5 +1,167 @@
 # tvOS support
 
+## Apple TV 4K (4th generation)
+
+Added on 2026-10-23: `AppleTV18,1`, board `J265AP` (`j265ap`), with **tvOS
+27.2 only**. The supplied Pallas SoftwareUpdate response lists beta assets
+`24K120` and `24K6120` pointing to the same AEA archive and key. Its actual
+BuildManifest and SystemVersion both identify `27.2` / `24K120`, so the catalog
+uses that build and offers one pairing. The archive is 5,234,491,392 bytes,
+SHA-256 `a98cff4d0006b4c047c4eff163c5c1cb17fe0d1f67005ea575050523c7b858f7`.
+The URL and public symmetric key are recorded in `VPhoneFirmwareCatalog`.
+
+This board reuses the 3rd generation's OTA path: Apple TV HD 26.6 (`23L773`)
+provides the restore base, cloudOS 26.4 beta (`23E5207q`) provides the boot
+chain/kernel, and the OTA supplies J265's tree and System userland. The virtual
+canvas is 3840×2160 at 2x. Its payload chunks use `pbzm` / LZRAVEN, so creation
+requires macOS 27. On an older host there is no catalog pairing for this model;
+it cannot fall back to tvOS 26.6. OTA identity checks reject OS versions other
+than 27.2, including renamed local archives.
+
+Both `vm create` and Launchpad New Machine use the existing `tvos-4k` preset
+and a standalone restore without template slimming:
+
+```zsh
+vphone-cli vm create tv4k4 --device AppleTV18,1 --cpu 4 --memory 4096 --disk-size 48
+```
+
+Use Launchpad and VPhone.bundle **2.13** together. Earlier Launchpad versions
+would choose the HD preset for this new product type. The CLI/catalog schema
+is unchanged; the new series keeps that preset decision paired with the new
+device catalog. Firmware patch discovery now preserves any recorded OTA board
+with a restore base, so the HD manifest cannot replace J265's guest identity.
+The 27.2 setup compatibility patch described below is selected by `tvos-4k`;
+there is no new instruction patch or preset.
+
+Validation completed without admin privileges:
+
+- Xcode builds of `VPhone.bundle` and Launchpad; core identity/catalog tests,
+  all 113 archive tests, 116 selected firmware/device-tree tests, and 32 patch
+  model tests passed. Two TCP timing tests failed in the full core run and
+  passed when rerun individually. Launchpad product/catalog and bundle-version
+  tests passed.
+- `fw prepare` against the real OTA and cached base/cloudOS IPSWs decrypted
+  the archive, verified `27.2` / `24K120`, staged `DeviceTree.j265ap.im4p` and
+  all **42** payload chunks, reused the cached GPU driver, and recorded
+  `AppleTV18,1` in `config.plist`.
+- `fw patch` with `tvos-4k` processed all **11** components and applied **239**
+  patches. The patched device tree reports model `AppleTV18,1`, target `J265`,
+  and subtype `J265AP`. No undeclared-patch warnings appeared.
+- Selective, unprivileged extraction confirmed dyld and launchd are arm64e
+  `USR00`, and SystemVersion reports `27.2` / `24K120`. Dry runs of the five
+  enabled tvOS 27 cache patchers succeeded: IOMFB found 10 trampolines, lsd and
+  libxpc found their gates, maxSlide needed no change because the cache fits,
+  and lockdown mode had no target. The cache-loader gate patch also succeeded
+  on a separate extracted copy.
+
+Live validation on 2026-10-24 used the persistent machine
+`~/.vphone/machines/tv4k4`, cloned from the prepared scratch machine. Launchpad
+2.13 and its helper installed and admitted the local bundle. The native restore
+completed for ECID `0xF853D2724C37EC35`; full `cfw install --keep-artifacts`
+then applied 109 patches and installed all 42 OTA chunks. The machine is bound
+to local bundle `2.13.0-local.aaf2152c`. Other machines were left stopped.
+
+The installer now promotes the installed OTA's SystemVersion for TV as well
+as HomePod, after the private disk clone is committed. Without this, the host
+kept showing the HD restore base's 26.6 even though the guest ran 27.2.
+`RestoreInfoTests` passed all 21 cases after the change, including both 4K
+identities, and the finished bundle rebuilt successfully.
+
+Both normal boots reached vphoned in about five seconds. `device.info` reports
+`AppleTV18,1`, `27.2.0`, four CPUs, 4 GB, and a 1920×1080-point screen at 2x.
+Graphical startup initially stalled: the native window retained the boot logo,
+and guest screenshots were black. SetupBackground's scene-create watchdog
+found its main thread in `PBSDisplayManager._init`, waiting on a semaphore for
+`fetchCurrentDisplayStateWithReply:`. Static analysis confirms a 15-second
+client wait against the scene's 10-second watchdog; the server implementation
+dispatches to the main queue and replies with its serialized state without a
+display-mode readiness gate. A missing client proxy can also produce that
+wait, so this stack alone did not establish the failure's cause.
+
+One controlled restart of `com.apple.PineBoard` allowed SetupBackground's
+scene to become ready, and the new Setup app rendered its animated Hello
+screen at 3840×2160. A third cold boot stalled again; restarting Setup alone
+did not recover it, and a second PineBoard restart did not reliably help.
+Keyboard Return through vphoned, the host API and the native window did not
+advance the recovered Hello screen.
+
+A temporary native probe then isolated the sandbox lookup. As `mobile`, the
+display service returned real 3840×2160 display state immediately, and
+`PBSDisplayManager.sharedInstance` initialized on the main thread in 0.006 s.
+Signing the same probe with SetupBackground's original three entitlements
+(application identifier, platform bit and container requirement) changed that
+to 15.049 s. Adding only
+`com.apple.security.exception.mach-lookup.global-name = [com.apple.PineBoardServices]`
+reduced it to 0.005 s. The container requirement remained on. This reproduces
+the scene watchdog without involving video playback or the GPU.
+
+`system-setupbackground-exp-pineboard_lookup` adds that single exception,
+preserving the app's other entitlements. The declaration applies only to
+27.2, is opt-in, and the installer rejects a non-TV identity.
+It saves the original executable as `.bak`, allowing the normal guest patch
+selection and `cfw update-environment` to reverse it. All 55 focused patch
+catalog, guest resolution and entitlement tests passed, as did the 32 patch
+model tests; the finished bundle rebuilt successfully. After administrator
+authorization, Launchpad installed `2.13.0-local.ea3237b6`, and
+`vm set-bundle tv4k4 2.13.0-local.ea3237b6 --update-environment` applied the
+patch. The guest receipt records it live. The installed executable has exactly
+the original three keys plus the single lookup array; its `.bak` is byte
+identical to the original pulled before the update.
+
+The first patched cold boot reached vphoned in five seconds and the animated
+4K Hello screen without a PineBoard restart. PineBoard, backboardd, Setup and
+SetupBackground retain their startup PIDs; no crash report was present after
+the boot. Consumer-page Select (`0x0C/0x41`) still did not advance Hello. A
+12-second Setup log capture around a press contained 144 normal rendering
+entries but no `Remote pressed.` handler entry. Static analysis and Swift
+field metadata show this handler checks `_hasDrawingStarted` and
+`ScenePhase.active`, not a mandatory paired-Bluetooth-remote condition. The
+unresolved cause is event delivery or these local scene gates.
+
+PineBoard retains a native fallback: `CompanionServices/TVSetupV2`, or
+`TVSetupV2HW` plus its product-type gate, selects `com.apple.Setup`; with both
+flags disabled it selects `com.apple.purplebuddy` (TVSetup). This TVSetup is
+from the 27.2 OTA (its SDK and minimum OS version are 27.2), not the HD restore
+base. A temporary Data-volume override of both flags followed by a cold boot
+opened its 4K Language screen. Consumer Down/Up and native-window keyboard
+Down/Up moved English to Simplified Chinese and back without selecting a
+language. REA evidence: `ev_e11258e9f22e339e9c8e1eedd8108024a7a9859b12a8c4cb966954461712f258`
+and `ev_be3a9edd8bf4e9ede9361aaa789b4cc9a4e282387021eb2ed7ca9f9fec6dd74a`.
+
+The supported preset therefore uses `system-tv-exp-legacy_setup`, gated to
+27.2 and selected only by `tvos-4k`. It sets `TVSetupV2.Enabled` and
+`TVSetupV2HW.Enabled` to false in the System CompanionServices feature plist,
+preserving other flags, metadata and encoding. The installer requires a TV
+identity and backs up the original plist for reversal. It does not mark setup
+complete or choose any setup options. The SetupBackground lookup repair now
+remains opt-in for investigation of the new setup flow. The 59 focused
+feature-plist, guest-resolution, catalogue and entitlement tests passed.
+
+Launchpad installed final bundle `2.13.0-local.aaf2152c` and updated the guest
+environment. Its receipt records the legacy setup patch and no display-lookup
+patch. The System feature plist matches the offline patch output; its `.bak`
+is byte-identical to the original. SetupBackground reverted byte-identically
+to the original executable. The temporary Data override was removed before
+boot and its absence confirmed from the guest.
+
+The final bundle's first cold boot reached vphoned in six seconds and the 4K
+Language screen. Consumer Down/Up moved English to Simplified Chinese and
+back. Native keyboard Return opened Region, and Escape returned to Language.
+No region, permissions, agreements, accounts or setup completion were chosen.
+The initial host window, tested after clearing only this machine's saved frame,
+has exactly 3840×2160 content plus the 104-pixel toolbar and correctly labels
+tvOS 27.2.0. Window fitting now follows toolbar installation and showing the
+window so AppKit's initial screen constraint cannot distort the wide panel.
+PineBoard (38), backboardd (74) and TVSetup (214) retained their PIDs over the
+first minute; the crash list remained empty. A second final cold boot reached
+vphoned in five seconds and rendered the 4K Language screen again, with no
+crash reports. The VM is left running there. `ui.tree` cannot verify the frontmost app on TV, so input
+verification uses direct screenshots and the native VM window.
+Logs, the watchdog report, a guest spindump and screenshots are retained under
+`/private/tmp/vphone-appletv18-*` and `.build/appletv18-validation/`.
+
+## Earlier Apple TV validation
+
 Validated on 2026-10-15: AppleTV5,3 tvOS 26.4 beta 1 (23L5208m) on the
 cloudOS 26.4 beta (23E5207q) vphone600ap platform boots to TVSetup and Settings.
 The same VM booted normally with four CPUs after installing the persistent
@@ -21,8 +183,8 @@ lists tvOS 26.6 for the Apple TV HD, and New Machine and `vm create --device
 AppleTV5,3` build it with the `tvos` preset.
 
 tvOS 27 dropped the Apple TV HD, and Apple publishes no IPSW for any Apple TV
-4K: AppleDB lists only OTA packages for AppleTV11,1 and AppleTV14,1, and
-AppleTV18,1 is not released. An Apple TV 4K (AppleTV14,1) guest is the HD's
+4K. The 3rd generation (AppleTV14,1) and 4th generation (AppleTV18,1) use
+full OTAs. An Apple TV 4K guest is the HD's
 26.6 restore with the 4K's identity and arm64e userland taken from its OTA;
 `fw prepare` reads the OTA itself. See
 [Apple TV 4K from its OTA](#apple-tv-4k-from-its-ota).

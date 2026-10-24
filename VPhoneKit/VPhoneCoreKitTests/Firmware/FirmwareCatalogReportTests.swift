@@ -49,7 +49,7 @@ struct FirmwareCatalogReportTests {
     }
 
     @Test func `lists every curated guest`() {
-        let report = VPhoneFirmwareCatalog.report
+        let report = VPhoneFirmwareCatalog.report(hostMacOS: 27)
         #expect(report.devices.map(\.productType) == VPhoneGuestDevice.known.map(\.productType))
         #expect(report.devices.first?.pairings == report.pairings)
         for device in report.devices.dropFirst() {
@@ -91,6 +91,29 @@ struct FirmwareCatalogReportTests {
             #expect(VPhoneFirmwareCatalog.restoreBaseURL(for: release) != nil)
             if let key = release.key { #expect(Data(base64Encoded: key)?.count == 32) }
         }
+    }
+
+    @Test func `the fourth generation Apple TV offers only its 27 point 2 OTA over the HD base`() throws {
+        let release = try #require(VPhoneFirmwareCatalog.otaRelease(for: "AppleTV18,1", build: "24K120"))
+        #expect(release.version == "27.2" && release.baseVersion == "26.6")
+        #expect(release.size == 5_234_491_392)
+        #expect(release.key == "B/S/c74WZgPJLoJc7BDr+IxDjtQZ2H8gUwWp7kq9RpI=")
+        #expect(release.url.hasSuffix("/c6553d1b2d6e080adcd92fd8281e36a47dc870e22fb9d0ac057b4489916bcd9c.aea"))
+        #expect(release.fileName == "AppleTV18,1_27.2_24K120_OTA.aea")
+        #expect(VPhoneFirmwareCatalog.otaRelease(source: "/cache/ota/\(release.fileName)") == release)
+        let pairings = VPhoneFirmwareCatalog.pairings(for: "AppleTV18,1", hostMacOS: 27)
+        #expect(pairings.map(\.iosName) == ["tvOS 27.2"])
+        #expect(pairings.first?.iosURL == release.url)
+        #expect(pairings.first?.cloudosURL == VPhoneFirmwareCatalog.cloud264)
+        let base = try #require(VPhoneFirmwareCatalog.restoreBaseURL(for: release))
+        #expect(base.hasSuffix("/AppleTV5,3_26.6_23L773_Restore.ipsw"))
+        let device = try #require(VPhoneFirmwareCatalog.report(hostMacOS: 27).devices.first { $0.productType == "AppleTV18,1" })
+        #expect(device.family == "appleTV" && device.name == "Apple TV 4K (4th generation)")
+        #expect(device.pairings.count == 1 && device.pairings[0].ios.build == "24K120")
+        #expect(device.pairings[0].ios.files == ["ota/\(release.fileName)", (base as NSString).lastPathComponent])
+        #expect(VPhoneFirmwareCatalog.pairings(for: "AppleTV18,1", hostMacOS: 26).isEmpty)
+        #expect(!VPhoneFirmwareCatalog.report(hostMacOS: 26).devices.contains { $0.productType == "AppleTV18,1" })
+        #expect(VPhoneFirmwareCatalog.otaRelease(for: "AppleTV18,1", build: "24J361") == nil)
     }
 
     @Test func `Apple TV pairings are tvOS releases on cloudOS 26.4`() throws {

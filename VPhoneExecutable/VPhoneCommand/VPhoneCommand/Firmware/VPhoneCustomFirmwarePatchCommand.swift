@@ -221,6 +221,27 @@ struct VPhoneCustomFirmwarePatchLocationdCohortingCommand: ParsableCommand {
     }
 }
 
+// MARK: - patch-tv-setup
+
+struct VPhoneCustomFirmwarePatchTVSetupCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "patch-tv-setup",
+        abstract: "Select the native tvOS 27.2 setup flow for virtual remote input",
+        shouldDisplay: false,
+    )
+
+    @Argument(transform: URL.init(fileURLWithPath:))
+    var plist: URL
+
+    @Flag(name: .customLong("dry-run"))
+    var dryRun = false
+
+    func run() throws {
+        let changed = try CustomFirmwareTVSetup.patch(at: plist, dryRun: dryRun)
+        print("  [\(changed ? "+" : ".")] TVSetupV2 / TVSetupV2HW = false\(dryRun ? " (dry-run)" : "")")
+    }
+}
+
 // MARK: - patch-jetsam-disable-allowed
 
 struct VPhoneCustomFirmwarePatchJetsamDisableAllowedCommand: ParsableCommand {

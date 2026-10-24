@@ -17,6 +17,7 @@
 @testable import FirmwarePatcher
 import Foundation
 import Testing
+import VPhoneCoreKit
 import VPhonePatchKit
 
 // MARK: - Harness
@@ -114,6 +115,30 @@ private struct FakeVM {
 // MARK: - Tests
 
 struct FirmwarePipelineOriginalsTests {
+    @Test(arguments: [VPhoneGuestDevice.appleTV14_1, .appleTV18_1])
+    func `patch discovery preserves each OTA board over the HD restore manifest`(device: VPhoneGuestDevice) throws {
+        let vm = try FakeVM()
+        defer { vm.remove() }
+        let manifest: [String: Any] = [
+            "SupportedProductTypes": ["AppleTV5,3"],
+            "ProductVersion": "26.6",
+            "ProductBuildVersion": "23L773",
+        ]
+        try PropertyListSerialization.data(fromPropertyList: manifest, format: .xml, options: 0)
+            .write(to: vm.restoreDir.appendingPathComponent("iPhone-BuildManifest.plist"))
+        try VPhoneVirtualMachineManifest.newVM().updating(guestDevice: device)
+            .write(to: vm.root.appendingPathComponent("config.plist"))
+        #expect(vm.pipeline().readGuestDevice(vm.restoreDir) == device)
+        let ota = ["ProductVersion": "27.2", "ProductBuildVersion": "24K120"]
+        try PropertyListSerialization.data(fromPropertyList: ota, format: .xml, options: 0)
+            .write(to: vm.restoreDir.appendingPathComponent(FirmwarePipeline.otaVersionFileName))
+        #expect(FirmwarePipeline.readBaseProductVersion(vm.restoreDir) == "27.2")
+        // An IPSW-backed board still follows the manifest when it disagrees.
+        try VPhoneVirtualMachineManifest.newVM().updating(guestDevice: .iPad16_1)
+            .write(to: vm.root.appendingPathComponent("config.plist"))
+        #expect(vm.pipeline().readGuestDevice(vm.restoreDir) == .appleTV5_3)
+    }
+
     @Test func `patching twice succeeds and lands on the same bytes`() throws {
         let vm = try FakeVM()
         defer { vm.remove() }

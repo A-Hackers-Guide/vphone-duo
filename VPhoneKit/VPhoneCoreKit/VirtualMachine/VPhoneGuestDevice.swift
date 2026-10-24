@@ -211,6 +211,17 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         screen: .init(width: 3840, height: 2160, pixelsPerInch: 144, scale: 2.0),
     )
 
+    /// Apple TV 4K (4th generation), J265AP. Its tvOS 27.2 userland and
+    /// device tree come from a full OTA over the Apple TV HD restore base.
+    /// The virtual display uses the same 4K canvas as the 3rd generation.
+    public static let appleTV18_1 = VPhoneGuestDevice(
+        family: .appleTV,
+        productType: "AppleTV18,1",
+        deviceClass: "j265ap",
+        productName: "Apple TV 4K (4th generation)",
+        screen: .init(width: 3840, height: 2160, pixelsPerInch: 144, scale: 2.0),
+    )
+
     /// HomePod mini (B520AP). It has no physical display; this small virtual
     /// canvas satisfies the VM graphics configuration and is not a panel
     /// specification or a promise of a graphical HomePod interface.
@@ -247,7 +258,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     /// device tree and userland `fw prepare` takes from its OTA. Nil for every
     /// device restored from its own IPSW.
     public var restoreBase: VPhoneGuestDevice? {
-        self == .appleTV14_1 ? .appleTV5_3 : nil
+        self == .appleTV14_1 || self == .appleTV18_1 ? .appleTV5_3 : nil
     }
 
     public static let known: [VPhoneGuestDevice] = [
@@ -261,7 +272,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         iPad15_3, iPad15_5,
         iPad16_3, iPad16_5,
         iPad17_1, iPad17_3,
-        appleTV5_3, appleTV14_1,
+        appleTV5_3, appleTV14_1, appleTV18_1,
         audioAccessory5_1,
         watch7_18,
     ]

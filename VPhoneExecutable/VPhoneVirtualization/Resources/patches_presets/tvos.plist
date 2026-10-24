@@ -147,6 +147,8 @@
 			<string>system-virtualaudio-cfw-speaker_route_throws</string>
 			<string>system-virtualaudio-cfw-volume_mode_precondition</string>
 			<string>system-tv-exp-ota_userland</string>
+			<string>system-setupbackground-exp-pineboard_lookup</string>
+			<string>system-tv-exp-legacy_setup</string>
 			<string>system-exp-ota_userland</string>
 		</array>
 	</dict>

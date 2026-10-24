@@ -33,6 +33,7 @@ public enum VPhoneOTAArchive {
         case missingMember(String, URL)
         case wrongDevice(URL, productTypes: [String], expected: String)
         case wrongBuild(URL, build: String, expected: String)
+        case unsupportedVersion(URL, productType: String, version: String)
         case inconsistentChunks(URL, String)
         case unexpectedSize(URL, expected: Int64, actual: Int64)
         case existingUserland(URL)
@@ -60,6 +61,8 @@ public enum VPhoneOTAArchive {
                 "\(file.lastPathComponent) is for \(productTypes.isEmpty ? "no listed device" : productTypes.joined(separator: ", ")), not \(expected). Choose the \(expected) OTA."
             case let .wrongBuild(file, build, expected):
                 "\(file.lastPathComponent) is build \(build), but the IPSW is \(expected). The OTA and the IPSW must be the same build."
+            case let .unsupportedVersion(file, productType, version):
+                "\(file.lastPathComponent) contains tvOS \(version) for \(productType). Apple TV 4K (4th generation) requires tvOS 27.2."
             case let .inconsistentChunks(file, reason):
                 "\(file.lastPathComponent) has an inconsistent payload: \(reason). Download the OTA again."
             case let .unexpectedSize(file, expected, actual):
@@ -752,6 +755,11 @@ public enum VPhoneOTAArchive {
         let types = manifest["SupportedProductTypes"] as? [String] ?? []
         guard types.contains(device.productType) else {
             throw Error.wrongDevice(ota, productTypes: types, expected: device.productType)
+        }
+        // Check the archive's manifest, including renamed local sources.
+        // The new board is admitted only for the 27.2 userland.
+        if device == .appleTV18_1, version != "27.2", version != "27.2.0" {
+            throw Error.unsupportedVersion(ota, productType: device.productType, version: version)
         }
         if let expected, build != expected { throw Error.wrongBuild(ota, build: build, expected: expected) }
         return (version, build)
