@@ -360,6 +360,17 @@ struct CryptexFileOpsTests {
         }
     }
 
+    @Test func `only an image with no partition map is grown past diskutil's limit`() {
+        // `diskutil image attach -noMount` on macOS 27.0: a GPT image, then
+        // one whose APFS container is the whole image, as watchOS 26.4's is.
+        let partitioned = "/dev/disk18  \tGUID_partition_scheme\n/dev/disk18s1\tApple_APFS\n"
+            + "/dev/disk19  \tApple_APFS_Container\n/dev/disk19s1\tApple_APFS_Volume\n"
+        let whole = "/dev/disk18\n/dev/disk19  \tApple_APFS_Container\n/dev/disk19s1\tApple_APFS_Volume\n"
+        #expect(CryptexFilesystemPatcher.hasPartitionMap(attachOutput: partitioned))
+        #expect(!CryptexFilesystemPatcher.hasPartitionMap(attachOutput: whole))
+        #expect(!CryptexFilesystemPatcher.hasPartitionMap(attachOutput: ""))
+    }
+
     @Test func `a plist without A max key is an error`() {
         let withoutMax = Self.sizesPlist.replacingOccurrences(
             of: "<key>max</key>",

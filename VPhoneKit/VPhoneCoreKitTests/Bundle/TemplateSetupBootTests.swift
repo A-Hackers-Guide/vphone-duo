@@ -48,6 +48,7 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
     /// Applies whose disable of com.apple.weatherd launchd refuses, as it
     /// refused com.apple.seserviced early in an iOS 26.5 setup boot.
     var profileRefusals = 0
+    var profileRefusalError = "disable requires root (launchd status 1)"
     var rebootNeverReturns = false
     var stopsCleanly = true
     /// vphoned still answers the first ping after `system.reboot`, then takes
@@ -224,7 +225,7 @@ private final class FakeGuest: VPhoneTemplateSetupMachine {
             if wanted == "trimmed", profileRefusals > 0 {
                 profileRefusals -= 1
                 return ["profile": wanted, "disabled": [String](), "enabled": [String](), "owned": 0, "failed": [
-                    ["label": "com.apple.weatherd", "action": "disable", "error": "disable requires root (launchd status 1)"],
+                    ["label": "com.apple.weatherd", "action": "disable", "error": profileRefusalError],
                 ]]
             }
             profile = wanted
@@ -446,6 +447,18 @@ struct TemplateSetupBootTests {
         let outcome = try run(guest).get()
         #expect(guest.calls.count(where: { $0 == "services.profile.apply" }) == 2)
         #expect(outcome.serviceProfile == "trimmed")
+    }
+
+    @Test func `a profile failure that is not launchd refusing fails at once`() throws {
+        let guest = FakeGuest(clock: FakeClock())
+        guest.profileRefusals = 1
+        guest.profileRefusalError = "unknown service"
+        guard case let .failure(failure) = run(guest) else {
+            Issue.record("the setup boot succeeded")
+            return
+        }
+        #expect(failure.step == .serviceProfile)
+        #expect(guest.calls.count(where: { $0 == "services.profile.apply" }) == 1)
     }
 
     @Test func `a service launchd keeps refusing fails the profile step after two retries`() throws {
