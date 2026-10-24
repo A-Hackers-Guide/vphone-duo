@@ -385,6 +385,19 @@
 > off. See
 > [tvOS support](Firmware/tvos_support.md#apple-tv-4k-from-its-ota).
 
+> **Apple TV 4K, 4th generation (2026-10-23).** `AppleTV18,1` / `J265AP`
+> reuses `tvos-4k`, the Apple TV HD 26.6 restore base, and cloudOS 26.4 beta
+> (`23E5207q`). Its only catalog release is the supplied Pallas tvOS 27.2 beta
+> OTA (`24K120`; asset alias `24K6120` shares the archive). OTA manifest
+> validation refuses other OS versions for this board. Patch discovery preserves
+> the recorded J265 identity over the HD manifest, and Launchpad selects the 4K
+> preset. No new binary patch or preset is introduced. The real OTA staged its
+> J265 tree and all 42 chunks; `fw patch` processed all 11 components with 239
+> patches, and the selected cache patchers passed dry runs against its userland.
+> Launchpad and the bundle move to series 2.13 so earlier Launchpad builds cannot
+> choose the HD preset for the new device. Privileged installation and a live
+> boot remain pending. See [bring-up notes](Firmware/tvos_support.md#apple-tv-4k-4th-generation).
+
 > **tvOS 27 on the Apple TV 4K (2026-10-16).** No new patch. The 4K's tvOS 27.0
 > (24J361) OTA goes over the HD's 26.6 IPSW, and the plan resolves for the OTA's
 > version. `system-tv-exp-ota_userland` now applies from 26.0 on (it was gated on

@@ -105,9 +105,9 @@ struct OTAArchiveTests {
         try stream.close()
     }
 
-    private func manifest(productTypes: [String] = ["AppleTV14,1"], build: String = "23L773") throws -> Data {
+    private func manifest(productTypes: [String] = ["AppleTV14,1"], build: String = "23L773", version: String = "26.6") throws -> Data {
         try PropertyListSerialization.data(fromPropertyList: [
-            "ProductVersion": "26.6",
+            "ProductVersion": version,
             "ProductBuildVersion": build,
             "SupportedProductTypes": productTypes,
         ], format: .xml, options: 0)
@@ -413,6 +413,60 @@ struct OTAArchiveTests {
         // A guest's absolute links are valid when extraction never follows them.
         try encode([.directory(""), .directory("System"), .file("System/test", Data()), .symlink("var", "/private/var")], in: root).write(to: a)
         try VPhoneOTAArchive.validatePayloadPaths([a])
+    }
+
+    @Test func `the fourth generation stages J265 from its encrypted 27 point 2 OTA`() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("flash"), withIntermediateDirectories: true)
+        let data = try manifest(productTypes: ["AppleTV18,1"], build: "24K120", version: "27.2")
+        let entries: [Entry] = [
+            .segment("E", [
+                .file("AssetData/boot/BuildManifest.plist", data),
+                .file("AssetData/boot/Firmware/all_flash/DeviceTree.j265ap.im4p", Data("J265".utf8)),
+                .file("AssetData/payloadv2/payload.000", chunk(0)),
+                .file("AssetData/payloadv2/payload_chunks.txt", Data("0: 1000\n".utf8)),
+            ]),
+        ]
+        let ota = try makeOTA(in: root, entries)
+        let identity = try VPhoneOTAArchive.checkIdentity(of: ota, key: keyText, device: .appleTV18_1, build: "24K120")
+        #expect(identity.version == "27.2" && identity.build == "24K120")
+        let staged = try VPhoneOTAArchive.stageUserland(
+            from: ota, key: keyText, device: .appleTV18_1, build: "24K120",
+            deviceTreeDirectory: root.appendingPathComponent("flash"),
+            userlandDirectory: root.appendingPathComponent("userland")
+        )
+        #expect(staged.chunks == ["payload.000"])
+        #expect(staged.deviceTree.lastPathComponent == "DeviceTree.j265ap.im4p")
+        #expect(try Data(contentsOf: staged.deviceTree) == Data("J265".utf8))
+        #expect(throws: VPhoneOTAArchive.Error.self) {
+            try VPhoneOTAArchive.checkIdentity(of: ota, key: keyText, device: .appleTV14_1)
+        }
+    }
+
+    @Test(arguments: ["26.6", "27.0", "27.1", "27.2.1", "27.3", "28.2"])
+    func `the fourth generation refuses other userland versions before staging`(version: String) throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let data = try manifest(productTypes: ["AppleTV18,1"], build: "24K120", version: version)
+        let ota = try makeOTA(in: root, otaEntries(manifest: data))
+        #expect {
+            try VPhoneOTAArchive.checkIdentity(of: ota, key: keyText, device: .appleTV18_1)
+        } throws: { error in
+            guard case let .unsupportedVersion(_, productType, actual)? = error as? VPhoneOTAArchive.Error else { return false }
+            return productType == "AppleTV18,1" && actual == version
+        }
+        let userland = root.appendingPathComponent("userland")
+        #expect {
+            try VPhoneOTAArchive.stageUserland(
+                from: ota, key: keyText, device: .appleTV18_1, build: "24K120",
+                deviceTreeDirectory: root.appendingPathComponent("flash"), userlandDirectory: userland
+            )
+        } throws: { error in
+            guard case let .unsupportedVersion(_, productType, actual)? = error as? VPhoneOTAArchive.Error else { return false }
+            return productType == "AppleTV18,1" && actual == version
+        }
+        #expect(!FileManager.default.fileExists(atPath: userland.path))
     }
 
     @Test func `an encrypted OTA stages its device tree, payload chunks and chunk list`() throws {

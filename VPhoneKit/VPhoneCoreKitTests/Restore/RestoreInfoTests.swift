@@ -148,18 +148,22 @@ struct RestoreInfoTests {
         #expect(try VPhoneRestoreInfo.recordVariant("jb", toBundle: b) == nil)
     }
 
-    @Test func `installed HomePod userland preserves cloudOS and later variant recording`() throws {
-        let b = try makeBundle(guestProductType: "AudioAccessory5,1")
+    @Test(arguments: ["AudioAccessory5,1", "AppleTV14,1", "AppleTV18,1"])
+    func `installed OTA userland preserves cloudOS and later variant recording`(productType: String) throws {
+        let homePod = productType.hasPrefix("AudioAccessory")
+        let baseVersion = homePod ? "27.0" : "26.6"
+        let baseBuild = homePod ? "24J361" : "23L773"
+        let b = try makeBundle(guestProductType: productType)
         defer { try? FileManager.default.removeItem(at: b.url) }
         let cloud = VPhoneRestoreInfo.OSVersion(version: "26.4", build: "23E5207q")
-        try VPhoneRestoreInfo(ios: .init(version: "27.0", build: "24J361"), cloudOS: cloud).write(toBundle: b)
+        try VPhoneRestoreInfo(ios: .init(version: baseVersion, build: baseBuild), cloudOS: cloud).write(toBundle: b)
         // Preparation and base restore alone never promote the userland.
-        #expect(try VPhoneRestoreInfo.recordVariant("jb", toBundle: b)?.ios.version == "27.0")
+        #expect(try VPhoneRestoreInfo.recordVariant("jb", toBundle: b)?.ios.version == baseVersion)
         let actual = VPhoneRestoreInfo.OSVersion(version: "27.2", build: "24K120")
         let installed = try VPhoneRestoreInfo.recordVariant("jb", toBundle: b, installedUserland: actual)
         #expect(installed?.ios == actual)
         #expect(installed?.cloudOS == cloud)
-        #expect(installed?.device == "AudioAccessory5,1")
+        #expect(installed?.device == (homePod ? productType : "iPhone99,11"))
         // The full-install command and creator both record the variant again.
         let rerecorded = try VPhoneRestoreInfo.recordVariant("jb", toBundle: b)
         #expect(rerecorded == installed)

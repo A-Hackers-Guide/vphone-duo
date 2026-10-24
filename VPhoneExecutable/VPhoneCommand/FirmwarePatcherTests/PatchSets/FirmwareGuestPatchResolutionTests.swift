@@ -184,8 +184,8 @@ struct FirmwareGuestPatchResolutionTests {
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: ["dyld-cfw-camera"], arm64eUserland: true) == ["dyld-cfw-camera"])
     }
 
-    @Test
-    func `the Apple TV 4K preset swaps in the OTA userland with the GPU driver and no TPRO patches`() throws {
+    @Test(arguments: ["27.0", "27.2"])
+    func `the Apple TV 4K preset swaps in the OTA userland with the GPU driver and no TPRO patches`(version: String) throws {
         let gpu = "system-extensions-boot-gpu_bundle"
         let ota = FirmwareGuestSystemPatchSet.tvOTAUserland
         let tpro: Set = [FirmwareGuestSystemPatchSet.tvTPRO, FirmwareKernelCustomFirmwarePatchSet.tvTPROPagers]
@@ -210,7 +210,7 @@ struct FirmwareGuestPatchResolutionTests {
         let tv4K27 = try VPhonePatchPlan.resolve(
             preset: FirmwarePatchSetCatalog.tvOS4KPreset,
             patchSets: FirmwarePatchSetCatalog.bundled,
-            iOSBase: VPhoneVersion("27.0"),
+            iOSBase: VPhoneVersion(version),
             cloudOS: VPhoneVersion("26.4"),
         )
         // The userland swap and the GPU driver carry on to the 27 OTA.

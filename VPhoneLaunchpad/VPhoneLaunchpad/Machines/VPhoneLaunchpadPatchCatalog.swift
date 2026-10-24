@@ -298,7 +298,7 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
     static func defaultPreset(forDevice productType: String?) -> String {
         switch productType {
         case "AudioAccessory5,1": homePodMiniPreset
-        case "AppleTV14,1": tvOS4KPreset
+        case "AppleTV14,1", "AppleTV18,1": tvOS4KPreset
         case let type? where type.hasPrefix("AppleTV"): tvOSPreset
         case let type? where type.hasPrefix("Watch"): watchOSPreset
         // The iOS 18 research board kernels boot no other preset.

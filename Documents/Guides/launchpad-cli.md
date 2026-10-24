@@ -129,6 +129,12 @@ version while a machine is bound to it; rebind or delete those machines first.
 | `guest unlock <name> [--passcode <code>] [--timeout <seconds>]` | Turn the screen on and unlock the guest, whatever state it was in (vphoned `screen.unlock`). `--passcode` is needed only when the guest has one |
 | `exec [--bundle <version>] <vphone-cli arguments>` | Run the default bundle's `vphone-cli`, or that version's, streaming its output. `--bundle` must come first |
 
+Apple TV 4K (4th generation) uses `--device AppleTV18,1` with Launchpad and
+Core Bundle 2.13. It selects `tvos-4k`, restores independently without slimming,
+and takes tvOS 27.2 beta (`24K120`) from its full OTA over the Apple TV HD base.
+Creation requires macOS 27. A live boot is still pending; see the
+[bring-up notes](../../Research/Firmware/tvos_support.md#apple-tv-4k-4th-generation).
+
 ### Patch overrides in `vm create`
 
 `--block <patch>` and `--allow <patch>` take the identifiers `vphone-cli fw

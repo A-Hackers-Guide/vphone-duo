@@ -444,7 +444,7 @@ struct VPhoneCustomFirmwareInstaller {
         // Resolved once the system volume is mounted (it needs the "was
         // installed" signal there), then used again by the Preboot pass.
         var priorGuest = Set<String>()
-        var installedHomePodUserland: VPhoneRestoreInfo.OSVersion?
+        var installedOTAUserland: VPhoneRestoreInfo.OSVersion?
         do {
             // Every descriptor on a guest volume lives in this scope, so none
             // is left open to hold the volume busy when it is unmounted.
@@ -514,7 +514,8 @@ struct VPhoneCustomFirmwareInstaller {
                     environmentOnly: true,
                 )
             }
-            if device.family == .homePod, liveGuest.contains(FirmwareGuestSystemPatchSet.homePodOTAUserland) {
+            if liveGuest.contains(FirmwareGuestSystemPatchSet.homePodOTAUserland)
+                || liveGuest.contains(FirmwareGuestSystemPatchSet.tvOTAUserland) {
                 // Read the installed bytes while the private System is still
                 // mounted. Preparation/base restore must never promote this
                 // host label before a successful OTA System installation.
@@ -522,9 +523,9 @@ struct VPhoneCustomFirmwareInstaller {
                 guard let version = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
                       let product = version["ProductVersion"] as? String,
                       let build = version["ProductBuildVersion"] as? String else {
-                    throw ValidationError("Installed HomePod userland has no SystemVersion identity.")
+                    throw ValidationError("Installed OTA userland has no SystemVersion identity.")
                 }
-                installedHomePodUserland = .init(version: product, build: build)
+                installedOTAUserland = .init(version: product, build: build)
             }
         }
         // The selected Preboot identity can also reach an installed guest through
@@ -620,19 +621,19 @@ struct VPhoneCustomFirmwareInstaller {
             in: bundleDirectory,
             owner: invokingUser.map { ($0.uid, $0.gid) },
         )
-        if let installedHomePodUserland {
+        if let installedOTAUserland {
             let installedBundle = URL(fileURLWithPath: bundlePath, isDirectory: true)
             let record: () throws -> Void = {
                 let vm = try VPhoneBundle.load(at: installedBundle)
                 let variant = VPhoneRestoreInfo.load(fromBundle: vm)?.variant ?? "jb"
                 _ = try VPhoneRestoreInfo.recordVariant(variant, toBundle: vm,
-                                                        installedUserland: installedHomePodUserland)
+                                                        installedUserland: installedOTAUserland)
             }
             do {
                 if let invokingUser { try invokingUser.withUserCredentials(record) }
                 else { try record() }
             } catch {
-                fputs("warning: could not record installed HomePod userland: \(error)\n", stderr)
+                fputs("warning: could not record installed OTA userland: \(error)\n", stderr)
             }
         }
         switch mode {
