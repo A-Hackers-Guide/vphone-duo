@@ -886,6 +886,23 @@ struct VPhoneLaunchpadControlCommands {
         }
     }
 
+    /// A maintenance command for a client: it shows in the app as a run of
+    /// Launchpad's own would, without opening its sheet, and its output
+    /// streams to the client too.
+    private func maintenance(
+        _ kind: VPhoneLaunchpadMaintenanceRun.Kind,
+        on machine: VPhoneLaunchpadMachinePath,
+        emit: @escaping Emit,
+        _ command: (@escaping @Sendable (String) -> Void) async throws -> Int32,
+    ) async throws -> Int32 {
+        try await library.runMaintenance(
+            VPhoneLaunchpadMaintenanceRun(kind: kind, machine: machine),
+            presents: false,
+            forward: emit,
+            command,
+        )
+    }
+
     private func installCustomFirmware(_ request: VPhoneLaunchpadControlRequest, emit: @escaping Emit) async throws -> Any {
         let machine = try await machine(request)
         let version = try bundleVersion(of: machine)
@@ -893,13 +910,16 @@ struct VPhoneLaunchpadControlCommands {
             throw VPhoneLaunchpadError("Stop \(machine.name) before installing CFW.")
         }
         try await requireDiskUnheld(machine)
-        let status = try await model.helper.installCustomFirmware(
-            bundleVersion: version,
-            machineName: machine.name,
-            libraryRoot: machine.libraryRoot,
-            keepArtifacts: request.flag("keep-artifacts"),
-            onLine: emit,
-        )
+        let keepArtifacts = request.flag("keep-artifacts")
+        let status = try await maintenance(.installCustomFirmware, on: machine, emit: emit) { [helper = model.helper] onLine in
+            try await helper.installCustomFirmware(
+                bundleVersion: version,
+                machineName: machine.name,
+                libraryRoot: machine.libraryRoot,
+                keepArtifacts: keepArtifacts,
+                onLine: onLine,
+            )
+        }
         guard status == 0 else {
             throw VPhoneLaunchpadError("Unable to install custom firmware. Check the log for details.")
         }
@@ -914,12 +934,14 @@ struct VPhoneLaunchpadControlCommands {
             throw VPhoneLaunchpadError("Stop \(machine.name) before updating its guest environment.")
         }
         try await requireDiskUnheld(machine)
-        let status = try await model.helper.updateGuestEnvironment(
-            bundleVersion: version,
-            machineName: machine.name,
-            libraryRoot: machine.libraryRoot,
-            onLine: emit,
-        )
+        let status = try await maintenance(.updateGuestEnvironment, on: machine, emit: emit) { [helper = model.helper] onLine in
+            try await helper.updateGuestEnvironment(
+                bundleVersion: version,
+                machineName: machine.name,
+                libraryRoot: machine.libraryRoot,
+                onLine: onLine,
+            )
+        }
         guard status == 0 else {
             throw VPhoneLaunchpadError("Unable to update the guest environment. Check the log for details.")
         }
@@ -934,12 +956,14 @@ struct VPhoneLaunchpadControlCommands {
             throw VPhoneLaunchpadError("Stop \(machine.name) before updating its kernel.")
         }
         try await requireDiskUnheld(machine)
-        let status = try await model.helper.updateKernel(
-            bundleVersion: version,
-            machineName: machine.name,
-            libraryRoot: machine.libraryRoot,
-            onLine: emit,
-        )
+        let status = try await maintenance(.updateKernel, on: machine, emit: emit) { [helper = model.helper] onLine in
+            try await helper.updateKernel(
+                bundleVersion: version,
+                machineName: machine.name,
+                libraryRoot: machine.libraryRoot,
+                onLine: onLine,
+            )
+        }
         guard status == 0 else {
             throw VPhoneLaunchpadError("Unable to update the kernel. Check the log for details.")
         }
