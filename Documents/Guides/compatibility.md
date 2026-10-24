@@ -53,7 +53,7 @@ carries it.
 
 ## macOS 26.6.2 hosts
 
-Checked on 2026-10-23 on Mac mini M4 hosts (Mac16,10, 16 GB, macOS 26.6.2 25G83) with Core Bundle 2.12.1. Every machine was created from nothing, from the CLI: the research-board pairings stage their kernelcache mix as the user and link it with sudo, then `sudo vphone-cli vm create`. A default is the newest pairing `fw catalog` gives that device on this Mac, as Launchpad's New Machine selects. Each machine then booted twice headless: vphoned answered, `device.info` reported the release, and the guest's serial log showed no panic.
+Checked on 2026-10-23 with Core Bundle 2.12.1, and again on 2026-10-24 with Core Bundle 2.12.2, on Mac mini M4 hosts (Mac16,10, 16 GB, macOS 26.6.2 25G83). Every machine was created from nothing, from the CLI: the research-board pairings stage their kernelcache mix as the user and link it with sudo, then `sudo vphone-cli vm create`. A default is the newest pairing `fw catalog` gives that device on this Mac, as Launchpad's New Machine selects. Each machine then booted twice headless: vphoned answered, `device.info` reported the release, and the guest's serial log showed no panic.
 
 | Guest | Firmware | cloudOS | Result |
 | --- | --- | --- | --- |
