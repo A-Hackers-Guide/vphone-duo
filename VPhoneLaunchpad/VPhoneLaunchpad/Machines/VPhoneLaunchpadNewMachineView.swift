@@ -105,7 +105,8 @@ struct VPhoneLaunchpadNewMachineView: View {
         usesOwnCloudOS && !usesCustomSources ? selectedPairing?.matchingCloudOS : nil
     }
 
-    /// Whether `fw patch` rebuilds the kernelcache, which needs the ipsw: on
+    /// Whether `fw patch` rebuilds the kernelcache, which a 2.12.0 bundle
+    /// stages with the ipsw (a 2.12.1 one extracts natively): on
     /// the release's own cloudOS, always for a watch, whose kexts no cloudOS
     /// kernelcache has, and for an iOS 18 guest, which boots its own release's
     /// research board kernel.
@@ -235,7 +236,7 @@ struct VPhoneLaunchpadNewMachineView: View {
     private var canCreate: Bool {
         nameProblem == nil && advancedProblem == nil && sources != nil && bundleVersion != nil
             && (!usesCustomSources || inspectedCustomSource == iphoneSource)
-            && (!rebuildsKernelcache || hasKernelcacheIPSW) && kernelcacheBuilderProblem == nil
+            && kernelcacheBuilderProblem == nil
     }
 
     var body: some View {
@@ -486,24 +487,18 @@ struct VPhoneLaunchpadNewMachineView: View {
                 Text("Choose a guest IPSW and a cloudOS IPSW in Advanced Options.").foregroundStyle(.red)
             }
         } else if let own = ownCloudOS {
-            Text(hasKernelcacheIPSW
-                ? "On its own cloudOS, \(own.name): the kernelcache is rebuilt, which asks for administrator access once."
-                : "Choose an ipsw with `kernel extract --kdk` in Advanced Options to run on \(own.name).")
-                .foregroundStyle(hasKernelcacheIPSW ? Color.secondary : Color.red)
+            Text("On its own cloudOS, \(own.name): the kernelcache is rebuilt, which asks for administrator access once.")
+                .foregroundStyle(.secondary)
         } else if linksKernelFirst, let cloudOS = selectedPairing?.recommendedCloudOS.name {
-            if !hasKernelcacheIPSW {
-                Text("Choose an ipsw with `kernel extract --kdk` in Advanced Options: the release's own kernel is rebuilt with the vphone600 kexts.").foregroundStyle(.red)
-            } else if let kernelcacheBuilderProblem {
+            if let kernelcacheBuilderProblem {
                 Text(kernelcacheBuilderProblem).foregroundStyle(.red)
             } else {
                 Text("With \(cloudOS): the kernelcache is rebuilt and linked \(kernelcacheBuilder.map { "on \($0.destination)" } ?? "on this Mac"), and the restore image asks for administrator access once.")
                     .foregroundStyle(.secondary)
             }
         } else if rebuildsKernelcache, let cloudOS = selectedPairing?.recommendedCloudOS.name {
-            Text(hasKernelcacheIPSW
-                ? "With \(cloudOS): the kernelcache is rebuilt with the watch's kexts, which asks for administrator access once."
-                : "Choose an ipsw with `kernel extract --kdk` in Advanced Options: the watch's kernelcache is rebuilt with its kexts.")
-                .foregroundStyle(hasKernelcacheIPSW ? Color.secondary : Color.red)
+            Text("With \(cloudOS): the kernelcache is rebuilt with the watch's kexts, which asks for administrator access once.")
+                .foregroundStyle(.secondary)
         } else if let selectedGuest, let cloudOS = selectedPairing?.recommendedCloudOS.name {
             Text("Recommended firmware pairings for \(selectedGuest.detailedName), with \(cloudOS).")
                 .foregroundStyle(.secondary)
@@ -702,11 +697,11 @@ struct VPhoneLaunchpadNewMachineView: View {
             Text(usesCustomSources
                 ? "These two files replace the device and version chosen on the basic page."
                 : ownCloudOS != nil
-                ? "On its own cloudOS the release boots its own kernel, rebuilt with the vphone600 virtualisation kexts: the ipsw (with `kernel extract --kdk`) stages it as you, and the helper links it as root."
+                ? "On its own cloudOS the release boots its own kernel, rebuilt with the vphone600 virtualisation kexts: it is staged as you, and the helper links it as root. The ipsw (with `kernel extract --kdk`) is only needed by a 2.12.0 Core Bundle."
                 : linksKernelFirst
-                ? "iOS 18 boots its own release's kernel, rebuilt with the vphone600 kexts of cloudOS 26.1: the ipsw (with `kernel extract --kdk`) stages it as you. Only the kmutil of macOS 15 or 26.0 to 26.3 links it: from macOS 26.4 on, the macOS builder, a Mac or macOS VM with Remote Login on, links it over ssh as root there. The password is for ssh and sudo on it and is not saved; leave it empty with ssh keys and passwordless sudo."
+                ? "iOS 18 boots its own release's kernel, rebuilt with the vphone600 kexts of cloudOS 26.1: it is staged as you (a 2.12.0 Core Bundle needs the ipsw with `kernel extract --kdk` for that). Only the kmutil of macOS 15 or 26.0 to 26.3 links it: from macOS 26.4 on, the macOS builder, a Mac or macOS VM with Remote Login on, links it over ssh as root there. The password is for ssh and sudo on it and is not saved; leave it empty with ssh keys and passwordless sudo."
                 : rebuildsKernelcache
-                ? "A watch boots the cloudOS kernel rebuilt with its own kexts: the ipsw (with `kernel extract --kdk`) stages it as you, and the helper links it as root."
+                ? "A watch boots the cloudOS kernel rebuilt with its own kexts: it is staged as you, and the helper links it as root. The ipsw (with `kernel extract --kdk`) is only needed by a 2.12.0 Core Bundle."
                 : "The device and version are chosen on the basic page; cloudOS goes with them.")
                 .foregroundStyle(.secondary)
         }
@@ -929,7 +924,7 @@ struct VPhoneLaunchpadNewMachineView: View {
             keepArtifacts: keepArtifacts,
             usesTemplate: usesTemplate,
             slimming: slimming,
-            kernelcacheIPSW: rebuildsKernelcache ? kernelcacheIPSW : nil,
+            kernelcacheIPSW: rebuildsKernelcache && hasKernelcacheIPSW ? kernelcacheIPSW : nil,
             kernelcacheBuilder: kernelcacheBuilder,
         )
         let pipeline = model.machines.create(options)
