@@ -19,9 +19,10 @@ extension VPhoneMenuController {
         menu.addItem(NSMenuItem.separator())
 
         // A guest has no shell of its own, and the tvos preset has no
-        // debugger: this window is the only place to run code inside one.
+        // debugger: this window is the only place to run code inside one, so
+        // it is named for that rather than for the session kind it opens.
         let session = makeItem(
-            "Session",
+            "Debug Session",
             action: #selector(openSession),
             keyEquivalent: "t",
             modifiers: [.command, .option],

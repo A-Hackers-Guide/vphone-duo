@@ -339,7 +339,7 @@ read waits for it, so a client that cannot keep up slows the session down
 instead of filling the worker's memory.
 
 Two things on the Mac open this route rather than asking a client to speak
-WebSocket itself. The VM window has **Diagnostics ▸ Session** (⌥⌘T), a
+WebSocket itself. The VM window has **Diagnostics ▸ Debug Session** (⌥⌘T), a
 terminal view on a session of its own, closed with the window. And
 `{"t":"shell"}` on the machine's `vphone.sock` hands that connection to the
 terminal. The end of that client's input reaches the terminal as a `^D`

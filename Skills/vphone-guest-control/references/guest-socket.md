@@ -69,7 +69,7 @@ there: unset for the JavaScript session, a bare name from the bootstrap's
 away altogether, rather than only ending its input, hangs the terminal up and
 the session goes with it.
 
-The VM window's **Diagnostics ▸ Session** (⌥⌘T) opens the same route in a
+The VM window's **Diagnostics ▸ Debug Session** (⌥⌘T) opens the same route in a
 terminal view, and `script.eval` through `rpc` runs one script without a
 terminal at all. See "Scripting sessions" in
 `Research/vphoned_http_api.md`.

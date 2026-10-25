@@ -27,7 +27,7 @@ final class VPhoneShellWindowController {
             backing: .buffered,
             defer: false,
         )
-        window.title = VPhoneLocalization.text(program == nil ? "Session" : "Terminal")
+        window.title = VPhoneLocalization.text(program == nil ? "Debug Session" : "Terminal")
         window.subtitle = program ?? "vphoned"
         window.contentViewController = NSHostingController(rootView: view)
         window.contentMinSize = NSSize(width: 420, height: 240)
