@@ -13,6 +13,17 @@
 > launch of Settings or the app. No binary or loader changes. Account daemons
 > stay running either way; update and account daemons are disabled only by
 > vphoned's service profile ([service trimming](Guest/service_trimming.md)).
+> **CSSC kernel compatibility experiment (2026-10-25).**
+> `kernel-boot-cssc_emulation` targets iOS 27 with cloudOS 26.4. It reuses the
+> kernel's undefined-instruction copyin, PAC-safe interrupt helpers and
+> signed-state check/sign ABI. Only known EL0 scalar CSSC words are evaluated;
+> unknown faults retain native triage. The single baseline-A64 payload occupies
+> persistent kernel text; no userland/cache CSSC trampolines or writable code
+> pages are introduced. Existing X1 PAuth/CPA lowering remains unchanged.
+> Selected X1 boot patch failures abort installation, and an unresolved CSSC
+> kernel handler aborts kernel preparation. TV and HomePod presets exclude
+> this operation. See `Research/Guest/iphone_duo_bringup.md` for the reveal
+> procedure and signed-state handling.
 
 > **HomePod local app installation (2026-10-23).**
 > `system-installd-exp-homepod_adhoc` is selected only by `homepod-mini` on

@@ -245,6 +245,7 @@ public enum FirmwarePatchSetCatalog {
         "dyld-boot-xpc_lwcr",
         "dyld-cfw-camera",
         "kernel-boot-arm64e_x1",
+        FirmwareKernelCustomFirmwarePatchSet.cssc,
         "preboot-cfw-devicetree_board_audio",
         "preboot-cfw-devicetree_haptics",
         "preboot-cfw-devicetree_iphone_product",
