@@ -243,6 +243,8 @@ struct FirmwarePatchSetCatalogTests {
                     && $0.identifier != FirmwareGuestSystemPatchSet.homePodOTAUserland
                     && $0.identifier != FirmwareGuestSystemPatchSet.homePodSoundGlow
                     && $0.identifier != FirmwareGuestSystemPatchSet.tvSetupDisplayLookup
+                    && $0.identifier != FirmwareGuestSystemPatchSet.tvSetupFocus
+                    && $0.identifier != FirmwareGuestSystemPatchSet.tvLocalActivation
                     && $0.identifier != FirmwareGuestSystemPatchSet.tvLegacySetup
                     && $0.identifier != FirmwareGuestSystemPatchSet.homePodCryptexStaging
                     && $0.identifier != FirmwareGuestSystemPatchSet.homePodCryptexClass

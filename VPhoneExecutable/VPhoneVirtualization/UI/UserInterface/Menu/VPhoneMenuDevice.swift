@@ -13,6 +13,13 @@ extension VPhoneMenuController {
         let menu = NSMenu(title: "Device")
         menu.autoenablesItems = false
         menu.addItem(makePanelItem(.controls, "Controls", keyEquivalent: "k", symbol: "slider.horizontal.3"))
+        let remote = makeItem(
+            "Apple TV Remote", action: #selector(showTVRemote),
+            keyEquivalent: "r", modifiers: [.command, .option], symbol: "appletvremote.gen2",
+        )
+        remote.isHidden = true
+        tvRemoteItem = remote
+        menu.addItem(remote)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(makeItem(
             "Home Screen",
@@ -138,6 +145,11 @@ extension VPhoneMenuController {
         menu.addItem(shutDown)
         item.submenu = menu
         return item
+    }
+
+    @objc func showTVRemote() {
+        guard showsTVControls else { return }
+        tvRemoteWindowController.show()
     }
 
     @objc func sendHome() {

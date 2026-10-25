@@ -12,24 +12,26 @@ import VPhonePatchKit
 
 @Suite("Guest patch resolution")
 struct FirmwareGuestPatchResolutionTests {
-    @Test func `TV legacy setup is limited to the 27 point 2 4K preset`() throws {
-        let identifier = FirmwareGuestSystemPatchSet.tvLegacySetup
-        for version in ["26.6", "27.0", "27.1", "27.2", "27.3"] {
-            for preset in FirmwarePatchSetCatalog.builtInPresets {
-                let plan = try VPhonePatchPlan.resolve(
-                    preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
-                    iOSBase: VPhoneVersion(version), cloudOS: VPhoneVersion("26.4"),
-                )
-                #expect(plan.isEnabled(identifier) == (version == "27.2" && preset.identifier == VPhonePatchPreset.tvOS4KIdentifier))
+    @Test func `native TV setup adapters are limited to the 27 point 2 4K preset`() throws {
+        for identifier in [FirmwareGuestSystemPatchSet.tvSetupDisplayLookup, FirmwareGuestSystemPatchSet.tvSetupFocus, FirmwareGuestSystemPatchSet.tvLocalActivation] {
+            for version in ["26.6", "27.0", "27.1", "27.2", "27.3"] {
+                for preset in FirmwarePatchSetCatalog.builtInPresets {
+                    let plan = try VPhonePatchPlan.resolve(
+                        preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,
+                        iOSBase: VPhoneVersion(version), cloudOS: VPhoneVersion("26.4"),
+                    )
+                    #expect(plan.isEnabled(identifier) == (version == "27.2" && preset.identifier == VPhonePatchPreset.tvOS4KIdentifier))
+                }
             }
+            #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true).isEmpty)
+            #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [identifier]) == [identifier])
+            #expect(FirmwareGuestPatchResolution.guestPatchesOff(selectionEnabled: []).contains(identifier))
+            #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier]) == [identifier])
         }
-        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [identifier], arm64eUserland: true).isEmpty)
-        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [identifier]) == [identifier])
-        #expect(FirmwareGuestPatchResolution.guestPatchesOff(selectionEnabled: []).contains(identifier))
     }
 
-    @Test func `new TV setup display repair remains opt in`() throws {
-        let identifier = FirmwareGuestSystemPatchSet.tvSetupDisplayLookup
+    @Test func `legacy TV setup is not selected by any preset`() throws {
+        let identifier = FirmwareGuestSystemPatchSet.tvLegacySetup
         for preset in FirmwarePatchSetCatalog.builtInPresets {
             let plan = try VPhonePatchPlan.resolve(
                 preset: preset, patchSets: FirmwarePatchSetCatalog.bundled,

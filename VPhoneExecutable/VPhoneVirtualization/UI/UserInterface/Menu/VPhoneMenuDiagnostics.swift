@@ -73,6 +73,7 @@ extension VPhoneMenuController {
     /// disconnect, disables them all.
     func updatePanelAvailability(capabilities: [String]) {
         guestPanelsWindowController.attitudeConnectionChanged()
+        if showsTVControls { tvRemoteWindowController.connectionChanged() }
         for (panel, item) in panelMenuItems {
             item.isEnabled = capabilities.contains(panel.capability)
         }

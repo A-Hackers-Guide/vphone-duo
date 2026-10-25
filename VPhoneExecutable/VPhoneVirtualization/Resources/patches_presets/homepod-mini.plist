@@ -115,6 +115,8 @@
 			<string>system-extensions-boot-gpu_bundle</string>
 			<string>system-tv-exp-ota_userland</string>
 			<string>system-setupbackground-exp-pineboard_lookup</string>
+			<string>system-setup-exp-deferred_focus</string>
+			<string>system-mobileactivationd-exp-tv_activation</string>
 			<string>system-tv-exp-legacy_setup</string>
 			<string>system-fsck-boot-arm64e_x1_bootstrap</string>
 			<string>system-jetsamproperties-cfw-disable_allowed</string>

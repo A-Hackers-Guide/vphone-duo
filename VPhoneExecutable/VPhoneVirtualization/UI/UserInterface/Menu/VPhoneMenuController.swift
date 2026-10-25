@@ -23,10 +23,16 @@ class VPhoneMenuController {
 
     var hardwareKeyboardItem: NSMenuItem?
     var tvControlCenterItem: NSMenuItem?
+    var tvRemoteItem: NSMenuItem?
+    lazy var tvRemoteWindowController = VPhoneTVRemoteWindowController(control: control)
 
     /// An Apple TV guest has a TV button that opens Control Center when held.
     var showsTVControls = false {
-        didSet { tvControlCenterItem?.isHidden = !showsTVControls }
+        didSet {
+            tvControlCenterItem?.isHidden = !showsTVControls
+            tvRemoteItem?.isHidden = !showsTVControls
+            if oldValue && !showsTVControls { tvRemoteWindowController.close() }
+        }
     }
     var watchSideButtonItem: NSMenuItem?
 

@@ -1,5 +1,56 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **Apple TV remote and native Setup (2026-10-24).** The current
+> `tvos-4k` preset selects `system-setupbackground-exp-pineboard_lookup` on
+> 27.2 and blocks `system-tv-exp-legacy_setup`. The environment update
+> restores the original CompanionServices flags from their backup, returning
+> to the new Setup app. Live debugger inspection localized Select's failure:
+> Hello's native focus target exists but is deferred; a directional press
+> commits it, after which Select executes the ordinary Hello callback and
+> opens Language. `system-setup-exp-deferred_focus` installs a tvOS dylib into
+> Setup via `/tf`, preserving its original entitlements and a reversible backup.
+> Its adapter uses native TV button-focus policy (`0`) only for an active key
+> Setup window whose WaffleIron system has default deferral (`3`) and no explicit
+> override. It observes scene/key/focus updates, preserves other overrides, and
+> uses UIKit's own preferred-focus machinery and eligibility checks. Earlier
+> focus-initialization prototypes expired after the native 60-second idle timer.
+> A live policy-0 test retained focus past 80 seconds and Select entered the
+> native country picker. The adapter changes no
+> pairing, drawing, ScenePhase, window suppression or setup-completion state.
+> This patch is selected only by `tvos-4k` on 27.2; legacy setup remains off.
+> Installed cold-boot testing passes the first Select after more than 65 seconds
+> idle at Hello, without directional priming or a debugger. Completed
+> AX/button taps now survive panel focus loss; pending holds are cancelled and
+> neither may cross a guest reconnection. The actual AX-button/queue harness
+> covers this live-discovered delivery failure. See the
+> [input investigation](Firmware/tvos_27_setup_input.md). Remote clicks, holds,
+> Home/Settings navigation and Control Center have passed live testing.
+>
+> Native Setup then reached manual activation and failed with -71136. The
+> matching tvOS mobileactivationd retains the existing `should_hactivate`
+> local-state path, but the TV preset had excluded it. The new declaration
+> `system-mobileactivationd-exp-tv_activation` reuses that unchanged patcher
+> with an exact 27.2 applicability gate, selected only by `tvos-4k` and admitted
+> only for arm64e Apple TV. The installer uses one activation declaration per
+> device, retaining the existing backup/revert path. Installed native Manual
+> setup now advances past activation to room choice and Terms & Conditions.
+> Cold boot of `a4b9ffc4` exposed a packaging failure: the final Setup bundle
+> seal discarded the entitlements preserved by `patchMachO`, causing native
+> TCC Bluetooth usage-description crashes. Both applying the focus adapter
+> and restoring its backup now preserve original entitlements through bundle
+> sealing. Corrected bundle `da14d7a4` retains the full pristine entitlement set
+> byte-identically and passes the idle/AX input test. After user-confirmed Terms,
+> native Setup completes to Home with its own SetupDone/TVBuddy completion
+> flags true and TVSetupVersion=15. The original VM is also updated, with its
+> prior setup and data preserved. Navigation, Control Center, Siri search,
+> Power sleep and TV wake pass; audio effects without active media remain
+> unverified. A final read-only daemon correction uses TV version/completion
+> policy instead of the iOS setup version; 376 logic checks pass. Its bundle
+> `9ffd2d6e` is installed on both machines. Final cold boots report TV setup
+> and current versions 15, pending=false, and no Setup process. The clone
+> returns directly to Home; the original remains running with its data intact.
+> Both receipts have zero pending changes and legacy setup off.
+
 > **HomePod local app installation (2026-10-23).**
 > `system-installd-exp-homepod_adhoc` is selected only by `homepod-mini` on
 > HomePod 27. It loads a dedicated TVOS arm64e build of the existing MIS

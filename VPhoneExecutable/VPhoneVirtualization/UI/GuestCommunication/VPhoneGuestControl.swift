@@ -545,6 +545,10 @@ final class VPhoneGuestControl {
 
     /// Calls one vphoned operation after the input events already queued, so a
     /// key or text request cannot overtake a tap sent before it.
+    /// A cancellable input producer must drain first, then check that its
+    /// interaction is still current immediately before submitting a new RPC.
+    func waitForQueuedInput() async { await orderedInput?.value }
+
     func callAfterQueuedInput(_ method: String, params: [String: Any] = [:]) async throws -> [String: Any] {
         await orderedInput?.value
         return try await call(method, params: params)

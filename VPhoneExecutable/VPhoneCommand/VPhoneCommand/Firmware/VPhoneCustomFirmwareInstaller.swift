@@ -217,6 +217,12 @@ struct VPhoneCustomFirmwareInstaller {
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.tvSetupDisplayLookup), device.family != .appleTV {
             throw ValidationError("The TV setup display-connection patch is supported only for an Apple TV guest.")
         }
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.tvLocalActivation), device.family != .appleTV {
+            throw ValidationError("The TV local-activation patch is supported only for an Apple TV guest.")
+        }
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.tvSetupFocus), device.family != .appleTV {
+            throw ValidationError("The TV setup focus adapter is supported only for an Apple TV guest.")
+        }
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodTopCap), device.family != .homePod {
             throw ValidationError("The HomePod top-cap patch is supported only for a HomePod guest.")
         }
@@ -1774,7 +1780,11 @@ struct VPhoneCustomFirmwareInstaller {
         }
 
         machO("system-launchd_cache_loader-boot-unsecure_cache_gate", path: "usr/libexec/launchd_cache_loader", verbs: ["patch-launchd-cache-loader"], codeIdentifier: "com.apple.launchd_cache_loader")
-        machO("system-mobileactivationd-boot-should_hactivate", path: "usr/libexec/mobileactivationd", verbs: ["patch-mobileactivationd"])
+        // The TV declaration has its own 27.2 gate and preset selection; the
+        // implementation and reversible backup are shared with iPhone.
+        let activation = guestDevice.family == .appleTV
+            ? FirmwareGuestSystemPatchSet.tvLocalActivation : "system-mobileactivationd-boot-should_hactivate"
+        machO(activation, path: "usr/libexec/mobileactivationd", verbs: ["patch-mobileactivationd"])
 
         isolate(["system-watchdogd-exp-hv_vmm_cache"]) {
             if on("system-watchdogd-exp-hv_vmm_cache") {
@@ -2014,6 +2024,37 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
 
+        let tvSetupFocus = FirmwareGuestSystemPatchSet.tvSetupFocus
+        isolate([tvSetupFocus]) {
+            let executable = "Applications/Setup.app/Setup"
+            let library = FirmwareGuestSystemPatchSet.tvSetupFocusLibrary
+            let path = String(library.dropFirst())
+            if on(tvSetupFocus), guestDevice.family == .appleTV,
+               version == "27.2" || version.hasPrefix("27.2.") {
+                let payload = try VPhoneGuestBinaries.resolve((library as NSString).lastPathComponent)
+                try system.replaceFile(path, fromFileAt: payload, mode: 0o755, owner: Self.guestOwner)
+                try installLibraryAlias(system: system, alias: "tf", target: library)
+                try patchMachO(system: system, work: work, path: executable,
+                               preserveEntitlements: true, injectedDylibPath: "/tf")
+                try sealGuestBundle(system: system, bundle: "Applications/Setup.app", preserveEntitlements: true)
+                live.insert(tvSetupFocus)
+            } else {
+                if try revertMachO(system: system, work: work, path: executable, bundle: "Applications/Setup.app", preserveEntitlements: true) {
+                    print("  [+] \(tvSetupFocus): restored Setup from backup")
+                } else if priorGuest.contains(tvSetupFocus) {
+                    live.insert(tvSetupFocus)
+                    throw ValidationError("TV setup focus adapter has no Setup backup; cannot safely remove its library.")
+                }
+                if try system.exists("tf") {
+                    guard try system.readLink("tf") == library else {
+                        throw ValidationError("Another file uses /tf; leaving it intact.")
+                    }
+                    try system.removeItem("tf")
+                }
+                try system.removeItem(path)
+            }
+        }
+
         let tvSetupLookup = FirmwareGuestSystemPatchSet.tvSetupDisplayLookup
         let tvSetupBackground = "Applications/SetupBackground.app/SetupBackground"
         isolate([tvSetupLookup]) {
@@ -2173,6 +2214,7 @@ struct VPhoneCustomFirmwareInstaller {
         work: WorkDirectory,
         path: String,
         bundle: String? = nil,
+        preserveEntitlements: Bool = false,
     ) throws -> Bool {
         let backup = "\(path).bak"
         guard try system.exists(backup) else { return false }
@@ -2182,7 +2224,7 @@ struct VPhoneCustomFirmwareInstaller {
         try system.replaceFile(path, fromFileAt: work.file(name), mode: 0o755, owner: Self.guestOwner)
         try system.removeItem(backup)
         if let bundle {
-            try sealGuestBundle(system: system, bundle: bundle)
+            try sealGuestBundle(system: system, bundle: bundle, preserveEntitlements: preserveEntitlements)
         }
         return true
     }
