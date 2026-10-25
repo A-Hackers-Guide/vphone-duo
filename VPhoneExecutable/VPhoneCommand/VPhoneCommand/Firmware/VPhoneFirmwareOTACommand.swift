@@ -60,7 +60,9 @@ struct VPhoneFirmwareOTACommand: ParsableCommand {
             case .quiesce: try quiesce(bundle)
             case .prepare: try prepare(bundle)
             case .complete: try complete(bundle)
-            case .commit: try VPhoneOTAUpdate.commit(of: bundle)
+            case .commit:
+                try verifyRemovedSystemApps(bundle, source: sourceState(VPhoneOTAUpdate.read(of: bundle)))
+                try VPhoneOTAUpdate.commit(of: bundle)
             case .verify: try verifyCommitted(bundle)
             case .rollback:
                 if try VPhoneOTAUpdate.read(of: bundle).phase == .completed, !force {
@@ -161,8 +163,9 @@ struct VPhoneFirmwareOTACommand: ParsableCommand {
             protected.append(app)
         }
         let restore = try JSONSerialization.jsonObject(with: Data(contentsOf: bundle.url.appendingPathComponent("restore-info.json")))
+        let removed = try VPhoneOTAUpdate.removedSystemAppIDs(call(bundle, "apps.removed_system"))
         let state: [String: Any] = ["device": info, "profile": profile, "auto_lock": autoLock,
-                                   "apps": protected, "restore": restore]
+                                   "apps": protected, "restore": restore, "removed_system_apps": removed]
         var record = VPhoneOTAUpdate.Record(bundle: bundle, build: build, version: version,
                                            source: try JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]))
         record.operationID = operationID
@@ -256,11 +259,15 @@ struct VPhoneFirmwareOTACommand: ParsableCommand {
             record.phase = .installed
             try VPhoneOTAUpdate.write(record, of: bundle)
         }
-        let systemApps = try call(bundle, "ota.apps.apply", ["force": true], timeout: 180)
-        guard systemApps["pending"] as? Int == 0 else {
+        let source = try sourceState(record)
+        var appParams: [String: Any] = ["force": true]
+        if let removed = source["removed_system_apps"] as? [String] { appParams["removed_bundle_ids"] = removed }
+        let systemApps = try call(bundle, "ota.apps.apply", appParams, timeout: 180)
+        guard systemApps["pending"] as? Int == 0,
+              (systemApps["removed_pending"] as? [String])?.isEmpty == true else {
             throw ValidationError("Retained Apple app programs have not finished updating.")
         }
-        let source = try sourceState(record)
+        try verifyRemovedSystemApps(bundle, source: source)
         for app in source["apps"] as? [[String: Any]] ?? [] {
             guard let id = app["bundle_id"] as? String else { throw ValidationError("Invalid protected app record.") }
             try requireUnchanged(bundle, app: app, id: id, fields: ["bundle_path", "data_path", "group_containers", "version", "build"]) {
@@ -369,6 +376,7 @@ struct VPhoneFirmwareOTACommand: ParsableCommand {
         }
         _ = try requireTargetMigration(bundle, record)
         let state = try sourceState(record)
+        try verifyRemovedSystemApps(bundle, source: state)
         for app in state["apps"] as? [[String: Any]] ?? [] {
             guard let id = app["bundle_id"] as? String else { continue }
             try requireUnchanged(bundle, app: app, id: id, fields: ["bundle_path", "data_path", "group_containers"]) {
@@ -378,6 +386,16 @@ struct VPhoneFirmwareOTACommand: ParsableCommand {
                 throw ValidationError("Committed app \(id) could not reach the foreground; target data was retained.")
             }
         }
+    }
+
+    private func verifyRemovedSystemApps(_ bundle: VPhoneBundle, source: [String: Any]) throws {
+        let inventory = try call(bundle, "apps.removed_system")
+        // Legacy journals lack this baseline. Still reject any remaining
+        // placeholders backed by a removal record; never remove an installed
+        // app just because a historical backup exists.
+        let ids = try source["removed_system_apps"] as? [String]
+            ?? VPhoneOTAUpdate.removedSystemAppIDs(inventory)
+        try VPhoneOTAUpdate.requireRemovedSystemApps(ids, inventory: inventory)
     }
 
     /// Services DataMigrator needs that a trimmed source may have disabled.

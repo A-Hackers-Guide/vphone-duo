@@ -306,6 +306,12 @@
 > patch failure. This is host-driven payload installation; Apple's UpdateBrain
 > protocol and application migration are not implied. See
 > [the implementation and validation record](Restore/data_preserving_full_ota.md).
+
+> **OTA removed-app state (2026-10-25):** capture preserves the guest's removed
+> system-app IDs, and complete/commit/verify include LaunchServices placeholders
+> in their absence checks. Reconciliation retains the original removal backups
+> and independent app data. No instruction patch or preset changes; see the
+> [removed-app regression](Restore/data_preserving_full_ota.md#preserve-removed-system-apps-2026-10-25).
 > **2026-10-21 correction:** full updates also stage, validate and install
 > `payloadv2/links.txt`. The 24A446 iPad OTA omits 24,835 duplicate paths from
 > its numbered chunks. Missing J410 media resources made audiomxd trap in

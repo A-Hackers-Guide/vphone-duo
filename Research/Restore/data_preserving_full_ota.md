@@ -254,6 +254,66 @@ below before the app is assessed.
 
 ## Retained applications after a major userland change (2026-10-21)
 
+### Preserve removed system apps (2026-10-25)
+
+The production `wecom-01` and `wecom-02` guests retained all nine original
+`apps.remove_system` backups after the 24A446 OTA, but SpringBoard's IconState
+again contained eight of their identifiers. `apps.list` omitted them and
+`staged_system_apps` was empty. A native LaunchServices probe found
+`isPlaceholder=true`, `isInstalled=false` records at new UUID bundle paths,
+including News, which was not in the visible icon lists. The SMS placeholder
+Info.plist named `Executable` and `MinimumOSVersion=27.0`. The normal system
+uninstall API refused it. Installed-app absence was therefore a false
+acceptance signal, not proof that the removal policy survived migration.
+
+`apps.removed_system` now includes fresh LaunchServices `registered`,
+`installed`, `placeholder` and current `bundle_path` fields alongside each
+original backup. Capture stores the valid absent/placeholder IDs in
+`removed_system_apps`; an already reinstalled program is excluded even when
+an old backup remains. `ota.apps.apply` accepts that baseline as
+`removed_bundle_ids`, removes those registrations (including placeholders)
+and their validated UUID program containers without overwriting the old
+backups or touching independent user/group containers, then updates retained
+programs. It returns `removed_pending`; complete, commit and verify all check
+that the removal baseline is absent and its backups remain usable. There is
+no blanket icon-layout reset or SpringBoard restart.
+
+Legacy journals infer only absent apps and placeholders with valid removal
+backups. They never infer removal of a currently installed program from a
+historical backup alone. An older daemon that cannot report placeholder
+state fails verification instead of silently accepting the OTA. The source
+backup manifests, rather than a hardcoded default trim list, determine policy.
+
+This is an application-state reconciliation change, not a new binary patch
+or patch preset. Migration may seed placeholders before complete reconciles
+them; the no-placeholder gate is required before networking is committed.
+
+Production repair used the same native enumeration/unregistration bridge in a
+temporary signed helper, restricted to the nine IDs whose original manifests
+were present. Every target had to be a placeholder, not an installed program;
+the UUID container and its Info.plist identifier were checked before mutation.
+The new placeholder containers were renamed into
+`/private/var/db/vphoned/ota-placeholders-20261025/` after LS absence read-back,
+keeping recovery material instead of destroying it. Both machines returned
+nine absent registrations, zero failures, and no matching identifiers in
+SpringBoard's persisted icon lists. Neither SpringBoard nor WeCom was restarted:
+WeCom PIDs remained 69286/5397, and bundle/data/group paths and version/build
+matched the before samples. The original nine removal backups remain separate.
+Both machines passed a second invocation with zero changes and zero registered
+targets; all nine original backups remained restorable with their original
+removal dates. The temporary launchd jobs were then unloaded.
+
+Validation: complete Debug `VPhone` bundle build/admission passed; all ten
+`OTAUpdateTests` passed, including absent/placeholder/reinstalled distinctions,
+old-daemon rejection, corrupt-backup rejection and rollback/commit coverage.
+The maintenance script passed all 148 Swift policy checks and 13 APFS C parser
+checks with AddressSanitizer/UndefinedBehaviorSanitizer. The shared native
+header now explicitly marks legacy pointers `_Null_unspecified`, preserving
+their Swift import while satisfying nullability completeness under `-Werror`;
+no warning was disabled. No full OTA or cold reboot was performed
+on these business machines for this repair. The new bundle was built locally;
+the production repair did not publish or replace their bundle.
+
 The protected app's executable had an ad hoc CodeDirectory identifier different
 from its bundle ID, with no explicit container-required entitlement. The
 existing data container's metadata matched that signing identifier. A same-byte

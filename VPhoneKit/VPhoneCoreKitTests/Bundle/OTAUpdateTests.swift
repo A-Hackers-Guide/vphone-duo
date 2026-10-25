@@ -4,6 +4,36 @@ import Testing
 @testable import VPhoneCoreKit
 
 struct OTAUpdateTests {
+    @Test func `OTA removal baseline distinguishes placeholders from deliberately reinstalled apps`() throws {
+        func row(_ id: String, installed: Bool, placeholder: Bool) -> [String: Any] {
+            ["bundle_id": id, "installed": installed, "placeholder": placeholder,
+             "registered": installed || placeholder, "restorable": true]
+        }
+        let absent = row("com.apple.news", installed: false, placeholder: false)
+        let placeholder = row("com.apple.MobileSMS", installed: false, placeholder: true)
+        let reinstalled = row("com.apple.tv", installed: true, placeholder: false)
+        let inventory: [String: Any] = ["backups": [absent, placeholder, reinstalled]]
+        #expect(try VPhoneOTAUpdate.removedSystemAppIDs(inventory) == ["com.apple.MobileSMS", "com.apple.news"])
+        #expect(throws: VPhoneOTAUpdate.Failure.self) {
+            try VPhoneOTAUpdate.requireRemovedSystemApps(["com.apple.MobileSMS"], inventory: inventory)
+        }
+        try VPhoneOTAUpdate.requireRemovedSystemApps(["com.apple.news"], inventory: inventory)
+        #expect(throws: VPhoneOTAUpdate.Failure.self) {
+            try VPhoneOTAUpdate.requireRemovedSystemApps(["com.apple.Home"], inventory: inventory)
+        }
+        #expect(throws: VPhoneOTAUpdate.Failure.self) {
+            _ = try VPhoneOTAUpdate.removedSystemAppIDs(["backups": [["bundle_id": "com.apple.news", "restorable": true]]])
+        }
+        var corrupt = absent
+        corrupt["error"] = "Invalid manifest"
+        #expect(throws: VPhoneOTAUpdate.Failure.self) {
+            _ = try VPhoneOTAUpdate.removedSystemAppIDs(["backups": [corrupt]])
+        }
+        #expect(throws: VPhoneOTAUpdate.Failure.self) {
+            try VPhoneOTAUpdate.requireRemovedSystemApps(["com.apple.news"], inventory: ["backups": [corrupt]])
+        }
+    }
+
     private func fixture() throws -> (URL, VPhoneBundle) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

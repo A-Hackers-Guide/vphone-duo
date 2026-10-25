@@ -5,6 +5,42 @@ import Foundation
 /// changing ordinary snapshot semantics. The journal lives outside the machine
 /// folder so guest-side phases can record progress while the VM is running.
 public enum VPhoneOTAUpdate {
+    /// Backups are not themselves a removal policy: a user may have installed
+    /// the app again. Only absent apps/placeholders belong in a new baseline.
+    public static func removedSystemAppIDs(_ response: [String: Any]) throws -> [String] {
+        guard let rows = response["backups"] as? [[String: Any]] else {
+            throw Failure("Missing removed-system-app inventory.")
+        }
+        var ids = Set<String>()
+        for row in rows {
+            guard let id = row["bundle_id"] as? String, id.hasPrefix("com.apple."),
+                  let installed = row["installed"] as? Bool,
+                  row["registered"] is Bool, row["placeholder"] is Bool else {
+                throw Failure("The guest cannot report system-app placeholders; update vphoned before OTA.")
+            }
+            if installed { continue }
+            guard row["restorable"] as? Bool == true, row["error"] == nil else {
+                throw Failure("Invalid removal backup for \(id).")
+            }
+            ids.insert(id)
+        }
+        return ids.sorted()
+    }
+
+    public static func requireRemovedSystemApps(_ ids: [String], inventory: [String: Any]) throws {
+        guard let rows = inventory["backups"] as? [[String: Any]] else {
+            throw Failure("Missing removed-system-app verification.")
+        }
+        for id in ids {
+            guard let row = rows.first(where: { $0["bundle_id"] as? String == id }),
+                  row["registered"] as? Bool == false, row["installed"] as? Bool == false,
+                  row["placeholder"] as? Bool == false, row["restorable"] as? Bool == true,
+                  row["error"] == nil else {
+                throw Failure("Removed system app \(id) returned after OTA or lost its backup.")
+            }
+        }
+    }
+
     public enum Phase: String, Codable, Sendable {
         case captured, checkpointing, checkpointed, quiesced, preparing, prepared
         case installed, completed, committed, rollingBack, rolledBack
