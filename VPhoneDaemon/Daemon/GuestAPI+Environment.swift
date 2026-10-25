@@ -25,6 +25,11 @@ extension GuestAPI {
         "libvphoneaccelerometer.dylib",
         "libvphoneattitude.dylib",
     ]
+    /// Must match `VPhoneGuestEnvironment.selectedLibraries`: the VM's patch selection owns these.
+    static let environmentSelectedLibraries: Set = [
+        "libprefsfix.dylib", "libsigninfix.dylib",
+        "libvphonegyro.dylib", "libvphoneaccelerometer.dylib", "libvphoneattitude.dylib",
+    ]
     static let environmentStaging = "/var/root/Library/Caches/vphone-environment"
 
     static func executeEnvironment(_ method: String, _ params: [String: Any]) throws -> [String: Any]? {
@@ -60,8 +65,8 @@ extension GuestAPI {
             guard environmentLibraries.contains(name) else {
                 throw GuestAPIError.invalidRequest("\(name) is not part of the vphone environment")
             }
-            if ["libvphonegyro.dylib", "libvphoneaccelerometer.dylib", "libvphoneattitude.dylib"].contains(name), !FileManager.default.fileExists(atPath: "/usr/lib/" + name) {
-                throw GuestAPIError.invalidRequest("Enable the motion sensor patch with cfw install or cfw update-environment first")
+            if environmentSelectedLibraries.contains(name), !FileManager.default.fileExists(atPath: "/usr/lib/" + name) {
+                throw GuestAPIError.invalidRequest("\(name) is off in this VM's patches; enable it with cfw install or cfw update-environment first")
             }
             let staged = URL(fileURLWithPath: environmentStaging + "/" + name)
             guard let data = try? Data(contentsOf: staged, options: .mappedIfSafe) else {

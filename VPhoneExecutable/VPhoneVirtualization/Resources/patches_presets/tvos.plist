@@ -118,6 +118,8 @@
 			<string>preboot-cfw-devicetree_microphone_array</string>
 			<string>restoreramdisk-boot-apfs_sha3_hash</string>
 			<string>system-apps-cfw-attitude</string>
+			<string>system-apps-cfw-signin_sheets</string>
+			<string>system-preferences-cfw-followup_groups</string>
 			<string>system-bluetoothd-cfw-btvc_le_connection</string>
 			<string>system-backboardd-cfw-gyroscope</string>
 			<string>system-backboardd-cfw-accelerometer</string>
