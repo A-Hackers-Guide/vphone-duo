@@ -1,5 +1,18 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **Account prompt hooks are selectable (2026-10-25).**
+> `system-preferences-cfw-followup_groups` (`libprefsfix.dylib`, Settings'
+> CoreFollowUp groups) and `system-apps-cfw-signin_sheets`
+> (`libsigninfix.dylib`, in-app sign-in sheets) were installed with the guest
+> environment and could not be turned off. Both are now declarations, on in
+> `standard` and `experimental`, blocked in the TV and HomePod presets, which
+> already block the environment. `cfw install` and `cfw update-environment`
+> install or remove each library per the plan, a VM with no plan keeps both,
+> and the live environment sync no longer reinstalls one that was turned off.
+> SystemHook skips a missing library, so removal takes effect on the next
+> launch of Settings or the app. No binary or loader changes. Account daemons
+> stay running either way; update and account daemons are disabled only by
+> vphoned's service profile ([service trimming](Guest/service_trimming.md)).
 > **CSSC kernel compatibility experiment (2026-10-25).**
 > `kernel-boot-cssc_emulation` targets iOS 27 with cloudOS 26.4. It reuses the
 > kernel's undefined-instruction copyin, PAC-safe interrupt helpers and

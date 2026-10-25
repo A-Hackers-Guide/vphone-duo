@@ -252,6 +252,8 @@ public enum FirmwarePatchSetCatalog {
         "preboot-cfw-devicetree_microphone_array",
         RestoreRamDiskSealPatcher.patchIdentifier,
         "system-apps-cfw-attitude",
+        FirmwareGuestSystemPatchSet.signInSheets,
+        FirmwareGuestSystemPatchSet.followUpGroups,
         "system-backboardd-cfw-gyroscope",
         "system-backboardd-cfw-accelerometer",
         "system-campo-cfw-entitlements",

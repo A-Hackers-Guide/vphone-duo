@@ -1592,6 +1592,8 @@ struct VPhoneCustomFirmwareInstaller {
             try system.removeItem(glowPath)
         }
         for (identifier, library) in [
+            (FirmwareGuestSystemPatchSet.followUpGroups, "libprefsfix.dylib"),
+            (FirmwareGuestSystemPatchSet.signInSheets, "libsigninfix.dylib"),
             (FirmwareGuestSystemPatchSet.gyroscope, "libvphonegyro.dylib"),
             (FirmwareGuestSystemPatchSet.accelerometer, "libvphoneaccelerometer.dylib"),
             (FirmwareGuestSystemPatchSet.attitude, "libvphoneattitude.dylib"),

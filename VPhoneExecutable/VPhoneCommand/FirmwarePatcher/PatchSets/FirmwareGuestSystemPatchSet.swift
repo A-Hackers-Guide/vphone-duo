@@ -29,6 +29,8 @@ public enum FirmwareGuestSystemPatchSet {
     public static let gyroscope = "system-backboardd-cfw-gyroscope"
     public static let accelerometer = "system-backboardd-cfw-accelerometer"
     public static let attitude = "system-apps-cfw-attitude"
+    public static let followUpGroups = "system-preferences-cfw-followup_groups"
+    public static let signInSheets = "system-apps-cfw-signin_sheets"
     public static let arm64eX1DyldBootstrap = "system-dyld-boot-arm64e_x1_bootstrap"
     public static let arm64eX1CacheBootstrap = "dyld-boot-arm64e_x1_bootstrap"
     public static let arm64eX1LaunchdBootstrap = "system-launchd-boot-arm64e_x1_bootstrap"
@@ -437,6 +439,22 @@ public enum FirmwareGuestSystemPatchSet {
                 """,
                 target: .guestFile(path: "/Library/LaunchDaemons"),
                 bootEssential: true,
+            ),
+
+            // MARK: Account prompts
+
+            VPhonePatchDeclaration(
+                identifier: followUpGroups,
+                title: "Hide Settings follow-up groups",
+                summary: "Installs libprefsfix.dylib, loaded by SystemHook into Settings. Hides the CoreFollowUp groups: Apple Account suggestions, services included with purchase, AppleCare, More for Your iPhone and Screen Time updates. Removing the library shows them again on the next Settings launch.",
+                target: .guestFile(path: "/usr/lib/libprefsfix.dylib"),
+            ),
+
+            VPhonePatchDeclaration(
+                identifier: signInSheets,
+                title: "Suppress sign-in sheets",
+                summary: "Installs libsigninfix.dylib, loaded by SystemHook into every app. Drops Apple Account, iCloud, Game Center and Media & Purchases sign-in sheets; account daemons are untouched. Removing the library restores the sheets on the next app launch.",
+                target: .guestFile(path: "/usr/lib/libsigninfix.dylib"),
             ),
 
             // MARK: Motion
