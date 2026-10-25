@@ -465,16 +465,19 @@ struct DeviceTreeGuestDeviceTests {
         #expect(product["medusa-overlay-app-capability"] == nil)
     }
 
-    @Test func `an iPhone tree is patched as it always was`() throws {
+    @Test func `an iPhone17,3 shared tree is patched as it always was`() throws {
         let shared = try Self.patch(device: .iPhone17_3, role: .shared)
         let product = try #require(shared["device-tree/product"])
         #expect(Self.integer(product["artwork-device-subtype"]) == 2556)
         #expect(Self.integer(product["island-notch-location"]) == 144)
         #expect(Self.string(product["artwork-device-idiom"]) == "phone")
 
-        // A `.installed` role means nothing without an iPad.
-        let installed = try Self.patch(device: .iPhone17_3, role: .installed)
-        #expect(Self.integer(installed["device-tree/product"]?["island-notch-location"]) == 144)
+        // Its installed tree presents D47AP, as every other board is presented.
+        let d47 = Self.board(model: "iPhone17,3", unique: "D47AP", subtype: 2556, disablesStageManager: false, idiom: "phone", scale: 3)
+        let installed = try Self.patch(device: .iPhone17_3, role: .installed, board: d47)
+        #expect(Self.string(installed["device-tree"]?["model"]) == "iPhone17,3")
+        #expect(Self.string(installed["device-tree"]?["target-type"]) == "D47")
+        #expect(Self.integer(installed["device-tree/product"]?["artwork-device-subtype"]) == 2556)
     }
 
     @Test func `an iPhone XS Max keeps the iPhone17,3 presentation with its own artwork and no island`() throws {

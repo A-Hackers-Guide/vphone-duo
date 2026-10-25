@@ -560,7 +560,7 @@ struct VPhoneCustomFirmwareInstaller {
         ))
         // Selected patches this guest has nothing for, so the receipt does not
         // report them as missing forever: the board audio repair on an
-        // iPhone17,3, which has no board of its own to present, the iPhone
+        // iPhone XS Max, which is not presented as its own board, the iPhone
         // product repair on a non-iPhone, and the build spoof with no value set. A
         // guest whose board tree could not be recovered is not among them: its
         // repair is missing, and drift should keep saying so.
@@ -3352,9 +3352,9 @@ struct VPhoneCustomFirmwareInstaller {
     /// made from when it has none. A board-presenting VM patched before `fw
     /// patch` kept it needs it for the board audio repair, without which
     /// VirtualAudio looks for the iPhone's tunings and the guest has no sound.
-    /// An iPhone17,3 VM needs it for the product description repair, without
+    /// An iPhone XS Max VM needs it for the product description repair, without
     /// which MobileGestalt reads Siri, Camera Control, the Action Button and the
-    /// model name as absent; `fw patch` does not keep the iPhone17,3's, so it
+    /// model name as absent; `fw patch` does not keep its board tree, so it
     /// always comes from here.
     /// A HomePod mini also needs its donor's native product-id token for audio
     /// routing; its selected repair refuses to proceed without a valid donor.

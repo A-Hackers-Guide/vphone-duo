@@ -25,8 +25,8 @@ present that model.
 | `iPhone18,5` | iPhone 17e | V159AP | 1170x2532 @ 460 ppi | 390x844 |
 | `iPhone19,2` | iPhone 18 Pro | V63AP | 1206x2622 @ 460 ppi | 402x874 |
 
-The iPhone17,3 keeps the display and the fixed D47 identity it has always had;
-every other model gets its own panel and the identity from its own device tree.
+Every model, the iPhone17,3 included, gets its panel and the identity from its
+own device tree; the iPhone17,3's panel is the display it has always had.
 Each model has an IPSW of its own, so `--device` is not needed. `fw catalog`
 lists the iPhone 16/17 models' releases from 26.0 to 27.0.1 (the iPhone 17e
 from 26.3.1), and the iPhone 18 Pro's 27.0.1,

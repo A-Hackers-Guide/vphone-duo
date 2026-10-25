@@ -228,7 +228,7 @@ public enum FirmwareManifest {
     public static let guestDeviceTreePath = "Firmware/all_flash/DeviceTree.vphone600ap.guest.im4p"
 
     /// Points the installed `DeviceTree` of a guest that presents its board
-    /// (an iPad, or an iPhone other than the iPhone17,3) at a copy of the
+    /// (an iPad, or an iPhone other than the XS Max) at a copy of the
     /// vphone600 tree, so `fw patch` can give that copy the board's identity.
     ///
     /// The DFU device restores with `RestoreDeviceTree`, and `restored_external`
@@ -237,7 +237,7 @@ public enum FirmwareManifest {
     /// installed `DeviceTree` is a separate manifest entry that restore only
     /// personalizes and writes to Preboot, so giving it its own file lets the
     /// board identity ride through restore without a root-only rewrite on the
-    /// host. An iPhone17,3 identity is returned unchanged.
+    /// host. An XS Max identity is returned unchanged.
     static func separateGuestDeviceTree(
         for device: VPhoneGuestDevice,
         identity: PlistDict,
