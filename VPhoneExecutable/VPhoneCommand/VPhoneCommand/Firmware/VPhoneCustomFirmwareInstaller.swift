@@ -1152,7 +1152,23 @@ struct VPhoneCustomFirmwareInstaller {
         throw ValidationError("No prepared iPhone restore tree was found in \(path). Run fw prepare, then install CFW again.")
     }
 
+    /// The free space a run needs before it touches the disk. A full install
+    /// unpacks cryptexes and the GPU bundle from a prepared restore tree into
+    /// an APFS clone of Disk.img, which takes tens of GiB. An environment or
+    /// kernel update writes only this bundle's guest files or one kernelcache
+    /// into that clone, so asking it for the same 50 GiB refused the update on
+    /// any Mac with a few VMs on it, while the update itself needed a small
+    /// fraction of that. 10 GiB still stops it on a volume that is close to
+    /// full.
+    static func requiredFreeSpaceGiB(for mode: Mode) -> Int64 {
+        switch mode {
+        case .full: 50
+        case .environmentOnly, .kernelUpdate: 10
+        }
+    }
+
     private func requireFreeSpace(at paths: [String]) throws {
+        let requiredGiB = Self.requiredFreeSpaceGiB(for: mode)
         var seen = Set<dev_t>()
         for path in paths {
             var metadata = stat()
@@ -1169,8 +1185,8 @@ struct VPhoneCustomFirmwareInstaller {
                     fputs("warning: Volume at \(path) reported 0 available space via resource keys, using statfs fallback: \(capacity / (1024 * 1024 * 1024)) GiB\n", stderr)
                 }
             }
-            guard capacity > 50 * 1024 * 1024 * 1024 else {
-                throw ValidationError("Less than 50 GiB of disk space is available on the volume holding \(path). Free up space, then install CFW again.")
+            guard capacity > requiredGiB * 1024 * 1024 * 1024 else {
+                throw ValidationError("Less than \(requiredGiB) GiB of disk space is available on the volume holding \(path). Free up space, then run the \(mode.summary) again.")
             }
         }
     }
