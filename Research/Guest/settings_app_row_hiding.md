@@ -235,23 +235,13 @@ re-sign. RE artifacts left on disk (until reboot): `/private/tmp/setupres/Prefer
 `…/prefs_text.asm` (full `__TEXT.__text` disass with string markup),
 `…/prefs_full.txt` (ObjC class dump).
 
-### The FollowUp-group hook (`libprefsfix`) — built, shipped once, then reverted
+### The FollowUp-group hook (`libprefsfix`)
 
 Covers only the CoreFollowUp suggestion groups (empty on this guest), **not** any
-row above. It was fully wired and a bundle built, but its load could not be
-cleanly verified live (invisible effect + pid-reuse defeating log tracing), and
-it does not serve the row-hiding goal. **Uncommitted WIP in the working tree**
-(keep or revert — decision pending):
-
-- new `VPhoneGuestComponents/PrefsFix/libprefsfix.m`
-- `VPhoneGuestComponents/Makefile` (PREFSFIX target)
-- `VPhoneGuestComponents/SystemHook/SystemHook-vphone.c` (`vpIsPreferences` + dlopen)
-- `VPhoneExecutable/VPhoneVirtualization/Build/StageBundle.sh`, `ValidateBundle.sh`
-- `VPhoneKit/VPhoneCoreKit/VirtualMachine/VPhoneGuestEnvironment.swift`,
-  `VPhoneDaemon/Daemon/GuestAPI+Environment.swift` (both lib lists)
-
-The experimental bundle `2.6.0-local.0af83bc1` is still in the Launchpad store
-(non-default, unbound).
+row above. It was later kept: SystemHook loads it into Settings
+(`vpIsPreferences`), and since 2026-10-25 it is the selectable patch
+`system-preferences-cfw-followup_groups`, on in `standard`. The entry below
+records the state of the earlier revert.
 
 ### panetest state (clean)
 

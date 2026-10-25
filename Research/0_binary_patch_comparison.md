@@ -1,5 +1,19 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **Account prompt hooks are selectable (2026-10-25).**
+> `system-preferences-cfw-followup_groups` (`libprefsfix.dylib`, Settings'
+> CoreFollowUp groups) and `system-apps-cfw-signin_sheets`
+> (`libsigninfix.dylib`, in-app sign-in sheets) were installed with the guest
+> environment and could not be turned off. Both are now declarations, on in
+> `standard` and `experimental`, blocked in the TV and HomePod presets, which
+> already block the environment. `cfw install` and `cfw update-environment`
+> install or remove each library per the plan, a VM with no plan keeps both,
+> and the live environment sync no longer reinstalls one that was turned off.
+> SystemHook skips a missing library, so removal takes effect on the next
+> launch of Settings or the app. No binary or loader changes. Account daemons
+> stay running either way; update and account daemons are disabled only by
+> vphoned's service profile ([service trimming](Guest/service_trimming.md)).
+
 > **HomePod local app installation (2026-10-23).**
 > `system-installd-exp-homepod_adhoc` is selected only by `homepod-mini` on
 > HomePod 27. It loads a dedicated TVOS arm64e build of the existing MIS
