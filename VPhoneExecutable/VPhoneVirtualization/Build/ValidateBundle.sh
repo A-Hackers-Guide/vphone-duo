@@ -42,13 +42,14 @@ for name in vphone-vm vphone-cli vphone-escalator libswiftCompatibilitySpan.vpho
     require_signed_macho "$macos/$name"
 done
 require_signed_macho "$frameworks/VPhonePatchKit.framework/Versions/A/VPhonePatchKit"
-# The terminal reads these through Bundle.module, which searches beside the
-# executable and traps when it finds nothing. A missing resource bundle is
-# therefore not a degraded terminal but a crash on opening one, and it carries
-# no Mach-O, so no other check here would notice it had gone.
+# The terminal reads these through Bundle.module, which searches
+# VPhone.bundle's Contents/Resources and root, never Contents/MacOS, and traps
+# when it finds nothing. A missing or misplaced resource bundle is therefore
+# not a degraded terminal but a crash on opening one, and it carries no
+# Mach-O, so no other check here would notice it had gone.
 for name in Ghostty terminfo; do
-    [[ -d "$macos/GhosttyKit_GhosttyTerminal.bundle/Contents/Resources/$name" ]] || {
-        print -u2 "The Ghostty resource bundle beside vphone-vm has no $name directory"
+    [[ -d "$resources/GhosttyKit_GhosttyTerminal.bundle/Contents/Resources/$name" ]] || {
+        print -u2 "The Ghostty resource bundle in Contents/Resources has no $name directory"
         exit 1
     }
 done

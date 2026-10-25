@@ -66,10 +66,12 @@ fi
 /bin/cp "$TARGET_BUILD_DIR/vphone-vm" "$macos/vphone-vm"
 # The terminal window's resources. libghostty is a static library, so nothing
 # is embedded for it, but GhosttyTerminal reads its Ghostty directory and its
-# compiled terminfo through Bundle.module, which looks beside the executable.
-# Without this the window traps the moment a session is opened.
+# compiled terminfo through Bundle.module. That searches Bundle.main's
+# resources and then its root, and for vphone-vm Bundle.main is VPhone.bundle,
+# not Contents/MacOS, so a copy beside the executable is never found. Without
+# this the window traps the moment a session is opened.
 /bin/cp -R "$TARGET_BUILD_DIR/GhosttyKit_GhosttyTerminal.bundle" \
-    "$macos/GhosttyKit_GhosttyTerminal.bundle"
+    "$resources/GhosttyKit_GhosttyTerminal.bundle"
 /bin/cp "$command_products/vphone-cli" "$macos/vphone-cli"
 /bin/cp "$amfi_products/vphone-escalator" "$macos/vphone-escalator"
 /bin/cp "$daemon_products/vphoned" "$guest/vphoned"
@@ -193,10 +195,6 @@ compatibility_library="$(/usr/bin/xcrun swift-stdlib-tool --print \
 /bin/rm -f "$frameworks/libswiftCompatibilitySpan.dylib"
 
 /usr/bin/codesign --force --sign - "$frameworks/VPhonePatchKit.framework"
-# A nested bundle is a subcomponent of the outer seal whether or not it holds
-# any code, so this one is signed too; without it the bundle cannot be sealed
-# at all.
-/usr/bin/codesign --force --sign - "$macos/GhosttyKit_GhosttyTerminal.bundle"
 /usr/bin/codesign --force --sign - "$macos/vphone-cli"
 /usr/bin/codesign --force --sign - --entitlements "$root/VPhoneDaemon/Configuration/VPhoneDaemon.entitlements" "$guest/vphoned"
 /usr/bin/codesign --force --sign - --entitlements "$root/VPhoneDaemon/Configuration/VPhoneDaemon.entitlements" "$guest/vphoned-tvos"
