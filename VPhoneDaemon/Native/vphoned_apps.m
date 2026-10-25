@@ -35,7 +35,57 @@
                                                 saveObserver:(id)observer
                                            registrationError:(NSError **)error;
 - (NSURL *)bundleURL;
+- (NSArray *)allApplications;
+- (NSString *)applicationIdentifier;
+- (BOOL)isPlaceholder;
+- (BOOL)isInstalled;
+- (BOOL)unregisterApplication:(NSURL *)url;
 @end
+
+// allInstalledApplications deliberately excludes OTA placeholders. Enumerate
+// allApplications for removal and read-back; a cached proxy for an identifier
+// can otherwise outlive its registration.
+static id vp_apps_find(NSString *identifier) {
+    id workspace = [NSClassFromString(@"LSApplicationWorkspace") defaultWorkspace];
+    if (![workspace respondsToSelector:@selector(allApplications)]) {
+        [NSException raise:@"VPhoneLaunchServices" format:@"allApplications is unavailable"];
+    }
+    NSArray *applications = [workspace allApplications];
+    if (!applications) [NSException raise:@"VPhoneLaunchServices" format:@"Application enumeration failed"];
+    for (id proxy in applications) {
+        if ([[proxy applicationIdentifier] isEqualToString:identifier]) return proxy;
+    }
+    return nil;
+}
+
+char *vp_ls_system_app_state(const char *bundle_id) {
+    @autoreleasepool { @try {
+        id proxy = vp_apps_find(@(bundle_id));
+        NSDictionary *state = proxy
+            ? @{@"bundle_id": @(bundle_id), @"registered": @YES,
+                @"bundle_path": [[proxy bundleURL] path] ?: @"",
+                @"placeholder": @([proxy isPlaceholder]), @"installed": @([proxy isInstalled])}
+            : @{@"bundle_id": @(bundle_id), @"registered": @NO, @"placeholder": @NO, @"installed": @NO};
+        NSData *data = [NSJSONSerialization dataWithJSONObject:state options:0 error:nil];
+        return data ? strndup(data.bytes, data.length) : NULL;
+    } @catch (NSException *exception) { return NULL; } }
+}
+
+// Return an error string or NULL. The caller validates a UUID bundle-container
+// path and polls vp_ls_system_app_state before touching its filesystem.
+char *vp_ls_unregister_system_app(const char *bundle_id, const char *app_path) {
+    @autoreleasepool { @try {
+        id proxy = vp_apps_find(@(bundle_id));
+        if (!proxy) return NULL;
+        NSURL *url = [proxy bundleURL];
+        if (![[url.path stringByStandardizingPath] isEqualToString:[@(app_path) stringByStandardizingPath]])
+            return strdup("LaunchServices app path changed before unregistration");
+        id workspace = [NSClassFromString(@"LSApplicationWorkspace") defaultWorkspace];
+        if (![workspace respondsToSelector:@selector(unregisterApplication:)] || ![workspace unregisterApplication:url])
+            return strdup("LaunchServices refused system app unregistration");
+        return NULL;
+    } @catch (NSException *exception) { return strdup(exception.reason.UTF8String); } }
+}
 
 // MARK: - Read Back
 

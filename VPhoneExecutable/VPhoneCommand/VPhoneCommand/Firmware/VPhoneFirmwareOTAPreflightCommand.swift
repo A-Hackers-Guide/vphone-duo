@@ -36,8 +36,16 @@ struct VPhoneFirmwareOTAPreflightCommand: ParsableCommand {
         let managedDisabled = (profile["disabled"] as? [String] ?? []).sorted()
         let externallyDisabled = VPhoneFirmwareOTACommand.externallyDisabledDependencies(profile: profile, disabled: disabled)
         let migrationDone = setup["data_migration_done"] as? Bool
+        var removed: [String] = []
+        var removalError: String?
+        do {
+            removed = try VPhoneOTAUpdate.removedSystemAppIDs(call("apps.removed_system"))
+        } catch {
+            removalError = error.localizedDescription
+        }
         // The same gate fw ota capture applies, so a ready report is accepted there.
         let ready = managedDisabled.isEmpty && externallyDisabled.isEmpty
+            && removalError == nil
             && VPhoneFirmwareOTACommand.sourceFinishedMigration(setup: setup, migration: migration)
         let report: [String: Any] = [
             "machine": bundle.name,
@@ -45,6 +53,8 @@ struct VPhoneFirmwareOTAPreflightCommand: ParsableCommand {
             "service_profile_record": record,
             "profile_owned_disabled": managedDisabled,
             "externally_disabled_dependencies": externallyDisabled,
+            "removed_system_apps": removed,
+            "removed_system_apps_error": removalError.map { $0 as Any } ?? NSNull(),
             "data_migration_done": migrationDone.map { $0 as Any } ?? NSNull(),
             "last_migration_result": lastResult.map { $0 as Any } ?? NSNull(),
             "notes": [
