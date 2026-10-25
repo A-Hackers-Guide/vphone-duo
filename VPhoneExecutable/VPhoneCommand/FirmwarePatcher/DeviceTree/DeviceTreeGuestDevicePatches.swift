@@ -10,7 +10,7 @@
 //
 // The answers come from the board's own device tree, `DeviceTree.<board>.im4p`,
 // which the IPSW carries and the restore tree keeps. Every guest device but the
-// iPhone17,3 gets them (`VPhoneGuestDevice.presentsBoard`); the patch IDs keep
+// iPhone XS Max gets them (`VPhoneGuestDevice.presentsBoard`); the patch IDs keep
 // the `ipad_` names they were introduced with, because presets list them.
 //
 //   - the `/product` properties in `copiedProductProperties` take the board's

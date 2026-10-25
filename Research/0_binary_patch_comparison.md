@@ -1,5 +1,26 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **The iPhone17,3 presents its board (2026-10-25).**
+> `VPhoneGuestDevice.presentsBoard` no longer excludes the iPhone17,3; only the
+> XS Max keeps the shared tree. An iPhone17,3 guest now gets the separate
+> installed tree and the `devicetree-cfw-ipad_*` presentation from
+> `DeviceTree.d47ap.im4p`, as every other iPhone does, and skips
+> `preboot-exp-devicetree_identity`. No patch is new. `ipad_identity` is on in
+> `standard`, so a `standard` iPhone17,3 guest now reports `iPhone17,3` instead
+> of `iPhone99,11`. The catalog's release list keeps its iPhone17,3 check
+> explicit (`VPhoneFirmwareCatalog.pairings`), so its pairings do not change. Checked on
+> a new `iPhone17,3 27.0.1 (24A446)` guest, cloudOS 26.4 (23E5207q), plain
+> `standard`: the restore tree split off `DeviceTree.vphone600ap.guest.im4p`;
+> the receipt records the `ipad_*` patches and
+> `preboot-cfw-devicetree_board_audio`; `device.info` reports `iPhone17,3` at
+> 430x932 @3x; Settings > About shows Model Name iPhone 16 and an Action
+> Button row; the Camera app shows the .5/1x/2 lenses and the test pattern;
+> with Location Services on, `location.set` reads back a fresh simulated fix
+> and `bluetoothd`/`locationd` keep their boot PIDs (no #438). Crash reports
+> held only the documented restore-reboot panic and `duetexpertd` datavault
+> crashes, plus one `NANDTaskScheduler` PAC kill in its Core Data failure
+> logging (no ANS NAND on a VM), not on a device tree path.
+
 > **Account prompt hooks are selectable (2026-10-25).**
 > `system-preferences-cfw-followup_groups` (`libprefsfix.dylib`, Settings'
 > CoreFollowUp groups) and `system-apps-cfw-signin_sheets`
@@ -13,6 +34,7 @@
 > launch of Settings or the app. No binary or loader changes. Account daemons
 > stay running either way; update and account daemons are disabled only by
 > vphoned's service profile ([service trimming](Guest/service_trimming.md)).
+
 > **CSSC kernel compatibility experiment (2026-10-25).**
 > `kernel-boot-cssc_emulation` targets iOS 27 with cloudOS 26.4. It reuses the
 > kernel's undefined-instruction copyin, PAC-safe interrupt helpers and

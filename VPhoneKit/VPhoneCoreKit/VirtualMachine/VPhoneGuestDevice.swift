@@ -73,10 +73,10 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
 
     /// Whether the guest boots a device tree of its own that presents this
     /// board, built by `fw patch` from the board's tree in the IPSW. Every
-    /// device but the iPhone17,3 and the iPhone XS Max does; those keep the
-    /// fixed D47 identity `cfw install` writes into the restored tree.
+    /// device but the iPhone XS Max does; it keeps the fixed D47 identity
+    /// `cfw install` writes into the restored tree.
     public var presentsBoard: Bool {
-        productType != Self.iPhone17_3.productType && notchedArtworkSubtype == nil
+        notchedArtworkSubtype == nil
     }
 
     /// The artwork subtype of a guest presented as the iPhone17,3 whose own
