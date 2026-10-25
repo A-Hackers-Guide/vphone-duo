@@ -23,10 +23,10 @@ extension GuestAPI {
     static func executeSystemApps(_ method: String, _ params: [String: Any]) throws -> [String: Any]? {
         switch method {
         case "ota.apps.status":
-            return try updateOTASystemApps(apply: false)
+            return try updateOTASystemApps(apply: false, removedIDs: systemAppIDs(params, key: "removed_bundle_ids"))
         case "ota.apps.apply":
             try requireForce(params, "update retained Apple app programs from the installed OTA")
-            return try updateOTASystemApps(apply: true)
+            return try updateOTASystemApps(apply: true, removedIDs: systemAppIDs(params, key: "removed_bundle_ids"))
         case "apps.remove_system":
             guard let ids = try systemAppIDs(params) else {
                 throw GuestAPIError.invalidRequest("bundle_ids must list the apps to remove")
@@ -42,7 +42,7 @@ extension GuestAPI {
             try requireForce(params, "restore removed system apps")
             return try restoreSystemApps(ids, respring: bool(params, "respring", default: true))
         case "apps.removed_system":
-            return removedSystemApps()
+            return try removedSystemApps()
         default:
             return nil
         }
@@ -53,7 +53,7 @@ extension GuestAPI {
     /// Deliberately separate from apps.install/register: this owns no ordinary
     /// app container. It accepts no caller-selected path or identifier and only
     /// replaces matching Apple apps already registered in UUID containers.
-    private static func updateOTASystemApps(apply: Bool) throws -> [String: Any] {
+    private static func updateOTASystemApps(apply: Bool, removedIDs: [String]?) throws -> [String: Any] {
         otaAppsLock.lock()
         defer { otaAppsLock.unlock() }
         let fm = FileManager.default
@@ -64,6 +64,23 @@ extension GuestAPI {
               metadata["Build"] == systemBuildVersion, metadata["Build"] == build else {
             throw GuestAPIError.operationFailed("No matching installed OTA system-app payload.")
         }
+        // An old journal has no removal baseline. Infer only absent apps and
+        // placeholders with a valid backup, never a deliberately reinstalled app.
+        let backups = try removedSystemApps()["backups"] as? [[String: Any]] ?? []
+        let inferred = backups.filter { $0["installed"] as? Bool == false }.compactMap { $0["bundle_id"] as? String }
+        let removed = removedIDs ?? inferred
+        for id in removed {
+            try GuestSystemAppPolicy.validateBundleID(id)
+            guard backups.contains(where: { $0["bundle_id"] as? String == id && $0["restorable"] as? Bool == true && $0["error"] == nil }) else {
+                throw GuestAPIError.operationFailed("No valid removal backup for \(id); refusing OTA reconciliation.")
+            }
+        }
+        if apply, !removed.isEmpty {
+            // Do not overwrite the original complete program backup with a
+            // newly seeded placeholder. No respring: LS notifies SpringBoard.
+            _ = try removeSystemApps(removed, backup: false, respring: false)
+        }
+        let removedPending = try removed.filter { try systemAppState($0)["registered"] as? Bool == true }
         let apps = try listApps()["apps"] as? [[String: Any]] ?? []
         let installed = Dictionary(apps.compactMap { app in (app["bundle_id"] as? String).map { ($0, app) } },
                                    uniquingKeysWith: { first, _ in first })
@@ -81,6 +98,7 @@ extension GuestAPI {
                 throw GuestAPIError.operationFailed("Invalid staged Apple app: \(name)")
             }
             try GuestSystemAppPolicy.validateBundleID(id)
+            if removed.contains(id) { continue }
             guard let bundlePath = installed[id]?["bundle_path"] as? String,
                   let location = try? GuestSystemAppLocation(bundlePath: bundlePath) else { continue }
             guard location.appDirectoryName == name, try bundleContainerExists(location) else {
@@ -168,14 +186,15 @@ extension GuestAPI {
             }
             rows.append(row)
         }
-        return ["build": build, "apps": rows, "pending": rows.filter { $0["current"] as? Bool != true }.count]
+        return ["build": build, "apps": rows, "pending": rows.filter { $0["current"] as? Bool != true }.count,
+                "removed_bundle_ids": removed, "removed_pending": removedPending]
     }
 
     /// `bundle_ids` in request order without repeats, or nil when absent.
-    private static func systemAppIDs(_ params: [String: Any]) throws -> [String]? {
-        guard let value = params["bundle_ids"] else { return nil }
-        guard let ids = value as? [String], !ids.isEmpty, ids.allSatisfy({ !$0.isEmpty }) else {
-            throw GuestAPIError.invalidRequest("bundle_ids must be a non-empty list of bundle identifiers")
+    private static func systemAppIDs(_ params: [String: Any], key: String = "bundle_ids") throws -> [String]? {
+        guard let value = params[key] else { return nil }
+        guard let ids = value as? [String], (key == "removed_bundle_ids" || !ids.isEmpty), ids.allSatisfy({ !$0.isEmpty }) else {
+            throw GuestAPIError.invalidRequest("\(key) must list bundle identifiers")
         }
         var seen = Set<String>()
         return ids.filter { seen.insert($0).inserted }
@@ -208,7 +227,8 @@ extension GuestAPI {
         var result: [String: Any] = ["bundle_id": id, "removed": false]
         do {
             try GuestSystemAppPolicy.validateBundleID(id)
-            guard let record = try installedApp(id) else {
+            let record = try systemAppState(id)
+            guard record["registered"] as? Bool == true else {
                 return try finishInterruptedRemoval(id, result: result)
             }
             let bundlePath = record["bundle_path"] as? String ?? ""
@@ -220,7 +240,7 @@ extension GuestAPI {
             guard try bundleContainerExists(location) else {
                 // LaunchServices lists a bundle whose container is gone:
                 // dropping the record is all that is left to do.
-                let unregistered = try unregisterSystemApp(bundlePath)
+                let unregistered = try unregisterSystemApp(bundlePath, id: id)
                 result["unregistered"] = unregistered["unregistered"] as? Bool ?? false
                 result["status"] = "unregistered_stale"
                 result["removed"] = true
@@ -236,7 +256,7 @@ extension GuestAPI {
                 result["backup_method"] = made.method
             }
             do {
-                let unregistered = try unregisterSystemApp(bundlePath)
+                let unregistered = try unregisterSystemApp(bundlePath, id: id)
                 result["unregistered"] = unregistered["unregistered"] as? Bool ?? false
                 if let attempts = unregistered["attempts"] as? Int, attempts > 1 {
                     result["unregister_attempts"] = attempts
@@ -531,7 +551,7 @@ extension GuestAPI {
 
     /// The backups in the backup directory, then those an older vphoned left
     /// in the legacy directory, each marked `legacy`.
-    private static func removedSystemApps() -> [String: Any] {
+    private static func removedSystemApps() throws -> [String: Any] {
         var backups: [[String: Any]] = []
         for directory in GuestSystemAppPolicy.backupDirectories {
             let ids = Set(directoryEntries(directory).compactMap(GuestSystemAppPolicy.bundleID(forBackupEntry:))).sorted()
@@ -542,6 +562,10 @@ extension GuestAPI {
                     "backup": pathExists(backupPath) ? backupPath : NSNull(),
                     "legacy": GuestSystemAppPolicy.isLegacy(directory),
                 ]
+                let current = try systemAppState(id)
+                for key in ["registered", "installed", "placeholder", "bundle_path"] {
+                    entry[key] = current[key]
+                }
                 do {
                     let manifest = try readManifest(id, in: directory)
                     let location = try manifest.location()
@@ -584,22 +608,26 @@ extension GuestAPI {
 
     /// Unregisters the app at `path` and waits for LaunchServices to drop its
     /// record, unregistering once more if it does not
-    /// (`GuestAppUnregistration`). IcliKit's `unregisterApp` looks at the
-    /// record straight away, and its "still lists the app" is not the last
-    /// word. Throws when the app is still listed after the last attempt.
-    private static func unregisterSystemApp(_ path: String) throws -> [String: Any] {
+    /// (`GuestAppUnregistration`). Include placeholders: ordinary installed-app
+    /// enumeration cannot prove these records have gone. Throws when the app
+    /// is still listed after the last attempt.
+    private static func unregisterSystemApp(_ path: String, id: String) throws -> [String: Any] {
         var attempt = 1
         while true {
             var result: [String: Any] = [:]
             var failure: Error?
             do {
-                result = try unregisterApp(path, force: true)
+                if let error = vp_ls_unregister_system_app(id, path) {
+                    defer { free(error) }
+                    throw GuestAPIError.operationFailed(String(cString: error))
+                }
+                result = ["unregistered": true, "path": path]
             } catch {
                 failure = error
             }
             let start = Date()
             polling: while true {
-                let registered = try appRegistration(path)["registered"] as? Bool == true
+                let registered = try systemAppState(id)["registered"] as? Bool == true
                 switch GuestAppUnregistration.next(registered: registered, attempt: attempt, waited: Date().timeIntervalSince(start)) {
                 case .done:
                     if failure != nil || attempt > 1 {
@@ -623,6 +651,17 @@ extension GuestAPI {
                 }
             }
         }
+    }
+
+    private static func systemAppState(_ id: String) throws -> [String: Any] {
+        guard let raw = vp_ls_system_app_state(id) else {
+            throw GuestAPIError.operationFailed("Could not enumerate LaunchServices state for \(id)")
+        }
+        defer { free(raw) }
+        guard let state = try JSONSerialization.jsonObject(with: Data(String(cString: raw).utf8)) as? [String: Any] else {
+            throw GuestAPIError.operationFailed("Invalid LaunchServices state for \(id)")
+        }
+        return state
     }
 
     /// The live LaunchServices record for `id`, never a cached one.
