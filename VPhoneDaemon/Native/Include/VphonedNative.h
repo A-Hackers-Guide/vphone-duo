@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/types.h>
 #ifdef __OBJC__
 #import <Foundation/Foundation.h>
 #endif
@@ -14,10 +15,44 @@
 char * _Null_unspecified vp_sign_app_for_install(const char * _Null_unspecified appPath, const char * _Null_unspecified certificatePath);
 void vp_native_bootstrap_cached_binary(void);
 void vp_native_confirm_cached_binary(void);
-/// 0 = launchd proxy, 1 = --io worker, -1 = invalid arguments.
+/// 0 = launchd proxy, 1 = --io worker, 2 = --session, -1 = invalid arguments.
 int vp_native_process_mode(void);
 int vp_native_run_proxy(void);
 int vp_native_watch_proxy(void);
+
+// MARK: - Scripting Sessions
+
+/// Run the `--session` process this one was started as, and return its exit
+/// status. A session evaluates JavaScript with vphoned's own identity, in its
+/// own process so neither a crashing script nor a wedged one can take the API
+/// down with it. The worker never calls this; it spawns a session instead.
+int vp_native_run_session(void);
+
+/// Whether this guest has JavaScriptCore, which watchOS does not ship.
+bool vp_js_available(void);
+
+/// Let a session's scripts call the guest API. `request` is a JSON
+/// `{method, params}`; the handler returns a malloc-owned JSON reply, which
+/// the session frees. Set before vp_native_run_session.
+void vp_js_set_api_handler(char * _Nullable (* _Nullable handler)(const char * _Nonnull request));
+
+/// Start a session process on a pseudo-terminal, as a session leader with the
+/// terminal as its controlling one, so job control and ^C work. `program` is
+/// NULL for the built-in REPL or an absolute path to run instead. Returns the
+/// master descriptor and sets `*pid`, or -1 with errno set.
+int vp_session_open(const char * _Nullable program, int columns, int rows, pid_t * _Nonnull pid);
+
+/// Tell a session's terminal its new size and signal the foreground group.
+void vp_session_resize(int master, int columns, int rows);
+
+/// Close a session: hang the terminal up, SIGKILL what is left after `grace`
+/// seconds, and reap it. Returns the wait status, or -1.
+int vp_session_close(int master, pid_t pid, double grace);
+
+/// Evaluate `source` in a one-shot session process, which ends with it.
+/// Returns the malloc-owned JSON object the session printed, or NULL with
+/// `*status` holding the wait status; `timeout` seconds kills it first.
+char * _Nullable vp_session_evaluate(const char * _Nonnull source, double timeout, int * _Nonnull status);
 void vp_vcam_start(void);
 /// Publish the HomePod MiniDisplay HID device when firmware has its geometry.
 /// The device and its callback queue live for the worker process lifetime.

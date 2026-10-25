@@ -4,7 +4,9 @@ A fresh guest has vphoned and the system changes the project ships, and
 nothing else: no package manager, no sshd, no shell tools. Everything in this
 file is about adding that environment (the "bootstrap") and then finding your
 way around it. Until it is installed, work only through `guest send` and
-`guest rpc`.
+`guest rpc` — including `script.eval`, which runs JavaScript with vphoned's
+identity and needs nothing installed at all (see
+[rpc-methods](rpc-methods.md)).
 
 ## Contents
 

@@ -27,6 +27,7 @@ invalid-request error, read the source named there instead of guessing keys.
 - Processes, logs, services
 - System and preferences
 - Bootstrap
+- Running a script in the guest
 - Raw HTTP and WebSocket
 
 ## Conventions
@@ -202,6 +203,33 @@ are the usual way to hit the reply size problem.
 `bootstrap.install {layout, package_path?}`, `bootstrap.status`,
 `bootstrap.inspect`, `bootstrap.uninstall {roots, force, reboot?}`,
 `bootstrap.firmware`. Behavior and the install flow: [guest-layout](guest-layout.md).
+
+## Running a script in the guest
+
+`script.eval {source, timeout?}` evaluates JavaScript with vphoned's own
+identity and answers `{ok, result, output, crashed}`. It is the way to reach
+something no method covers, and on an Apple TV guest it is the only
+debugging environment there is: no shell, no package manager, no debugserver.
+`script.info` reports whether this guest has it (capability `script_js`;
+watchOS does not ship JavaScriptCore).
+
+The script runs in a session process of its own, so a crash or a runaway loop
+costs the session and nothing else; `timeout` defaults to 30 seconds. Inside
+it, `api('method', {...})` calls any method in this file, `ObjC.use('NSFoo')`
+and `ObjC.classes.NSFoo` call ObjC methods by name — an underscore stands for
+a colon, `setValue_forKey_(v, k)` — and `fs`, `proc`, `console` and `print`
+cover files, one program, and output. A returned collection stays an object;
+`$value` converts it to plain JSON.
+
+```sh
+guest rpc script.eval '{"source":"ObjC.use(\"NSProcessInfo\").processInfo().operatingSystemVersionString()"}'
+```
+
+Prefer a real method when one exists: it is checked, documented and stable.
+Reach for a script when nothing covers what is needed, then say so, because a
+missing method is usually worth adding. The interactive form is the
+`/v1/shell` WebSocket, which needs `--api-listen` — see
+`Research/vphoned_http_api.md` ("Scripting sessions").
 
 ## Raw HTTP and WebSocket
 

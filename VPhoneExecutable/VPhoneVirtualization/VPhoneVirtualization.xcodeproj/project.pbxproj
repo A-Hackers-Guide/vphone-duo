@@ -150,6 +150,7 @@
 				DD0000000000000000000204 /* NIOPosix */,
 				DD0000000000000000000205 /* NIOHTTP1 */,
 				DD0000000000000000000206 /* NIOWebSocket */,
+				DD0000000000000000000207 /* GhosttyTerminal */,
 			);
 			productName = VPhoneVirtualMachineKit;
 			productReference = DD0000000000000000000032 /* libVPhoneVirtualMachineKit.a */;
@@ -219,6 +220,7 @@
 				DD0000000000000000000171 /* XCRemoteSwiftPackageReference "swift-argument-parser" */,
 				DD0000000000000000000172 /* XCRemoteSwiftPackageReference "Dynamic" */,
 				DD0000000000000000000173 /* XCRemoteSwiftPackageReference "swift-nio" */,
+				DD0000000000000000000174 /* XCRemoteSwiftPackageReference "libghostty-spm" */,
 			);
 			projectDirPath = "";
 			projectRoot = "";
@@ -558,6 +560,14 @@
 				version = 2.83.0;
 			};
 		};
+		DD0000000000000000000174 /* XCRemoteSwiftPackageReference "libghostty-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Lakr233/libghostty-spm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.6.20260928;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -590,6 +600,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DD0000000000000000000173 /* XCRemoteSwiftPackageReference "swift-nio" */;
 			productName = NIOWebSocket;
+		};
+		DD0000000000000000000207 /* GhosttyTerminal */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DD0000000000000000000174 /* XCRemoteSwiftPackageReference "libghostty-spm" */;
+			productName = GhosttyTerminal;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

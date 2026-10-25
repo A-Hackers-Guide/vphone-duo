@@ -513,8 +513,14 @@ class VPhoneHostAutomationServer {
     /// command itself runs on the main actor, where it awaits without
     /// holding a thread.
     private nonisolated static func serveClient(_ fd: Int32, controller: VPhoneHostAutomationServer?) {
-        guard let line = readLine(from: fd) else {
+        guard let (line, typedAhead) = readCommand(from: fd) else {
             close(fd)
+            return
+        }
+        // A shell has no reply: the connection becomes the terminal, so it
+        // leaves the one-line protocol here and never comes back to it.
+        if let request = shellRequest(in: line) {
+            relayShell(fd, request: request, typedAhead: typedAhead, controller: controller)
             return
         }
         Task { @MainActor in
@@ -529,7 +535,10 @@ class VPhoneHostAutomationServer {
 
     // MARK: - Socket I/O
 
-    private nonisolated static func readLine(from fd: Int32) -> String? {
+    /// The command line, and whatever arrived behind it. Only a shell has
+    /// anything behind it: its client starts typing without waiting for a
+    /// reply, and those keystrokes are already the session's input.
+    private nonisolated static func readCommand(from fd: Int32) -> (line: String, rest: Data)? {
         var buffer = [UInt8](repeating: 0, count: 4096)
         var accumulated = Data()
 
@@ -543,9 +552,69 @@ class VPhoneHostAutomationServer {
         }
 
         if let nlRange = accumulated.firstIndex(of: 0x0A) {
-            return String(data: accumulated[..<nlRange], encoding: .utf8)
+            guard let line = String(data: accumulated[..<nlRange], encoding: .utf8) else { return nil }
+            return (line, Data(accumulated[accumulated.index(after: nlRange)...]))
         }
-        return accumulated.isEmpty ? nil : String(data: accumulated, encoding: .utf8)
+        guard !accumulated.isEmpty, let line = String(data: accumulated, encoding: .utf8) else { return nil }
+        return (line, Data())
+    }
+
+    // MARK: - Interactive Shell
+
+    /// The parsed command when it is `{"t":"shell"}`, or nil for everything
+    /// else, which the one-line protocol answers as it always has.
+    private nonisolated static func shellRequest(in line: String) -> [String: Any]? {
+        guard let data = line.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              json["t"] as? String == "shell"
+        else { return nil }
+        return json
+    }
+
+    /// `{"t":"shell"}` hands the connection to the guest's terminal: every
+    /// byte after the command line is input, everything the session writes
+    /// comes back, and one JSON line at the end says how it finished. So
+    /// `nc -U .../vphone.sock` is a shell in the guest, and the terminal
+    /// window opens the same route.
+    ///
+    /// `program` picks what runs (unset for vphoned's own JavaScript session,
+    /// a bare name from the bootstrap, or an absolute path); `cols` and `rows`
+    /// set the initial terminal size.
+    private nonisolated static func relayShell(
+        _ fd: Int32,
+        request: [String: Any],
+        typedAhead: Data,
+        controller: VPhoneHostAutomationServer?,
+    ) {
+        // A terminal with nobody typing at it is the normal state, so the
+        // read timeout the line protocol wants would end a healthy session.
+        // The send timeout stays: a client that stops reading must not hold
+        // the session's output thread for good.
+        var none = timeval(tv_sec: 0, tv_usec: 0)
+        _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &none, socklen_t(MemoryLayout<timeval>.size))
+        var send = timeval(tv_sec: 30, tv_usec: 0)
+        _ = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &send, socklen_t(MemoryLayout<timeval>.size))
+
+        let relay = VPhoneHostShellRelay(descriptor: fd)
+        let options = VPhoneGuestShellChannel.Options(
+            program: request["program"] as? String,
+            columns: (request["cols"] as? NSNumber)?.intValue ?? 80,
+            rows: (request["rows"] as? NSNumber)?.intValue ?? 24,
+        )
+        Task { @MainActor in
+            do {
+                guard let controller else { throw HostControlError.guestNotConnected }
+                let channel = try await VPhoneGuestShellChannel.open(
+                    control: try controller.connectedControl(),
+                    options: options,
+                    onOutput: { relay.deliver($0) },
+                    onEnd: { relay.end($0) },
+                )
+                relay.attach(channel, typedAhead: typedAhead)
+            } catch {
+                relay.refuse(String(describing: error))
+            }
+        }
     }
 
     /// One JSON line, ready to write.

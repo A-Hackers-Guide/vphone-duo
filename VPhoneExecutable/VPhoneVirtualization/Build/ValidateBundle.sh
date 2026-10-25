@@ -42,6 +42,16 @@ for name in vphone-vm vphone-cli vphone-escalator libswiftCompatibilitySpan.vpho
     require_signed_macho "$macos/$name"
 done
 require_signed_macho "$frameworks/VPhonePatchKit.framework/Versions/A/VPhonePatchKit"
+# The terminal reads these through Bundle.module, which searches beside the
+# executable and traps when it finds nothing. A missing resource bundle is
+# therefore not a degraded terminal but a crash on opening one, and it carries
+# no Mach-O, so no other check here would notice it had gone.
+for name in Ghostty terminfo; do
+    [[ -d "$macos/GhosttyKit_GhosttyTerminal.bundle/Contents/Resources/$name" ]] || {
+        print -u2 "The Ghostty resource bundle beside vphone-vm has no $name directory"
+        exit 1
+    }
+done
 require_signed_macho "$location_helper"
 /usr/bin/codesign --verify --strict "$location_app"
 # One requirement for every build, so locationd keeps one grant for all of
@@ -169,6 +179,19 @@ daemon_rpaths="$(/usr/bin/otool -l "$guest/vphoned" | /usr/bin/awk '
         print -u2 "vphoned does not use the bundled Span compatibility library"
         exit 1
     }
+# The scripting session runs on JavaScriptCore, which watchOS does not ship.
+# All three daemons are the same build, so a strong reference would leave the
+# watch guest without a daemon at all.
+for daemon in vphoned vphoned-tvos vphoned-watchos; do
+    javascriptcore_loads="$(/usr/bin/otool -l "$guest/$daemon" | /usr/bin/awk '
+        $1 == "cmd" { command = $2 }
+        $1 == "name" && $2 ~ /JavaScriptCore/ { print command }
+    ' | /usr/bin/sort -u)"
+    [[ "$javascriptcore_loads" == "LC_LOAD_WEAK_DYLIB" ]] || {
+        print -u2 "$daemon must load JavaScriptCore weakly, not as ${javascriptcore_loads:-nothing}"
+        exit 1
+    }
+done
 for name in vphoned.plist libcamfix.plist libvcamcaptured.plist libmisfix.plist com.vphone.homepod-setup.plist; do
     [[ -f "$guest/$name" ]] || { print -u2 "Missing guest configuration: $name"; exit 1; }
 done

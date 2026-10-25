@@ -263,6 +263,8 @@
 					"-lVPhoneSign",
 					"-weak_framework",
 					Vision,
+					"-weak_framework",
+					JavaScriptCore,
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -284,6 +286,8 @@
 					"-lVPhoneSign",
 					"-weak_framework",
 					Vision,
+					"-weak_framework",
+					JavaScriptCore,
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;

@@ -121,7 +121,7 @@ final class GuestHyperTextHandler: ChannelInboundHandler, RemovableChannelHandle
             Self.send(APIWire.error("Port must be a decimal number from 1 to 65535"), on: channel)
             return
         }
-        if path == "/v1/events" || path.hasPrefix("/v1/ports/") {
+        if path == "/v1/events" || path == "/v1/shell" || path.hasPrefix("/v1/ports/") {
             Self.send(APIWire.error("WebSocket upgrade required", status: 426), on: channel)
             return
         }

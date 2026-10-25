@@ -1003,6 +1003,20 @@ final class VPhoneGuestControl {
         return components.string ?? ""
     }
 
+    /// A VSOCK connection of its own for a route that streams for as long as
+    /// it is open, rather than answering once. The caller owns it from here:
+    /// every other request sets a read timeout and closes when its reply is
+    /// complete, neither of which suits a terminal that is idle most of the
+    /// time. `VPhoneGuestShellChannel` is the only caller.
+    func openGuestStream() async throws -> VPhoneGuestStream {
+        guard let device else { throw ControlError.notConnected }
+        let socket = await withCheckedContinuation {
+            (continuation: CheckedContinuation<VPhoneSocketResult, Never>) in
+            device.connect(toPort: 1339) { continuation.resume(returning: VPhoneSocketResult($0)) }
+        }
+        return VPhoneGuestStream(connection: try socket.result.get())
+    }
+
     private func httpError(_ response: VPhoneHTTPResponse) throws -> ControlError {
         let body = try JSONSerialization.jsonObject(with: response.body) as? [String: Any]
         let error = body?["error"] as? [String: Any]

@@ -34,8 +34,45 @@ not there yet.
 | `{"t":"rpc","method":"<vphoned method>","params":{…}}` | Calls any vphoned method; see [rpc-methods](rpc-methods.md) |
 | `{"t":"push","local":"/abs/host/file","path":"/abs/guest/file","mode":"755"}` | Streams a Mac file into the guest, any size. A `path` ending in `/` keeps the file's name; `mode` defaults to the Mac file's permissions. `result` has `path`, `local`, `size` |
 | `{"t":"pull","path":"/abs/guest/file","local":"/abs/host/file"}` | Streams a guest file to the Mac; `local` may be a folder. Written beside `local` and renamed when complete |
+| `{"t":"shell","program":"bash","cols":120,"rows":40}` | Hands the connection to a terminal in the guest (see below). `program` unset runs vphoned's own JavaScript session, which needs nothing installed |
 
 Unknown `t`, or missing fields, give `{"ok":false,"error":"…"}`.
+
+## A terminal in the guest
+
+`shell` is the one request with no single reply: the connection becomes the
+terminal. Every byte sent after the command line is input, everything the
+session writes comes back as it arrives, and one JSON line at the end says how
+it finished — `{"ok":true,"exit":0}`, `{"ok":true,"signal":2}`, or
+`{"ok":false,"error":"…"}` when no session could be opened.
+
+When the client's input ends, the terminal gets a `^D`, the way a keyboard
+ends input, and the session keeps running, so what it prints on the way out
+and that last line still arrive. A pipe is therefore a script:
+
+```zsh
+{ print '{"t":"shell"}'; print '6 * 7' } | nc -U "$machine/vphone.sock"
+```
+
+For a terminal you type into, put your own in raw mode so every key goes to
+the guest as typed; `^C` is then simply byte 3, which the guest's terminal
+driver turns into a signal. When the session ends, press one more key to get
+the prompt back, because `cat` is still waiting for one:
+
+```zsh
+stty raw -echo; { print '{"t":"shell"}'; cat } | nc -U "$machine/vphone.sock"; stty sane
+```
+
+The guest side is vphoned's `/v1/shell`, so `program` resolves the same way
+there: unset for the JavaScript session, a bare name from the bootstrap's
+`bin`, `usr/bin` and `usr/local/bin`, or an absolute path. A client that goes
+away altogether, rather than only ending its input, hangs the terminal up and
+the session goes with it.
+
+The VM window's **Diagnostics ▸ Session** (⌥⌘T) opens the same route in a
+terminal view, and `script.eval` through `rpc` runs one script without a
+terminal at all. See "Scripting sessions" in
+`Research/vphoned_http_api.md`.
 
 ## Replies and the attached screen
 
