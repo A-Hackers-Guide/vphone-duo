@@ -108,10 +108,10 @@ final class VPhoneShellTerminalLink: @unchecked Sendable {
         let code: UInt32
         switch ending {
         case let .exited(status):
-            session.receive("\r\n[session exited with status \(status)]\r\n")
+            session.receive("\r\n[\(VPhoneLocalization.format("Session exited with status %lld", status))]\r\n")
             code = UInt32(truncatingIfNeeded: status)
         case let .signalled(number):
-            session.receive("\r\n[session ended on signal \(number)]\r\n")
+            session.receive("\r\n[\(VPhoneLocalization.format("Session ended on signal %lld", number))]\r\n")
             code = UInt32(128 + number)
         case let .failed(message):
             session.receive("\r\n[\(message)]\r\n")
