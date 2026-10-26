@@ -9,9 +9,9 @@
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleVersion</key>
-	<string>53</string>
+	<string>54</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.13.5</string>
+	<string>2.13.6</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Shares this Mac's microphone with the virtual iPhone so apps running inside it can record.</string>
 </dict>
