@@ -56,7 +56,7 @@ int vp_session_exec(void) {
         return 64;
     }
     vp_session_detach();
-    execv(argv[3], &argv[3]);
+    vp_execv(argv[3], &argv[3]);
     fprintf(stderr, "vphoned session: %s: %s\n", argv[3], strerror(errno));
     return 127;
 }

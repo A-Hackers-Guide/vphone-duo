@@ -98,7 +98,7 @@ void vp_native_bootstrap_cached_binary(void) {
         return;
     }
     char *const arguments[] = {(char *)cache, NULL};
-    execv(cache, arguments);
+    vp_execv(cache, arguments);
     fprintf(stderr, "vphoned proxy: cached binary exec failed: %s\n", strerror(errno));
     _exit(1);
 }
