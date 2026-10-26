@@ -8,10 +8,9 @@ import MachO
 /// Irisin publishes three: RootHide and rootless for iOS, and RootHide alone
 /// for Apple TV, whose daemon and helper are tvOS binaries that refuse any
 /// other bootstrap (Irisin's Documentation/AppleTV.md). A TV guest runs
-/// `vphoned-tvos`, the iOS build marked tvOS so that dyld loads the system's
-/// libraries into it. The same mark decides whether Irisin's tvOS binaries
-/// load, so it is what this reads rather than the product type: the Apple TV
-/// HD and the 4K take the same package.
+/// `vphoned-tvos`, built against the AppleTVOS SDK. Its platform decides
+/// whether Irisin's tvOS binaries load, so it is what this reads rather than
+/// the product type: the Apple TV HD and the 4K take the same package.
 enum GuestBootstrapPlatform {
     /// The package for a layout, or nil when this system has none for it.
     static func packageArchitecture(layout: String, tvOS: Bool) -> String? {

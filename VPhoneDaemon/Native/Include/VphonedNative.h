@@ -2,10 +2,36 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <spawn.h>
 #include <sys/types.h>
 #ifdef __OBJC__
 #import <Foundation/Foundation.h>
 #endif
+
+// MARK: - Spawning
+
+// tvOS has posix_spawn and execv, and libSystem exports them there as on iOS,
+// but the AppleTVOS SDK declares them unavailable. vphoned is built for both
+// from one source, so it calls the same libSystem symbols under these names.
+int vp_spawn(pid_t * _Nullable pid, const char * _Nonnull path,
+    const posix_spawn_file_actions_t _Nullable * _Nullable actions,
+    const posix_spawnattr_t _Nullable * _Nullable attributes,
+    char * _Nullable const argv[_Nonnull], char * _Nullable const envp[_Nullable]) __asm__("_posix_spawn");
+int vp_spawn_file_actions_init(posix_spawn_file_actions_t _Nullable * _Nonnull actions)
+    __asm__("_posix_spawn_file_actions_init");
+int vp_spawn_file_actions_destroy(posix_spawn_file_actions_t _Nullable * _Nonnull actions)
+    __asm__("_posix_spawn_file_actions_destroy");
+int vp_spawn_file_actions_addclose(posix_spawn_file_actions_t _Nullable * _Nonnull actions, int descriptor)
+    __asm__("_posix_spawn_file_actions_addclose");
+int vp_spawn_file_actions_adddup2(posix_spawn_file_actions_t _Nullable * _Nonnull actions, int descriptor, int target)
+    __asm__("_posix_spawn_file_actions_adddup2");
+int vp_spawn_file_actions_addopen(posix_spawn_file_actions_t _Nullable * _Nonnull actions, int descriptor,
+    const char * _Nonnull path, int flags, mode_t mode) __asm__("_posix_spawn_file_actions_addopen");
+int vp_spawnattr_init(posix_spawnattr_t _Nullable * _Nonnull attributes) __asm__("_posix_spawnattr_init");
+int vp_spawnattr_destroy(posix_spawnattr_t _Nullable * _Nonnull attributes) __asm__("_posix_spawnattr_destroy");
+int vp_spawnattr_setflags(posix_spawnattr_t _Nullable * _Nonnull attributes, short flags)
+    __asm__("_posix_spawnattr_setflags");
+int vp_execv(const char * _Nonnull path, char * _Nullable const argv[_Nonnull]) __asm__("_execv");
 
 // Keep legacy bridge pointers explicitly unspecified: their Swift import stays
 // unchanged while sharing this header with APIs that declare nonnull pointers.

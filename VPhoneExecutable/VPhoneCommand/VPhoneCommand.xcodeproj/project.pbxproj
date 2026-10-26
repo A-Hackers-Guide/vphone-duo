@@ -618,6 +618,7 @@
 				SWIFT_INCLUDE_PATHS = "$(BUILT_PRODUCTS_DIR) $(SRCROOT)/../../.build/XcodeKit/Build/Products/$(CONFIGURATION) $(SRCROOT)/../../.build/XcodeRestore/Build/Products/$(CONFIGURATION)";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
+				TVOS_DEPLOYMENT_TARGET = 15.0;
 			};
 			name = Release;
 		};
@@ -634,9 +635,10 @@
 				PRODUCT_NAME = VPhoneSign;
 				SDKROOT = auto;
 				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "macosx iphoneos";
+				SUPPORTED_PLATFORMS = "macosx iphoneos appletvos";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
+				TVOS_DEPLOYMENT_TARGET = 15.0;
 			};
 			name = Debug;
 		};
@@ -652,9 +654,10 @@
 				PRODUCT_NAME = VPhoneSign;
 				SDKROOT = auto;
 				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "macosx iphoneos";
+				SUPPORTED_PLATFORMS = "macosx iphoneos appletvos";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
+				TVOS_DEPLOYMENT_TARGET = 15.0;
 			};
 			name = Release;
 		};

@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import VphonedNative
 
 // MARK: - RootHide bootstrap base
 
@@ -218,15 +219,15 @@ extension GuestIrisinInstaller {
             throw GuestAPIError.operationFailed("pipe: \(String(cString: strerror(errno)))")
         }
         var actions: posix_spawn_file_actions_t?
-        posix_spawn_file_actions_init(&actions)
-        posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0)
-        posix_spawn_file_actions_adddup2(&actions, outputPipe[1], STDOUT_FILENO)
-        posix_spawn_file_actions_adddup2(&actions, outputPipe[1], STDERR_FILENO)
-        posix_spawn_file_actions_addclose(&actions, outputPipe[0])
-        posix_spawn_file_actions_addclose(&actions, outputPipe[1])
+        vp_spawn_file_actions_init(&actions)
+        vp_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0)
+        vp_spawn_file_actions_adddup2(&actions, outputPipe[1], STDOUT_FILENO)
+        vp_spawn_file_actions_adddup2(&actions, outputPipe[1], STDERR_FILENO)
+        vp_spawn_file_actions_addclose(&actions, outputPipe[0])
+        vp_spawn_file_actions_addclose(&actions, outputPipe[1])
         var pid: pid_t = 0
-        let spawned = posix_spawn(&pid, path, &actions, nil, &argv, environ)
-        posix_spawn_file_actions_destroy(&actions)
+        let spawned = vp_spawn(&pid, path, &actions, nil, &argv, environ)
+        vp_spawn_file_actions_destroy(&actions)
         close(outputPipe[1])
         guard spawned == 0 else {
             close(outputPipe[0])

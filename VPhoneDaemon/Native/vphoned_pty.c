@@ -233,20 +233,20 @@ int vp_spawn_collect(const char *path, const char *const *argv, const char *inpu
     }
 
     posix_spawn_file_actions_t actions;
-    posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_adddup2(&actions, in[0], STDIN_FILENO);
-    posix_spawn_file_actions_adddup2(&actions, out[1], STDOUT_FILENO);
-    posix_spawn_file_actions_adddup2(&actions, err[1], STDERR_FILENO);
+    vp_spawn_file_actions_init(&actions);
+    vp_spawn_file_actions_adddup2(&actions, in[0], STDIN_FILENO);
+    vp_spawn_file_actions_adddup2(&actions, out[1], STDOUT_FILENO);
+    vp_spawn_file_actions_adddup2(&actions, err[1], STDERR_FILENO);
     posix_spawnattr_t attributes;
-    posix_spawnattr_init(&attributes);
+    vp_spawnattr_init(&attributes);
     // Only the three descriptors above reach the child: vphoned holds the
     // VSOCK listener and every client connection.
-    posix_spawnattr_setflags(&attributes, POSIX_SPAWN_CLOEXEC_DEFAULT);
+    vp_spawnattr_setflags(&attributes, POSIX_SPAWN_CLOEXEC_DEFAULT);
 
     pid_t child = -1;
-    int failure = posix_spawn(&child, path, &actions, &attributes, (char *const *)argv, environ);
-    posix_spawn_file_actions_destroy(&actions);
-    posix_spawnattr_destroy(&attributes);
+    int failure = vp_spawn(&child, path, &actions, &attributes, (char *const *)argv, environ);
+    vp_spawn_file_actions_destroy(&actions);
+    vp_spawnattr_destroy(&attributes);
     close(in[0]);
     close(out[1]);
     close(err[1]);
@@ -295,13 +295,13 @@ int vp_session_open(const char *program, int columns, int rows, pid_t *pid) {
     vp_keep_from_children(slave);
 
     posix_spawn_file_actions_t actions;
-    posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_adddup2(&actions, slave, STDIN_FILENO);
-    posix_spawn_file_actions_adddup2(&actions, slave, STDOUT_FILENO);
-    posix_spawn_file_actions_adddup2(&actions, slave, STDERR_FILENO);
+    vp_spawn_file_actions_init(&actions);
+    vp_spawn_file_actions_adddup2(&actions, slave, STDIN_FILENO);
+    vp_spawn_file_actions_adddup2(&actions, slave, STDOUT_FILENO);
+    vp_spawn_file_actions_adddup2(&actions, slave, STDERR_FILENO);
     posix_spawnattr_t attributes;
-    posix_spawnattr_init(&attributes);
-    posix_spawnattr_setflags(&attributes, POSIX_SPAWN_CLOEXEC_DEFAULT);
+    vp_spawnattr_init(&attributes);
+    vp_spawnattr_setflags(&attributes, POSIX_SPAWN_CLOEXEC_DEFAULT);
 
     char *arguments[5];
     int count = 0;
@@ -316,9 +316,9 @@ int vp_session_open(const char *program, int columns, int rows, pid_t *pid) {
     arguments[count] = NULL;
 
     pid_t child = -1;
-    int failure = posix_spawn(&child, executable, &actions, &attributes, arguments, environ);
-    posix_spawn_file_actions_destroy(&actions);
-    posix_spawnattr_destroy(&attributes);
+    int failure = vp_spawn(&child, executable, &actions, &attributes, arguments, environ);
+    vp_spawn_file_actions_destroy(&actions);
+    vp_spawnattr_destroy(&attributes);
     close(slave);
     if (failure != 0) {
         close(master);
@@ -392,21 +392,21 @@ char *vp_session_evaluate(const char *source, double timeout, int *status) {
     }
 
     posix_spawn_file_actions_t actions;
-    posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_adddup2(&actions, in[0], STDIN_FILENO);
-    posix_spawn_file_actions_adddup2(&actions, out[1], STDOUT_FILENO);
+    vp_spawn_file_actions_init(&actions);
+    vp_spawn_file_actions_adddup2(&actions, in[0], STDIN_FILENO);
+    vp_spawn_file_actions_adddup2(&actions, out[1], STDOUT_FILENO);
     // The session keeps vphoned's stderr: a crash report from a script belongs
     // in the guest log, and its stdout carries nothing but the reply.
-    posix_spawn_file_actions_adddup2(&actions, STDERR_FILENO, STDERR_FILENO);
+    vp_spawn_file_actions_adddup2(&actions, STDERR_FILENO, STDERR_FILENO);
     posix_spawnattr_t attributes;
-    posix_spawnattr_init(&attributes);
-    posix_spawnattr_setflags(&attributes, POSIX_SPAWN_CLOEXEC_DEFAULT);
+    vp_spawnattr_init(&attributes);
+    vp_spawnattr_setflags(&attributes, POSIX_SPAWN_CLOEXEC_DEFAULT);
 
     char *arguments[] = {executable, "--session", "eval", NULL};
     pid_t child = -1;
-    int failure = posix_spawn(&child, executable, &actions, &attributes, arguments, environ);
-    posix_spawn_file_actions_destroy(&actions);
-    posix_spawnattr_destroy(&attributes);
+    int failure = vp_spawn(&child, executable, &actions, &attributes, arguments, environ);
+    vp_spawn_file_actions_destroy(&actions);
+    vp_spawnattr_destroy(&attributes);
     close(in[0]);
     close(out[1]);
     if (failure != 0) {

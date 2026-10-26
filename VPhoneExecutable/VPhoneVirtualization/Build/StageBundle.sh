@@ -40,6 +40,30 @@ build_project -project "$root/VPhoneDaemon/VPhoneDaemon.xcodeproj" \
     -derivedDataPath "$root/.build/XcodeDaemon" CODE_SIGNING_ALLOWED=NO \
     SUPPORTS_MACCATALYST=NO EFFECTIVE_PLATFORM_NAME=-iphoneos build
 
+# Apple TV and HomePod guests run vphoned built against the AppleTVOS SDK, so
+# its `#if os(tvOS)` branches and IcliKit's are the tvOS ones. That SDK has no
+# IOKit.framework though tvOS ships one with the same exports, so the build
+# links against the iPhoneOS SDK's IOKit headers and stub, targeted at tvOS.
+tvos_frameworks="$root/.build/XcodeDaemon/tvos-frameworks"
+iphoneos_iokit="$(/usr/bin/xcrun --sdk iphoneos --show-sdk-path)/System/Library/Frameworks/IOKit.framework/Versions/A"
+/bin/rm -rf "$tvos_frameworks"
+/bin/mkdir -p "$tvos_frameworks/IOKit.framework"
+/bin/cp -R "$iphoneos_iokit/Headers" "$tvos_frameworks/IOKit.framework/Headers"
+# Xcode 27's iPhoneOS SDK adds arm64e.x1; tvOS has arm64 and arm64e alone.
+/usr/bin/sed -E -e 's/, *arm64e?\.[a-z0-9]+-ios//g' -e 's/arm64e?-ios/arm64-tvos, arm64e-tvos/' \
+    "$iphoneos_iokit/IOKit.tbd" > "$tvos_frameworks/IOKit.framework/IOKit.tbd"
+if ! /usr/bin/grep -q 'arm64-tvos' "$tvos_frameworks/IOKit.framework/IOKit.tbd" ||
+    /usr/bin/grep -q -- '-ios[] ,]' "$tvos_frameworks/IOKit.framework/IOKit.tbd"; then
+    print -u2 -- "Could not target the iPhoneOS SDK's IOKit.tbd at tvOS"
+    exit 1
+fi
+build_project -project "$root/VPhoneDaemon/VPhoneDaemon.xcodeproj" \
+    -scheme vphoned -configuration "$configuration" \
+    -sdk appletvos \
+    -derivedDataPath "$root/.build/XcodeDaemon" CODE_SIGNING_ALLOWED=NO \
+    SUPPORTS_MACCATALYST=NO EFFECTIVE_PLATFORM_NAME=-appletvos \
+    FRAMEWORK_SEARCH_PATHS="$tvos_frameworks" build
+
 build_project -project "$root/VPhoneExecutable/VPhoneEscalator/VPhoneEscalator.xcodeproj" \
     -scheme VPhoneEscalator -configuration "$configuration" \
     -derivedDataPath "$root/.build/XcodeAMFIAllow" \
@@ -49,15 +73,18 @@ build_project -project "$root/VPhoneExecutable/VPhoneEscalator/VPhoneEscalator.x
 
 command_products="$root/.build/XcodeCommand/Build/Products/$configuration"
 daemon_products="$root/.build/XcodeDaemon/Build/Products/$configuration-iphoneos"
+tvos_daemon_products="$root/.build/XcodeDaemon/Build/Products/$configuration-appletvos"
 amfi_products="$root/.build/XcodeAMFIAllow/Build/Products/$configuration"
 guest_products="$root/.build/guest-components/stage"
 
 # The iOS 26 Swift runtime lacks this symbol, and Swift 6.4 can import it
 # strongly even when vphoned targets iOS 15, causing a dyld crash loop.
-if /usr/bin/nm -u "$daemon_products/vphoned" | /usr/bin/grep -q '_swift_initBorrow'; then
-    print -u2 -- "vphoned requires _swift_initBorrow, which is unavailable on iOS 26"
-    exit 1
-fi
+for daemon in "$daemon_products/vphoned" "$tvos_daemon_products/vphoned"; do
+    if /usr/bin/nm -u "$daemon" | /usr/bin/grep -q '_swift_initBorrow'; then
+        print -u2 -- "${daemon#$root/} requires _swift_initBorrow, which is unavailable on iOS 26 and tvOS 26"
+        exit 1
+    fi
+done
 
 /bin/rm -rf "$macos" "$resources"
 /bin/mkdir -p "$macos" "$guest" "$frameworks"
@@ -75,15 +102,14 @@ fi
 /bin/cp "$command_products/vphone-cli" "$macos/vphone-cli"
 /bin/cp "$amfi_products/vphone-escalator" "$macos/vphone-escalator"
 /bin/cp "$daemon_products/vphoned" "$guest/vphoned"
-# Apple TV guests run the same arm64 daemon. tvOS dyld loads its system
-# libraries only into a tvOS-platform process, so this copy says tvOS.
+/bin/cp "$tvos_daemon_products/vphoned" "$guest/vphoned-tvos"
+# Watch guests still run the iOS daemon marked watchOS: watchOS 8 is iOS 15's
+# release.
 daemon_sdk="$(/usr/bin/otool -l "$guest/vphoned" | /usr/bin/awk '/LC_BUILD_VERSION/ { found = 1 } found && $1 == "sdk" { print $2; exit }')"
-/usr/bin/xcrun vtool -set-build-version tvos 15.0 "$daemon_sdk" -replace -output "$guest/vphoned-tvos" "$guest/vphoned"
-# The same for watch guests: watchOS 8 is iOS 15's release.
 /usr/bin/xcrun vtool -set-build-version watchos 8.0 "$daemon_sdk" -replace -output "$guest/vphoned-watchos" "$guest/vphoned"
 # iOS before 26 needs Span's back-deployment library. Keep /usr/lib/swift
 # first so newer guests use their system implementation; only the iOS daemon
-# gets this private fallback. TV/watch payloads above remain unchanged.
+# gets this private fallback. The TV and watch daemons above have none.
 guest_compatibility_library="$(/usr/bin/xcrun swift-stdlib-tool --print \
     --scan-executable "$guest/vphoned" --platform iphoneos | \
     /usr/bin/grep '/libswiftCompatibilitySpan.dylib$')"

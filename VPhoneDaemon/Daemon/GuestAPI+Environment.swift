@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import IcliSystem
+import VphonedNative
 
 // MARK: - vphone Environment
 
@@ -150,12 +151,12 @@ extension GuestAPI {
             throw GuestAPIError.operationFailed("pipe: \(String(cString: strerror(errno)))")
         }
         var actions: posix_spawn_file_actions_t?
-        posix_spawn_file_actions_init(&actions)
-        posix_spawn_file_actions_adddup2(&actions, errorPipe[1], STDERR_FILENO)
-        posix_spawn_file_actions_addclose(&actions, errorPipe[0])
+        vp_spawn_file_actions_init(&actions)
+        vp_spawn_file_actions_adddup2(&actions, errorPipe[1], STDERR_FILENO)
+        vp_spawn_file_actions_addclose(&actions, errorPipe[0])
         var pid: pid_t = 0
-        let spawned = posix_spawn(&pid, arguments[0], &actions, nil, &argv, environ)
-        posix_spawn_file_actions_destroy(&actions)
+        let spawned = vp_spawn(&pid, arguments[0], &actions, nil, &argv, environ)
+        vp_spawn_file_actions_destroy(&actions)
         close(errorPipe[1])
         guard spawned == 0 else {
             close(errorPipe[0])

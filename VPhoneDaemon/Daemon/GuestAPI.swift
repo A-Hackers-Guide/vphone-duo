@@ -420,11 +420,15 @@ enum GuestAPI {
         case "clipboard.set":
             return try setClipboard(string(params, "text"))
         case "clipboard.clear":
+            #if os(tvOS)
+            throw GuestAPIError.operationFailed("tvOS has no system clipboard")
+            #else
             guard let pasteboard = UIPasteboard(name: .general, create: false) else {
                 throw GuestAPIError.operationFailed("The system clipboard is unavailable")
             }
             pasteboard.items = []
             return try clipboardInfo()
+            #endif
         case "files.list":
             return try fileList(string(params, "path"))
         case "files.mkdir":
