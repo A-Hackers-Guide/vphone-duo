@@ -1,4 +1,4 @@
-#include "Include/VphonedNative.h"
+#include "vphoned_session.h"
 
 #include <crt_externs.h>
 #include <errno.h>
@@ -36,6 +36,7 @@ static int worker_fd(void) {
 int vp_native_process_mode(void) {
     int argc = *_NSGetArgc();
     if (argc == 1) return 0;
+    if (vp_session_arguments_present()) return 2;
     return worker_fd() >= 0 ? 1 : -1;
 }
 

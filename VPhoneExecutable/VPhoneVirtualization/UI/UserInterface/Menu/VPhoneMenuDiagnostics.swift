@@ -18,6 +18,21 @@ extension VPhoneMenuController {
         menu.addItem(makePanelItem(.crashLogs, "Crash Logs", keyEquivalent: "c", symbol: "exclamationmark.triangle"))
         menu.addItem(NSMenuItem.separator())
 
+        // A guest has no shell of its own, and the tvos preset has no
+        // debugger: this window is the only place to run code inside one, so
+        // it is named for that rather than for the session kind it opens.
+        let session = makeItem(
+            "Debug Session",
+            action: #selector(openSession),
+            keyEquivalent: "t",
+            modifiers: [.command, .option],
+            symbol: "apple.terminal",
+        )
+        session.isEnabled = false
+        connectSessionItem = session
+        menu.addItem(session)
+        menu.addItem(NSMenuItem.separator())
+
         let devModeStatus = makeItem(
             "Developer Mode Status",
             action: #selector(devModeStatus),

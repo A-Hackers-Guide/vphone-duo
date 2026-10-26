@@ -42,7 +42,8 @@ Shipped as `libsigninfix.dylib` (`VPhoneGuestComponents/SignInFix/libsigninfix.m
 loaded by SystemHook into **app processes only** (`vpIsAppPath`, never daemons, so
 background AuthKit auth is untouched); wired into `VPhoneGuestEnvironment.libraries`,
 `GuestAPI+Environment.environmentLibraries`, `StageBundle.sh` and `ValidateBundle.sh`
-like the other hook dylibs. Resolves every class+selector by name at load (the
+like the other hook dylibs. Installed per the selectable patch
+`system-apps-cfw-signin_sheets` (on in `standard`). Resolves every class+selector by name at load (the
 `libhapticsfix` pattern); re-runs on `_dyld_register_func_for_add_image` so the
 lazily-loaded frameworks (AuthKitUI, AppleIDSetupUI, GameCenterUI, AMSUI) get
 hooked when they map. Verified on `signintest-iphone27` (iOS 27.0, iPhone17,3).

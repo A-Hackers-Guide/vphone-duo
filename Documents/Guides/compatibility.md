@@ -80,8 +80,10 @@ The tvOS 27.0 (24J361) and HomePod Software 27.2 (24K120) OTAs compress their pa
 Apple TV 4K (4th generation), `AppleTV18,1` / `J265AP`, is available for
 bring-up with tvOS 27.2 beta (`24K120`) only, using its full OTA over the
 Apple TV HD 26.6 restore base and cloudOS 26.4 beta (`23E5207q`). It requires
-macOS 27 and the `tvos-4k` preset. Installation and a live boot have not yet
-been verified; it is not included in the tested table above. See the
+macOS 27 and the `tvos-4k` preset. On 2026-10-24 one machine was restored,
+had its custom firmware installed, and cold booted twice to vphoned and the 4K
+Language screen of the legacy TVSetup; setup itself was not completed. It is
+not included in the tested table above. See the
 [bring-up notes](../../Research/Firmware/tvos_support.md#apple-tv-4k-4th-generation).
 
 cloudOS 26.7 (23H20) has no iPhone release to pair with. Staged with iOS 26.6.2's userland, its mix links and its 28 kernelcache patches apply; the CFW patch `_vm_fault_enter_prepare` finds no site in that kernel. It has not booted.

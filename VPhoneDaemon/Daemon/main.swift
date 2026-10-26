@@ -6,6 +6,12 @@ import NIOWebSocket
 import VphonedNative
 
 let mode = vp_native_process_mode()
+if mode == 2 {
+    // A scripting session, spawned by the worker for one script or one
+    // interactive session. None of the startup below belongs here; see
+    // GuestScriptSession.
+    exit(GuestScriptSession.run())
+}
 if mode != 1 {
     guard mode == 0 else { exit(64) }
     vp_native_bootstrap_cached_binary()
@@ -49,7 +55,8 @@ do {
                     // that carries Origin or a non-loopback Host. The refused
                     // request then reaches GuestHyperTextHandler, which replies 403.
                     let allowed = GuestHyperTextHandler.isLocalClient(request.headers) &&
-                        (request.uri == "/v1/events" || GuestPortForwardHandler.port(from: request.uri) != nil)
+                        (request.uri == "/v1/events" || GuestPortForwardHandler.port(from: request.uri) != nil ||
+                            GuestShellSessionHandler.request(from: request.uri) != nil)
                     guard allowed else { return channel.eventLoop.makeSucceededFuture(nil) }
                     // A client that gave the host proxy its token as a WebSocket
                     // subprotocol expects the server to select that protocol.
@@ -77,6 +84,15 @@ do {
                                     maxAccumulatedFrameSize: 1 << 20,
                                 ),
                                 GuestPortForwardHandler(port: port),
+                            ])
+                        } else if let session = GuestShellSessionHandler.request(from: request.uri) {
+                            try sync.addHandlers([
+                                NIOWebSocketFrameAggregator(
+                                    minNonFinalFragmentSize: 1,
+                                    maxAccumulatedFrameCount: 32,
+                                    maxAccumulatedFrameSize: 1 << 20,
+                                ),
+                                GuestShellSessionHandler(request: session),
                             ])
                         } else {
                             try sync.addHandlers([

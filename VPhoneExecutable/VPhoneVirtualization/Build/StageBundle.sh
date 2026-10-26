@@ -64,6 +64,14 @@ fi
 /bin/rm -rf "$frameworks/VPhonePatchKit.framework"
 /bin/cp -R "$command_products/VPhonePatchKit.framework" "$frameworks/VPhonePatchKit.framework"
 /bin/cp "$TARGET_BUILD_DIR/vphone-vm" "$macos/vphone-vm"
+# The terminal window's resources. libghostty is a static library, so nothing
+# is embedded for it, but GhosttyTerminal reads its Ghostty directory and its
+# compiled terminfo through Bundle.module. That searches Bundle.main's
+# resources and then its root, and for vphone-vm Bundle.main is VPhone.bundle,
+# not Contents/MacOS, so a copy beside the executable is never found. Without
+# this the window traps the moment a session is opened.
+/bin/cp -R "$TARGET_BUILD_DIR/GhosttyKit_GhosttyTerminal.bundle" \
+    "$resources/GhosttyKit_GhosttyTerminal.bundle"
 /bin/cp "$command_products/vphone-cli" "$macos/vphone-cli"
 /bin/cp "$amfi_products/vphone-escalator" "$macos/vphone-escalator"
 /bin/cp "$daemon_products/vphoned" "$guest/vphoned"

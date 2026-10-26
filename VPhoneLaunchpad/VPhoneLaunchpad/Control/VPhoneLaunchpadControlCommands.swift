@@ -615,8 +615,9 @@ struct VPhoneLaunchpadControlCommands {
         } else {
             slimming = try Self.slimming(request, usesTemplate: usesTemplate)
         }
-        // A machine on its release's own cloudOS stages its kernelcache mix with
-        // an ipsw, as New Machine's ipsw field; `fw kernelcache` does nothing
+        // A 2.12.0 bundle stages a kernelcache mix with an ipsw, as New
+        // Machine's ipsw field; a 2.12.1 bundle extracts natively and ignores
+        // it. The creation runs `fw kernelcache` either way, which does nothing
         // on a cloudOS that still has vphone600 components.
         let kernelcacheIPSW = request.option("ipsw")
         if let kernelcacheIPSW, !FileManager.default.isExecutableFile(atPath: kernelcacheIPSW) {
@@ -631,9 +632,6 @@ struct VPhoneLaunchpadControlCommands {
         if let kernelcacheBuilder {
             guard VPhoneLaunchpadKernelcacheBuilder.isValid(kernelcacheBuilder.destination) else {
                 throw VPhoneLaunchpadError("--kmutil-ssh takes user@host, not \(kernelcacheBuilder.destination).")
-            }
-            guard kernelcacheIPSW != nil else {
-                throw VPhoneLaunchpadError("--kmutil-ssh links the kernelcache mix that --ipsw stages; pass --ipsw too.")
             }
         }
         let options = try VPhoneLaunchpadCreationPipeline.Options(

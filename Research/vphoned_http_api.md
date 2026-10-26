@@ -287,6 +287,123 @@ WebSocket fragmentation is reassembled before forwarding. On disconnect, the
 guest tunnel and the host TCP-to-VSOCK proxy let their final queued write
 finish before closing the opposite socket, with a five-second drain limit.
 
+## Scripting sessions
+
+A guest has no shell, and the `tvos` preset has neither debugserver nor any
+Frida patch, so a script run with vphoned's own identity is the only way to
+reach what the guest keeps to itself. The engine is IcliKit's probe (icli
+0.10.0): its JavaScriptCore context, ObjC reflection bridge and REPL, run
+inside the session process. vphoned adds only what icli leaves to the process
+hosting the probe: `api()` answers with this catalog, and `proc.run` runs a
+program. IcliKit opens JavaScriptCore at run time instead of linking it,
+because iOS and tvOS ship it and watchOS does not, and vphoned reports
+`script_js` in `capabilities` only where it can be loaded. `shell` is reported
+everywhere, because the interactive route also runs a program from the
+bootstrap.
+
+Every session is a process of its own, spawned from vphoned's own executable
+(`--session`), so it carries the same signature and entitlements as the
+daemon and nothing else. A script that crashes, over-releases an object or
+never returns ends its own session and no more: the worker keeps serving, and
+`processes.list` shows nothing left behind. Each session leads its own
+process group, so a program a script started dies with it rather than
+outliving it as an orphan. None of the worker's startup has run in a session,
+which is the one thing a script cannot work around: methods that depend on
+state the worker set up at startup, such as the virtual camera or the
+preloaded HID symbols, are not available through a session's `api()`.
+
+`POST /v1/rpc` with `script.eval` takes `{source, timeout?}` and answers
+`{ok, result, output, crashed}`, or `{ok: false, error, output, crashed}`. A
+script that throws is an answer rather than a failed request, so its output
+comes back either way; `result` is the value described as text and `output`
+is everything the script printed. `timeout` defaults to 30 seconds and is
+clamped to 1 through 600; a script that outruns it is killed with its group
+and the request fails. `crashed` is true when the session died before it
+could answer, and `error` then names the signal. `script.info` reports
+`available`, `engine`, the globals below, and which of `bash`, `sh` and `zsh`
+this guest's bootstrap actually has.
+
+For an interactive session, upgrade `GET /v1/shell` to WebSocket. Admission
+is the same as `/v1/events`: no `Origin`, a loopback `Host`, and the host
+proxy's token in front of it. `program` selects what runs — unset or `repl`
+for the probe's REPL (prompt `probe>`), a bare name resolved from the bootstrap's
+`bin`, `usr/bin` and `usr/local/bin`, or an absolute path. `cols` and `rows`
+set the initial terminal size. Each binary frame is a chunk of the terminal's
+byte stream in either direction, so `^C` is simply byte 3 and the terminal
+driver turns it into a signal. Text frames from the client are control
+messages, `{"resize": [columns, rows]}` and `{"signal": "INT"}`; the server
+sends one text frame last, `{"exit": status}` or `{"signal": number}`, and a
+session that could not be opened at all sends `{"error": message}` and closes
+with 1011. The session is a session leader with the terminal as its
+controlling one, claimed by the child rather than by `posix_spawn`'s file
+actions so the order never depends on the kernel's. Closing the WebSocket
+hangs the terminal up, and a session still running three seconds later is
+killed with its group. Output is written one frame at a time and the next
+read waits for it, so a client that cannot keep up slows the session down
+instead of filling the worker's memory.
+
+Two things on the Mac open this route rather than asking a client to speak
+WebSocket itself. The VM window has **Diagnostics ▸ Debug Session** (⌥⌘T), a
+terminal view on a session of its own, closed with the window. And
+`{"t":"shell"}` on the machine's `vphone.sock` hands that connection to the
+terminal. The end of that client's input reaches the terminal as a `^D`
+rather than hanging it up, because `nc` and pipes shut their sending half as
+soon as their input runs out, so a pipe into `nc -U` runs as a script and
+still gets the session's last output; only a client gone altogether hangs the
+terminal up. See `Skills/vphone-guest-control/references/guest-socket.md`.
+Both go through the
+VM process's own VSOCK connection, so neither needs `--api-listen` or a token.
+
+A guest runs at most 8 interactive sessions and 16 scripts at once. Each one
+is a process, and a script holds its place in the concurrent queue the rest
+of the API shares for as long as its timeout allows, so the request past
+either limit is refused outright — `{"error": …}` and close 1011 for
+`/v1/shell`, `operation_failed` for `script.eval` — rather than answered
+slowly with everything else queued behind it.
+
+The session's globals are `ObjC`, `api`, `fs`, `proc`, `console`, `print`
+and `sleep`. `ObjC.use('NSProcessInfo')` and
+`ObjC.classes.NSProcessInfo` both give a class, and methods are called by
+name: an underscore stands for a colon (`setValue_forKey_(v, k)`), a bare
+name takes one colon per argument, and a name written with colons is used as
+it stands (`obj['setValue:forKey:'](v, k)`). Dispatch is `NSInvocation` over
+the method signature the runtime reports, so every method it can describe can
+be called and an `NSException` arrives as a JavaScript error rather than a
+crash. A string, a number and a date come back as themselves; everything
+else, collections included, stays an object, because converting an `NSArray`
+would hand back a copy of something a script asked for in order to mutate.
+`$value` converts one when that is what was wanted, `$class` names the class
+and `$isClass` says whether it is one. A JavaScript array or object passed
+where an object is expected is converted on the way in. Three things are
+deliberately not supported: struct arguments and returns, which would need
+the encoding's layout read out (`frame`, `bounds` and `operatingSystemVersion`
+raise a refusal that names the type), pointer arguments other than null, and
+variadic methods, which the runtime cannot describe. An `alloc` comes back as
+an object and never as a value, because an allocated `NSString` is a
+placeholder that raises on anything but an initializer.
+
+`api(method, params)` runs any method in this catalog in the session's own
+process and returns its result, raising `code: message` if it fails. `fs.ls`,
+`fs.read`, `fs.write` and `fs.stat` are the root-privileged file operations,
+`proc.run(path, args, input)` runs one program and collects
+`{status, signal, stdout, stderr}`, and `console.log` and `print` write to
+the terminal, or into `output` for `script.eval`. `proc.run` is vphoned's,
+not icli's: the probe launches nothing itself, so the session defines `proc`
+over `api('proc.run', {path, args, input})`, which only a session answers.
+There is no `exit()`; `.exit` leaves the REPL. In the REPL, `^C` abandons a
+half-finished statement while a line is being read; while a statement runs,
+it ends the session, which the WebSocket reports as `{"signal": 2}`.
+
+This opens no privilege the API did not already have: the same connection can
+already write any file as root and load a launch daemon. What it does change
+is how directly that privilege is reached, so the host proxy's token and the
+loopback checks are the whole of the protection, exactly as for every other
+method. Nothing in the daemon's entitlements is granted per session; a
+session is vphoned. The daemon does carry `dynamic-codesigning` so that
+JavaScriptCore can use its JIT, and JSC falls back to its interpreter by
+itself where that is refused, so a guest whose AMFI declines it still runs
+scripts, more slowly.
+
 `apps.launch` returns a PID and `frontmost_verified`. IcliKit 0.6.8 checks
 RunningBoard's live focal assertion and accepts it only when one real app owns
 it. iOS 26.6.2 uses `SuspendableRole-UIFocal`; older systems may use
@@ -380,7 +497,7 @@ request carries `"force": true`.
 | Darwin notifications | `notify.post {name, state?}` (`postDarwinNotification`; `state` is a UInt64, as a number or a decimal string, stored before the post), `notify.state {name}` (`darwinNotificationState`) |
 | Network, security | `network.capture {seconds, interface?, filter?}` (writes a pcap in the guest scratch directory and returns its path), `network.ipv4.get {interface?}`, `network.ipv4.set {interface?, method, address?, subnet_mask?, router?, dns?}`, `network.hostname.get`, `network.hostname.set {local_host_name?}`, `device.name.get`, `device.name.set {name}` (see below), `network.static_names.get`, `network.static_names.set {entries}`, `network.resolve {host, family?, port?, first_only?, timeout_ms?}` (see below), `security.ssl_killswitch` |
 | Apps | `apps.list`, `search`, `refresh`, `launch`, `terminate`, `foreground`, `open_url`, `install`, `info`, `binary`, `data_dir`, `url_schemes`, `handlers`, `registration`, `register`, `network_policy {repair?}`; `apps.uninstall`, `unregister`, `unregister_dir` **force**; `apps.removed_system`, `apps.remove_system {bundle_ids, backup?, respring?}` **force**, `apps.restore_system {bundle_ids?, respring?}` **force** (removable system apps, see below) |
-| OTA Apple app programs | `ota.apps.status`, `ota.apps.apply {force:true}` (capability `ota_system_apps`; only matching installed removable Apple apps from the installed 24A446 System payload, no caller-selected paths or third-party app IDs; result `{build, apps, pending}`; preserves user-data/group containers and retains old programs/placeholders; see [the OTA runbook](Restore/data_preserving_full_ota.md#retained-apple-app-programs)) |
+| OTA Apple app programs | `ota.apps.status`, `ota.apps.apply {force:true, removed_bundle_ids?:[]}` (capability `ota_system_apps`; reconciles removed Apple app registrations including placeholders against valid removal backups, then updates retained programs from the installed 24A446 payload; no caller-selected paths or third-party IDs; result `{build, apps, pending, removed_bundle_ids, removed_pending}`; an omitted baseline infers only absent/placeholder apps, never installed apps; preserves user-data/group containers and original removal backups; see [the OTA runbook](Restore/data_preserving_full_ota.md#preserve-removed-system-apps-2026-10-25)) |
 | System | `system.uicache`, `system.system_apps {visible?}`, `system.respring` **force**, `system.reboot {userspace?}` **force**, `system.shutdown` **force**, `developer_mode.status`, `developer_mode.enable`, `power.low_power_mode`, `time.timezone {identifier?, automatic?}`, `time.clock {time?, automatic?}` (see below), `diagnostics.self_test` |
 | Files | `files.list`, `mkdir`, `remove`, `rename`, `read {binary?, limit?}`, `write`, `find`, `copy`, `symlink`, `chmod`, `chown`, `plist`, `plist_set {value \| remove}` |
 | APFS snapshots | `apfs.snapshots {mount?}`, `apfs.snapshot.delete {mount?, name? \| prefix?}` **force** (only `orig-fs.disabled.rn-*`, see below) |
@@ -392,6 +509,7 @@ request carries `"force": true`.
 | Bootstrap | `bootstrap.install {layout}`, `bootstrap.status`, `bootstrap.inspect`, `bootstrap.uninstall {jbroot, force}`, `bootstrap.firmware` (see above) |
 | Environment | `environment.status` (SHA-256 of each vphone library in `/usr/lib`, or null when absent, plus the staging directory), `environment.install {libraries: [{name, sha256}]}` (see below) |
 | Profile UDID | `udid.get`, `udid.set {udid}`, `udid.clear` — each returns `{udid, path}`, the UDID the guest gives its profile checks and the host (null: the guest's own) and the settings file it came from; `set` and `clear` also return `restarted_pids`, `usb_serial` and `usb_reenumerated` (see below) |
+| Scripting | `script.eval {source, timeout?}` (`{ok, result, output, crashed}`; evaluated in a session process, capability `script_js`), `script.info` (`{available, engine, globals, programs}`) — the interactive form is the `/v1/shell` WebSocket, see "Scripting sessions" |
 | Setup Assistant | `setup.status` (`{pending, running, pid, setup_done, setup_version, current_version, data_migration_done}`), `setup.skip` **force** (sets `SetupDone`, `SetupFinishedAllSteps` and `SetupVersion` in `com.apple.purplebuddy`, restarts SpringBoard, returns the status plus `respring`; while the first boot's data migration is still running it does not restart SpringBoard, which reads the keys when migration ends, and `respring` is `{restarted: false, reason: "data_migration_pending"}`; a restart FrontBoard ignored is refused with `reason: busy`, `retryable: true`, the keys already written); `setup.settle {timeout_s?, poll_s?, stable_polls?}` (read-only wait for first-boot work, see below); `/v1/health` carries `setup_pending` — see `Research/Guest/setup_assistant_skip.md` |
 
 `input.hid` sends a keyboard/consumer usage with 16-bit `page` and `usage`.
@@ -1040,6 +1158,16 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/v1/health
 curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
      -d '{"method":"device.snapshot","params":{}}' http://127.0.0.1:8765/v1/rpc
 websocat "ws://127.0.0.1:8765/v1/events?token=$TOKEN"
+
+# One script, with its value and whatever it printed.
+curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{"method":"script.eval","params":{"source":"api(\"device.snapshot\").name"}}' \
+     http://127.0.0.1:8765/v1/rpc
+
+# An interactive session. websocat sends what it reads as text frames, so pass
+# --binary; it has no window size to report, so the terminal starts at 80x24.
+websocat --binary "ws://127.0.0.1:8765/v1/shell?token=$TOKEN&cols=120&rows=40"
+websocat --binary "ws://127.0.0.1:8765/v1/shell?program=bash&token=$TOKEN"
 ```
 
 ```swift

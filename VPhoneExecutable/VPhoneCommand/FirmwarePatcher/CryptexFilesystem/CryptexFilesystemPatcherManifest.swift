@@ -37,33 +37,21 @@ extension CryptexFilesystemPatcher {
             at: filesystem,
         )
 
-        let newTrustcachePath = restoreDir.appending(path: "Firmware").appending(path: trustcache.lastPathComponent)
-        if trustcache != newTrustcachePath, FileManager.default.fileExists(atPath: newTrustcachePath.path) {
-            try FileManager.default.removeItem(at: newTrustcachePath)
-        }
-        try FileManager.default.moveItem(at: trustcache, to: newTrustcachePath)
+        let newTrustcachePath = try moveIntoFirmware(trustcache)
         identityManifest = try updateManifestComponentPath(
             identityManifest: identityManifest,
             component: "StaticTrustCache",
             at: newTrustcachePath,
         )
 
-        let newMetadataPath = restoreDir.appending(path: "Firmware").appending(path: metadata.lastPathComponent)
-        if metadata != newMetadataPath, FileManager.default.fileExists(atPath: newMetadataPath.path) {
-            try FileManager.default.removeItem(at: newMetadataPath)
-        }
-        try FileManager.default.moveItem(at: metadata, to: newMetadataPath)
+        let newMetadataPath = try moveIntoFirmware(metadata)
         identityManifest = try updateManifestComponentPath(
             identityManifest: identityManifest,
             component: "Ap,SystemVolumeCanonicalMetadata",
             at: newMetadataPath,
         )
 
-        let newRootHashPath = restoreDir.appending(path: "Firmware").appending(path: rootHash.lastPathComponent)
-        if rootHash != newRootHashPath, FileManager.default.fileExists(atPath: newRootHashPath.path) {
-            try FileManager.default.removeItem(at: newRootHashPath)
-        }
-        try FileManager.default.moveItem(at: rootHash, to: newRootHashPath)
+        let newRootHashPath = try moveIntoFirmware(rootHash)
         identityManifest = try updateManifestComponentPath(
             identityManifest: identityManifest,
             component: "SystemVolume",
@@ -74,6 +62,19 @@ extension CryptexFilesystemPatcher {
         buildIdentities[0] = buildIdentity
         root["BuildIdentities"] = buildIdentities
         return root
+    }
+
+    /// Moves `file` into the restore's `Firmware` directory, replacing an
+    /// older file of that name. createTrustcache already writes its output
+    /// there, and FileManager refuses to move a file onto itself.
+    func moveIntoFirmware(_ file: URL) throws -> URL {
+        let destination = restoreDir.appending(path: "Firmware").appending(path: file.lastPathComponent)
+        guard file.standardizedFileURL != destination.standardizedFileURL else { return destination }
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.moveItem(at: file, to: destination)
+        return destination
     }
 
     func updateManifestComponentPath(identityManifest: PlistDict, component: String, at: URL) throws -> PlistDict {

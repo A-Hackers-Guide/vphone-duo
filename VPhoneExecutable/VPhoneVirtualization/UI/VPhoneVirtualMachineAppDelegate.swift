@@ -10,6 +10,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: VPhoneVirtualMachineWindowController?
     private var homePodDisplayTask: Task<Void, Never>?
     private var menuController: VPhoneMenuController?
+    private var shellWindowController: VPhoneShellWindowController?
     private var fileWindowController: VPhoneFileWindowController?
     private var keychainWindowController: VPhoneKeychainWindowController?
     private var appWindowController: VPhoneAppWindowController?
@@ -217,6 +218,9 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
+            let shellWC = VPhoneShellWindowController()
+            shellWindowController = shellWC
+
             let fileWC = VPhoneFileWindowController()
             fileWindowController = fileWC
 
@@ -254,6 +258,10 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
             mc.showsTVControls = options.isTVGuest
             mc.showsWatchControls = options.isWatchGuest
             mc.touchIDMonitor = wc.touchIDMonitor
+            mc.onSessionPressed = { [weak shellWC, weak control] in
+                guard let shellWC, let control else { return }
+                shellWC.showWindow(control: control)
+            }
             mc.onFilesPressed = { [weak fileWC, weak control] in
                 guard let fileWC, let control else { return }
                 fileWC.showWindow(control: control)

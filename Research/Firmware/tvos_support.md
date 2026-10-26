@@ -532,6 +532,21 @@ Verified on 23L5208m and 23L773: `vm wait` returns, `device.info` reports
 `own_name` "Apple TV", screenshots and `apps.launch` work, and consumer-page
 HID input moves the TVSetup focus.
 
+A TV guest has no shell, no package manager, and the `tvos` preset admits
+neither debugserver nor any Frida patch, so the scripting session is the
+debugging environment there: `script.eval` and the `/v1/shell` WebSocket run
+JavaScript with vphoned's identity inside the guest. JavaScriptCore is a
+public tvOS framework and the tvOS SDK ships its stub, so nothing has to be
+installed. See "Scripting sessions" in `Research/vphoned_http_api.md`.
+
+Nothing about the session needed a tvOS build: the tvOS SDK marks
+`posix_spawn`, `execv` and the rest of the process API `__TVOS_PROHIBITED`,
+but `vphoned-tvos` is the iOS build with its platform retagged, so those
+declarations are never consulted, and the proxy has been spawning its worker
+that way on TV guests all along. Compiling the daemon against the tvOS SDK
+would fail on them; do not try to, and do not guard the session's code for
+tvOS availability.
+
 ## TV button, Home and Control Center
 
 A USB keyboard cannot press the TV button: no keyboard-page key maps to it.

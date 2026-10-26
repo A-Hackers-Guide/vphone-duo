@@ -182,9 +182,9 @@ struct GuestDeviceTests {
     }
 
     @Test
-    func `every other iPhone presents its own board at 3x`() {
-        #expect(!VPhoneGuestDevice.iPhone17_3.presentsBoard)
-        for device in VPhoneGuestDevice.known where device.family == .iPhone && device != .iPhone17_3 && device.notchedArtworkSubtype == nil {
+    func `every iPhone but the XS Max presents its own board at 3x`() {
+        #expect(VPhoneGuestDevice.iPhone17_3.presentsBoard)
+        for device in VPhoneGuestDevice.known where device.family == .iPhone && device.notchedArtworkSubtype == nil {
             #expect(device.presentsBoard)
             #expect(device.screen.scale == 3.0)
             #expect(device.screen.pixelsPerInch == 460)

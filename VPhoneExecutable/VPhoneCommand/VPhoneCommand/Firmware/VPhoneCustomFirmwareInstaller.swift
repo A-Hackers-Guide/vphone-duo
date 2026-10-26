@@ -566,7 +566,7 @@ struct VPhoneCustomFirmwareInstaller {
         ))
         // Selected patches this guest has nothing for, so the receipt does not
         // report them as missing forever: the board audio repair on an
-        // iPhone17,3, which has no board of its own to present, the iPhone
+        // iPhone XS Max, which is not presented as its own board, the iPhone
         // product repair on a non-iPhone, and the build spoof with no value set. A
         // guest whose board tree could not be recovered is not among them: its
         // repair is missing, and drift should keep saying so.
@@ -1158,7 +1158,23 @@ struct VPhoneCustomFirmwareInstaller {
         throw ValidationError("No prepared iPhone restore tree was found in \(path). Run fw prepare, then install CFW again.")
     }
 
+    /// The free space a run needs before it touches the disk. A full install
+    /// unpacks cryptexes and the GPU bundle from a prepared restore tree into
+    /// an APFS clone of Disk.img, which takes tens of GiB. An environment or
+    /// kernel update writes only this bundle's guest files or one kernelcache
+    /// into that clone, so asking it for the same 50 GiB refused the update on
+    /// any Mac with a few VMs on it, while the update itself needed a small
+    /// fraction of that. 10 GiB still stops it on a volume that is close to
+    /// full.
+    static func requiredFreeSpaceGiB(for mode: Mode) -> Int64 {
+        switch mode {
+        case .full: 50
+        case .environmentOnly, .kernelUpdate: 10
+        }
+    }
+
     private func requireFreeSpace(at paths: [String]) throws {
+        let requiredGiB = Self.requiredFreeSpaceGiB(for: mode)
         var seen = Set<dev_t>()
         for path in paths {
             var metadata = stat()
@@ -1175,8 +1191,8 @@ struct VPhoneCustomFirmwareInstaller {
                     fputs("warning: Volume at \(path) reported 0 available space via resource keys, using statfs fallback: \(capacity / (1024 * 1024 * 1024)) GiB\n", stderr)
                 }
             }
-            guard capacity > 50 * 1024 * 1024 * 1024 else {
-                throw ValidationError("Less than 50 GiB of disk space is available on the volume holding \(path). Free up space, then install CFW again.")
+            guard capacity > requiredGiB * 1024 * 1024 * 1024 else {
+                throw ValidationError("Less than \(requiredGiB) GiB of disk space is available on the volume holding \(path). Free up space, then run the \(mode.summary) again.")
             }
         }
     }
@@ -1241,7 +1257,9 @@ struct VPhoneCustomFirmwareInstaller {
     /// no restore-tree step runs.
     ///
     /// Paired TV dyld updates abort on failure and discard the private disk
-    /// clone, preserving the original disk and receipt. Other patches run in isolation: one patch failing — a verb rejecting an
+    /// clone, preserving the original disk and receipt. Selected X1 bootstrap
+    /// patches also abort on failure: continuing would boot an incompatible
+    /// cache or executable. Other patches run in isolation: one patch failing — a verb rejecting an
     /// unexpected prologue on an older VM, say — is reported and the patch is
     /// left in its prior state, but the run continues and the vphoned redeploy,
     /// done first, is never blocked. Non-patch failures (a volume that will not
@@ -1373,17 +1391,36 @@ struct VPhoneCustomFirmwareInstaller {
         }
         let version = try productVersion(system: system)
 
+        func requireX1Bootstrap() throws {
+            let required: Set<String> = [
+                FirmwareGuestSystemPatchSet.arm64eX1DyldBootstrap,
+                FirmwareGuestSystemPatchSet.arm64eX1CacheBootstrap,
+                FirmwareGuestSystemPatchSet.arm64eX1LaunchdBootstrap,
+                FirmwareGuestSystemPatchSet.arm64eX1FsckBootstrap,
+                FirmwareGuestSystemPatchSet.arm64eX1MountBootstrap,
+            ]
+            let failed = Set(failures).intersection(required).filter {
+                plan?.isEnabled($0) ?? version.hasPrefix("27.")
+            }.sorted()
+            guard failed.isEmpty else {
+                throw ValidationError("Required X1 boot patches failed; installation stopped before setup boot: \(failed.joined(separator: ", ")). See the patch error above.")
+            }
+        }
+
         if version.hasPrefix("27.") || priorGuest.contains(FirmwareGuestSystemPatchSet.arm64eX1DyldBootstrap) {
             machO(FirmwareGuestSystemPatchSet.arm64eX1DyldBootstrap, path: "usr/lib/dyld",
                   verbs: ["patch-arm64e-x1"], preserveEntitlements: true)
+            try requireX1Bootstrap()
         }
         if version.hasPrefix("27.") || priorGuest.contains(FirmwareGuestSystemPatchSet.arm64eX1FsckBootstrap) {
             machO(FirmwareGuestSystemPatchSet.arm64eX1FsckBootstrap, path: "sbin/fsck",
                   verbs: ["patch-arm64e-x1"], preserveEntitlements: true)
+            try requireX1Bootstrap()
         }
         if version.hasPrefix("27.") || priorGuest.contains(FirmwareGuestSystemPatchSet.arm64eX1MountBootstrap) {
             machO(FirmwareGuestSystemPatchSet.arm64eX1MountBootstrap, path: "sbin/mount",
                   verbs: ["patch-arm64e-x1"], preserveEntitlements: true)
+            try requireX1Bootstrap()
         }
 
         // 0. A cache whose span alone overruns the guest kernel's shared region
@@ -1561,6 +1598,8 @@ struct VPhoneCustomFirmwareInstaller {
             try system.removeItem(glowPath)
         }
         for (identifier, library) in [
+            (FirmwareGuestSystemPatchSet.followUpGroups, "libprefsfix.dylib"),
+            (FirmwareGuestSystemPatchSet.signInSheets, "libsigninfix.dylib"),
             (FirmwareGuestSystemPatchSet.gyroscope, "libvphonegyro.dylib"),
             (FirmwareGuestSystemPatchSet.accelerometer, "libvphoneaccelerometer.dylib"),
             (FirmwareGuestSystemPatchSet.attitude, "libvphoneattitude.dylib"),
@@ -1600,10 +1639,11 @@ struct VPhoneCustomFirmwareInstaller {
             ("dyld-exp-hv_vmm", "patch-hv-vmm-dsc", [dsc]),
             ("dyld-cfw-camera", "patch-camera-dsc", [dsc, DyldSharedCacheChunkSet.mainCacheURL(in: URL(fileURLWithPath: dsc)).path]),
         ]
-        applyDyldPatches(
+        try applyDyldPatches(
             dyld, dsc: dsc, cacheRelative: cacheRelative, system: system, plan: plan, priorGuest: priorGuest,
             live: &live, failures: &failures,
         )
+        try requireX1Bootstrap()
 
         // The feature plist exists from iOS 26. Turning the patch off restores
         // the original.
@@ -1940,6 +1980,7 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
 
+        try requireX1Bootstrap()
         if !isHomePod {
             isolate([]) { try restoreMISFixTargets(system: system) }
         }
@@ -2119,7 +2160,8 @@ struct VPhoneCustomFirmwareInstaller {
     /// multi-gigabyte scan when nothing changed. A disabled patch with no undo
     /// record was either never applied (nothing to do) or applied before the
     /// undo log existed; the latter is told apart by the prior-live set and
-    /// reported as not revertible, staying live. Each verb runs in isolation.
+    /// reported as not revertible, staying live. The selected X1 bootstrap
+    /// patch must succeed; optional cache patches still run in isolation.
     private func applyDyldPatches(
         _ dyld: [(id: String, verb: String, args: [String])],
         dsc: String,
@@ -2129,9 +2171,14 @@ struct VPhoneCustomFirmwareInstaller {
         priorGuest: Set<String>,
         live: inout Set<String>,
         failures: inout [String],
-    ) {
+    ) throws {
         func enabled(_ id: String) -> Bool {
             plan?.isEnabled(id) ?? !FirmwareGuestSystemPatchSet.settingsRowPatches.contains(id)
+        }
+        func requireBootstrap(_ id: String, error: any Error) throws {
+            if id == FirmwareGuestSystemPatchSet.arm64eX1CacheBootstrap {
+                throw ValidationError("Required X1 boot patch \(id) failed; installation stopped before setup boot: \(error)")
+            }
         }
         let undoAbsolute = (dsc as NSString).appendingPathComponent(Self.dscUndoLogLeaf)
         let undoRelative = "\(cacheRelative)/\(Self.dscUndoLogLeaf)"
@@ -2153,6 +2200,7 @@ struct VPhoneCustomFirmwareInstaller {
                     } catch {
                         failures.append(entry.id)
                         print("  [!] \(entry.id): re-running the applied patch failed, left as it was: \(error)")
+                        try requireBootstrap(entry.id, error: error)
                     }
                 } else if let undoLog, undoLog.hasOutdatedImplementation(of: entry.id) {
                     print("  [*] \(entry.id): an earlier implementation is applied; reverting it and applying the current one")
@@ -2162,6 +2210,7 @@ struct VPhoneCustomFirmwareInstaller {
                         failures.append(entry.id)
                         live.insert(entry.id)
                         print("  [!] \(entry.id): reverting the earlier implementation failed, left as it was: \(error)")
+                        try requireBootstrap(entry.id, error: error)
                         continue
                     }
                     do {
@@ -2169,6 +2218,7 @@ struct VPhoneCustomFirmwareInstaller {
                     } catch {
                         failures.append(entry.id)
                         print("  [!] \(entry.id): the earlier implementation was reverted but the current one failed; the cache is unpatched for it: \(error)")
+                        try requireBootstrap(entry.id, error: error)
                         continue
                     }
                 }
@@ -2180,6 +2230,7 @@ struct VPhoneCustomFirmwareInstaller {
                 } catch {
                     failures.append(entry.id)
                     print("  [!] \(entry.id): dyld patch failed, left in its prior state: \(error)")
+                    try requireBootstrap(entry.id, error: error)
                 }
             case (false, true):
                 if recorded.contains(entry.id) {
@@ -3343,9 +3394,9 @@ struct VPhoneCustomFirmwareInstaller {
     /// made from when it has none. A board-presenting VM patched before `fw
     /// patch` kept it needs it for the board audio repair, without which
     /// VirtualAudio looks for the iPhone's tunings and the guest has no sound.
-    /// An iPhone17,3 VM needs it for the product description repair, without
+    /// An iPhone XS Max VM needs it for the product description repair, without
     /// which MobileGestalt reads Siri, Camera Control, the Action Button and the
-    /// model name as absent; `fw patch` does not keep the iPhone17,3's, so it
+    /// model name as absent; `fw patch` does not keep its board tree, so it
     /// always comes from here.
     /// A HomePod mini also needs its donor's native product-id token for audio
     /// routing; its selected repair refuses to proceed without a valid donor.

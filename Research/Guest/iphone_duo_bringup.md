@@ -1,5 +1,47 @@
 # iPhone Duo single-display bring-up
 
+## Kernel CSSC fallback (2026-10-25)
+
+This branch starts from upstream main, without the static CSSC trampoline
+experiment. On an independent Banana clone, the installed experimental image
+panicked with PID 1 SIGILL at user PC 0x2bd6380e8, ESR 0x02000000. The kernel's
+exception codes contained the copied instruction 0xdac1a7fe (PACIBSPPC), matching
+/usr/lib/libSystem.B.dylib at image offset 0x10e8. CSSC allocation had aborted
+the entire X1 cache operation, leaving PAuth/CPA conversion unapplied; the
+installer nevertheless continued. The new route retains upstream PAuth/CPA
+conversion and handles CSSC independently in the kernel.
+
+Reveal procedure for `kernelcache.research.vphone600`, UUID
+784F88D3-2AF5-3D4A-AB00-365607646E44:
+
+1. Find the unique function referencing `Undefined kernel instruction: pc=%p
+   instr=%x`. Identify it as XNU handle_uncategorized by decoded control flow,
+   not a recovered symbol (the indexed research symbol JSON is absent).
+2. Validate its copyin of four bytes from the saved PC and its EL0/EL1 gate.
+   Hook only the user path before undefined-instruction triage. The observed
+   handler file offset is 0x1e626ec; the hook is 0x1e62918.
+3. Follow the handler's existing signed-state manipulation sequence to recover
+   ml_check_signed_state (0x1caa37c), ml_sign_thread_state (0x1caa32c) and its
+   interrupt disable/restore helpers. Validate register and saved-state ABI,
+   PACGA bodies, and the original stack-canary checked epilogue. These names
+   are source correlations; offsets are observations, never runtime constants.
+4. Plan the complete fixed-size payload and one entry branch before writing.
+   Restrict it to persistent __TEXT_EXEC; do not use boot-only reclaimed text.
+   Unknown or ambiguous layouts abort the selected operation.
+
+The fallback accepts only 64-bit user saved states with an uncategorized
+exception and successful instruction copyin. It evaluates scalar ABS/CNT/CTZ
+and signed/unsigned MIN/MAX register and immediate forms, preserving the
+saved NZCV and all unrelated registers. W results zero-extend and register 31
+is ZR. A successful operation verifies the old signed state, updates the
+destination and PC, and re-signs with the new LR/X16/X17 when applicable.
+There are no stack accesses while SPSel selects the interrupt stack. The
+original canary check and epilogue remain in use. Unknown words preserve the
+original instruction, registers, kernel flags and exception path.
+
+Kernel emulation has per-execution exception overhead. Native CSSC execution
+does not enter this fallback; PAuth/CPA retain the existing X1 conversion path.
+
 ## Scope and inputs (2026-10-23)
 
 This experiment attempts to boot the iPhone Duo userland on the existing

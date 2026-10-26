@@ -48,10 +48,12 @@ class VPhoneMenuController {
     /// Saves the Sync Host Location setting to this machine's config.plist.
     var onHostLocationSyncChange: ((Bool) throws -> Void)?
 
+    var onSessionPressed: (() -> Void)?
     var onFilesPressed: (() -> Void)?
     var onKeychainPressed: (() -> Void)?
     var onFindPressed: (() -> Void)?
     var onAppsPressed: (() -> Void)?
+    var connectSessionItem: NSMenuItem?
     var connectFileBrowserItem: NSMenuItem?
     var connectKeychainBrowserItem: NSMenuItem?
     var connectDevModeStatusItem: NSMenuItem?

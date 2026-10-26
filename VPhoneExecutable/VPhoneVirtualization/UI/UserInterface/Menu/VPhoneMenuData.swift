@@ -90,6 +90,7 @@ extension VPhoneMenuController {
     }
 
     func updateConnectAvailability(available: Bool) {
+        connectSessionItem?.isEnabled = available
         connectFileBrowserItem?.isEnabled = available
         connectKeychainBrowserItem?.isEnabled = available
         connectDevModeStatusItem?.isEnabled = available
@@ -100,6 +101,10 @@ extension VPhoneMenuController {
     func updateClipboardAvailability(available: Bool) {
         clipboardGetItem?.isEnabled = available
         clipboardSetItem?.isEnabled = available
+    }
+
+    @objc func openSession() {
+        onSessionPressed?()
     }
 
     @objc func openFiles() {

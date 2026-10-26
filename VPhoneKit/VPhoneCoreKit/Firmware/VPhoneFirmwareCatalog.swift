@@ -650,7 +650,7 @@ public enum VPhoneFirmwareCatalog {
                 )
             }
         }
-        guard guest.presentsBoard else { return pairings }
+        guard guest.productType != VPhoneGuestDevice.iPhone17_3.productType else { return pairings }
         let restored = guest.restoreBase ?? guest
         let otas = otaReleases.filter { $0.productType == guest.productType && $0.unpacks(onMacOS: hostMacOS) }
         var releases = (iPhoneReleases + iPadReleases + tvReleases + homePodReleases + watchReleases).first { $0.devices.contains(restored.productType) }?.releases ?? []

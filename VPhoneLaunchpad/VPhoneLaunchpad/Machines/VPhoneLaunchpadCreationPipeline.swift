@@ -99,9 +99,9 @@ final class VPhoneLaunchpadCreationPipeline {
         /// of its own.
         var usesTemplate = true
         var slimming = VPhoneLaunchpadSlimming()
-        /// The ipsw that stages the kernelcache mix of a machine on its
-        /// release's own cloudOS (`fw kernelcache --ipsw`), whose link the helper
-        /// runs as root. Nil for every other machine.
+        /// The ipsw a 2.12.0 bundle stages the kernelcache mix with (`fw
+        /// kernelcache --ipsw`), whose link the helper runs as root. A 2.12.1
+        /// bundle extracts natively and ignores it; nil passes none.
         var kernelcacheIPSW: String?
         /// The Mac that links a kernel-first mix over ssh, for an iOS 18 guest
         /// on a Mac whose kmutil links kernel-last; nil links here, as root.
@@ -395,16 +395,17 @@ final class VPhoneLaunchpadCreationPipeline {
         let log = log
         let output: @Sendable (String) -> Void = { line in log.write(line) }
 
+        @discardableResult
         func run(
             _ arguments: [String],
             builder: VPhoneLaunchpadKernelcacheBuilder? = nil,
             onLine: @escaping @Sendable (String) -> Void = output,
             onProgress: (@Sendable (Double) -> Void)? = nil,
-        ) async throws {
+        ) async throws -> VPhoneLaunchpadCommandResult {
             // The builder's destination is shown, its password is not.
             let prefix = builder.map { "\(VPhoneLaunchpadKernelcacheBuilder.destinationVariable)=\($0.destination) " } ?? ""
             onLine("$ \(prefix)\(VPhoneLaunchpadCommandLine.display(arguments))")
-            try await commandLine.runChecked(arguments, environment: builder?.environment ?? [:], onLine: onLine, onProgress: onProgress)
+            return try await commandLine.runChecked(arguments, environment: builder?.environment ?? [:], onLine: onLine, onProgress: onProgress)
         }
 
         // For the template steps: a failure names the step and carries the
@@ -491,15 +492,21 @@ final class VPhoneLaunchpadCreationPipeline {
                 )
             }
             let libraryRoot = Self.canonicalPath(URL(fileURLWithPath: options.libraryRoot, isDirectory: true))
-            // On the release's own cloudOS the kernelcache is mixed first: staged
-            // here, as the user, with the chosen ipsw, and linked by the helper as
-            // root, which runs no ipsw. `fw patch` takes the mix from the cache.
-            // With an ssh builder, `fw kernelcache` links it on that Mac, and
-            // nothing here needs root for it.
-            if let ipsw = options.kernelcacheIPSW, let builder = options.kernelcacheBuilder {
-                try await run(["fw", "kernelcache", name, "--ipsw", ipsw] + library, builder: builder, onLine: tee)
-            } else if let ipsw = options.kernelcacheIPSW {
-                try await run(["fw", "kernelcache", name, "--ipsw", ipsw] + library, onLine: tee)
+            // A machine whose cloudOS has no vphone600 components (the release's
+            // own cloudOS, a watch, an iOS 18 guest) gets its kernelcache mixed
+            // first: staged here, as the user, and linked by the helper as root.
+            // `fw patch` takes the mix from the cache. `fw kernelcache` decides
+            // whether a mix is needed and says "[=] … needs no mix" otherwise,
+            // so it runs for every machine: since 2.12.1 it extracts natively,
+            // and the ipsw is only passed on for a 2.12.0 bundle, which needs
+            // one. The helper runs only once a volume is staged ("[+] Staged."),
+            // so a machine without a mix asks for no administrator access. With
+            // an ssh builder, `fw kernelcache` links it on that Mac, and nothing
+            // here needs root for it.
+            let kernelcache = ["fw", "kernelcache", name] + (options.kernelcacheIPSW.map { ["--ipsw", $0] } ?? []) + library
+            if let builder = options.kernelcacheBuilder {
+                try await run(kernelcache, builder: builder, onLine: tee)
+            } else if try await run(kernelcache, onLine: tee).lines.contains(where: { $0.hasPrefix("[+] Staged.") }) {
                 let status = try await helper.linkKernelcache(
                     bundleVersion: version,
                     machineName: name,

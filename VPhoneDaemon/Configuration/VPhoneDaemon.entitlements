@@ -570,6 +570,8 @@
 	<array>
 		<string>/</string>
 	</array>
+	<key>dynamic-codesigning</key>
+	<true/>
 	<key>file-read-data</key>
 	<true/>
 	<key>file-read-metadata</key>

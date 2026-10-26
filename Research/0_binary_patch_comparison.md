@@ -51,6 +51,53 @@
 > returns directly to Home; the original remains running with its data intact.
 > Both receipts have zero pending changes and legacy setup off.
 
+> **The iPhone17,3 presents its board (2026-10-25).**
+> `VPhoneGuestDevice.presentsBoard` no longer excludes the iPhone17,3; only the
+> XS Max keeps the shared tree. An iPhone17,3 guest now gets the separate
+> installed tree and the `devicetree-cfw-ipad_*` presentation from
+> `DeviceTree.d47ap.im4p`, as every other iPhone does, and skips
+> `preboot-exp-devicetree_identity`. No patch is new. `ipad_identity` is on in
+> `standard`, so a `standard` iPhone17,3 guest now reports `iPhone17,3` instead
+> of `iPhone99,11`. The catalog's release list keeps its iPhone17,3 check
+> explicit (`VPhoneFirmwareCatalog.pairings`), so its pairings do not change. Checked on
+> a new `iPhone17,3 27.0.1 (24A446)` guest, cloudOS 26.4 (23E5207q), plain
+> `standard`: the restore tree split off `DeviceTree.vphone600ap.guest.im4p`;
+> the receipt records the `ipad_*` patches and
+> `preboot-cfw-devicetree_board_audio`; `device.info` reports `iPhone17,3` at
+> 430x932 @3x; Settings > About shows Model Name iPhone 16 and an Action
+> Button row; the Camera app shows the .5/1x/2 lenses and the test pattern;
+> with Location Services on, `location.set` reads back a fresh simulated fix
+> and `bluetoothd`/`locationd` keep their boot PIDs (no #438). Crash reports
+> held only the documented restore-reboot panic and `duetexpertd` datavault
+> crashes, plus one `NANDTaskScheduler` PAC kill in its Core Data failure
+> logging (no ANS NAND on a VM), not on a device tree path.
+
+> **Account prompt hooks are selectable (2026-10-25).**
+> `system-preferences-cfw-followup_groups` (`libprefsfix.dylib`, Settings'
+> CoreFollowUp groups) and `system-apps-cfw-signin_sheets`
+> (`libsigninfix.dylib`, in-app sign-in sheets) were installed with the guest
+> environment and could not be turned off. Both are now declarations, on in
+> `standard` and `experimental`, blocked in the TV and HomePod presets, which
+> already block the environment. `cfw install` and `cfw update-environment`
+> install or remove each library per the plan, a VM with no plan keeps both,
+> and the live environment sync no longer reinstalls one that was turned off.
+> SystemHook skips a missing library, so removal takes effect on the next
+> launch of Settings or the app. No binary or loader changes. Account daemons
+> stay running either way; update and account daemons are disabled only by
+> vphoned's service profile ([service trimming](Guest/service_trimming.md)).
+
+> **CSSC kernel compatibility experiment (2026-10-25).**
+> `kernel-boot-cssc_emulation` targets iOS 27 with cloudOS 26.4. It reuses the
+> kernel's undefined-instruction copyin, PAC-safe interrupt helpers and
+> signed-state check/sign ABI. Only known EL0 scalar CSSC words are evaluated;
+> unknown faults retain native triage. The single baseline-A64 payload occupies
+> persistent kernel text; no userland/cache CSSC trampolines or writable code
+> pages are introduced. Existing X1 PAuth/CPA lowering remains unchanged.
+> Selected X1 boot patch failures abort installation, and an unresolved CSSC
+> kernel handler aborts kernel preparation. TV and HomePod presets exclude
+> this operation. See `Research/Guest/iphone_duo_bringup.md` for the reveal
+> procedure and signed-state handling.
+
 > **HomePod local app installation (2026-10-23).**
 > `system-installd-exp-homepod_adhoc` is selected only by `homepod-mini` on
 > HomePod 27. It loads a dedicated TVOS arm64e build of the existing MIS
@@ -357,6 +404,12 @@
 > patch failure. This is host-driven payload installation; Apple's UpdateBrain
 > protocol and application migration are not implied. See
 > [the implementation and validation record](Restore/data_preserving_full_ota.md).
+
+> **OTA removed-app state (2026-10-25):** capture preserves the guest's removed
+> system-app IDs, and complete/commit/verify include LaunchServices placeholders
+> in their absence checks. Reconciliation retains the original removal backups
+> and independent app data. No instruction patch or preset changes; see the
+> [removed-app regression](Restore/data_preserving_full_ota.md#preserve-removed-system-apps-2026-10-25).
 > **2026-10-21 correction:** full updates also stage, validate and install
 > `payloadv2/links.txt`. The 24A446 iPad OTA omits 24,835 duplicate paths from
 > its numbered chunks. Missing J410 media resources made audiomxd trap in
@@ -3911,6 +3964,18 @@ On macOS 26.6.2 two more steps failed (2026-10-23, Mac mini M4):
   now extends the file and runs `diskutil apfs resizeContainer <container> 0`,
   which gave the same image 2.7 GB free. The iOS images, which diskutil can
   grow, are resized as before.
+
+Corrected 2026-10-24 (macOS 26.5.1, Minimal preset): the iOS OS images have
+no partition map either. iPhone17,3 26.5 23F77's `094-54920-099` converts to a
+9.31 GB RAW image with 537 MB free, and `diskutil image resize -plist` reports
+max = current for it, so `convertToRawImage`'s resize to max left it as it
+was. Merging the System OS cryptex (5.2 GB) then ran out of space in the image
+("dyld_shared_cache_arm64e.09: No space left on device"), for iOS 18.6 22G86
+as well; a 2.12.0 bundle that had built both a day earlier failed the same
+way on the same host. `convertToRawImage` keeps the resize to max where it
+grows the image and otherwise grows it as `growImage` does, by 16 GiB
+(`mergeHeadroom`): the room is sparse, and `shrinkImage` gives it back after
+the merge.
 
 The binaries the merge patches (`launchd_cache_loader`, `mobileactivationd`)
 are re-signed in Apple's ad-hoc shape (`VPhoneSignOptions.Style.appleAdHoc`),

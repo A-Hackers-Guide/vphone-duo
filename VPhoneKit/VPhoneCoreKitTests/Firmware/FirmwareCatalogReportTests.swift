@@ -209,7 +209,7 @@ struct FirmwareCatalogReportTests {
     }
 
     @Test func `other i phones have pairings of their own`() {
-        for guest in VPhoneGuestDevice.known where guest.family == .iPhone && guest.presentsBoard {
+        for guest in VPhoneGuestDevice.known where guest.family == .iPhone && guest.presentsBoard && guest != .iPhone17_3 {
             let pairings = VPhoneFirmwareCatalog.pairings(for: guest.productType)
             let firstRelease = switch guest.productType {
             case "iPhone18,5": "iOS 26.3.1"

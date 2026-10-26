@@ -86,7 +86,10 @@ public final class KernelCustomFirmwarePatcher: KernelCustomFirmwarePatcherBase,
             patchIoucFailedSandbox()
             patchDiskImages2ClientAbi()
             patchSharedRegionSize()
-            patchArm64eX1Admission()
+            if gate.isEnabled("kernel-boot-arm64e_x1"), !patchArm64eX1Admission() {
+                throw PatcherError.invalidFormat("cannot validate required ARM64E_X1 kernel admission")
+            }
+            try patchCSSC()
         } else if applyParavirtUserClients {
             patchParavirtUserClientsNarrow()
         }
