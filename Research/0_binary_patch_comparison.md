@@ -1,5 +1,24 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **Apple TV RootHide bootstrap and environment hooks (2026-10-26).** No new
+> declaration or instruction patch. An arm64e Apple TV now admits
+> `system-launchdaemons-boot-environment` and
+> `system-launchd-boot-jetsam_panic_guard_bypass`
+> (`FirmwareGuestPatchResolution.tvArm64eGuestPatches`); both stay blocked in
+> `tvos` and `tvos-4k` and on the plain-arm64 HD. On TV the environment is
+> `launchdhook-vphone.dylib` and `SystemHook-vphone.dylib` alone, their
+> `LC_BUILD_VERSION` rewritten to tvOS (`MachOBuildPlatform`) and re-signed at
+> install, with `/vh`; turning it off removes them. The launchd patch is
+> unchanged: on `tv4k`'s tvOS 26.6 arm64e launchd it rewrote `tbnz w0, #0,
+> 0xdac4` at `0xDA68` to `b 0xdac4` (anchor `jetsam property category`) and
+> `/vh` went in as `LC_LOAD_WEAK_DYLIB`. With both on, `tv4k` booted to the
+> home screen with SystemHook in every process and the vphoned RootHide root
+> as `VPHONE_JB_ROOT`; with both off again launchd came back from its backup
+> and the libraries and `/vh` were removed. vphoned installs Irisin's
+> `appletvos-arm64e` package as the RootHide bootstrap on any tvOS guest and
+> refuses rootless there; both were validated live on `tv4k`. See
+> [tvOS support](Firmware/tvos_support.md#roothide-bootstrap).
+
 > **The iPhone17,3 presents its board (2026-10-25).**
 > `VPhoneGuestDevice.presentsBoard` no longer excludes the iPhone17,3; only the
 > XS Max keeps the shared tree. An iPhone17,3 guest now gets the separate

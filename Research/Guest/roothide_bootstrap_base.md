@@ -92,6 +92,10 @@ Rules:
   link and root SSH worked with public-key and password authentication. A
   fresh restore with the package's unmodified `sshd_config` has not been
   checked yet. vphoned never edits `sshd_config`, the package's conffile.
+- **Apple TV.** The base is the same on tvOS, seeded from tvOS's own account
+  files, but no tvOS package provides `pwd_mkdb` or `ssh-keygen` yet, so the
+  databases and host keys stay deferred and vphoned logs that at every start.
+  See `Research/Firmware/tvos_support.md` ("RootHide bootstrap").
 - **Alternatives links** such as `/usr/bin/pager` only exist when maintainer
   scripts ran. Check whether Irisin's Bootstrap Install creates them on a fresh
   vphone; if it does not, that is an Irisin bug.

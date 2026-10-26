@@ -37,11 +37,16 @@ public enum FirmwareGuestPatchResolution {
     /// An arm64e Apple TV (the 4K, from its OTA) also admits the paravirtual
     /// GPU driver, which a plain-arm64 userland cannot load, the OTA userland
     /// swap itself, and the iOS 27 shared-cache patches its tvOS 27 OTA meets.
+    /// It admits the environment's launchd hook and SystemHook too, marked
+    /// tvOS at install, with the launchd patch that loads the hook: both are
+    /// arm64e, so a plain-arm64 launchd could not load them.
     public static let tvArm64eGuestPatches: Set<String> = Set([
         "system-extensions-boot-gpu_bundle",
         FirmwareGuestSystemPatchSet.tvOTAUserland,
         FirmwareGuestSystemPatchSet.tvSetupDisplayLookup,
         FirmwareGuestSystemPatchSet.tvLegacySetup,
+        "system-launchdaemons-boot-environment",
+        "system-launchd-boot-jetsam_panic_guard_bypass",
     ]).union(FirmwarePatchSetCatalog.tvOS27UserlandPatches)
 
     public static func unvalidatedTVGuestPatches(enabled: Set<String>, arm64eUserland: Bool = false) -> [String] {

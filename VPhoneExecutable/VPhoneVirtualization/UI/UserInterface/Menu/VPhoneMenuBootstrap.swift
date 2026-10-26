@@ -129,16 +129,18 @@ extension VPhoneMenuController {
         } else {
             VPhoneLocalization.text("Choose the bootstrap layout. This installs the latest Irisin release once in the guest.")
         }
+        // Irisin serves an Apple TV only as RootHide; vphoned refuses rootless there.
+        let offersRootless = !showsTVControls
         VPhoneAlert.present(
             title: "Install Bootstrap",
             message: message,
             style: .informational,
-            buttons: ["roothide", "rootless (deprecated)", "Cancel"],
+            buttons: offersRootless ? ["roothide", "rootless (deprecated)", "Cancel"] : ["roothide", "Cancel"],
         ) { [weak self] response in
             let layout: String
             switch response {
             case .alertFirstButtonReturn: layout = "roothide"
-            case .alertSecondButtonReturn: layout = "rootless"
+            case .alertSecondButtonReturn where offersRootless: layout = "rootless"
             default: return
             }
             self?.performBootstrapInstallation(layout: layout, localURL: localURL)

@@ -1,12 +1,13 @@
 import Foundation
+import MachO
 
 // MARK: - Harness
 
 /// Checks the guest-independent parts of vphoned on the Mac: the service
 /// profile lists and bookkeeping, the first-boot settle verdict (data
-/// migration included), the device name rule and the pointer scroll
-/// parameters. `run-logic-tests.sh` builds
-/// this file with those sources.
+/// migration included), the device name rule, the pointer scroll
+/// parameters and the Irisin package a guest takes. `run-logic-tests.sh`
+/// builds this file with those sources.
 nonisolated(unsafe) var failures = 0
 nonisolated(unsafe) var checks = 0
 
@@ -36,6 +37,7 @@ enum LogicTests {
         dataMigrationRecord()
         deviceNameRule()
         pointerScroll()
+        bootstrapPlatform()
         print("\(checks) checks, \(failures) failures")
         exit(failures == 0 ? 0 : 1)
     }
@@ -396,5 +398,21 @@ enum LogicTests {
         for bad: Any in [-1, 8, 1.5, true, "1"] {
             expect((try? GuestPointerScroll.buttons(["buttons": bad])) == nil, "buttons \(bad) is refused")
         }
+    }
+
+    // MARK: - Bootstrap Platform
+
+    static func bootstrapPlatform() {
+        let architecture = GuestBootstrapPlatform.packageArchitecture
+        expectEqual(architecture("roothide", false), "iphoneos-arm64e")
+        expectEqual(architecture("rootless", false), "iphoneos-arm64")
+        expectEqual(architecture("roothide", true), "appletvos-arm64e", "an Apple TV takes Irisin's Apple TV package")
+        expectEqual(architecture("rootless", true), nil, "Irisin serves no rootless Apple TV")
+        expectEqual(architecture("rootful", false), nil)
+        expect(GuestBootstrapPlatform.packageRequiresApp(architecture: "iphoneos-arm64e"), "the iOS packages carry the app")
+        expect(GuestBootstrapPlatform.packageRequiresApp(architecture: "iphoneos-arm64"), "the iOS packages carry the app")
+        expect(!GuestBootstrapPlatform.packageRequiresApp(architecture: "appletvos-arm64e"), "the Apple TV package has none")
+        expectEqual(GuestBootstrapPlatform.mainExecutablePlatform(), UInt32(PLATFORM_MACOS), "this test runs as macOS")
+        expect(!GuestBootstrapPlatform.isTVOS, "the Mac is not tvOS")
     }
 }

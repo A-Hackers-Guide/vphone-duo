@@ -125,7 +125,16 @@ menu item retains the verified latest-release download.
 Rootless uses `/var/jb`. RootHide reuses the sole valid `.jbroot-<16 hex>` under
 `/var/containers/Bundle/Application`, or creates
 `.jbroot-000114514191980C` when none exists. The selected stem is zero padded
-and its final byte carries RootHide's XOR checksum. Missing bootstrap directories are created.
+and its final byte carries RootHide's XOR checksum. Missing bootstrap directories are created,
+an empty `Applications` among them, which the package watcher's app refresh reads.
+A guest whose vphoned dyld runs as tvOS (`vphoned-tvos`: every Apple TV and
+HomePod guest) has one layout, `roothide`, and one package, Irisin's
+`appletvos-arm64e`; `rootless` is refused before anything is created
+(`GuestBootstrapPlatform`). That package carries no app, so vphoned checks its
+daemon, helper and plist, makes no data directory, registers nothing
+(`registration` and `app_path` are null) and loads the daemon as on iOS. The
+Apple TV HD's plain-arm64 userland takes the same package: Irisin's tvOS
+binaries are arm64.
 It selects the matching architecture, verifies the release
 asset's GitHub SHA-256 digest and Debian control fields, then uses IcliKit to
 extract the `.deb` into a temporary directory. It copies the full payload

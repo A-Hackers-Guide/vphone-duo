@@ -4,16 +4,21 @@ import Foundation
 // MARK: - Payload
 
 extension GuestIrisinInstaller {
+    /// `app` is nil for a package without one, which only the Apple TV
+    /// package may be (`GuestBootstrapPlatform.packageRequiresApp`).
     static func validatePayload(
-        app: URL, daemon: URL, helper: URL, plist: URL,
+        app: URL?, daemon: URL, helper: URL, plist: URL,
         version: String, architecture: String, layout: String,
     ) throws {
-        let info = NSDictionary(contentsOf: app.appendingPathComponent("Info.plist"))
-        guard info?["CFBundleIdentifier"] as? String == "wiki.qaq.irisin",
-              info?["CFBundleShortVersionString"] as? String == version,
-              info?["IrisinCurrentArchitecture"] as? String == architecture,
-              FileManager.default.isExecutableFile(atPath: app.appendingPathComponent("irisin").path),
-              FileManager.default.isExecutableFile(atPath: daemon.path),
+        if let app {
+            let info = NSDictionary(contentsOf: app.appendingPathComponent("Info.plist"))
+            guard info?["CFBundleIdentifier"] as? String == "wiki.qaq.irisin",
+                  info?["CFBundleShortVersionString"] as? String == version,
+                  info?["IrisinCurrentArchitecture"] as? String == architecture,
+                  FileManager.default.isExecutableFile(atPath: app.appendingPathComponent("irisin").path)
+            else { throw GuestAPIError.operationFailed("Irisin release payload is incomplete or has the wrong layout") }
+        }
+        guard FileManager.default.isExecutableFile(atPath: daemon.path),
               FileManager.default.isExecutableFile(atPath: helper.path),
               let properties = NSDictionary(contentsOf: plist) as? [String: Any],
               properties["Label"] as? String == serviceLabel,

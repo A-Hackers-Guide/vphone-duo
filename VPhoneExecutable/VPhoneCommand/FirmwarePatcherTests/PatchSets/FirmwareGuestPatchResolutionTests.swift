@@ -269,6 +269,19 @@ struct FirmwareGuestPatchResolutionTests {
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: ["dyld-cfw-camera"], arm64eUserland: true) == ["dyld-cfw-camera"])
     }
 
+    @Test
+    func `only an arm64e TV admits the environment hooks and the launchd patch that loads them`() {
+        let hooks: Set = ["system-launchdaemons-boot-environment", "system-launchd-boot-jetsam_panic_guard_bypass"]
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: hooks, arm64eUserland: true).isEmpty)
+        // Both libraries are arm64e: a plain-arm64 launchd cannot load them.
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: hooks) == hooks.sorted())
+        // The X1 launchd bootstrap shares the load command but stays out.
+        let x1 = FirmwareGuestSystemPatchSet.arm64eX1LaunchdBootstrap
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [x1], arm64eUserland: true) == [x1])
+        // HomePod keeps its own launchd library and no environment.
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: hooks) == hooks.sorted())
+    }
+
     @Test(arguments: ["27.0", "27.2"])
     func `the Apple TV 4K preset swaps in the OTA userland with the GPU driver and no TPRO patches`(version: String) throws {
         let gpu = "system-extensions-boot-gpu_bundle"

@@ -405,8 +405,9 @@ Its launchd job goes into `/System/Library/xpc/launchd.plist` as on iOS. The
 plain-arm64 loader (`0xB00` in 23L5208m), and the console then shows `Using
 unsecure cache: /System/Library/xpc/launchd.plist`. Both are now admitted for
 TV (`FirmwareGuestPatchResolution.tvSupportedGuestPatches`). The environment
-hooks (`system-launchdaemons-boot-environment`) stay blocked; they have no TV
-port.
+hooks (`system-launchdaemons-boot-environment`) stay blocked on the plain-arm64
+HD; an arm64e TV admits a two-library port of them, see "RootHide bootstrap"
+below.
 
 Verified on 23L5208m and 23L773: `vm wait` returns, `device.info` reports
 `own_name` "Apple TV", screenshots and `apps.launch` work, and consumer-page
@@ -426,6 +427,94 @@ declarations are never consulted, and the proxy has been spawning its worker
 that way on TV guests all along. Compiling the daemon against the tvOS SDK
 would fail on them; do not try to, and do not guard the session's code for
 tvOS availability.
+
+## RootHide bootstrap
+
+Irisin 5.0.1 ships a third package, `appletvos-arm64e`, beside iOS's two:
+`irisind`, `irisin-install` and the daemon's plist, tvOS 17 binaries (plain
+arm64, platform TVOS), and no app. Irisin serves an Apple TV only as RootHide
+and refuses any other root (its `Documentation/AppleTV.md`). OwnGoal's
+repository carries no tvOS bootstrap package yet, so on TV the bootstrap is
+the RootHide root, vphoned's base in it, and Irisin's privileged layer.
+
+`bootstrap.install` decides the package by the platform dyld runs vphoned as
+(`GuestBootstrapPlatform`: the main image's `LC_BUILD_VERSION`, TVOS for
+`vphoned-tvos`), not by product type, so the HD and the 4K take the same
+package. On tvOS `rootless` is refused before a root is created. The
+package's missing app is allowed only for `appletvos-*`; vphoned then creates
+no data directory, registers nothing and loads the daemon, which is what the
+package's own postinst does. Every root also gets an empty `Applications`,
+which icli's refresh needs to exist. The Apps menu offers only roothide on
+an Apple TV.
+
+Validation, 2026-10-26, `tv4k` on jp-01 (AppleTV14,1, tvOS 26.6 arm64e OTA
+userland: `/sbin/launchd` cpusubtype `0x80000002`, `dyld_shared_cache_arm64e`),
+the new `vphoned-tvos` delivered by the host's update path:
+
+- `{"layout":"rootless"}` answers `Irisin serves only a roothide bootstrap on
+  tvOS`; no `/var/jb` appears.
+- `{"layout":"roothide"}` downloads `wiki.qaq.irisin_5.0.1_appletvos-arm64e.deb`
+  (digest checked) and returns `architecture` `appletvos-arm64e`,
+  `registration` null, `firmware_version` 26.6.0, `irisind` loaded, started and
+  running. The base created `/tmp`, `/var`, `/var/root`, `/etc`, `/var/tmp`,
+  `/dev`, `/rootfs` and the three account files from tvOS's own; `pwd.db`
+  waits for a `pwd_mkdb` no tvOS package provides yet. The `.jbroot` loader
+  links are in the root, `usr/lib` and `usr/libexec`.
+- Irisin's tvOS test client (`irisin-external-probe`, root-owned in the
+  root's `usr/libexec`, from Irisin's Apple TV test kit) gets `serviceInfo`
+  with `installRoot` the vphoned root, installs and removes an `all` package
+  (dpkg status lists it beside `firmware`, then only `firmware`), and is
+  refused an `iphoneos-arm64e` package.
+- After `system.reboot`, `bootstrap.inspect` reports the roothide root,
+  vphoned's startup reloads `wiki.qaq.irisind`, and the daemon starts on demand
+  for the client.
+
+### Environment hooks
+
+The iOS environment inserts SystemHook into every process and five more
+libraries into named iOS processes (SpringBoard, Settings, installd,
+lockdownd, cryptexd, configd). An Apple TV takes
+`VPhoneGuestEnvironment.tvLibraries` alone, `launchdhook-vphone.dylib` and
+`SystemHook-vphone.dylib`: the RootHide loader links and `VPHONE_JB_ROOT` at
+each spawn, jetsam limits for bootstrap programs, and ElleKit's TweakLoader
+when a bootstrap provides one. The spawn hooks insert a library only when it
+is installed, so the others are simply absent. Both libraries are built for
+iOS; `cfw install` and `cfw update-environment` mark them tvOS with
+`MachOBuildPlatform` and sign them again, as the HomePod virtio sound driver
+is. They are always written with `/vh` on TV, and removed with `/vh` when the
+patch is off. The hook is loaded by `/vh`, the load command
+`system-launchd-boot-jetsam_panic_guard_bypass` adds to launchd, so both
+patches are admitted together, for an arm64e TV only: both libraries are
+arm64e. Neither is on in `tvos-4k`; turn them on with `fw set-patches <vm>
+--allow system-launchdaemons-boot-environment --allow
+system-launchd-boot-jetsam_panic_guard_bypass`, then `cfw update-environment`.
+
+Offline, on a copy of `tv4k`'s `/sbin/launchd` (586496 bytes): the jetsam
+patcher found `jetsam property category`, function at `0xDA34`, and rewrote
+`tbnz w0, #0, 0xdac4` at `0xDA68` to `b 0xdac4`; `inject-dylib` added
+`LC_LOAD_WEAK_DYLIB /vh`.
+
+Live, the same day on `tv4k`, with the RootHide bootstrap above installed:
+`fw set-patches tv4k --allow …` for both, then `cfw update-environment`
+logged `Environment hooks retargeted to tvOS`, the jetsam patch at `0xDA68`
+and `/vh`. The guest booted to vphoned in 20 seconds and to the home screen.
+The launchd hook inserted SystemHook into xpcproxy (203 spawns by then),
+PineBoard, PosterBoard and the TV apps; SystemHook's log names
+`root=/private/var/containers/Bundle/Application/.jbroot-000114514191980C` in
+every process, so the hook found the vphoned root. The test client's request
+started `irisind` through xpcproxy (`label=wiki.qaq.irisind`); the hook
+checked its loader link (`loader_link_errno=0`) and, its plist setting
+`DISABLE_TWEAKS`, logged `inserted-tweaks-disabled`. `serviceInfo` answered as
+before; PineBoard kept its boot pid; the only reports were `bug_type` 313
+SiriSearchFeedback entries, which the guest also wrote before the hooks.
+There is no `bootstrap-root` line in the hook's log: its first spawns come
+before the data volume where the log lives is mounted.
+
+Turning both off (`fw set-patches tv4k`, `cfw update-environment`) logged
+`removed the TV environment hooks` and `restored sbin/launchd from backup`;
+the guest booted in 20 seconds with neither library nor `/vh`, the bootstrap
+still installed. Turning them on again restored the hooked boot. Snapshots
+`before-tvroothide` (no bootstrap) and `bootstrap-no-hooks` are on the VM.
 
 ## TV button, Home and Control Center
 

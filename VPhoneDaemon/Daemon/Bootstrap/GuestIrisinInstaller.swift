@@ -255,16 +255,23 @@ enum GuestIrisinInstaller {
         if let detectedLayout, layout != detectedLayout {
             throw GuestAPIError.invalidRequest("Requested layout does not match the guest bootstrap")
         }
+        // Before anything is created, so a refused layout leaves no root behind.
+        guard let architecture = GuestBootstrapPlatform.packageArchitecture(
+            layout: layout, tvOS: GuestBootstrapPlatform.isTVOS,
+        ) else {
+            throw GuestAPIError.invalidRequest("Irisin serves only a roothide bootstrap on tvOS")
+        }
         let root = try bootstrapRoot(layout: layout, detected: jailbreak["jbroot"] as? String)
-        try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true,
-                                                attributes: [.posixPermissions: 0o755])
-        try FileManager.default.createDirectory(atPath: root + "/usr/lib", withIntermediateDirectories: true,
-                                                attributes: [.posixPermissions: 0o755])
+        // icli refuses to refresh an Applications directory that is not there,
+        // and the Apple TV package carries no app to create it.
+        for directory in [root, root + "/usr/lib", root + "/Applications"] {
+            try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o755])
+        }
         guard isDirectory(root) else {
             throw GuestAPIError.operationFailed("Jailbreak root is not a directory: \(root)")
         }
 
-        let architecture = layout == "roothide" ? "iphoneos-arm64e" : "iphoneos-arm64"
         let work = FileManager.default.temporaryDirectory
             .appendingPathComponent("vphoned-irisin-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
@@ -310,13 +317,19 @@ enum GuestIrisinInstaller {
         let daemon = payload.appendingPathComponent("usr/libexec/irisind")
         let helper = payload.appendingPathComponent("usr/libexec/irisin-install")
         let plist = payload.appendingPathComponent("Library/LaunchDaemons/\(serviceLabel).plist")
-        try validatePayload(app: app, daemon: daemon, helper: helper, plist: plist,
+        let carriesApp = itemExists(app)
+        guard carriesApp || !GuestBootstrapPlatform.packageRequiresApp(architecture: architecture) else {
+            throw GuestAPIError.operationFailed("Irisin release payload is incomplete or has the wrong layout")
+        }
+        try validatePayload(app: carriesApp ? app : nil, daemon: daemon, helper: helper, plist: plist,
                             version: version, architecture: architecture, layout: layout)
 
         if layout == "roothide" {
             _ = try patchRootHideDaemon(at: plist.path, root: root)
         }
-        try prepareAppData(home: appHome(layout: layout, root: root))
+        if carriesApp {
+            try prepareAppData(home: appHome(layout: layout, root: root))
+        }
 
         let rootURL = URL(fileURLWithPath: root, isDirectory: true)
         let installedApp = rootURL.appendingPathComponent("Applications/irisin.app", isDirectory: true)
@@ -338,7 +351,7 @@ enum GuestIrisinInstaller {
             if layout == "roothide" {
                 base = try repairRootHide(root: root)
             }
-            let registration = try registerApp(installedApp.path)
+            let registration: Any = carriesApp ? try registerApp(installedApp.path) : NSNull()
             let loaded = try loadServices([installedPlist.path], load: true, override: false)
             var started: [String: Any]?
             var startWarning: String?
@@ -370,7 +383,7 @@ enum GuestIrisinInstaller {
                 "architecture": architecture,
                 "layout": layout,
                 "jbroot": root,
-                "app_path": installedApp.path,
+                "app_path": carriesApp ? installedApp.path : NSNull(),
                 "registration": registration,
                 "service_load": loaded,
                 "service_status": status,

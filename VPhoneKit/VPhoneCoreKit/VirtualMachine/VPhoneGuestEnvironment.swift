@@ -23,6 +23,13 @@ public enum VPhoneGuestEnvironment {
         "libvphoneattitude.dylib",
     ]
 
+    /// What an Apple TV takes: the launchd hook and SystemHook, which give
+    /// every spawn the RootHide loader links, the bootstrap root and the tweak
+    /// loader. The others serve iOS processes (SpringBoard, Settings, the
+    /// camera) or are not validated in tvOS ones, and the spawn hooks insert a
+    /// library only when it is installed.
+    public static let tvLibraries = ["launchdhook-vphone.dylib", "SystemHook-vphone.dylib"]
+
     /// Selection installs/removes these. A live hash sync may replace an
     /// installed copy, but must never reinstall a patch the user turned off.
     public static let selectedLibraries: Set<String> = [
