@@ -171,7 +171,7 @@ public enum FirmwareGuestSystemPatchSet {
             VPhonePatchDeclaration(
                 identifier: virtualBluetooth,
                 title: "Virtual Bluetooth",
-                summary: "Turns on the feature flag that lets bluetoothd connect over its virtual controller, which a paired watch and phone talk over.",
+                summary: "Turns on the feature flag that lets bluetoothd establish LE connections between guests over its Bonjour virtual controller.",
                 target: .guestFile(path: "/" + CustomFirmwareBluetoothVirtualController.relativePath),
                 applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 26, minor: 0)),
             ),

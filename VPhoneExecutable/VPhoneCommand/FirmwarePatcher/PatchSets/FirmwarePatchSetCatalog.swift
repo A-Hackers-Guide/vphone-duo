@@ -236,7 +236,6 @@ public enum FirmwarePatchSetCatalog {
     public static let tvOSBlockedPatches: Set<String> = [
         paravirtTask3Patch,
         FirmwareGuestSystemPatchSet.arm64eX1CacheBootstrap,
-        FirmwareGuestSystemPatchSet.virtualBluetooth,
         "dyld-boot-iomfb_force_kern",
         "dyld-boot-iomfb_swapend",
         "dyld-boot-lockdown_mode",

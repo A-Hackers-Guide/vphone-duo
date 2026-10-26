@@ -111,7 +111,6 @@
 			<string>system-backboardd-cfw-gyroscope</string>
 			<string>system-backboardd-cfw-accelerometer</string>
 			<string>system-campo-cfw-entitlements</string>
-			<string>system-bluetoothd-cfw-btvc_le_connection</string>
 			<string>system-debugserver-cfw-install</string>
 			<string>system-dyld-boot-arm64e_x1_bootstrap</string>
 			<string>system-diskimagesiod-cfw-is_mount_complete</string>

@@ -22,11 +22,12 @@ import Foundation
 import VPhonePatchKit
 
 public enum FirmwareGuestPatchResolution {
-    /// TV admits the gigalocker repair, opt-in dyld TPRO compatibility, and
-    /// vphoned with the launchd cache gate its launchd.plist entry needs.
+    /// TV admits the gigalocker repair, opt-in dyld TPRO compatibility, virtual
+    /// Bluetooth, and vphoned with the launchd cache gate its launchd.plist entry needs.
     /// Other payloads, cache patches and shell integration need a TV port and
     /// validation before the installer can select them.
     public static let tvSupportedGuestPatches: Set<String> = [
+        FirmwareGuestSystemPatchSet.virtualBluetooth,
         "system-seputil-boot-gigalocker_uuid",
         "system-gigalocker-boot-rename",
         FirmwareGuestSystemPatchSet.tvTPRO,
