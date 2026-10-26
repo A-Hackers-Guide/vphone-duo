@@ -34,15 +34,19 @@ extension GuestAPI {
 
     private static let buddyDomain = "com.apple.purplebuddy"
 
-    /// `BYBuddyIOSCurrentVersion`, a 32-bit integer: 11 on iOS 26.4 and 27.0.
-    /// Nil when the framework does not export it.
-    static let setupAssistantCurrentVersion: Int? = {
+    /// Keep the iOS constant for the existing skip operation. TV status is
+    /// read independently; this correction never writes TV completion state.
+    static let setupAssistantCurrentVersion = setupAssistantVersion(symbol: "BYBuddyIOSCurrentVersion")
+    private static let tvSetupAssistantCurrentVersion = setupAssistantVersion(symbol: "BYBuddyTVOSCurrentVersion")
+    private static let usesTVSetupState = GuestSetupAssistantState.usesTVPolicy(machine: GuestVirtualAudioProduct.machine())
+
+    private static func setupAssistantVersion(symbol name: String) -> Int? {
         let path = "/System/Library/PrivateFrameworks/SetupAssistant.framework/SetupAssistant"
         guard let handle = dlopen(path, RTLD_LAZY),
-              let symbol = dlsym(handle, "BYBuddyIOSCurrentVersion")
+              let symbol = dlsym(handle, name)
         else { return nil }
         return Int(symbol.assumingMemoryBound(to: Int32.self).pointee)
-    }()
+    }
 
     private static func buddyValue(_ key: String) -> Any? {
         CFPreferencesCopyValue(key as CFString, buddyDomain as CFString, "mobile" as CFString, kCFPreferencesAnyHost)
@@ -52,24 +56,31 @@ extension GuestAPI {
         (buddyValue("SetupVersion") as? NSNumber)?.intValue
     }
 
-    /// True when SpringBoard will run Setup the next time it starts. Two
-    /// preference reads, cheap enough for `/v1/health`.
-    static func setupAssistantPending() -> Bool {
-        guard buddyValue("SetupDone") as? Bool == true else { return true }
-        guard let current = setupAssistantCurrentVersion else { return false }
-        return (buddySetupVersion ?? 0) < current
+    private static var setupAssistantState: GuestSetupAssistantState {
+        GuestSetupAssistantState(
+            setupDone: buddyValue("SetupDone") as? Bool ?? false,
+            version: usesTVSetupState ? (buddyValue("TVSetupVersion") as? NSNumber)?.intValue : buddySetupVersion,
+            currentVersion: usesTVSetupState ? tvSetupAssistantCurrentVersion : setupAssistantCurrentVersion,
+            requiresTVCompletion: usesTVSetupState,
+            tvCompleted: usesTVSetupState && (buddyValue("TVBuddyCompletedSuccessfully") as? Bool == true),
+        )
     }
+
+    /// Native preference policy, cheap enough for `/v1/health`. PineBoard
+    /// requires the TV version and completion flag, not BYBuddyIOSCurrentVersion.
+    static func setupAssistantPending() -> Bool { setupAssistantState.pending }
 
     private static func setupAssistantStatus() throws -> [String: Any] {
         let processes = try listProcesses(filter: "Setup")["processes"] as? [[String: Any]] ?? []
         let pid = processes.first { $0["executable"] as? String == "/Applications/Setup.app/Setup" }?["pid"]
+        let state = setupAssistantState
         return [
-            "pending": setupAssistantPending(),
+            "pending": state.pending,
             "running": pid != nil,
             "pid": pid ?? 0,
-            "setup_done": buddyValue("SetupDone") as? Bool ?? false,
-            "setup_version": buddySetupVersion.map { $0 as Any } ?? NSNull(),
-            "current_version": setupAssistantCurrentVersion.map { $0 as Any } ?? NSNull(),
+            "setup_done": state.setupDone,
+            "setup_version": state.version.map { $0 as Any } ?? NSNull(),
+            "current_version": state.currentVersion.map { $0 as Any } ?? NSNull(),
             "data_migration_done": dataMigrationDone().map { $0 as Any } ?? NSNull(),
         ]
     }

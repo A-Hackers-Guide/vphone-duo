@@ -30,8 +30,11 @@ would choose the HD preset for this new product type. The CLI/catalog schema
 is unchanged; the new series keeps that preset decision paired with the new
 device catalog. Firmware patch discovery now preserves any recorded OTA board
 with a restore base, so the HD manifest cannot replace J265's guest identity.
-The 27.2 setup compatibility patch described below is selected by `tvos-4k`;
-there is no new instruction patch or preset.
+The current `tvos-4k` preset retains the new 27.2 Setup app and selects its
+SetupBackground display lookup repair. The legacy TVSetup fallback used in
+the earlier validation below is now off in every preset. The new setup's
+input issue remains under investigation; see [native Setup and remote
+panel](#native-setup-and-remote-panel). There is no new instruction patch or preset.
 
 Validation completed without admin privileges:
 
@@ -159,6 +162,123 @@ crash reports. The VM is left running there. `ui.tree` cannot verify the frontmo
 verification uses direct screenshots and the native VM window.
 Logs, the watchdog report, a guest spindump and screenshots are retained under
 `/private/tmp/vphone-appletv18-*` and `.build/appletv18-validation/`.
+
+## Native Setup and remote panel
+
+Current source, 2026-10-24: `tvos-4k` blocks
+`system-tv-exp-legacy_setup` and enables the existing 27.2
+`system-setupbackground-exp-pineboard_lookup` and
+`system-setup-exp-deferred_focus`. An environment update restores
+the original CompanionServices feature flags from their `.bak`, then applies
+the single display-service lookup entitlement repair and the native button-
+focus policy adapter in Setup. This returns an earlier
+test VM to `com.apple.Setup`, without changing setup completion or choices.
+The current bundle is `2.13.0-local.9ffd2d6e`. Its installed focus adapter
+passes cold-boot input testing, and native manual setup advances past activation.
+
+The new panel is available only for Apple TV guests under **Device > Apple TV
+Remote** (Option-Command-R). Its silver remote face has a directional clickpad
+and Select, Back, TV/Control Center, Play/Pause, Mute, volume rocker, side Siri
+and Power buttons. Native buttons expose accessibility labels and keyboard
+focus. Click/hold sends distinct consumer HID down/up events, so the guest can
+interpret taps, multiple clicks and holds. Closing, minimizing, losing focus
+or disconnecting releases held controls; a failed release is retried before
+new input on reconnection. A cancelled queued press cannot reach a later
+connection. Remote controls are disabled while the agent is unavailable.
+
+Arrow keys, Return and Escape in the panel send the remote's directional,
+Select and Menu events. Space activates a focused button, or Play/Pause when
+the remote face has focus. H, M, +/-, S and P map to TV, Mute, Volume, Siri and
+Power. The HID consumer MenuEscape usage (`0x46`) is Back; ACBack (`0x224`)
+is a different UIKit press type. These mappings are verified against the
+matching tvOS 27.2 UIKitCore, rather than inferred from keyboard behavior.
+The control layout and hold semantics follow Apple's
+[Siri Remote guide](https://support.apple.com/en-us/102337).
+
+Offline validation uses `Tests/run-tv-remote-tests.sh`, a host-only AppKit
+harness with no guest connection. It exercises all 13 accessible buttons,
+directional hit areas, pointer holds, overlapping keyboard/pointer sources,
+modifier-safe releases, cancellation while the shared queue is suspended,
+and release recovery after disconnection. Completed AX/button taps survive
+panel key loss, unfinished holds are cancelled before releasing the view, and
+a connection epoch keeps old taps out of a later guest. The harness exercises
+the actual AX button through that cancellation sequence. It renders the native
+view to a PNG for visual review. The focused patch suites pass 63 tests and
+the patch model suites pass 32. The finished bundle builds and passes bundle
+admission. Live remote tests passed Home/Settings navigation, Select, Back and
+a held TV button opening Control Center. The new focus/preset checks passed
+54 focused tests; the activation declaration's version/preset matrix then passed
+49 selected tests. Installed cold-boot focus and completed-tap delivery pass:
+Hello appeared at 21:23:00 UTC, and the first actual remote AX Select after
+more than 65 seconds idle advanced to Quick Start at 21:24:19. No directional
+input, RPC priming, or debugger was used. Siri/audio integration remains outside
+that validation.
+
+Live inspection localized Hello's failure to native deferred focus. Select
+reaches the active key window as UIPress type 4 with window suppression off,
+but no item is focused. UIKit already holds Hello's preferred item as a
+deferred target. A normal Up commits it and the next Select enters Language;
+the native deferred-focus method also commits it without an arrow. Initial
+focus-operation prototypes expired after the native 60-second idle timeout.
+The final adapter instead uses native TV button-focus policy (`0`) only for
+an active key Setup window with WaffleIron/default-3/nil-override state;
+explicit unrelated overrides are preserved. Native preferred focus and
+eligibility still choose the item. Scene/key/focus notifications recheck
+asynchronously, with no swizzles or polling. A manual policy-0 trial retained
+focus beyond 80 seconds, and ordinary Select advanced English to the country
+picker, then United States to Quick Start. [The investigation](tvos_27_setup_input.md)
+records the exact boundaries and installed test. No pairing,
+drawing, scene-phase or setup-completion state is fabricated, and no Hello
+command or readiness check is bypassed.
+
+The exact built focus adapter was then loaded into a fresh native Setup
+process without a manual policy call. It initialized native focus and ordinary
+remote input advanced Quick Start to Set Up Manually. Activation failed with
+`NSOSStatusErrorDomain` -71136. The matching tvOS mobileactivationd retains
+the same local-activation path as the existing iPhone patch; its getter was
+unpatched because TV excluded it. `system-mobileactivationd-exp-tv_activation`
+now reuses that patch under an exact 27.2 gate, selected only by `tvos-4k` and
+admitted only for arm64e Apple TV. Older TV releases and HomePod keep their
+existing selection. The complete bundle builds and 49 focused tests pass.
+After administrator authorization, cold boot of `a4b9ffc4` exposed a sealing
+bug: final bundle signing dropped Setup's original entitlements and caused
+TCC Bluetooth usage-description crashes before Hello. `da14d7a4` preserves
+those entitlements during both application and reversal of the focus adapter.
+The actual installed executable's full entitlements compare byte-identically
+to pristine Setup. Its signature verifies with the pulled Info.plist and
+CodeResources (resource contents excluded from that host check). Both new
+patches are recorded applied, with zero pending patches and legacy setup off.
+The corrected cold boot reaches Hello; the actual remote's Manual selection
+advances through activation to room choice, Data & Privacy, and Terms &
+Conditions. After the user's action-time confirmation, Terms were accepted,
+account sign-in was skipped, and optional Siri, location, and analytics were
+declined. Native Welcome then advanced to the Home Screen. Native preferences
+now contain SetupDone=true, TVBuddyCompletedSuccessfully=true, and
+TVSetupVersion=15; Setup itself wrote these completion values and exited.
+English/United States and America/Sao_Paulo were preserved; Office was chosen
+only on the diagnostic clone. The original VM was also updated to `da14d7a4`,
+cold-booted in five seconds, and retained its prior completed setup and data.
+
+Final original-VM remote tests pass navigation, Select/Back, Control Center,
+Siri search/dictation UI, Power hold to sleep and TV to wake. Volume Up/Down,
+Mute (twice), and Play/Pause were exercised without active media; audible
+effects remain unverified. All inputs were released and Home restored. The
+two unused builds with the sealing defect (`8e456731`, `a4b9ffc4`) were removed.
+
+Completion exposed an additional read-only reporting bug: vphoned compared the
+absent iOS SetupVersion against BYBuddyIOSCurrentVersion even on Apple TV.
+`9ffd2d6e` uses TVSetupVersion, dynamic BYBuddyTVOSCurrentVersion, SetupDone,
+and TVBuddyCompletedSuccessfully for runtime Apple TV models. iPhone/HomePod
+and the existing skip operation retain their previous behavior. No completion
+state is written. The full bundle builds and its 376-check logic harness passes.
+After administrator installation, both machines' guest environments match
+`9ffd2d6e`. Each cold boot answers vphoned in five seconds and reports native
+setup/current version 15, SetupDone=true, pending=false, and no Setup process.
+The clone returns directly to Home without running Setup again and is then
+stopped. The original VM remains running with its data and completed setup
+preserved. Both patch receipts have zero pending changes and legacy setup off.
+The final original-VM Home capture and actual remote Back/Right test also pass;
+all 13 controls are enabled and the VM is left at Home with input released.
 
 ## Earlier Apple TV validation
 

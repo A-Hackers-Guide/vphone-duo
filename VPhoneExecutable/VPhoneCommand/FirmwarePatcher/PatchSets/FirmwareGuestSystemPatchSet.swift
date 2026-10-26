@@ -47,6 +47,9 @@ public enum FirmwareGuestSystemPatchSet {
     public static let tvTPRO = "system-dyld-exp-tv_tpro"
     public static let tvSetupDisplayLookup = "system-setupbackground-exp-pineboard_lookup"
     public static let tvLegacySetup = "system-tv-exp-legacy_setup"
+    public static let tvSetupFocus = "system-setup-exp-deferred_focus"
+    public static let tvSetupFocusLibrary = "/usr/lib/libvphonetvsetupfocus.dylib"
+    public static let tvLocalActivation = "system-mobileactivationd-exp-tv_activation"
     /// Replaces the restored System volume with an Apple TV 4K userland
     /// staged from its OTA. Research only: no IPSW exists for that device.
     public static let tvOTAUserland = "system-tv-exp-ota_userland"
@@ -132,9 +135,23 @@ public enum FirmwareGuestSystemPatchSet {
             ),
             VPhonePatchDeclaration(
                 identifier: tvLegacySetup,
-                title: "TV setup virtual remote compatibility",
-                summary: "Selects the native TVSetup app retained in tvOS 27.2 by disabling TVSetupV2 and TVSetupV2HW. Its language screen accepts virtual keyboard and consumer remote input. Setup choices and completion remain under user control.",
+                title: "Legacy TV setup (research)",
+                summary: "Research fallback: selects the legacy TVSetup app in tvOS 27.2 by disabling TVSetupV2 and TVSetupV2HW. Off in every preset; disabling restores the original flags and the new Setup flow.",
                 target: .guestFile(path: "/" + CustomFirmwareTVSetup.relativePath),
+                applicability: VPhonePatchApplicability(iOSBase: .release(major: 27, minor: 2)),
+            ),
+            VPhonePatchDeclaration(
+                identifier: tvLocalActivation,
+                title: "TV local activation",
+                summary: "Uses mobileactivationd’s existing local activation path for the tvOS 27.2 research guest, allowing the native Setup assistant to proceed without an Apple activation record.",
+                target: .guestExecutable(path: "/usr/libexec/mobileactivationd"),
+                applicability: VPhonePatchApplicability(iOSBase: .release(major: 27, minor: 2)),
+            ),
+            VPhonePatchDeclaration(
+                identifier: tvSetupFocus,
+                title: "TV setup button focus",
+                summary: "Uses native TV button-focus policy in the new tvOS 27.2 Setup window, so Consumer Select works without indirect-touch activity, including after idle. Preserves explicit focus overrides, eligibility and all Setup readiness checks.",
+                target: .guestExecutable(path: "/Applications/Setup.app/Setup"),
                 applicability: VPhonePatchApplicability(iOSBase: .release(major: 27, minor: 2)),
             ),
             VPhonePatchDeclaration(

@@ -17,6 +17,7 @@ trap '/bin/rm -rf "$temporary"' EXIT
     "$daemon/Daemon/GuestDeviceNameRule.swift" \
     "$daemon/Daemon/GuestPointerScroll.swift" \
     "$daemon/Daemon/Bootstrap/GuestBootstrapPlatform.swift" \
+    "$daemon/Daemon/GuestSetupAssistantState.swift" \
     "$daemon/Tests/LogicTests.swift" \
     -o "$temporary/logic-tests"
 

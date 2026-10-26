@@ -44,6 +44,8 @@ public enum FirmwareGuestPatchResolution {
         "system-extensions-boot-gpu_bundle",
         FirmwareGuestSystemPatchSet.tvOTAUserland,
         FirmwareGuestSystemPatchSet.tvSetupDisplayLookup,
+        FirmwareGuestSystemPatchSet.tvSetupFocus,
+        FirmwareGuestSystemPatchSet.tvLocalActivation,
         FirmwareGuestSystemPatchSet.tvLegacySetup,
         "system-launchdaemons-boot-environment",
         "system-launchd-boot-jetsam_panic_guard_bypass",
