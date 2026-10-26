@@ -1,6 +1,26 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Apple TV Remote" : {
+    },
+    "Click or hold. Arrow keys navigate.\nReturn selects. Esc goes back." : {
+    },
+    "Down" : {
+    },
+    "Left" : {
+    },
+    "Play / Pause" : {
+    },
+    "Right" : {
+    },
+    "Select" : {
+    },
+    "Siri" : {
+    },
+    "TV / Control Center" : {
+    },
+    "Up" : {
+    },
     "%lld of %lld defaults · %lld unsaved changes" : {
       "localizations": {
         "en": {

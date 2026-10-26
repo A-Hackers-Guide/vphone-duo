@@ -543,6 +543,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         cameraServer?.disconnect()
         menuController?.stopBatteryMonitoring()
         menuController?.guestPanelsWindowController.closeAttitudeDials()
+        menuController?.tvRemoteWindowController.close()
         windowController?.closeForRestart()
         // Tool windows belong to the old guest connection too.
         for window in NSApp.windows {

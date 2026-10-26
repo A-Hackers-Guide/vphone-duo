@@ -41,6 +41,8 @@ public enum FirmwareGuestPatchResolution {
         "system-extensions-boot-gpu_bundle",
         FirmwareGuestSystemPatchSet.tvOTAUserland,
         FirmwareGuestSystemPatchSet.tvSetupDisplayLookup,
+        FirmwareGuestSystemPatchSet.tvSetupFocus,
+        FirmwareGuestSystemPatchSet.tvLocalActivation,
         FirmwareGuestSystemPatchSet.tvLegacySetup,
     ]).union(FirmwarePatchSetCatalog.tvOS27UserlandPatches)
 

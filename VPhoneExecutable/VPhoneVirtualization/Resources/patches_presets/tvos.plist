@@ -151,6 +151,8 @@
 			<string>system-virtualaudio-cfw-volume_mode_precondition</string>
 			<string>system-tv-exp-ota_userland</string>
 			<string>system-setupbackground-exp-pineboard_lookup</string>
+			<string>system-setup-exp-deferred_focus</string>
+			<string>system-mobileactivationd-exp-tv_activation</string>
 			<string>system-tv-exp-legacy_setup</string>
 			<string>system-exp-ota_userland</string>
 		</array>

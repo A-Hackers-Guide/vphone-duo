@@ -37,6 +37,15 @@ final class VPhoneApplication: NSApplication {
     private static let homeKeyCode: UInt16 = 0x73
 
     override func sendEvent(_ event: NSEvent) {
+        // The remote's Return/Esc are consumer Select/Menu, including while
+        // AppKit would otherwise match the Device menu's bare Escape item.
+        if (event.type == .keyDown || event.type == .keyUp),
+           event.keyCode != 49, // Space activates the focused native button.
+           event.window?.attachedSheet == nil,
+           let remote = event.window?.contentView as? VPhoneTVRemoteView,
+           remote.handleKey(event, down: event.type == .keyDown) {
+            return
+        }
         // While a sheet is up, its keys are its own: Esc must reach its
         // Cancel button, not the guest's back gesture.
         guard event.type == .keyDown || event.type == .keyUp || event.type == .flagsChanged,
