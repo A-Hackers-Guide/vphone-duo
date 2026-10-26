@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import IcliKit
 import NIOCore
 import NIOWebSocket
 import VphonedNative
@@ -162,7 +163,7 @@ final class GuestShellSessionHandler: ChannelInboundHandler, @unchecked Sendable
             refuse(String(describing: error), on: channel)
             return
         }
-        if program == nil, !vp_js_available() {
+        if program == nil, !probeAvailable() {
             GuestSessionLimit.interactive.release()
             refuse("This guest has no JavaScriptCore, so there is no session to open.", on: channel)
             return

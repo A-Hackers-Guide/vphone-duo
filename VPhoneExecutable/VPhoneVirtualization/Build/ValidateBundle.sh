@@ -181,15 +181,15 @@ daemon_rpaths="$(/usr/bin/otool -l "$guest/vphoned" | /usr/bin/awk '
         exit 1
     }
 # The scripting session runs on JavaScriptCore, which watchOS does not ship.
-# All three daemons are the same build, so a strong reference would leave the
-# watch guest without a daemon at all.
+# IcliKit's probe opens it at run time, so the daemon names no JavaScriptCore
+# symbol; a reference would leave the watch guest without a daemon at all.
 for daemon in vphoned vphoned-tvos vphoned-watchos; do
     javascriptcore_loads="$(/usr/bin/otool -l "$guest/$daemon" | /usr/bin/awk '
         $1 == "cmd" { command = $2 }
         $1 == "name" && $2 ~ /JavaScriptCore/ { print command }
     ' | /usr/bin/sort -u)"
-    [[ "$javascriptcore_loads" == "LC_LOAD_WEAK_DYLIB" ]] || {
-        print -u2 "$daemon must load JavaScriptCore weakly, not as ${javascriptcore_loads:-nothing}"
+    [[ -z "$javascriptcore_loads" ]] || {
+        print -u2 "$daemon must not link JavaScriptCore, which the probe opens at run time: $javascriptcore_loads"
         exit 1
     }
 done

@@ -22,19 +22,21 @@ int vp_native_watch_proxy(void);
 
 // MARK: - Scripting Sessions
 
-/// Run the `--session` process this one was started as, and return its exit
-/// status. A session evaluates JavaScript with vphoned's own identity, in its
-/// own process so neither a crashing script nor a wedged one can take the API
-/// down with it. The worker never calls this; it spawns a session instead.
-int vp_native_run_session(void);
+/// Lead a process group of the session's own, and take its terminal, when it
+/// has one, as the controlling terminal. A `--session` process calls this
+/// before anything else runs: the worker ends a session by its group.
+void vp_session_detach(void);
 
-/// Whether this guest has JavaScriptCore, which watchOS does not ship.
-bool vp_js_available(void);
+/// Replace this `--session exec <program>` process with the program, on the
+/// session's terminal. Returns only when that fails, with the exit status.
+int vp_session_exec(void);
 
-/// Let a session's scripts call the guest API. `request` is a JSON
-/// `{method, params}`; the handler returns a malloc-owned JSON reply, which
-/// the session frees. Set before vp_native_run_session.
-void vp_js_set_api_handler(char * _Nullable (* _Nullable handler)(const char * _Nonnull request));
+/// Run one program and collect what it writes, for a script's `proc.run`.
+/// `input` may be NULL. Both outputs are malloc-owned and always set on
+/// success. Returns 0, or an errno value; `*status` is the wait status.
+int vp_spawn_collect(const char * _Nonnull path, const char * _Nullable const * _Nonnull argv,
+                     const char * _Nullable input, int * _Nonnull status,
+                     char * _Nullable * _Nonnull output, char * _Nullable * _Nonnull errors);
 
 /// Start a session process on a pseudo-terminal, as a session leader with the
 /// terminal as its controlling one, so job control and ^C work. `program` is

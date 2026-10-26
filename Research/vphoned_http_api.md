@@ -291,9 +291,13 @@ finish before closing the opposite socket, with a five-second drain limit.
 
 A guest has no shell, and the `tvos` preset has neither debugserver nor any
 Frida patch, so a script run with vphoned's own identity is the only way to
-reach what the guest keeps to itself. The runtime is JavaScriptCore, which
-iOS and tvOS ship and watchOS does not; vphoned links it weakly and reports
-`script_js` in `capabilities` only where it is present. `shell` is reported
+reach what the guest keeps to itself. The engine is IcliKit's probe (icli
+0.10.0): its JavaScriptCore context, ObjC reflection bridge and REPL, run
+inside the session process. vphoned adds only what icli leaves to the process
+hosting the probe: `api()` answers with this catalog, and `proc.run` runs a
+program. IcliKit opens JavaScriptCore at run time instead of linking it,
+because iOS and tvOS ship it and watchOS does not, and vphoned reports
+`script_js` in `capabilities` only where it can be loaded. `shell` is reported
 everywhere, because the interactive route also runs a program from the
 bootstrap.
 
@@ -322,7 +326,7 @@ this guest's bootstrap actually has.
 For an interactive session, upgrade `GET /v1/shell` to WebSocket. Admission
 is the same as `/v1/events`: no `Origin`, a loopback `Host`, and the host
 proxy's token in front of it. `program` selects what runs — unset or `repl`
-for vphoned's JavaScript session, a bare name resolved from the bootstrap's
+for the probe's REPL (prompt `probe>`), a bare name resolved from the bootstrap's
 `bin`, `usr/bin` and `usr/local/bin`, or an absolute path. `cols` and `rows`
 set the initial terminal size. Each binary frame is a chunk of the terminal's
 byte stream in either direction, so `^C` is simply byte 3 and the terminal
@@ -357,8 +361,8 @@ either limit is refused outright — `{"error": …}` and close 1011 for
 `/v1/shell`, `operation_failed` for `script.eval` — rather than answered
 slowly with everything else queued behind it.
 
-The session's globals are `ObjC`, `api`, `fs`, `proc`, `console`, `print`,
-`sleep` and `exit`. `ObjC.use('NSProcessInfo')` and
+The session's globals are `ObjC`, `api`, `fs`, `proc`, `console`, `print`
+and `sleep`. `ObjC.use('NSProcessInfo')` and
 `ObjC.classes.NSProcessInfo` both give a class, and methods are called by
 name: an underscore stands for a colon (`setValue_forKey_(v, k)`), a bare
 name takes one colon per argument, and a name written with colons is used as
@@ -379,11 +383,16 @@ an object and never as a value, because an allocated `NSString` is a
 placeholder that raises on anything but an initializer.
 
 `api(method, params)` runs any method in this catalog in the session's own
-process and returns its result, raising the error if it fails. `fs.ls`,
+process and returns its result, raising `code: message` if it fails. `fs.ls`,
 `fs.read`, `fs.write` and `fs.stat` are the root-privileged file operations,
 `proc.run(path, args, input)` runs one program and collects
 `{status, signal, stdout, stderr}`, and `console.log` and `print` write to
-the terminal, or into `output` for `script.eval`.
+the terminal, or into `output` for `script.eval`. `proc.run` is vphoned's,
+not icli's: the probe launches nothing itself, so the session defines `proc`
+over `api('proc.run', {path, args, input})`, which only a session answers.
+There is no `exit()`; `.exit` leaves the REPL. In the REPL, `^C` abandons a
+half-finished statement while a line is being read; while a statement runs,
+it ends the session, which the WebSocket reports as `{"signal": 2}`.
 
 This opens no privilege the API did not already have: the same connection can
 already write any file as root and load a launch daemon. What it does change

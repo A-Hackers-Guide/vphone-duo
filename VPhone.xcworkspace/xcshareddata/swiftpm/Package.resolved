@@ -1,5 +1,5 @@
 {
-  "originHash" : "a6866c860e660ef27df596c0ba8795342d386b1b265f3a7cc212d640cd67c649",
+  "originHash" : "205a9c9c5f188171fc901d3eb8077faf89b548744c0307a4f382e74b3f278a54",
   "pins" : [
     {
       "identity" : "applemobiledevicelibrary",
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/owngoal-dev/icli.git",
       "state" : {
-        "revision" : "217dc37e55ef44bf6a0739358f2486e660b05d40",
-        "version" : "0.9.2"
+        "revision" : "2fbdb5ee61d8c320732deb9768b22506f5e3d411",
+        "version" : "0.10.0"
       }
     },
     {

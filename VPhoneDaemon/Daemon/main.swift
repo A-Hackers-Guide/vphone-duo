@@ -5,27 +5,12 @@ import NIOPosix
 import NIOWebSocket
 import VphonedNative
 
-/// A session's `api(...)`, answered in the session's own process. The reply
-/// is malloc-owned and the session frees it.
-func answerSessionAPIRequest(_ request: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
-    let reply: APIReply
-    do {
-        reply = APIWire.execute(try APIWire.decode(Data(String(cString: request).utf8)))
-    } catch {
-        reply = APIWire.error(String(describing: error))
-    }
-    return strdup(String(decoding: reply.data, as: UTF8.self))
-}
-
 let mode = vp_native_process_mode()
 if mode == 2 {
     // A scripting session, spawned by the worker for one script or one
-    // interactive session. None of the startup below belongs here: a session
-    // owns no port and no device, several run at once, and whatever a script
-    // does to this process stops at it. Methods that need state the worker
-    // set up at startup are the ones a session cannot reach.
-    vp_js_set_api_handler(answerSessionAPIRequest)
-    exit(vp_native_run_session())
+    // interactive session. None of the startup below belongs here; see
+    // GuestScriptSession.
+    exit(GuestScriptSession.run())
 }
 if mode != 1 {
     guard mode == 0 else { exit(64) }

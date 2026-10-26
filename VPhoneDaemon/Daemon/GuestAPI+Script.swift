@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import IcliKit
 import VphonedNative
 
 // MARK: - Scripting
@@ -29,7 +30,7 @@ extension GuestAPI {
     static func scriptCapabilities() -> [String] {
         // The interactive route runs a program from the bootstrap as well, so
         // it is offered even where the built-in session cannot run.
-        vp_js_available() ? ["shell", "script_js"] : ["shell"]
+        probeAvailable() ? ["shell", "script_js"] : ["shell"]
     }
 
     /// Long enough for a script that waits on a system service, short enough
@@ -41,7 +42,7 @@ extension GuestAPI {
     }
 
     private static func evaluateScript(source: String, timeout: Double) throws -> [String: Any] {
-        guard vp_js_available() else {
+        guard probeAvailable() else {
             throw GuestAPIError.operationFailed("This guest has no JavaScriptCore, so it cannot run a script")
         }
         guard GuestSessionLimit.evaluations.acquire() else {
@@ -91,9 +92,9 @@ extension GuestAPI {
             }
         }
         return [
-            "available": vp_js_available(),
+            "available": probeAvailable(),
             "engine": "JavaScriptCore",
-            "globals": ["ObjC", "api", "fs", "proc", "console", "print", "sleep", "exit"],
+            "globals": ["ObjC", "api", "fs", "proc", "console", "print", "sleep"],
             "programs": programs,
         ]
     }
