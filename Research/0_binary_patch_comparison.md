@@ -4234,8 +4234,19 @@ the universal binary), and three patches are new:
 | Patch | Target | Change |
 | --- | --- | --- |
 | `devicetree-cfw-watch_companion` | an iPhone guest's tree | `/product/watch-companion = 1`, added where the board copy removed a placeholder. vphone600's `syscfg/waco` has no syscfg value on a VM, so iBoot drops it and the phone pairs with no watch. |
-| `system-bluetoothd-cfw-btvc_le_connection` | `/System/Library/FeatureFlags/Domain/BluetoothFeatures.plist`, `cfw install`, iOS 26+ | `EnableBTVCLeConnection.Enabled = true`: bluetoothd's virtual LE controller may connect. Reverted from the `.bak` when turned off; blocked for tvOS. |
+| `system-bluetoothd-cfw-btvc_le_connection` | `/System/Library/FeatureFlags/Domain/BluetoothFeatures.plist`, `cfw install` / `cfw update-environment`, guest OS 26+ | `EnableBTVCLeConnection.Enabled = true`: bluetoothd's virtual LE controller may connect. Reverted from the `.bak` when turned off; enabled for iPhone, Apple TV HD, Apple TV 4K and HomePod guests. |
 | `filesystem-exp-btvc_le_connection` | the same file in the restore image (`minimal`, `watchos`) | The same flag, written before the seal. |
+
+On 2026-10-26 the Apple TV and HomePod presets also enable the guest BTVC
+patch, and their installer admission includes it for both plain-arm64 and
+arm64e userlands. The existing OS 26+ applicability and opt-out restoration
+remain in place. HomePod mini 27.0 (24J361) and tvOS 27.2 (24K120) ship the
+BTVC Bonjour, advertisement and LE connection implementation; the HomePod
+connection manager still queries `EnableBTVCLeConnection`. Their original
+feature plists omit the entry, which the existing plist patcher can add.
+This enables transport testing; HomePod onboarding, Apple TV companion setup
+and Home/AirPlay pairing have not been validated. Existing machines need the
+updated Core Bundle and `cfw update-environment` while stopped, then a boot.
 
 ## iOS 18 guests on the research board (2026-10-21)
 

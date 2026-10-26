@@ -42,4 +42,23 @@ struct CustomFirmwareBluetoothVirtualControllerTests {
             #expect(plan.isEnabled(FirmwareGuestSystemPatchSet.virtualBluetooth) == !base.hasPrefix("18."))
         }
     }
+
+    @Test
+    func `TV and HomePod presets enable and admit virtual Bluetooth from OS 26`() throws {
+        let identifier = FirmwareGuestSystemPatchSet.virtualBluetooth
+        for preset in [FirmwarePatchSetCatalog.tvOSPreset, FirmwarePatchSetCatalog.tvOS4KPreset, FirmwarePatchSetCatalog.homePodMiniPreset] {
+            for base in ["18.6", "26.4", "27.0", "27.2"] {
+                let plan = try VPhonePatchPlan.resolve(
+                    preset: preset,
+                    patchSets: FirmwarePatchSetCatalog.bundled,
+                    iOSBase: VPhoneVersion(base), cloudOS: VPhoneVersion("26.4"),
+                )
+                #expect(plan.isEnabled(identifier) == !base.hasPrefix("18."))
+            }
+        }
+        let selection: Set<String> = [identifier]
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: selection).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: selection, arm64eUserland: true).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: selection).isEmpty)
+    }
 }
