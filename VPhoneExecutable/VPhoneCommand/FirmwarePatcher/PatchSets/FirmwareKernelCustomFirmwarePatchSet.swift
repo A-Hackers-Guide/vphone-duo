@@ -299,6 +299,17 @@ public enum FirmwareKernelCustomFirmwarePatchSet {
                 applicability: ios27,
                 bootEssential: true,
             ),
+            VPhonePatchDeclaration(
+                identifier: "kernel-cfw-aks_unlock_bag",
+                title: "Keybag unlock arguments",
+                summary: "Accepts the five-argument keybag unlock an iOS 26.6-or-newer userland sends, so escrow unlock and encrypted backups work on the 26.4 kernel.",
+                target: .firmware(.kernelcache),
+                // iOS 26.6 is where Apple's keybag-unlock external method began
+                // sending inputScalarCount == 5 (26.5 and earlier send 4); the
+                // anchor self-guards on a kernel that already accepts 5, so no
+                // cloudOS bound is needed.
+                applicability: VPhonePatchApplicability(iOSBase: .atLeast(major: 26, minor: 6)),
+            ),
 
             VPhonePatchDeclaration(
                 identifier: FirmwarePatchSetCatalog.paravirtUserClientsPatch,

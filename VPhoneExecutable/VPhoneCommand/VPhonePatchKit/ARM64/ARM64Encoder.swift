@@ -96,6 +96,16 @@ public enum ARM64Encoder {
         return ARM64.encodeU32(insn)
     }
 
+    /// Encode `B.cond`. The immediate is a signed 19-bit instruction offset (±1 MiB).
+    public static func encodeBCond(from pc: Int, to target: Int, condition: ARM64Condition) -> Data? {
+        let delta = target - pc
+        guard delta & 0x3 == 0 else { return nil }
+        let imm19 = delta >> 2
+        guard imm19 >= -(1 << 18), imm19 < (1 << 18) else { return nil }
+        let insn: UInt32 = 0x5400_0000 | ((UInt32(bitPattern: Int32(imm19)) & 0x7FFFF) << 5) | condition.rawValue
+        return ARM64.encodeU32(insn)
+    }
+
     /// Encode `CBZ`/`CBNZ` for a general-purpose register.
     ///
     /// The 32-bit form is used by the IOMFB display dispatcher so the loaded
