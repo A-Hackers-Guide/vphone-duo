@@ -107,6 +107,13 @@ scripts/duo/vphone-duo shot ~/Desktop/duo.png
 
 A headless launch has no window, so `fold` goes straight to the hinge sensor.
 
+### Fold stress
+
+`vphone-duo stress --cycles 20 --hold 1` folds and unfolds under the app in
+front (open, closed, laptop, open, each cycle), then reports whether the app
+kept its process and any new crash logs. It exits non-zero if the app
+relaunched or crashed.
+
 ## Working on the 3D window
 
 `Tools/DuoPreview` builds the window without the VM engine, so a change to

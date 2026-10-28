@@ -8,6 +8,9 @@
   vphone-duo finish black            white or black
   vphone-duo shot out.png            full-resolution screenshot
   vphone-duo rpc METHOD [JSON]       any vphoned method
+  vphone-duo stress [--cycles N] [--hold S]
+                                     fold and unfold the frontmost app N times, then
+                                     report whether it kept running and any crashes
 
 The VM is found by name under ~/.vphone/machines (default "duo"); pass
 --vm NAME or --socket PATH to pick another.
@@ -35,14 +38,55 @@ def call(sock_path, request):
     return reply
 
 
+def rpc(path, method, params=None):
+    reply = call(path, {"t": "rpc", "method": method, "params": params or {}, "screen": False})
+    if not reply.get("ok"):
+        raise SystemExit(f"{method}: {reply.get('error', 'failed')}")
+    return reply.get("result", {})
+
+
+def set_hinge(path, angle, velocity=0.0):
+    rpc(path, "motion.hinge.set", {"enabled": True, "angle": angle, "velocity": velocity})
+
+
+def stress(path, cycles, hold):
+    """Folds and unfolds under the frontmost app; did it survive?"""
+    import time
+    front = rpc(path, "apps.foreground")
+    bundle, pid = front.get("bundle_id", ""), front.get("pid", 0)
+    crashes_before = set(rpc(path, "logs.crashes", {"bundle_id": bundle}).get("crashes", []))
+    print(f"stressing {front.get('name') or bundle} (pid {pid}) for {cycles} fold cycles")
+    relaunched = 0
+    for cycle in range(1, cycles + 1):
+        for angle in (180, 0, 110, 180):
+            set_hinge(path, angle)
+            time.sleep(hold)
+        now = rpc(path, "apps.foreground")
+        if now.get("bundle_id") != bundle:
+            print(f"cycle {cycle}: {bundle} is no longer in front ({now.get('bundle_id')})")
+            break
+        if now.get("pid") != pid:
+            relaunched += 1
+            print(f"cycle {cycle}: relaunched, pid {pid} -> {now.get('pid')}")
+            pid = now.get("pid")
+    new = sorted(set(rpc(path, "logs.crashes", {"bundle_id": bundle}).get("crashes", [])) - crashes_before)
+    print(f"done: {relaunched} relaunch(es), {len(new)} new crash log(s)")
+    for log in new:
+        print(f"  {log}")
+    if relaunched or new:
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--vm", default="duo")
     parser.add_argument("--socket")
-    parser.add_argument("command", choices=["fold", "press", "finish", "shot", "rpc"])
+    parser.add_argument("command", choices=["fold", "press", "finish", "shot", "rpc", "stress"])
     parser.add_argument("args", nargs="*")
     parser.add_argument("--animate", action="store_true")
     parser.add_argument("--ms", type=int, default=120)
+    parser.add_argument("--cycles", type=int, default=20)
+    parser.add_argument("--hold", type=float, default=1.0)
     options = parser.parse_args()
     path = options.socket or os.path.expanduser(f"~/.vphone/machines/{options.vm}/vphone.sock")
 
@@ -65,6 +109,9 @@ def main():
     elif options.command == "rpc":
         request.update(t="rpc", method=options.args[0], params=json.loads(options.args[1]) if len(options.args) > 1 else {})
 
+    if options.command == "stress":
+        stress(path, options.cycles, options.hold)
+        return
     reply = call(path, request)
     print(json.dumps(reply, indent=2))
     sys.exit(0 if reply.get("ok") else 1)
