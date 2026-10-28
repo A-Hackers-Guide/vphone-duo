@@ -8,6 +8,8 @@
   vphone-duo finish black            white or black
   vphone-duo shot out.png            full-resolution screenshot
   vphone-duo rpc METHOD [JSON]       any vphoned method
+  vphone-duo matrix OUTDIR [--settle S] every posture, portrait and landscape:
+                                     screenshots and an index.html to compare
 
 The VM is found by name under ~/.vphone/machines (default "duo"); pass
 --vm NAME or --socket PATH to pick another.
@@ -35,14 +37,75 @@ def call(sock_path, request):
     return reply
 
 
+def rpc(path, method, params=None):
+    reply = call(path, {"t": "rpc", "method": method, "params": params or {}, "screen": False})
+    if not reply.get("ok"):
+        raise SystemExit(f"{method}: {reply.get('error', 'failed')}")
+    return reply.get("result", {})
+
+
+def set_hinge(path, angle, velocity=0.0):
+    rpc(path, "motion.hinge.set", {"enabled": True, "angle": angle, "velocity": velocity})
+
+
+POSTURES = [("closed", 0), ("tent", 70), ("laptop", 110), ("open", 180)]
+ORIENTATIONS = [("portrait", "0"), ("landscape", "90")]
+
+
+def matrix(path, outdir, settle):
+    """Every posture in both orientations, as the guest draws it."""
+    import html
+    import time
+    os.makedirs(outdir, exist_ok=True)
+    before = rpc(path, "display.rotation").get("degrees", 0)
+    rows = []
+    try:
+        for orientation, degrees in ORIENTATIONS:
+            turned = call(path, {"t": "rpc", "method": "display.rotation", "params": {"orientation": degrees}, "screen": False})
+            if not turned.get("ok"):
+                # An app that keeps one orientation (Settings on iPhone keeps
+                # portrait) refuses the turn; its row says so.
+                print(f"{orientation:9} skipped: {turned.get('error', 'refused')}")
+                rows.append((orientation, None))
+                continue
+            row = []
+            for posture, angle in POSTURES:
+                set_hinge(path, angle)
+                time.sleep(settle)
+                name = f"{posture}-{orientation}.png"
+                shot = call(path, {"t": "screenshot", "path": os.path.abspath(os.path.join(outdir, name)), "screen": False})
+                if not shot.get("ok"):
+                    raise SystemExit(f"screenshot: {shot.get('error')}")
+                published = rpc(path, "motion.hinge.get").get("provider", {}).get("configuration", {}).get("angle")
+                row.append((posture, angle, published, name))
+                print(f"{orientation:9} {posture:6} {angle:5.1f}° (iOS {published}) -> {name}")
+            rows.append((orientation, row))
+    finally:
+        call(path, {"t": "rpc", "method": "display.rotation", "params": {"orientation": str(before)}, "screen": False})
+    cells = "".join(
+        f"<tr><th>{html.escape(o)}</th>" + (
+            f'<td colspan="{len(POSTURES)}">the app in front keeps one orientation</td>' if r is None else "".join(
+                f'<td><img src="{html.escape(n)}"><br>{html.escape(p)} {a:g}° · iOS {pub}</td>' for p, a, pub, n in r
+            )
+        ) + "</tr>" for o, r in rows
+    )
+    with open(os.path.join(outdir, "index.html"), "w") as f:
+        f.write(f"""<!doctype html><meta charset="utf-8"><title>Duo posture matrix</title>
+<style>body{{font:13px -apple-system,sans-serif;background:#111;color:#ddd}}td{{text-align:center;padding:6px}}
+img{{max-width:220px;max-height:320px;border-radius:12px}}th{{padding:8px}}</style>
+<table><tr><th></th>{"".join(f"<th>{p} ({a}°)</th>" for p, a in POSTURES)}</tr>{cells}</table>""")
+    print(f"wrote {os.path.join(outdir, 'index.html')}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--vm", default="duo")
     parser.add_argument("--socket")
-    parser.add_argument("command", choices=["fold", "press", "finish", "shot", "rpc"])
+    parser.add_argument("command", choices=["fold", "press", "finish", "shot", "rpc", "matrix"])
     parser.add_argument("args", nargs="*")
     parser.add_argument("--animate", action="store_true")
     parser.add_argument("--ms", type=int, default=120)
+    parser.add_argument("--settle", type=float, default=2.5)
     options = parser.parse_args()
     path = options.socket or os.path.expanduser(f"~/.vphone/machines/{options.vm}/vphone.sock")
 
@@ -65,6 +128,9 @@ def main():
     elif options.command == "rpc":
         request.update(t="rpc", method=options.args[0], params=json.loads(options.args[1]) if len(options.args) > 1 else {})
 
+    if options.command == "matrix":
+        matrix(path, options.args[0] if options.args else "duo-matrix", options.settle)
+        return
     reply = call(path, request)
     print(json.dumps(reply, indent=2))
     sys.exit(0 if reply.get("ok") else 1)

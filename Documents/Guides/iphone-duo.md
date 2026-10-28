@@ -107,6 +107,13 @@ scripts/duo/vphone-duo shot ~/Desktop/duo.png
 
 A headless launch has no window, so `fold` goes straight to the hinge sensor.
 
+### Posture matrix
+
+`vphone-duo matrix OUTDIR` folds the phone to Closed, Tent, Laptop and Open,
+in portrait and then landscape, and saves the guest's screen at each, with
+the angle iOS read back, as `OUTDIR/index.html`. An app that keeps one
+orientation (Settings on iPhone) refuses the turn; its row says so.
+
 ## Working on the 3D window
 
 `Tools/DuoPreview` builds the window without the VM engine, so a change to
