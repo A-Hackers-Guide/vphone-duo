@@ -80,11 +80,17 @@ def main():
         if options.args:
             value = options.args[0]
             try:
-                request["angle"] = float(value)
+                angle = float(value)
             except ValueError:
                 request["posture"] = value
+            else:
+                if not 0 <= angle <= 180:
+                    parser.error("the angle runs from 0 (closed) to 180 (open flat)")
+                request["angle"] = angle
             request["animate"] = options.animate
     elif options.command == "press":
+        if not options.args:
+            parser.error("press needs a key: volume_up, volume_down, side or camera_control")
         request.update(t="duo", button=options.args[0], ms=options.ms)
     elif options.command == "finish":
         request.update(t="duo", finish=options.args[0])

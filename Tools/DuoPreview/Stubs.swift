@@ -28,3 +28,8 @@ final class VPhoneVirtualMachineView: NSView {
     }
 }
 
+
+// The core kit's edge flags, as the VM view takes them.
+enum VPhoneDisplayGeometry {
+    enum Edge: Int { case none = 0, top = 1, bottom = 2, right = 4, left = 8 }
+}

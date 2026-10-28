@@ -13,7 +13,6 @@ final class VPhoneDuoFeedback {
     private let player = AVAudioPlayerNode()
     private let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
     private var clicks: [String: (down: AVAudioPCMBuffer, up: AVAudioPCMBuffer)] = [:]
-    private var started = false
 
     init() {
         engine.attach(player)
@@ -33,10 +32,11 @@ final class VPhoneDuoFeedback {
             down ? .levelChange : .generic, performanceTime: .now,
         )
         guard let pair = clicks[button.rawValue] else { return }
-        if !started {
+        // The engine stops by itself when the output device changes (a
+        // headset unplugged); playing on a stopped engine raises.
+        if !engine.isRunning {
             do {
                 try engine.start()
-                started = true
             } catch {
                 return
             }
@@ -48,7 +48,6 @@ final class VPhoneDuoFeedback {
     func stop() {
         player.stop()
         engine.stop()
-        started = false
     }
 
     private static func voice(for button: VPhoneDuoModel.Button) -> (pitch: Double, body: Double, level: Float) {

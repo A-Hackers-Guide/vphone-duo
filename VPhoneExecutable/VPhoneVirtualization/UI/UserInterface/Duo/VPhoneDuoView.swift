@@ -1,5 +1,6 @@
 import AppKit
 import RealityKit
+import VPhoneCoreKit
 
 // MARK: - iPhone Duo Window Content
 
@@ -58,7 +59,11 @@ final class VPhoneDuoView: NSView {
 
     private(set) var hingeAngle: Double = 180
     private(set) var activePanel: VPhoneDuoModel.Panel = .inner
-    private var pressed: VPhoneDuoModel.Button?
+    /// Keys held down, by mouse or by automation, each released on its own.
+    private var held: Set<VPhoneDuoModel.Button> = []
+    /// The key the mouse pressed, released when the mouse lifts.
+    private var mouseButton: VPhoneDuoModel.Button?
+    private var stopped = false
     private var touching: VPhoneDuoModel.Panel?
     private var dragStart: NSPoint?
     private var hingeAnimation: (from: Double, to: Double, start: CFTimeInterval)?
@@ -127,6 +132,8 @@ final class VPhoneDuoView: NSView {
         }
         do {
             let model = try await VPhoneDuoModel.load(from: resources.appendingPathComponent("DuoModel.usdz"))
+            // The window may have closed while the model loaded.
+            guard !stopped else { return }
             pivot.addChild(model.root)
             self.model = model
             model.setFinish(controls.finish)
@@ -139,12 +146,17 @@ final class VPhoneDuoView: NSView {
             stream.activePanel = activePanel
             stream.start()
             self.stream = stream
+            // The guest display boots at the outer panel's size; give it the
+            // panel the window starts on.
+            onActivePanelChange?(activePanel)
         } catch {
             print("[vphone] Duo model failed to load: \(error)")
         }
     }
 
     func stop() {
+        stopped = true
+        for button in held { press(button, down: false) }
         stream?.stop()
         feedback.stop()
         orbitLink?.invalidate()
@@ -344,6 +356,7 @@ final class VPhoneDuoView: NSView {
     fileprivate func pointerDown(at point: NSPoint) {
         switch target(at: point) {
         case let .button(button):
+            mouseButton = button
             press(button, down: true)
         case let .panel(panel, location) where panel == activePanel:
             touching = panel
@@ -365,8 +378,9 @@ final class VPhoneDuoView: NSView {
     }
 
     fileprivate func pointerUp(at point: NSPoint) {
-        if let pressed {
-            press(pressed, down: false)
+        if let mouseButton {
+            press(mouseButton, down: false)
+            self.mouseButton = nil
         }
         if touching != nil {
             if case let .panel(_, location) = target(at: point) {
@@ -442,15 +456,33 @@ final class VPhoneDuoView: NSView {
         virtualMachineView?.performDragOperation(info) ?? false
     }
 
+    /// How near the screen's edge, as a share of it, a touch starts an edge
+    /// swipe: about the normal window's 32 points.
+    private static let edgeShare: CGFloat = 0.03
+    private var touchEdge = 0
+
     private func touch(phase: Int, at location: CGPoint) {
+        if phase == 0 {
+            // A finger that lands at an edge flags it, so SpringBoard's edge
+            // gestures (Home, Control Center) can begin, as in the plain window.
+            touchEdge = switch true {
+            case location.y >= 1 - Self.edgeShare: VPhoneDisplayGeometry.Edge.bottom.rawValue
+            case location.y <= Self.edgeShare: VPhoneDisplayGeometry.Edge.top.rawValue
+            case location.x <= Self.edgeShare: VPhoneDisplayGeometry.Edge.left.rawValue
+            case location.x >= 1 - Self.edgeShare: VPhoneDisplayGeometry.Edge.right.rawValue
+            default: 0
+            }
+        }
         lastTouch = location
         _ = virtualMachineView?.sendNormalizedTouch(
-            phase: phase, normalized: [NSPoint(x: location.x, y: location.y)], swipeAim: 0,
+            phase: phase, normalized: [NSPoint(x: location.x, y: location.y)], swipeAim: touchEdge,
         )
     }
 
     private func press(_ button: VPhoneDuoModel.Button, down: Bool) {
-        pressed = down ? button : nil
+        // A key goes down once and up once, whoever presses it.
+        guard down != held.contains(button) else { return }
+        if down { held.insert(button) } else { held.remove(button) }
         model?.setButton(button, pressed: down)
         feedback.play(button, down: down)
         onButton?(button, down)

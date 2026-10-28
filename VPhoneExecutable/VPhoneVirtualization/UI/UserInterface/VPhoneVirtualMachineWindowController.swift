@@ -94,7 +94,8 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
                 duoView.frameSource = { [weak display] deliver in
                     guard let display else { return deliver(nil) }
                     VPhoneGraphicsDisplayCapture.capture(display) { image in
-                        MainActor.assumeIsolated { deliver(image) }
+                        // The service's completion thread is not documented.
+                        Task { @MainActor in deliver(image) }
                     }
                 }
             }

@@ -558,6 +558,8 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         }
         NSApp.mainMenu = nil
         windowController = nil
+        duoHinge?.stop()
+        duoHinge = nil
         menuController = nil
         fileWindowController = nil
         keychainWindowController = nil
@@ -714,6 +716,7 @@ extension VPhoneVirtualMachineAppDelegate {
         duoHinge = hinge
         duoView.onHingeChange = { angle in hinge.send(angle) }
         hinge.onSettled = { [weak duoView] in duoView?.hingeDelivered() }
+        hinge.currentAngle = { [weak duoView] in duoView?.hingeAngle ?? 180 }
         duoView.readPublishedAngle = { [weak control] in
             guard let control, control.isConnected, control.supportsHinge,
                   let reply = try? await control.readHinge(), reply.providerRunning

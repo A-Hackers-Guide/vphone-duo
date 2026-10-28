@@ -728,7 +728,8 @@ class VPhoneHostAutomationServer {
                 if json["animate"] as? Bool == true {
                     duoView.animateHinge(to: target)
                 } else {
-                    duoView.setHinge(target)
+                    // As a user's: it stops a posture still easing in.
+                    duoView.setHinge(target, fromUser: true)
                 }
             }
             return Self.reply(ok: true, result: [

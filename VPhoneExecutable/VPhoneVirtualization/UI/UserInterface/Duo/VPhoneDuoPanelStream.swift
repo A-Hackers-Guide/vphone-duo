@@ -35,6 +35,14 @@ final class VPhoneDuoPanelStream {
     private var link: CADisplayLink?
     private var inFlight = false
     private var lastFrame: CFTimeInterval = 0
+    /// Counts capture requests, so one answered after it was given up on is
+    /// ignored.
+    private var generation = 0
+    /// The last copy to the drawable has not finished: the staging buffer is
+    /// still being read.
+    private var gpuBusy = false
+    /// A capture not answered in this time is given up on.
+    private static let captureTimeout: CFTimeInterval = 0.5
 
     /// The guest presents at up to 60 Hz; the panel need not go faster.
     private static let minimumInterval: CFTimeInterval = 1.0 / 60
@@ -69,11 +77,14 @@ final class VPhoneDuoPanelStream {
 
     @objc private func tick(_: CADisplayLink) {
         let now = CACurrentMediaTime()
-        guard !inFlight, now - lastFrame >= Self.minimumInterval * 0.9, let frameSource else { return }
+        if inFlight, now - lastFrame > Self.captureTimeout { inFlight = false }
+        guard !inFlight, !gpuBusy, now - lastFrame >= Self.minimumInterval * 0.9, let frameSource else { return }
         inFlight = true
         lastFrame = now
+        generation += 1
+        let request = generation
         frameSource { [weak self] image in
-            guard let self else { return }
+            guard let self, request == generation else { return }
             inFlight = false
             if let image { present(image) }
         }
@@ -106,6 +117,10 @@ final class VPhoneDuoPanelStream {
             destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0),
         )
         blit.endEncoding()
+        gpuBusy = true
+        commands.addCompletedHandler { [weak self] _ in
+            Task { @MainActor in self?.gpuBusy = false }
+        }
         commands.commit()
         drawable.present()
     }

@@ -392,7 +392,7 @@ final class VPhoneDuoModel {
 
     func setFinish(_ finish: VPhoneDuoView.Finish) {
         for slot in finishSlots {
-            guard var materials = slot.entity.model?.materials,
+            guard var materials = slot.entity.model?.materials, materials.indices.contains(slot.index),
                   var pbr = materials[slot.index] as? PhysicallyBasedMaterial
             else { continue }
             let look = Self.finish(finish, slot.part)

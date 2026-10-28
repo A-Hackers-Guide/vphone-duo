@@ -14,6 +14,15 @@ swiftc -O -swift-version 6 -o /tmp/duo-preview Tools/DuoPreview/*.swift \
   <a-screenshot.png> <out-dir> <script>
 ```
 
+The view imports VPhoneCoreKit for one enum, which `Stubs.swift` stands in
+for; build it with that import removed:
+
+```sh
+sed 's/^import VPhoneCoreKit$//' $D/VPhoneDuoView.swift > /tmp/DuoView.swift
+```
+
+and pass `/tmp/DuoView.swift` in its place.
+
 Scripts:
 
 | Script | What it does |

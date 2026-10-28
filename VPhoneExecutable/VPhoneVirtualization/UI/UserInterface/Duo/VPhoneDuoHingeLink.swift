@@ -14,8 +14,15 @@ final class VPhoneDuoHingeLink {
     private var pending: Double?
     private var inFlight = false
     private var last: (angle: Double, time: TimeInterval)?
+    private var lastVelocity = 0.0
+    private var settle: Task<Void, Never>?
+    private var connectionWatch: Timer?
+    private var wasConnected = false
     /// The guest has the newest angle: nothing more is waiting to go.
     var onSettled: (() -> Void)?
+    /// The angle the window shows, sent whenever the guest (re)connects: the
+    /// guest keeps its last angle across reboots, the window starts open.
+    var currentAngle: () -> Double = { 180 }
 
     /// Whether the guest display follows the lit panel's size. iOS lays out
     /// once per display mode, so a resize is only made where it is followed.
@@ -25,6 +32,26 @@ final class VPhoneDuoHingeLink {
 
     init(control: VPhoneGuestControl) {
         self.control = control
+        connectionWatch = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.watchConnection() }
+        }
+    }
+
+    func stop() {
+        connectionWatch?.invalidate()
+        connectionWatch = nil
+        settle?.cancel()
+    }
+
+    /// Sends the window's angle each time the guest's agent comes up, and
+    /// anything that waited while it was away.
+    private func watchConnection() {
+        let connected = control?.isConnected == true && control?.supportsHinge == true
+        defer { wasConnected = connected }
+        guard connected, !wasConnected else { return }
+        last = nil
+        if pending == nil { pending = currentAngle() }
+        flush()
     }
 
     func send(_ angle: Double) {
@@ -42,11 +69,30 @@ final class VPhoneDuoHingeLink {
             velocity = min(max((angle - last.angle) / (now - last.time), -3600), 3600)
         }
         last = (angle, now)
+        lastVelocity = velocity
+        settle?.cancel()
         Task {
             _ = try? await control.setHinge(VPhoneHingeConfiguration(enabled: true, angle: angle, velocity: velocity))
             inFlight = false
-            if pending == nil { onSettled?() }
+            if pending == nil {
+                onSettled?()
+                settleVelocity(at: angle)
+            }
             flush()
+        }
+    }
+
+    /// A fold that stops still has the speed of its last step; once nothing
+    /// has moved for a moment, the guest is told the hinge is at rest.
+    private func settleVelocity(at angle: Double) {
+        guard lastVelocity != 0 else { return }
+        settle = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard let self, !Task.isCancelled, pending == nil, !inFlight,
+                  let control, control.isConnected
+            else { return }
+            lastVelocity = 0
+            _ = try? await control.setHinge(VPhoneHingeConfiguration(enabled: true, angle: angle, velocity: 0))
         }
     }
 
