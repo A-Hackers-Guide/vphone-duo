@@ -419,12 +419,19 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         let root = try parseTree(blob, label: "DT")
         let source = try parseTree(board, label: "board DT")
         let changes = DeviceTreePatcher.presentPhoneProduct(in: root, from: source)
+            + DeviceTreePatcher.presentPanels(in: root, from: source)
         guard !changes.isEmpty else { return (blob, [], 0) }
         let records = changes.map {
-            Change(property: $0.path, before: $0.before.map(describe) ?? "absent", after: describe($0.after))
+            Change(
+                property: $0.path,
+                before: $0.before.map(describe) ?? "absent",
+                after: $0.isNode ? "node (\($0.after.count) bytes)" : describe($0.after),
+            )
         }
+        // An added node brings its own header and property headers.
         let delta = changes.reduce(0) { sum, change in
-            sum + align4(change.after.count) - (change.before.map { align4($0.count) } ?? -36)
+            if change.isNode { return sum + change.after.count }
+            return sum + align4(change.after.count) - (change.before.map { align4($0.count) } ?? -36)
         }
         return (serializeNode(root), records, delta)
     }
