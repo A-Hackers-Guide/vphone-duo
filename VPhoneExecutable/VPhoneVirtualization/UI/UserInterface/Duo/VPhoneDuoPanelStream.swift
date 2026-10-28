@@ -1,20 +1,22 @@
 import AppKit
 import Metal
-import MetalKit
 import RealityKit
 
 // MARK: - Live Panels
 
-/// Puts the guest's display on the lit panel of the Duo model, frame by frame.
-///
-/// Each frame is the VM service's last presented buffer
-/// (`VPhoneGraphicsDisplayCapture`), uploaded once to the GPU and copied into
-/// a RealityKit drawable that the panel's material samples, so nothing is
-/// rebuilt per frame. Capture is paced by the window's display link and
-/// skipped while one is still in flight, so a slow guest never queues work.
 /// Hands over the guest's current frame, or nil when there is none yet.
 typealias VPhoneDuoFrameSource = @MainActor (@escaping @MainActor (CGImage?) -> Void) -> Void
 
+/// Puts the guest's display on the lit panel of the Duo model, frame by frame.
+///
+/// Each frame is the VM service's last presented buffer
+/// (`VPhoneGraphicsDisplayCapture`). It is drawn into one reused buffer that
+/// backs a shared staging texture, then copied on the GPU into a RealityKit
+/// drawable that the panel's material samples, so nothing is allocated per
+/// frame. That takes about 3.5 ms for the outer panel's 1398 x 2034 frame;
+/// `MTKTextureLoader`, which decodes into a new texture each time, took 35.
+/// Capture is paced by the window's display link and skipped while one is
+/// still in flight, so a slow guest never queues work.
 @MainActor
 final class VPhoneDuoPanelStream {
     var frameSource: VPhoneDuoFrameSource?
@@ -25,7 +27,8 @@ final class VPhoneDuoPanelStream {
     private let model: VPhoneDuoModel
     private static let device = MTLCreateSystemDefaultDevice()
     private let queue = VPhoneDuoPanelStream.device?.makeCommandQueue()
-    private let loader = VPhoneDuoPanelStream.device.map(MTKTextureLoader.init(device:))
+    /// The frame's pixels, drawn on the CPU and read by the GPU.
+    private var staging: (texture: MTLTexture, context: CGContext)?
     private var drawables: TextureResource.DrawableQueue?
     private var texture: TextureResource?
     private var shape: Shape?
@@ -77,28 +80,28 @@ final class VPhoneDuoPanelStream {
     }
 
     private func present(_ image: CGImage) {
-        guard let queue, let loader,
-              let source = try? loader.newTexture(cgImage: image, options: [
-                  .textureUsage: MTLTextureUsage.shaderRead.rawValue,
-                  .textureStorageMode: MTLStorageMode.private.rawValue,
-                  .SRGB: true,
-              ])
-        else { return }
-        // A blit copies texels as they are, so the drawable takes the
-        // decoded frame's own pixel format and size.
-        let shape = Shape(width: source.width, height: source.height, format: source.pixelFormat)
-        if shape != self.shape || drawables == nil {
+        let shape = Shape(width: image.width, height: image.height)
+        if shape != self.shape || drawables == nil || staging == nil {
             guard rebuild(for: shape) else { return }
         }
-        guard let drawables,
-              let drawable = try? drawables.nextDrawable(),
+        guard let queue, let staging, let drawables,
+              let pixels = staging.context.data
+        else { return }
+        // Drawing converts whatever the frame's layout is to the staging
+        // buffer's BGRA, which the texture then takes as it is.
+        staging.context.draw(image, in: CGRect(x: 0, y: 0, width: shape.width, height: shape.height))
+        staging.texture.replace(
+            region: MTLRegionMake2D(0, 0, shape.width, shape.height), mipmapLevel: 0,
+            withBytes: pixels, bytesPerRow: staging.context.bytesPerRow,
+        )
+        guard let drawable = try? drawables.nextDrawable(),
               let commands = queue.makeCommandBuffer(),
               let blit = commands.makeBlitCommandEncoder()
         else { return }
         blit.copy(
-            from: source, sourceSlice: 0, sourceLevel: 0,
+            from: staging.texture, sourceSlice: 0, sourceLevel: 0,
             sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
-            sourceSize: MTLSize(width: source.width, height: source.height, depth: 1),
+            sourceSize: MTLSize(width: shape.width, height: shape.height, depth: 1),
             to: drawable.texture, destinationSlice: 0, destinationLevel: 0,
             destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0),
         )
@@ -110,15 +113,29 @@ final class VPhoneDuoPanelStream {
     private struct Shape: Equatable {
         let width: Int
         let height: Int
-        let format: MTLPixelFormat
     }
+
+    private static let pixelFormat = MTLPixelFormat.bgra8Unorm_srgb
 
     private func rebuild(for shape: Shape) -> Bool {
         let descriptor = TextureResource.DrawableQueue.Descriptor(
-            pixelFormat: shape.format, width: shape.width, height: shape.height,
+            pixelFormat: Self.pixelFormat, width: shape.width, height: shape.height,
             usage: [.shaderRead, .renderTarget], mipmapsMode: .none,
         )
-        guard let queue = try? TextureResource.DrawableQueue(descriptor) else { return false }
+        let stagingDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: Self.pixelFormat, width: shape.width, height: shape.height, mipmapped: false,
+        )
+        stagingDescriptor.usage = .shaderRead
+        stagingDescriptor.storageMode = .shared
+        guard let queue = try? TextureResource.DrawableQueue(descriptor),
+              let stagingTexture = Self.device?.makeTexture(descriptor: stagingDescriptor),
+              let context = CGContext(
+                  data: nil, width: shape.width, height: shape.height, bitsPerComponent: 8, bytesPerRow: shape.width * 4,
+                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue,
+              )
+        else { return false }
+        staging = (stagingTexture, context)
         queue.allowsNextDrawableTimeout = true
         do {
             let placeholder: TextureResource
