@@ -197,6 +197,53 @@ the guest kernel's fallback. Boot completes; app launches are slower. On this
 host, tapping Settings took between 4 and 10 seconds to bring it to the
 front.
 
+## Forcing a fold: what was tried
+
+The question: can iOS be made to fold for real, laying out one wide inner
+screen when open and the small outer one when closed? Tried on 2026-10-28,
+same guest, engine 2.13.8-local.311d9268.
+
+| Attempt | Result |
+| --- | --- |
+| Two displays in one VM | **Impossible.** `_maximumAllowedDisplayCount` is 1; a second display fails configuration either way (above). |
+| Resize the one display live as the hinge moves (`VZGraphicsDisplay.reconfigure(sizeInPixels:)`, the socket's `display` command) | **Refused by Virtualization.framework:** *"Display does not support reconfiguration at this time"*, for 2670 × 1878, 1878 × 2670 and back to 1398 × 2034. Live resizing needs the guest's display driver to take part; macOS guests have one, the iOS guest does not. iOS kept 466 × 678 points throughout. |
+| Boot the one display at the inner panel's portrait size, 1878 × 2670 @ 430 ppi | **Boots, 626 × 890 points.** SpringBoard draws a different layout: a top status bar and a horizontal dock, where the outer panel has a side dock. It is not the inner panel's layout done right: the icon grid sits off-centre and the wallpaper is black, as parts of SpringBoard still measure for the outer panel. |
+| Boot it at the inner panel as seen open, 2670 × 1878 landscape | **Boots, 890 × 626 points.** SpringBoard lays out its portrait phone screen in a column on the left; the rest is black and the bottom rows are cut off. iOS does not lay out for a wide panel here. |
+
+| Outer size (normal) | Inner size, portrait | Inner size, landscape |
+| --- | --- | --- |
+| ![outer](../../Documents/duo/research/outer-size-boot.jpg) | ![inner portrait](../../Documents/duo/research/inner-size-boot.jpg) | ![inner landscape](../../Documents/duo/research/wide-size-boot.jpg) |
+
+### Why it cannot be forced on this VM
+
+1. **The VM has one framebuffer and it cannot change size.** That rules out
+   both real routes: a second display for the inner panel, and one display
+   that changes size as the phone opens.
+2. **SpringBoard's inner layout belongs to `display1`, not to a size.** The
+   Duo's device tree names two displays, and SpringBoard picks the display,
+   and the layout with it, from its device pose. With `display1` absent, the
+   pose provider's `hinge.isAvailable` stays off, nothing asks locationd for
+   the angle (4,889 log lines, none from `CLAngleNotifier`), and the
+   cover-display-only policy applies. A bigger `display0` is still the cover
+   display to SpringBoard: it gets the phone layout, stretched or clipped,
+   not the inner one.
+3. **locationd drops the hinge driver on a VM by design** (`Skipping open
+   for physical HID device on VM/Simulator`), so even the angle's own path
+   is built to stay quiet here.
+
+### What could change it
+
+- A Virtualization.framework that allows two displays, or live resizing of
+  an iOS guest's display.
+- Answering `display1` from the one display in the guest: making SpringBoard
+  believe in an inner display and route it to the framebuffer, swapping by
+  pose. That needs SpringBoard's display arbitration and the framebuffer's
+  identity, neither yet mapped, and is the one route that does not wait on
+  Apple.
+
+The 3D window already does the host's half: it lights the panel the fold
+selects and shows iOS there; what is missing is iOS changing its layout.
+
 ## The 3D model, for whoever works on it next
 
 `DuoModel.usdz` as RealityKit loads it:
