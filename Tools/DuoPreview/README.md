@@ -23,4 +23,11 @@ Scripts:
 | `clicks` | Clicks a grid over the open phone and prints each touch. |
 | `clicks-closed` | The same over the closed phone's outer screen. |
 | `buttons` | Clicks every key where it is drawn, from four folds and angles, and prints which key each click pressed. |
+| `selftest` | Puts a grid of guest-screen points on the model at five folds and angles, clicks each through the real hit-testing, and checks it comes back as itself (within 0.01). Prints `SELFTEST PASSED` or `FAILED`. |
+| `touchdot`, `crease`, `scroll`, `readback` | Checks for the extras and the scroll and readback paths; `scroll` and `readback` need a running Duo. |
 | `live` | Drives a running Duo VM through `~/.vphone/machines/duo/vphone.sock`: its live screen on the panels, clicks become touches, keys become HID presses, and the fold goes to the hinge sensor. It taps Settings on the 3D model and checks that iOS opened it. |
+
+Set `DUO_QUIET=1` to leave out the per-touch lines.
+
+`FrameUploadBenchmark.swift.txt` times two ways of putting a frame on the
+GPU; rename it to `.swift` and pass it a screenshot to run it.

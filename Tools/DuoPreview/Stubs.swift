@@ -11,7 +11,9 @@ final class VPhoneVirtualMachineView: NSView {
     @discardableResult
     func sendNormalizedTouch(phase: Int, normalized: [NSPoint], swipeAim: Int, timestamp: TimeInterval = 0) -> Bool {
         touches.append((phase, normalized[0]))
-        print("touch phase=\(phase) x=\(String(format: "%.3f", normalized[0].x)) y=\(String(format: "%.3f", normalized[0].y))")
+        if ProcessInfo.processInfo.environment["DUO_QUIET"] == nil {
+            print("touch phase=\(phase) x=\(String(format: "%.3f", normalized[0].x)) y=\(String(format: "%.3f", normalized[0].y))")
+        }
         if live {
             let name = phase == 0 ? "down" : phase == 1 ? "move" : "up"
             let point = normalized[0]

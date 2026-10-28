@@ -198,6 +198,33 @@ final class Harness: NSObject, NSApplicationDelegate {
             await snap("60_touch_dot")
             window.sendEvent(ev(.leftMouseUp))
             await snap("61_touch_dot_gone")
+        case "selftest":
+            // Every point of the guest's screen, put on the model, clicked
+            // through the real hit-testing, must come back as itself.
+            let view = duo.subviews.compactMap { $0 as? ARView }.first!
+            var worst: Double = 0, checked = 0, missed = 0
+            let poses: [(Double, VPhoneDuoModel.Panel, Float, Float)] = [
+                (180, .inner, Float.pi - 0.38, 0.16), (180, .inner, Float.pi + 0.6, -0.3),
+                (110, .inner, Float.pi - 0.1, 0.25), (0, .outer, -0.38 + Float.pi / 2, 0.16), (0, .outer, 0.9, 0.5),
+            ]
+            for (angle, panel, yaw, pitch) in poses {
+                duo.setHinge(angle); duo.debugOrbit(yaw: yaw, pitch: pitch)
+                try? await Task.sleep(for: .milliseconds(250))
+                for y in stride(from: 0.08, through: 0.92, by: 0.12) {
+                    for x in stride(from: 0.08, through: 0.92, by: 0.12) {
+                        let aim = CGPoint(x: x, y: y)
+                        guard let world = duo.model?.position(of: aim, on: panel, relativeTo: nil),
+                              let p = view.project(world), view.bounds.contains(p) else { continue }
+                        vmView.touches.removeAll()
+                        await click(NSPoint(x: p.x, y: p.y), hold: 0.02)
+                        checked += 1
+                        guard let got = vmView.touches.first?.1 else { missed += 1; continue }
+                        worst = max(worst, hypot(got.x - aim.x, got.y - aim.y))
+                    }
+                }
+            }
+            print(String(format: "selftest: %d points, %d missed, worst error %.4f", checked, missed, worst))
+            if missed > 0 || worst > 0.01 { print("SELFTEST FAILED") } else { print("SELFTEST PASSED") }
         case "clicks-closed":
             duo.setHinge(0); duo.resetView(animated: false)
             try? await Task.sleep(for: .milliseconds(500))
