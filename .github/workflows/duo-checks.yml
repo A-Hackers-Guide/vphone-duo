@@ -7,7 +7,6 @@ name: duo-checks
 
 on:
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -34,7 +33,10 @@ jobs:
       - name: Build scripts parse
         run: |
           sudo apt-get install -y -qq zsh >/dev/null
-          for f in VPhoneExecutable/VPhoneVirtualization/Build/*.sh; do zsh -n "$f"; done
+          shopt -s nullglob
+          scripts=(VPhoneExecutable/VPhoneVirtualization/Build/*.sh)
+          if [ ${#scripts[@]} -eq 0 ]; then echo "no build scripts"; exit 0; fi
+          for f in "${scripts[@]}"; do zsh -n "$f"; done
 
       - name: Model is a sound USDZ
         run: |
@@ -45,6 +47,9 @@ jobs:
           size=$(stat -c %s "$model")
           echo "DuoModel.usdz: $size bytes"
           [ "$size" -lt 20000000 ] || { echo "::error::model over 20 MB"; exit 1; }
+          # OpenUSD's own validators, and every part the window looks up.
+          python3 -m pip install -q usd-core==26.11
+          python3 Tools/DuoModel/check_model.py "$model"
 
       - name: No firmware, blobs or machine identity
         run: |
