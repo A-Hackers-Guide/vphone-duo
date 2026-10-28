@@ -122,13 +122,36 @@ end angle, duration, delay, options), and `CLSPUAngleServiceControl`'s
 telemetry has an `isSimulated` field: Apple simulates the hinge in its own
 tools, from inside the sensor stack.
 
+### Nothing asks for the angle
+
+Across a locationd restart, with the angle set five times afterwards,
+locationd logged 4,889 lines and not one from `CLAngleNotifier`, not even its
+VM skip. The notifier is made on demand, so on this guest nothing asks for
+the angle. The asker would be SpringBoard's pose provider, and its pose says
+when it would:
+
+```
+devicePose = { orientation, coverOrientation, innerOrientation,
+               hinge = { isAvailable, position, state,
+                         fullyClosedRegion = { start, end, isActive, … } } }
+```
+
+`hinge.isAvailable` gates the rest. What sets it is not in the strings; a
+check against the device's displays or a capability is the likely source,
+and with `display1` absent it would stay false. The display mode then
+follows a resolution policy, among them
+`SBFForceCoverDisplayOnlyDisplayContentModeResolutionPolicy` (`resolvedMode
+ForDisplayProxy:devicePose:`, `preferredPrimarySurfaceTypeForDevicePose:`):
+a Duo shown on its cover display alone, which is what this guest does.
+
 ### The hinge-angle HUD
 
 `SBShowHingeAngleHUD = YES` in `com.apple.springboard`, read back as set, and
 a SpringBoard restart: no HUD appeared on the outer screen while the angle was
-moved (150°, 120°, 90°), screenshot 0.3 s after each change. Either the
-default is honoured only on internal builds, or the pose provider does not
-receive the angle on this guest. Which one is open; the default was removed
+moved (150°, 120°, 90°), screenshot 0.3 s after each change. The HUD is
+switched by SpringBoard's debug HUD (`SBWindowSceneDebugHUDWindowRootView
+Controller _isHingeAngleHUDEnabled`), not by that default alone, and the pose
+provider gets no angle here anyway (above). The default was removed
 afterwards.
 
 ## One display
@@ -200,11 +223,10 @@ front.
 - **Does SpringBoard try to switch to `display1`?** Its fold transition and
   the pose provider's decision would show at the debug log level, or with a
   breakpoint on the pose provider's update path.
-- **Does locationd's notifier take the virtual events?** Its start-up log
-  (the VM skip above) and its per-event log line would answer it; both come
-  from locationd's launch, so a capture across a locationd restart is the
-  next step. If it does not, `CMAngleSimulator` is the in-stack way to feed
-  it.
+- **What sets `hinge.isAvailable`?** Finding it in SpringBoardFoundation's
+  pose provider is the next step. Once it is true, the provider asks
+  locationd for the angle, and whether `CLAngleNotifier`'s event path takes
+  the virtual service's events (or needs `CMAngleSimulator`) can be seen.
 - **Could one framebuffer stand in for both?** Answering `display1`'s
   geometry from the one VM display, and switching what it shows by pose, is
   the path to a guest that relays out on unfold. It needs SpringBoard's
