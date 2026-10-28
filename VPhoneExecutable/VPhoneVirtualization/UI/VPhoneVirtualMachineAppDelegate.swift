@@ -9,6 +9,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
     private var control: VPhoneGuestControl?
     private var windowController: VPhoneVirtualMachineWindowController?
     private var homePodDisplayTask: Task<Void, Never>?
+    private var duoHinge: VPhoneDuoHingeLink?
     private var menuController: VPhoneMenuController?
     private var shellWindowController: VPhoneShellWindowController?
     private var fileWindowController: VPhoneFileWindowController?
@@ -180,7 +181,11 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                     .resolvingSymlinksInPath()
                     .path,
                 homePodGuest: options.isHomePodGuest,
+                duo: options.innerScreen != nil,
             )
+            if let duoView = wc.duoView, let inner = options.innerScreen {
+                connectDuo(duoView, vm: vm, control: control, options: options, inner: inner)
+            }
             wc.captureView?.escapeIsBackGesture = !options.isPadGuest && !options.isTVGuest
             wc.captureView?.isTVGuest = options.isTVGuest
             wc.homeButtonHoldsInGuest = options.isTVGuest
@@ -686,5 +691,57 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
         !command.noGraphics && !isRestartingVirtualMachine
+    }
+}
+
+// MARK: - iPhone Duo
+
+@MainActor
+extension VPhoneVirtualMachineAppDelegate {
+    /// Joins the Duo window to the guest: the fold goes to the hinge sensor,
+    /// the model's buttons to the guest's buttons, and the lit panel to the
+    /// display's size.
+    fileprivate func connectDuo(
+        _ duoView: VPhoneDuoView,
+        vm: VPhoneVirtualMachine,
+        control: VPhoneGuestControl,
+        options: VPhoneVirtualMachine.Options,
+        inner: VPhoneVirtualMachineManifest.ScreenConfig,
+    ) {
+        let hinge = VPhoneDuoHingeLink(control: control)
+        duoHinge = hinge
+        duoView.onHingeChange = { angle in hinge.send(angle) }
+        hinge.onSettled = { [weak duoView] in duoView?.hingeDelivered() }
+        duoView.readPublishedAngle = { [weak control] in
+            guard let control, control.isConnected, control.supportsHinge,
+                  let reply = try? await control.readHinge(), reply.providerRunning
+            else { return nil }
+            return reply.publishedAngle
+        }
+        duoView.onButton = { [weak control] button, down in
+            guard let control, control.isConnected else { return }
+            let key = VPhoneDuoHingeLink.hidKey(for: button)
+            if down {
+                control.sendHIDDown(page: key.page, usage: key.usage)
+            } else {
+                control.sendHIDUp(page: key.page, usage: key.usage)
+            }
+        }
+        duoView.onActivePanelChange = { [weak vm] panel in
+            guard let vm, VPhoneDuoHingeLink.resizesDisplay else { return }
+            let size = panel == .inner
+                ? (inner.width, inner.height)
+                : (options.screenWidth, options.screenHeight)
+            do {
+                try vm.resizeDisplay(width: size.0, height: size.1)
+            } catch {
+                print("[vphone] Duo display resize failed: \(error)")
+            }
+        }
+        let resources = Bundle.main.resourceURL?.appendingPathComponent("DuoModel")
+            ?? URL(fileURLWithPath: CommandLine.arguments[0])
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Resources/DuoModel")
+        Task { await duoView.load(resources: resources) }
     }
 }

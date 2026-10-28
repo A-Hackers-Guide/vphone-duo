@@ -9,6 +9,8 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
     private weak var control: VPhoneGuestControl?
     private weak var virtualMachineView: VPhoneVirtualMachineView?
     private(set) var homePodDisplayView: VPhoneHomePodDisplayView?
+    /// An iPhone Duo's 3D window content, with the VM view hidden inside.
+    private(set) var duoView: VPhoneDuoView?
     private var homePodGuest = false
     private(set) var touchIDMonitor: VPhoneTouchIDMonitor?
     private var homeButton: NSButton?
@@ -42,6 +44,7 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         name: String,
         sceneIdentifier: String,
         homePodGuest: Bool = false,
+        duo: Bool = false,
     ) {
         self.control = control
         self.homePodGuest = homePodGuest
@@ -57,7 +60,8 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         view.clipboardSync = VPhoneClipboardSync(control: control)
         virtualMachineView = view
         let scale = CGFloat(screenScale)
-        let windowSize = homePodGuest ? VPhoneHomePodDisplayView.defaultContentSize : NSSize(
+        let windowSize = homePodGuest ? VPhoneHomePodDisplayView.defaultContentSize
+            : duo ? NSSize(width: 860, height: 820) : NSSize(
             width: CGFloat(screenWidth) / scale,
             height: CGFloat(screenHeight) / scale,
         )
@@ -82,6 +86,26 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
             homePodDisplayView = cap
             displayContainer = nil
             container = cap
+        } else if duo {
+            let duoView = VPhoneDuoView(frame: NSRect(origin: .zero, size: windowSize))
+            duoView.virtualMachineView = view
+            if let display = vm.graphicsDevices.first?.displays.first {
+                duoView.frameSource = { [weak display] deliver in
+                    guard let display else { return deliver(nil) }
+                    VPhoneGraphicsDisplayCapture.capture(display) { image in
+                        MainActor.assumeIsolated { deliver(image) }
+                    }
+                }
+            }
+            // The VM view keeps its panel-sized bounds for touch mapping and
+            // capture, beneath the 3D view.
+            view.frame = NSRect(x: 0, y: 0, width: CGFloat(screenWidth) / scale, height: CGFloat(screenHeight) / scale)
+            view.isHidden = true
+            duoView.addSubview(view, positioned: .below, relativeTo: nil)
+            self.duoView = duoView
+            displayContainer = nil
+            homePodDisplayView = nil
+            container = duoView
         } else {
             let display = VPhoneDisplayContainerView(displayView: view)
             display.panelSize = windowSize
@@ -101,7 +125,11 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         window.delegate = self
         window.level = .normal
         VPhoneAlert.hostWindow = window
-        window.contentAspectRatio = windowSize
+        if duo {
+            window.contentMinSize = NSSize(width: 560, height: 520)
+        } else {
+            window.contentAspectRatio = windowSize
+        }
         window.title = name
         window.contentView = container
 
@@ -141,7 +169,7 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         // after the toolbar and actual screen are known, including a wide TV
         // panel whose saved frame may otherwise be clamped out of proportion.
         // The guest starts unturned; the orientation poll follows it later.
-        if !homePodGuest { applyOrientation(.portrait, to: window, force: true) }
+        if !homePodGuest, !duo { applyOrientation(.portrait, to: window, force: true) }
 
         keySender.window = window
         NSApp.activate(ignoringOtherApps: true)
@@ -168,7 +196,7 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
 
         // The menu sets the orientation before the guest turns, and the poll
         // after; either way the window follows it.
-        if !homePodGuest {
+        if !homePodGuest, !duo {
             control.observeInterfaceOrientation { [weak self, weak window] orientation in
                 guard let self, let window else { return }
                 applyOrientation(orientation ?? .portrait, to: window)
@@ -213,6 +241,8 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         NotificationCenter.default.removeObserver(self)
         touchIDMonitor?.stop()
         touchIDMonitor = nil
+        duoView?.stop()
+        duoView = nil
         captureView?.virtualMachine = nil
         captureView?.keySender = nil
         captureView?.control = nil

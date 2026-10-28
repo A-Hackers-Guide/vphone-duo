@@ -177,6 +177,13 @@ fi
     "$root/VPhoneExecutable/VPhoneVirtualization/Resources/OpenSEP/LICENSE" \
     "$resources/OpenSEP/"
 
+# The iPhone Duo's 3D model and the studio light it is shown in, made by
+# Tools/DuoModel/prepare_duo.py and render_previews.py.
+/bin/mkdir -p "$resources/DuoModel"
+/bin/cp "$root/VPhoneExecutable/VPhoneVirtualization/Resources/DuoModel/DuoModel.usdz" \
+    "$root/VPhoneExecutable/VPhoneVirtualization/Resources/DuoModel/DuoStudio.exr" \
+    "$resources/DuoModel/"
+
 # Patch presets. Prewritten plists, read by vphone-cli at patch time to decide
 # which declared patches apply. Nothing generates or edits these.
 /bin/mkdir -p "$resources/patches_presets"

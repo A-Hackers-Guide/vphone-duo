@@ -1084,6 +1084,17 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     ) -> Bool {
         guard !localPoints.isEmpty else { return false }
         let normalized = localPoints.map { normalizeCoordinate($0, allowOutside: allowOutside) }
+        return sendNormalizedTouch(phase: phase, normalized: normalized, swipeAim: swipeAim, timestamp: timestamp)
+    }
+
+    /// Delivers fingers already in the guest's normalized touch space (0...1,
+    /// origin top left), as the iPhone Duo window does after hit-testing its
+    /// 3D panels. Routing is the same as for a mouse on this view.
+    @discardableResult
+    func sendNormalizedTouch(
+        phase: Int, normalized: [NSPoint], swipeAim: Int, timestamp: TimeInterval = ProcessInfo.processInfo.systemUptime,
+    ) -> Bool {
+        guard !normalized.isEmpty else { return false }
 
         // A single finger that starts at a screen edge goes through vphoned
         // when the guest can flag it as an edge touch. The native path cannot:
@@ -1092,7 +1103,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         // gesture) never begin. The choice is made on the down and kept until
         // the lift.
         if phase == 0 {
-            edgeTouchViaGuest = localPoints.count == 1 && swipeAim != 0
+            edgeTouchViaGuest = normalized.count == 1 && swipeAim != 0
                 && control?.supportsEdgeTouch == true
         }
         defer {
