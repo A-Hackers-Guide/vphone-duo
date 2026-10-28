@@ -43,9 +43,11 @@ tools would parse it):
 - **HID.framework** exports `IOHIDEventCreateHingeAngleEvent`, whose arguments
   are `(allocator, timestamp, angle, mechanicalAngle, velocity, options)`. It
   builds an event of type `0x2C`.
-- **CoreMotion**'s lid-angle notifier, `CLLidAngleNotifier`, matches services
-  on usage page `0xFF0C` (Apple's vendor motion page) and usage `0x21`, and
-  reads the angle field of `0x2C` events.
+- **CoreMotion**'s angle notifier, `CLAngleNotifier`, matches services on
+  usage page `0xFF0C` (Apple's vendor motion page) and usage `0x21`, and
+  reads the angle field of `0x2C` events. It runs in **locationd** (below).
+  A `CLLidAngleNotifier` also appears in the cache, a different class not in
+  CoreLocation's or CoreMotion's public frameworks.
 - **SpringBoardFoundation**'s `SBFDevicePoseProvider` takes that angle and
   turns it into the device pose that decides which panel is in use.
 - **SpringBoard** has a continuous-fold controller, `SBContinuousFoldController`,
@@ -89,6 +91,36 @@ trace the events leave in the log.
 
 Nothing in SpringBoard's or locationd's log at the default level mentioned a
 pose or the angle during the capture.
+
+### locationd, where the angle is read
+
+`/usr/libexec/locationd` (27.2, pulled from the guest for reading; not kept in
+the repository) holds `CLAngleNotifier` (`Shared/Motion/Notifiers/Angle/
+CLAngleNotifier.mm`) and `CLSPUAngleServiceControl`. Its strings show two
+separate paths:
+
+- **Events:** `CLAngleNotifier::onIoHidEvent(IOHIDEventRef, bool)`, with
+  `copyEvent`, and the assertion `IOHIDEventGetType(event) ==
+  kIOHIDEventTypeHingeAngle`. Each event is logged as `phase, state, angle,
+  mechanicalAngle, velocity, timestamp` — the fields the virtual service
+  fills.
+- **The driver:** `openHIDDriverInterfaceIfNeeded` and `sendCommand`, for
+  commands to the physical hinge driver. On a VM these are skipped on
+  purpose:
+
+  ```
+  [CLAngleNotifier] Skipping open for physical HID device on VM/Simulator
+  [CLAngleNotifier] sendCommand skipped, no physical HID driver (VM/Simulator)
+  [CLAngleNotifier] copyEvent: no HID device available
+  ```
+
+So locationd knows it may run in a VM and drops the driver side there. Whether
+its event side then takes the virtual service's events is not shown by the
+strings; `copyEvent: no HID device available` suggests the copy path, at
+least, finds nothing. locationd also carries a `CMAngleSimulator` (start and
+end angle, duration, delay, options), and `CLSPUAngleServiceControl`'s
+telemetry has an `isSimulated` field: Apple simulates the hinge in its own
+tools, from inside the sensor stack.
 
 ### The hinge-angle HUD
 
@@ -168,9 +200,11 @@ front.
 - **Does SpringBoard try to switch to `display1`?** Its fold transition and
   the pose provider's decision would show at the debug log level, or with a
   breakpoint on the pose provider's update path.
-- **Is CoreMotion's notifier running?** `CLLidAngleNotifier` instantiated
-  through vphoned's script bridge, with a handler logging what it receives,
-  would show whether the angle gets past the HID service today.
+- **Does locationd's notifier take the virtual events?** Its start-up log
+  (the VM skip above) and its per-event log line would answer it; both come
+  from locationd's launch, so a capture across a locationd restart is the
+  next step. If it does not, `CMAngleSimulator` is the in-stack way to feed
+  it.
 - **Could one framebuffer stand in for both?** Answering `display1`'s
   geometry from the one VM display, and switching what it shows by pose, is
   the path to a guest that relays out on unfold. It needs SpringBoard's
