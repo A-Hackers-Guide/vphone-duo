@@ -78,6 +78,12 @@ final class VPhoneDuoControlsView: NSVisualEffectView {
         publishedLabel.toolTip = "The angle iOS's hinge sensor publishes, read back from the guest"
         publishedLabel.widthAnchor.constraint(equalToConstant: 74).isActive = true
 
+        // The keyboard belongs to the guest: a click on the bar must not take
+        // focus from the VM view, or typing would move the slider instead.
+        for control in [slider, presets, finishControl, reset] as [NSControl] {
+            control.refusesFirstResponder = true
+        }
+
         let stack = NSStackView(views: [foldLabel, slider, angleLabel, publishedLabel, presets, finishControl, reset])
         stack.orientation = .horizontal
         stack.spacing = 12
