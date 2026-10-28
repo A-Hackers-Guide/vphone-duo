@@ -24,9 +24,11 @@ jobs:
       - name: Python tools parse
         run: |
           shopt -s nullglob
-          files=(scripts/duo/vphone-duo Tools/DuoModel/*.py)
-          files=($(for f in "${files[@]}"; do [ -f "$f" ] && echo "$f"; done))
-          [ ${#files[@]} -eq 0 ] && { echo "no Duo tools yet"; exit 0; }
+          files=()
+          for f in scripts/duo/vphone-duo Tools/DuoModel/*.py; do
+            if [ -f "$f" ]; then files+=("$f"); fi
+          done
+          if [ ${#files[@]} -eq 0 ]; then echo "no Duo tools yet"; exit 0; fi
           python3 -c 'import sys; [compile(open(f).read(), f, "exec") for f in sys.argv[1:]]' "${files[@]}"
 
       - name: Build scripts parse
