@@ -48,6 +48,13 @@ import VPhoneCoreKit
 ///                                                 directory. The file replaces `local` only once complete
 ///   {"t":"network"}                             → the NIC's state, in `"result"`
 ///   {"t":"network","link":"down"}               → unplug (`up` replugs); not saved
+///   {"t":"fold"}                                → an iPhone Duo's hinge: `angle`, `panel` (outer/inner)
+///   {"t":"fold","angle":87.5}                   → sets the hinge angle (0 closed ... 180 open flat),
+///                                                 exactly as given; `"animate":true` eases to it
+///   {"t":"fold","posture":"laptop"}             → closed (0), tent (70), laptop (110) or open (180)
+///   {"t":"duo","button":"side","ms":120}        → presses a button on the 3D model, with its click
+///                                                 (volume_up, volume_down, side, camera_control)
+///   {"t":"duo","finish":"black"}                → the model's finish: white or black
 ///
 /// All commands except "screenshot", "rpc", "push", "pull" and "network" wait
 /// briefly then capture a compact screen image returned as
@@ -81,6 +88,8 @@ class VPhoneHostAutomationServer {
     private weak var control: VPhoneGuestControl?
     /// For the `network` command; nil until the VM exists.
     weak var virtualMachine: VPhoneVirtualMachine?
+    /// An iPhone Duo's window, for the `fold` and `duo` commands.
+    weak var duoView: VPhoneDuoView?
 
     /// Matches vphoned's JSON body limit, so an `rpc` line is never refused
     /// here that the guest would accept.
@@ -315,6 +324,36 @@ class VPhoneHostAutomationServer {
                     try virtualMachine.setNetworkLink(up: link == "up")
                 }
                 return Self.reply(ok: true, result: virtualMachine.networkStatus)
+
+            case "fold":
+                return try await fold(json)
+
+            case "duo":
+                guard let duoView else {
+                    return Self.reply(ok: false, error: "duo needs an iPhone Duo window")
+                }
+                if let name = json["finish"] as? String {
+                    guard let finish = VPhoneDuoView.Finish(rawValue: name) else {
+                        return Self.reply(ok: false, error: "finish must be white or black")
+                    }
+                    duoView.setFinish(finish)
+                }
+                if let name = json["button"] as? String {
+                    guard let button = VPhoneDuoModel.Button(name: name) else {
+                        return Self.reply(ok: false, error: "button must be volume_up, volume_down, side or camera_control")
+                    }
+                    let hold = min(max(json["ms"] as? Int ?? 120, 30), 10000)
+                    await duoView.pressButton(button, holdMilliseconds: hold)
+                }
+
+            case "display":
+                guard let virtualMachine else {
+                    return Self.reply(ok: false, error: "the VM is not running")
+                }
+                guard let width = json["width"] as? Int, let height = json["height"] as? Int, width > 0, height > 0 else {
+                    return Self.reply(ok: false, error: "display requires width and height in pixels")
+                }
+                try virtualMachine.resizeDisplay(width: width, height: height)
 
             default:
                 return Self.reply(ok: false, error: "unknown command: \(type)")
@@ -665,5 +704,48 @@ class VPhoneHostAutomationServer {
                 offset += written
             }
         }
+    }
+
+    // MARK: - Fold
+
+    private static let postures: [String: Double] = ["closed": 0, "tent": 70, "laptop": 110, "open": 180]
+
+    private func fold(_ json: [String: Any]) async throws -> Data {
+        var target: Double?
+        if let posture = json["posture"] as? String {
+            guard let angle = Self.postures[posture] else {
+                return Self.reply(ok: false, error: "posture must be closed, tent, laptop or open")
+            }
+            target = angle
+        } else if let angle = (json["angle"] as? NSNumber)?.doubleValue {
+            guard angle.isFinite, (0 ... 180).contains(angle) else {
+                return Self.reply(ok: false, error: "angle must be between 0 (closed) and 180 (open flat)")
+            }
+            target = angle
+        }
+        if let duoView {
+            if let target {
+                if json["animate"] as? Bool == true {
+                    duoView.animateHinge(to: target)
+                } else {
+                    duoView.setHinge(target)
+                }
+            }
+            return Self.reply(ok: true, result: [
+                "angle": target ?? duoView.hingeAngle,
+                "panel": (duoView.activePanel == .outer ? "outer" : "inner"),
+            ])
+        }
+        // Headless: straight to the hinge sensor.
+        let control = try connectedControl()
+        guard control.supportsHinge else {
+            return Self.reply(ok: false, error: "this guest has no hinge sensor")
+        }
+        let reply = if let target {
+            try await control.setHinge(VPhoneHingeConfiguration(enabled: true, angle: target, velocity: 0))
+        } else {
+            try await control.readHinge()
+        }
+        return Self.reply(ok: true, result: ["angle": reply.configuration.angle])
     }
 }

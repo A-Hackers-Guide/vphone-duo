@@ -422,6 +422,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
             screenHeight: options.screenHeight,
         )
         server.virtualMachine = vm
+        server.duoView = windowController?.duoView
         hostAutomationServer = server
     }
 

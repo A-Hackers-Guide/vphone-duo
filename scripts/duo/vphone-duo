@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""Drive a running iPhone Duo VM over its host control socket.
+
+  vphone-duo fold                    print the hinge angle and lit panel
+  vphone-duo fold 87.5               set the hinge angle exactly (0 closed, 180 open flat)
+  vphone-duo fold laptop [--animate] closed, tent, laptop or open
+  vphone-duo press side [--ms 800]   press a button: volume_up, volume_down, side, camera_control
+  vphone-duo finish black            white or black
+  vphone-duo shot out.png            full-resolution screenshot
+  vphone-duo rpc METHOD [JSON]       any vphoned method
+
+The VM is found by name under ~/.vphone/machines (default "duo"); pass
+--vm NAME or --socket PATH to pick another.
+"""
+import argparse
+import json
+import os
+import socket
+import sys
+
+
+def call(sock_path, request):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(120)
+        s.connect(sock_path)
+        s.sendall((json.dumps(request) + "\n").encode())
+        data = b""
+        while not data.endswith(b"\n"):
+            chunk = s.recv(1 << 16)
+            if not chunk:
+                break
+            data += chunk
+    reply = json.loads(data or b"{}")
+    reply.pop("image", None)
+    return reply
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--vm", default="duo")
+    parser.add_argument("--socket")
+    parser.add_argument("command", choices=["fold", "press", "finish", "shot", "rpc"])
+    parser.add_argument("args", nargs="*")
+    parser.add_argument("--animate", action="store_true")
+    parser.add_argument("--ms", type=int, default=120)
+    options = parser.parse_args()
+    path = options.socket or os.path.expanduser(f"~/.vphone/machines/{options.vm}/vphone.sock")
+
+    request = {"screen": False}
+    if options.command == "fold":
+        request["t"] = "fold"
+        if options.args:
+            value = options.args[0]
+            try:
+                request["angle"] = float(value)
+            except ValueError:
+                request["posture"] = value
+            request["animate"] = options.animate
+    elif options.command == "press":
+        request.update(t="duo", button=options.args[0], ms=options.ms)
+    elif options.command == "finish":
+        request.update(t="duo", finish=options.args[0])
+    elif options.command == "shot":
+        request.update(t="screenshot", path=os.path.abspath(options.args[0] if options.args else "duo.png"))
+    elif options.command == "rpc":
+        request.update(t="rpc", method=options.args[0], params=json.loads(options.args[1]) if len(options.args) > 1 else {})
+
+    reply = call(path, request)
+    print(json.dumps(reply, indent=2))
+    sys.exit(0 if reply.get("ok") else 1)
+
+
+if __name__ == "__main__":
+    main()
