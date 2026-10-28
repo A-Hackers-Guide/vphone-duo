@@ -180,6 +180,10 @@ static int vpExecve(const char *path, char *const argv[], char *const envp[]) {
 // app can present a sign-in sheet. Self-gates on each class being present.
 // See SignInFix/libsigninfix.m.
 #define VP_SIGNIN_FIX "/usr/lib/libsigninfix.dylib"
+// The owner signs in to an Apple Account themselves: this marker, left by
+// `vphone-duo signin allow`, keeps the sign-in sheets for apps launched after
+// it. On the data volume, since the system volume is sealed.
+#define VP_SIGNIN_ALLOWED "/var/mobile/Library/Preferences/com.vphone.signin-allowed"
 
 // The one UIKit process measured creating a CHHapticEngine without first
 // asking CoreHaptics whether the hardware exists. Suffix-matched, like the
@@ -273,10 +277,11 @@ __attribute__((constructor)) static void vpLogProcess(void) {
         vpLoadLibrary("prefs-fix", VP_PREFS_FIX);
     if (!vpInBootstrap && !vpIsAppPath(path))
         return;
-    // Every app gets the sign-in suppressor; it self-gates on the sign-in
-    // presentation classes being present (daemons are excluded by the app gate
-    // above, so background AuthKit auth is untouched).
-    if (vpIsAppPath(path))
+    // Every app gets the sign-in suppressor, unless the owner allowed sign-in;
+    // it self-gates on the sign-in presentation classes being present (daemons
+    // are excluded by the app gate above, so background AuthKit auth is
+    // untouched).
+    if (vpIsAppPath(path) && access(VP_SIGNIN_ALLOWED, F_OK) != 0)
         vpLoadLibrary("signin-fix", VP_SIGNIN_FIX);
     if (vpIsAppPath(path) && vpAttitudeAllowsProcess(path))
         vpLoadLibrary("attitude-hook", VP_ATTITUDE_HOOK);

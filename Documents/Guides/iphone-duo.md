@@ -118,9 +118,20 @@ The model comes from `Tools/DuoModel/prepare_duo.py`, which turns the source
 Blender scene into `DuoModel.usdz` with named parts, live panels and the
 hinge rig; `render_previews.py` renders the studio light probe.
 
+## iCloud
+
+A research guest hides Apple Account sign-in, having no account. To sign in
+to iCloud yourself:
+
+```sh
+scripts/duo/vphone-duo signin allow
+```
+
+then open **Settings ▸ Apple Account** and sign in. It applies to apps
+launched after it; `signin block` hides sign-in again. Apple may still refuse
+a virtual device: the VM has its own identity and never borrows a phone's.
+
 ## What it does not do
 
-- **iCloud** needs you to sign in yourself in Settings, and Apple may refuse
-  a virtual device. The VM has its own identity; it never borrows a phone's.
 - **Two live panels at once.** See above.
 - **Face ID.** The PCC research VM has no camera module.

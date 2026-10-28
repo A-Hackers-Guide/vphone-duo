@@ -8,6 +8,9 @@
   vphone-duo finish black            white or black
   vphone-duo shot out.png            full-resolution screenshot
   vphone-duo rpc METHOD [JSON]       any vphoned method
+  vphone-duo signin allow|block      let apps launched from now on show Apple Account
+                                     sign-in, for signing in to iCloud yourself;
+                                     block puts the research guest's suppression back
 
 The VM is found by name under ~/.vphone/machines (default "duo"); pass
 --vm NAME or --socket PATH to pick another.
@@ -35,11 +38,36 @@ def call(sock_path, request):
     return reply
 
 
+SIGNIN_MARKER = "/var/mobile/Library/Preferences/com.vphone.signin-allowed"
+
+
+def signin(path, choice):
+    """The guest suppresses Apple Account sign-in sheets, having no account;
+    a marker lets apps launched after it show them again."""
+    def rpc(method, params):
+        reply = call(path, {"t": "rpc", "method": method, "params": params, "screen": False})
+        return reply.get("ok"), reply
+    if choice == "allow":
+        ok, reply = rpc("files.write", {"path": SIGNIN_MARKER, "content": "allowed by vphone-duo\n"})
+        if not ok:
+            raise SystemExit(f"could not allow sign-in: {reply.get('error')}")
+        rpc("apps.terminate", {"bundle_id": "com.apple.Preferences"})
+        print("sign-in allowed: open Settings > Apple Account and sign in yourself")
+    elif choice == "block":
+        rpc("files.remove", {"path": SIGNIN_MARKER})
+        rpc("apps.terminate", {"bundle_id": "com.apple.Preferences"})
+        print("sign-in sheets suppressed again for apps launched from now on")
+    else:
+        ok, reply = rpc("files.list", {"path": "/var/mobile/Library/Preferences"})
+        names = [e.get("name") for e in (reply.get("result") or {}).get("entries", [])] if ok else []
+        print("allowed" if SIGNIN_MARKER.rsplit("/", 1)[1] in names else "blocked")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--vm", default="duo")
     parser.add_argument("--socket")
-    parser.add_argument("command", choices=["fold", "press", "finish", "shot", "rpc"])
+    parser.add_argument("command", choices=["fold", "press", "finish", "shot", "rpc", "signin"])
     parser.add_argument("args", nargs="*")
     parser.add_argument("--animate", action="store_true")
     parser.add_argument("--ms", type=int, default=120)
@@ -65,6 +93,9 @@ def main():
     elif options.command == "rpc":
         request.update(t="rpc", method=options.args[0], params=json.loads(options.args[1]) if len(options.args) > 1 else {})
 
+    if options.command == "signin":
+        signin(path, options.args[0] if options.args else "status")
+        return
     reply = call(path, request)
     print(json.dumps(reply, indent=2))
     sys.exit(0 if reply.get("ok") else 1)
