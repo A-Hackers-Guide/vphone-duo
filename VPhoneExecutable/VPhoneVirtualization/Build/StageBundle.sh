@@ -62,7 +62,7 @@ build_project -project "$root/VPhoneDaemon/VPhoneDaemon.xcodeproj" \
     -sdk appletvos \
     -derivedDataPath "$root/.build/XcodeDaemon" CODE_SIGNING_ALLOWED=NO \
     SUPPORTS_MACCATALYST=NO EFFECTIVE_PLATFORM_NAME=-appletvos \
-    FRAMEWORK_SEARCH_PATHS="$tvos_frameworks" build
+    FRAMEWORK_SEARCH_PATHS="\"$tvos_frameworks\"" build
 
 build_project -project "$root/VPhoneExecutable/VPhoneEscalator/VPhoneEscalator.xcodeproj" \
     -scheme VPhoneEscalator -configuration "$configuration" \
