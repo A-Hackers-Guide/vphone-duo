@@ -32,6 +32,8 @@ final class VPhoneDuoView: NSView {
     private var readback: Task<Void, Never>?
 
     weak var virtualMachineView: VPhoneVirtualMachineView?
+    /// The guest display's size in pixels, known before its first frame.
+    var guestScreenSize: CGSize = .zero
     /// Where the lit panel's frames come from.
     var frameSource: VPhoneDuoFrameSource? {
         didSet { stream?.frameSource = frameSource }
@@ -128,6 +130,7 @@ final class VPhoneDuoView: NSView {
             pivot.addChild(model.root)
             self.model = model
             model.setFinish(controls.finish)
+            model.expectFrames(of: guestScreenSize)
             model.setHinge(hingeAngle)
             recenter()
             resetView(animated: false)

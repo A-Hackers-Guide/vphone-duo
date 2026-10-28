@@ -89,6 +89,7 @@ class VPhoneVirtualMachineWindowController: NSObject, NSWindowDelegate {
         } else if duo {
             let duoView = VPhoneDuoView(frame: NSRect(origin: .zero, size: windowSize))
             duoView.virtualMachineView = view
+            duoView.guestScreenSize = CGSize(width: screenWidth, height: screenHeight)
             if let display = vm.graphicsDevices.first?.displays.first {
                 duoView.frameSource = { [weak display] deliver in
                     guard let display else { return deliver(nil) }

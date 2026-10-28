@@ -244,6 +244,16 @@ final class VPhoneDuoModel {
         return zones
     }
 
+    /// Fits frames of `frameSize` to both panels before any has arrived, so
+    /// a touch made before the first frame lands where the frame will be.
+    func expectFrames(of frameSize: CGSize) {
+        guard frameSize.width > 0, frameSize.height > 0 else { return }
+        for (panel, var slot) in panels {
+            slot.fit = PanelFit(frame: Float(frameSize.width / frameSize.height), panel: slot.mapping.aspect)
+            panels[panel] = slot
+        }
+    }
+
     /// Lights a panel with `texture`, a frame of `frameSize` pixels, fitted
     /// to the panel at its own aspect ratio with black bars around it.
     ///

@@ -20,6 +20,7 @@ final class Harness: NSObject, NSApplicationDelegate {
         window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         duo = VPhoneDuoView(frame: NSRect(origin: .zero, size: size))
         duo.virtualMachineView = vmView
+        duo.guestScreenSize = CGSize(width: 1398, height: 2034)
         duo.onHingeChange = { print(String(format: "hinge %.2f", $0)) }
         duo.onButton = { print("button \($0.rawValue) \($1 ? "down" : "up")") }
         duo.onActivePanelChange = { print("panel \($0)") }
@@ -186,6 +187,17 @@ final class Harness: NSObject, NSApplicationDelegate {
                 print(String(format: "set %.2f", angle))
                 try? await Task.sleep(for: .seconds(1.5))
             }
+        case "touchdot":
+            // Hold a finger on the open screen and look at it.
+            let b = duo.bounds
+            let wp = duo.convert(NSPoint(x: b.width * 0.45, y: b.height * 0.55), to: nil)
+            func ev(_ t: NSEvent.EventType) -> NSEvent {
+                NSEvent.mouseEvent(with: t, location: wp, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            }
+            window.sendEvent(ev(.leftMouseDown))
+            await snap("60_touch_dot")
+            window.sendEvent(ev(.leftMouseUp))
+            await snap("61_touch_dot_gone")
         case "clicks-closed":
             duo.setHinge(0); duo.resetView(animated: false)
             try? await Task.sleep(for: .milliseconds(500))
