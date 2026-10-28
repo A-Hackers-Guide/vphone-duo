@@ -3,9 +3,11 @@ import AppKit
 // MARK: - Fold Controls
 
 /// The bar under the phone: the fold slider with its exact angle, the
-/// postures it is most often set to, the finish, and a view reset.
+/// postures it is most often set to, the finish, and a view reset. It is
+/// Liquid Glass where the system has it (macOS 26), and the HUD material
+/// before that.
 @MainActor
-final class VPhoneDuoControlsView: NSVisualEffectView {
+final class VPhoneDuoControlsView: NSView {
     var onAngle: ((Double, Bool) -> Void)?
     var onPreset: ((Double) -> Void)?
     var onFinish: ((VPhoneDuoView.Finish) -> Void)?
@@ -33,12 +35,6 @@ final class VPhoneDuoControlsView: NSVisualEffectView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        material = .hudWindow
-        blendingMode = .withinWindow
-        state = .active
-        wantsLayer = true
-        layer?.cornerRadius = 14
-        layer?.cornerCurve = .continuous
 
         let foldLabel = NSTextField(labelWithString: "Fold")
         foldLabel.font = .systemFont(ofSize: 12, weight: .semibold)
@@ -92,13 +88,42 @@ final class VPhoneDuoControlsView: NSVisualEffectView {
         stack.setVisibilityPriority(.detachOnlyIfNecessary, for: finishControl)
         stack.setVisibilityPriority(.detachOnlyIfNecessary, for: presets)
         stack.setVisibilityPriority(.detachOnlyIfNecessary, for: publishedLabel)
-        addSubview(stack)
+
+        let background = Self.makeBackground(holding: stack)
+        background.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(background)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            background.leadingAnchor.constraint(equalTo: leadingAnchor),
+            background.trailingAnchor.constraint(equalTo: trailingAnchor),
+            background.topAnchor.constraint(equalTo: topAnchor),
+            background.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+    }
+
+    /// Liquid Glass around the controls, or the HUD material before macOS 26.
+    private static func makeBackground(holding content: NSView) -> NSView {
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView()
+            glass.style = .regular
+            glass.cornerRadius = 20
+            glass.contentView = content
+            return glass
+        }
+        let material = NSVisualEffectView()
+        material.material = .hudWindow
+        material.blendingMode = .withinWindow
+        material.state = .active
+        material.wantsLayer = true
+        material.layer?.cornerRadius = 14
+        material.layer?.cornerCurve = .continuous
+        material.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: material.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: material.trailingAnchor),
+            content.topAnchor.constraint(equalTo: material.topAnchor),
+            content.bottomAnchor.constraint(equalTo: material.bottomAnchor),
+        ])
+        return material
     }
 
     @available(*, unavailable)
