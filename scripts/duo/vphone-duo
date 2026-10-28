@@ -8,6 +8,9 @@
   vphone-duo finish black            white or black
   vphone-duo shot out.png            full-resolution screenshot
   vphone-duo rpc METHOD [JSON]       any vphoned method
+  vphone-duo sweep FROM TO [--seconds S] [--hz N] [--step DEG] [--jitter DEG]
+                                     move the hinge as a hand does: eased, with
+                                     velocity, optionally quantized and noisy
 
 The VM is found by name under ~/.vphone/machines (default "duo"); pass
 --vm NAME or --socket PATH to pick another.
@@ -35,14 +38,61 @@ def call(sock_path, request):
     return reply
 
 
+def rpc(path, method, params=None):
+    reply = call(path, {"t": "rpc", "method": method, "params": params or {}, "screen": False})
+    if not reply.get("ok"):
+        raise SystemExit(f"{method}: {reply.get('error', 'failed')}")
+    return reply.get("result", {})
+
+
+def set_hinge(path, angle, velocity=0.0):
+    rpc(path, "motion.hinge.set", {"enabled": True, "angle": angle, "velocity": velocity})
+
+
+def sweep(path, start, end, seconds, hz, step, jitter):
+    """An eased sweep at a sensor's rate. --step rounds as a coarse sensor
+    would (Apple quotes about 5° for its posture API); --jitter adds noise,
+    so an app is not tuned to perfect values."""
+    import random
+    import time
+    # The sweep keeps the clock: when a sample takes longer than 1/hz to
+    # reach the guest, the next one is taken where the hand would be by then.
+    previous, started, samples = start, time.monotonic(), 0
+    while True:
+        elapsed = time.monotonic() - started
+        t = min(elapsed / max(seconds, 1e-6), 1)
+        eased = t * t * (3 - 2 * t)
+        angle = start + (end - start) * eased
+        if jitter and t < 1:
+            angle += random.gauss(0, jitter)
+        if step:
+            angle = round(angle / step) * step
+        angle = min(max(angle, 0), 180)
+        velocity = (angle - previous) / max(elapsed - (samples and last_time or 0), 1 / hz)
+        last_time = elapsed
+        set_hinge(path, angle, max(min(velocity, 3600), -3600))
+        previous, samples = angle, samples + 1
+        if t >= 1:
+            break
+        delay = started + samples / hz - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
+    took = time.monotonic() - started
+    print(f"swept {start:g}° to {end:g}° in {took:.2f}s: {samples} samples, {samples / took:.1f} per second")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--vm", default="duo")
     parser.add_argument("--socket")
-    parser.add_argument("command", choices=["fold", "press", "finish", "shot", "rpc"])
+    parser.add_argument("command", choices=["fold", "press", "finish", "shot", "rpc", "sweep"])
     parser.add_argument("args", nargs="*")
     parser.add_argument("--animate", action="store_true")
     parser.add_argument("--ms", type=int, default=120)
+    parser.add_argument("--seconds", type=float, default=1.0)
+    parser.add_argument("--hz", type=float, default=60)
+    parser.add_argument("--step", type=float, default=0)
+    parser.add_argument("--jitter", type=float, default=0)
     options = parser.parse_args()
     path = options.socket or os.path.expanduser(f"~/.vphone/machines/{options.vm}/vphone.sock")
 
@@ -65,6 +115,10 @@ def main():
     elif options.command == "rpc":
         request.update(t="rpc", method=options.args[0], params=json.loads(options.args[1]) if len(options.args) > 1 else {})
 
+    if options.command == "sweep":
+        start, end = float(options.args[0]), float(options.args[1])
+        sweep(path, start, end, options.seconds, options.hz, options.step, options.jitter)
+        return
     reply = call(path, request)
     print(json.dumps(reply, indent=2))
     sys.exit(0 if reply.get("ok") else 1)

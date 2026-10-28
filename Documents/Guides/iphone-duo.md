@@ -107,6 +107,14 @@ scripts/duo/vphone-duo shot ~/Desktop/duo.png
 
 A headless launch has no window, so `fold` goes straight to the hinge sensor.
 
+### Hand-like folding
+
+`vphone-duo sweep 0 180 --seconds 1.2` moves the hinge the way a hand does:
+eased, with the velocity iOS sees following the motion. `--step 5` rounds as
+a coarse sensor would, `--jitter 0.4` adds noise, so an app is not tuned to
+perfect values. The sweep keeps the clock: a slow guest gets fewer samples,
+not a slower fold.
+
 ## Working on the 3D window
 
 `Tools/DuoPreview` builds the window without the VM engine, so a change to
