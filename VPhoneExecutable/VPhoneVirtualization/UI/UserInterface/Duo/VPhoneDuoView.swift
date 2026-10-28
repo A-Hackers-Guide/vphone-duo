@@ -99,6 +99,7 @@ final class VPhoneDuoView: NSView {
         controls.onPreset = { [weak self] angle in self?.animateHinge(to: angle) }
         controls.onFinish = { [weak self] finish in self?.applyFinish(finish) }
         controls.onResetView = { [weak self] in self?.resetView() }
+        controls.isHidden = UserDefaults.standard.bool(forKey: "VPhoneDuoHidesControls")
 
         camera.camera.fieldOfViewInDegrees = 30
         camera.camera.near = 0.01
@@ -439,6 +440,17 @@ final class VPhoneDuoView: NSView {
         if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
             touch(phase: 3, at: lastTouch)
             scrollFinger = nil
+        }
+    }
+
+    // MARK: - Controls
+
+    /// Whether the fold bar shows; remembered between launches.
+    var showsControls: Bool {
+        get { !controls.isHidden }
+        set {
+            controls.isHidden = !newValue
+            UserDefaults.standard.set(!newValue, forKey: "VPhoneDuoHidesControls")
         }
     }
 
