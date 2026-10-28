@@ -8,6 +8,7 @@ permissions:
 
 jobs:
   package:
+    if: github.repository == 'Lakr233/vphone-cli'
     runs-on: xcode-27
     steps:
       - name: Checkout

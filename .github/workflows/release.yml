@@ -20,6 +20,7 @@ permissions:
 
 jobs:
   build:
+    if: github.repository == 'Lakr233/vphone-cli'
     runs-on: xcode-27
     steps:
       - name: Checkout
@@ -94,6 +95,7 @@ jobs:
         run: gh release upload "$TAG" "VPhone-${TAG}.zip" --clobber
 
   launchpad:
+    if: github.repository == 'Lakr233/vphone-cli'
     runs-on: xcode-27
     steps:
       - name: Checkout
