@@ -21,6 +21,9 @@ extension VPhoneMenuController {
             "Face the Lit Screen", action: #selector(resetDuoView), keyEquivalent: "0",
             modifiers: [.command, .control], symbol: "scope",
         ))
+        let crease = makeItem("Show Crease", action: #selector(toggleCrease(_:)), keyEquivalent: "5", modifiers: [.command, .control])
+        crease.representedObject = "crease"
+        menu.addItem(crease)
         menu.addItem(NSMenuItem.separator())
         for finish in VPhoneDuoView.Finish.allCases {
             let title = finish == .white ? "Star White" : "Space Black"
@@ -37,6 +40,10 @@ extension VPhoneMenuController {
 
     @objc private func foldToPosture(_ sender: NSMenuItem) {
         duoView?.animateHinge(to: Double(sender.tag))
+    }
+
+    @objc private func toggleCrease(_: NSMenuItem) {
+        duoView?.showsCrease.toggle()
     }
 
     @objc private func resetDuoView() {
@@ -57,6 +64,10 @@ final class VPhoneFoldMenuDelegate: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         for item in menu.items {
             guard let name = item.representedObject as? String else { continue }
+            if name == "crease" {
+                item.state = duoView?.showsCrease == true ? .on : .off
+                continue
+            }
             item.state = name == duoView?.finish.rawValue ? .on : .off
         }
     }

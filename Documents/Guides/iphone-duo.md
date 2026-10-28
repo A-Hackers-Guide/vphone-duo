@@ -107,6 +107,11 @@ scripts/duo/vphone-duo shot ~/Desktop/duo.png
 
 A headless launch has no window, so `fold` goes straight to the hinge sensor.
 
+### Crease guide
+
+**Fold ▸ Show Crease** (⌃⌘5) draws the fold line down the inner screen, so
+a layout can be checked against where the panel bends.
+
 ## Working on the 3D window
 
 `Tools/DuoPreview` builds the window without the VM engine, so a change to

@@ -194,6 +194,7 @@ final class VPhoneDuoView: NSView {
         hingeAngle = clamped
         model?.setHinge(clamped)
         recenter()
+        if showsCrease { updateCrease() }
         controls.showAngle(clamped)
         onHingeChange?(clamped)
         updateActivePanel()
@@ -440,6 +441,34 @@ final class VPhoneDuoView: NSView {
             touch(phase: 3, at: lastTouch)
             scrollFinger = nil
         }
+    }
+
+    // MARK: - Crease
+
+    /// A thin line down the inner screen's fold, for laying out around it.
+    var showsCrease = false {
+        didSet { updateCrease() }
+    }
+
+    private var crease: ModelEntity?
+
+    private func updateCrease() {
+        crease?.removeFromParent()
+        crease = nil
+        guard showsCrease, let model,
+              let top = model.position(of: CGPoint(x: 0.5, y: 0), on: .inner, relativeTo: pivot),
+              let bottom = model.position(of: CGPoint(x: 0.5, y: 1), on: .inner, relativeTo: pivot)
+        else { return }
+        // The frame is fitted with bars; the crease runs the panel's full
+        // height at its middle, which the frame's middle column shares.
+        let length = simd_distance(top, bottom)
+        var material = UnlitMaterial(color: NSColor.systemOrange.withAlphaComponent(0.8))
+        material.blending = .transparent(opacity: .init(floatLiteral: 0.8))
+        let line = ModelEntity(mesh: .generateBox(size: [0.0005, length, 0.0005]), materials: [material])
+        line.position = (top + bottom) / 2
+        line.orientation = simd_quatf(from: [0, 1, 0], to: simd_normalize(top - bottom))
+        pivot.addChild(line)
+        crease = line
     }
 
     // MARK: - Files
