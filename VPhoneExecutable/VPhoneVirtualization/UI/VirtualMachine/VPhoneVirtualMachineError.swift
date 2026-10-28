@@ -6,6 +6,7 @@ enum VPhoneVirtualMachineError: Error, CustomStringConvertible {
     case diskNotFound(String)
     case invalidKernelDebugPort(Int)
     case apiSocketUnavailable
+    case displayUnavailable
 
     var description: String {
         switch self {
@@ -25,6 +26,8 @@ enum VPhoneVirtualMachineError: Error, CustomStringConvertible {
             "Invalid kernel debug port: \(port) (expected 6000...65535)"
         case .apiSocketUnavailable:
             "VM has no VSOCK device for the API proxy"
+        case .displayUnavailable:
+            "VM has no display to resize"
         }
     }
 }

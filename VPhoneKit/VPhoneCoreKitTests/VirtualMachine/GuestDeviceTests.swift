@@ -230,4 +230,13 @@ struct GuestDeviceTests {
         #expect(decoded.guestDevice == device)
         #expect(decoded.screenConfig == .init(width: 1398, height: 2034, pixelsPerInch: 460, scale: 3.0))
     }
+
+    @Test
+    func `iPhone Duo folds onto its inner panel and no other device does`() {
+        #expect(VPhoneGuestDevice.iPhone19_4.isFoldable)
+        #expect(VPhoneGuestDevice.iPhone19_4.innerScreen == .init(width: 1878, height: 2670, pixelsPerInch: 430, scale: 3.0))
+        for device in VPhoneGuestDevice.known where device != .iPhone19_4 {
+            #expect(!device.isFoldable, "\(device.productType) has no inner panel")
+        }
+    }
 }

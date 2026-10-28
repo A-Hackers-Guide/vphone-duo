@@ -35,6 +35,7 @@ extension VPhoneBootCommand {
             isTVGuest: manifest.guestDevice.family == .appleTV,
             isHomePodGuest: manifest.guestDevice.family == .homePod,
             isWatchGuest: manifest.guestDevice.family == .watch,
+            innerScreen: VPhoneVirtualMachine.foldableWindowEnabled ? manifest.guestDevice.innerScreen : nil,
         )
     }
 }
