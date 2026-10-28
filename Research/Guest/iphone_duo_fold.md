@@ -231,12 +231,25 @@ same guest, engine 2.13.8-local.311d9268.
    for physical HID device on VM/Simulator`), so even the angle's own path
    is built to stay quiet here.
 
+### The inner display is not in this VM's device tree
+
+The running guest's device tree (`device.ioreg` with `plane: IODeviceTree`)
+has a single virtual `gfx` node, and `product` holds `vphone600-gestalt-
+variants`, `maps`, `usb-device`, `util`, `camera`, `facetime`, `audio` and
+`iopm`: **no `display0`, no `display1`**. The VM boots vphone's virtual
+research board, carrying the Duo's product identity but not its display
+nodes; `display1` (index 1, rotation 270) exists only in the restore image's
+`DeviceTree.v68ap`. A real Duo gets its inner layout from that node and the
+second display controller behind it. Here iOS 27.2 has the layout, and
+nothing to put it on.
+
 ### What could change it
 
 - A Virtualization.framework that allows two displays, or live resizing of
   an iOS guest's display.
-- Answering `display1` from the one display in the guest: making SpringBoard
-  believe in an inner display and route it to the framebuffer, swapping by
+- Answering `display1` from the one display in the guest: adding the
+  `display0`/`display1` nodes from `DeviceTree.v68ap` to the VM's device tree,
+  then making SpringBoard route the inner one to the framebuffer, swapping by
   pose. That needs SpringBoard's display arbitration and the framebuffer's
   identity, neither yet mapped, and is the one route that does not wait on
   Apple.
