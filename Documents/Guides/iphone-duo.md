@@ -107,6 +107,11 @@ scripts/duo/vphone-duo shot ~/Desktop/duo.png
 
 A headless launch has no window, so `fold` goes straight to the hinge sensor.
 
+### Touch marks
+
+While a finger is down on the 3D screen, a grey, half-clear mark sits where
+it touches, riding the screen as it folds, so a recording shows each touch.
+
 ## Working on the 3D window
 
 `Tools/DuoPreview` builds the window without the VM engine, so a change to

@@ -442,6 +442,33 @@ final class VPhoneDuoView: NSView {
         }
     }
 
+    // MARK: - Touch Indicator
+
+    /// A soft white dot where a finger is down, riding the screen as it
+    /// folds, so a recording shows where the touch went.
+    private lazy var touchDot: ModelEntity = {
+        // About a fingertip, grey and half clear like iOS's own touch marks.
+        var material = UnlitMaterial(color: NSColor(white: 0.82, alpha: 1))
+        material.blending = .transparent(opacity: .init(floatLiteral: 0.7))
+        let dot = ModelEntity(mesh: .generateSphere(radius: 0.0034), materials: [material])
+        dot.isEnabled = false
+        anchor.addChild(dot)
+        return dot
+    }()
+
+    private func showTouch(_ location: CGPoint?) {
+        guard let location, let model,
+              let world = model.position(of: location, on: activePanel, relativeTo: nil)
+        else {
+            touchDot.isEnabled = false
+            return
+        }
+        // A hair off the glass toward the viewer, so it never sinks into it.
+        let lift = model.facing(activePanel, relativeTo: nil).map { $0 * 0.0006 } ?? .zero
+        touchDot.setPosition(world + lift, relativeTo: nil)
+        touchDot.isEnabled = true
+    }
+
     // MARK: - Files
 
     fileprivate func dragEntered(_ info: any NSDraggingInfo) -> NSDragOperation {
@@ -474,6 +501,7 @@ final class VPhoneDuoView: NSView {
             }
         }
         lastTouch = location
+        showTouch(phase == 3 ? nil : location)
         _ = virtualMachineView?.sendNormalizedTouch(
             phase: phase, normalized: [NSPoint(x: location.x, y: location.y)], swipeAim: touchEdge,
         )
