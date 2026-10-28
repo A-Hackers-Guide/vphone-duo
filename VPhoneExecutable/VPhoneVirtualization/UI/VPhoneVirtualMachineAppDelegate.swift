@@ -318,6 +318,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 mc.updateCameraConnectionState(connected: camServer.isConnected)
             }
             mc.screenRecorder = screenRecorder
+            mc.duoView = windowController?.duoView
             menuController = mc
 
             // Wire location toggle through onConnect/onDisconnect
