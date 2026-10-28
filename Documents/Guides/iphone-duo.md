@@ -107,6 +107,11 @@ scripts/duo/vphone-duo shot ~/Desktop/duo.png
 
 A headless launch has no window, so `fold` goes straight to the hinge sensor.
 
+### Just the phone
+
+**Fold ▸ Hide Controls** (⌃⌘H) hides the fold bar and leaves only the phone;
+the Fold menu still folds it. The choice is remembered.
+
 ## Working on the 3D window
 
 `Tools/DuoPreview` builds the window without the VM engine, so a change to
