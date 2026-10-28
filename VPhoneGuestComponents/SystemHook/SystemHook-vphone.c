@@ -162,6 +162,7 @@ static int vpExecve(const char *path, char *const argv[], char *const envp[]) {
 #define VP_CAMERA_DAEMON_HOOK "/usr/lib/libvcamcaptured.dylib"
 #define VP_CAMERA_APP_HOOK "/usr/lib/libcamfix.dylib"
 #define VP_GYROSCOPE_HOOK "/usr/lib/libvphonegyro.dylib"
+#define VP_HINGE_HOOK "/usr/lib/libvphonehinge.dylib"
 #define VP_ACCELEROMETER_HOOK "/usr/lib/libvphoneaccelerometer.dylib"
 #define VP_ATTITUDE_HOOK "/usr/lib/libvphoneattitude.dylib"
 #define VP_AVFOUNDATION "/System/Library/Frameworks/AVFoundation.framework/AVFoundation"
@@ -256,6 +257,7 @@ __attribute__((constructor)) static void vpLogProcess(void) {
     }
     if (vpIsMotionDaemon(path)) {
         vpLoadLibrary("gyroscope-hook", VP_GYROSCOPE_HOOK);
+        vpLoadLibrary("hinge-hook", VP_HINGE_HOOK);
         vpLoadLibrary("accelerometer-hook", VP_ACCELEROMETER_HOOK);
         return;
     }

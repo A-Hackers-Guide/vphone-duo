@@ -186,6 +186,9 @@ char * _Null_unspecified vp_ls_unregister_system_app(const char * _Null_unspecif
 /// The configured radians/second and the injected HID provider's heartbeat.
 NSDictionary * _Null_unspecified vp_gyro_get(void);
 BOOL vp_gyro_set(double x, double y, double z, bool enabled);
+/// The configured hinge angle and the injected HID hinge sensor's status.
+NSDictionary * _Null_unspecified vp_hinge_get(void);
+BOOL vp_hinge_set(double angle, double velocity, int state, bool enabled);
 /// The backboardd HID gravity provider used by display.rotation.
 NSDictionary * _Nonnull vp_accelerometer_get(void);
 BOOL vp_accelerometer_set_orientation(NSString * _Nonnull spec);
