@@ -43,11 +43,18 @@ tools would parse it):
 - **HID.framework** exports `IOHIDEventCreateHingeAngleEvent`, whose arguments
   are `(allocator, timestamp, angle, mechanicalAngle, velocity, options)`. It
   builds an event of type `0x2C`.
-- **CoreMotion**'s angle notifier (`CLAngleNotifier`) matches services on
-  usage page `0xFF0C` (Apple's vendor motion page) and usage `0x21`, and reads
-  the angle field of `0x2C` events.
-- **SpringBoardFoundation**'s `SBFDevicePoseProvider` takes CoreMotion's
-  angle and turns it into the device pose that decides which panel is in use.
+- **CoreMotion**'s lid-angle notifier, `CLLidAngleNotifier`, matches services
+  on usage page `0xFF0C` (Apple's vendor motion page) and usage `0x21`, and
+  reads the angle field of `0x2C` events.
+- **SpringBoardFoundation**'s `SBFDevicePoseProvider` takes that angle and
+  turns it into the device pose that decides which panel is in use.
+- **SpringBoard** has a continuous-fold controller, `SBContinuousFoldController`,
+  with a pair of mappings between the hinge angle and fold progress
+  (`…ContinuousFoldAngleProgressForHingeAngleDegrees` and its inverse), and a
+  hinge-angle HUD, `SBFHingeAngleHUDView`, behind a `SBShowHingeAngleHUD`
+  default.
+- **UIKit** carries the hinge state to scenes through
+  `_UISceneHingeStateHostComponent`, which is how an app would learn the pose.
 
 ### Runtime: the virtual service
 
@@ -82,6 +89,15 @@ trace the events leave in the log.
 
 Nothing in SpringBoard's or locationd's log at the default level mentioned a
 pose or the angle during the capture.
+
+### The hinge-angle HUD
+
+`SBShowHingeAngleHUD = YES` in `com.apple.springboard`, read back as set, and
+a SpringBoard restart: no HUD appeared on the outer screen while the angle was
+moved (150°, 120°, 90°), screenshot 0.3 s after each change. Either the
+default is honoured only on internal builds, or the pose provider does not
+receive the angle on this guest. Which one is open; the default was removed
+afterwards.
 
 ## One display
 
@@ -152,9 +168,9 @@ front.
 - **Does SpringBoard try to switch to `display1`?** Its fold transition and
   the pose provider's decision would show at the debug log level, or with a
   breakpoint on the pose provider's update path.
-- **Is CoreMotion's notifier running?** A guest process subscribing to
-  `CMHingeAngle` (or the private notifier) would show whether apps can read
-  the angle today.
+- **Is CoreMotion's notifier running?** `CLLidAngleNotifier` instantiated
+  through vphoned's script bridge, with a handler logging what it receives,
+  would show whether the angle gets past the HID service today.
 - **Could one framebuffer stand in for both?** Answering `display1`'s
   geometry from the one VM display, and switching what it shows by pose, is
   the path to a guest that relays out on unfold. It needs SpringBoard's
