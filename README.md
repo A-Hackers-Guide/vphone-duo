@@ -4,6 +4,16 @@
 
 Run a virtual iPhone on an Apple Silicon Mac.
 
+> [!NOTE]
+> **This fork adds the iPhone Duo.** It boots iOS 27.2 for Apple's foldable
+> and shows it as a 3D phone: fold it with a slider while iOS reads the exact
+> hinge angle, click its screens and keys from any side, in Star White or
+> Space Black. See [iPhone Duo](Documents/Guides/iphone-duo.md). Everything
+> else is [vphone-cli](https://github.com/Lakr233/vphone-cli) by @Lakr233,
+> under its MIT license.
+>
+> ![The iPhone Duo half open](Documents/duo/half-open.jpg)
+
 > [!WARNING]
 > This project has never issued or authorized any cryptocurrency or token, and does not accept cryptocurrency payments or donations. Any cryptocurrency or token issued or promoted in this project's name, or claiming any affiliation with it, is a scam.
 
