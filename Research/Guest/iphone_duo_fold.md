@@ -243,13 +243,74 @@ nodes; `display1` (index 1, rotation 270) exists only in the restore image's
 second display controller behind it. Here iOS 27.2 has the layout, and
 nothing to put it on.
 
+### Grafting the panels into the VM's tree
+
+`cfw patch-dt-iphone-product --panels` copies `/product/display0` and
+`/product/display1` from `DeviceTree.v68ap` into a restored guest's
+`devicetree.img4` on Preboot. Off by default; tried on 2026-10-28 on a
+copy-on-write clone of the 27.2 Duo guest, never on the original.
+
+**What is copied, and what is not.** The two nodes have no `compatible`, so
+no driver matches them: they describe the panels to userland and nothing
+else. Everything that drives the panels on a real Duo (the DCPs,
+`disp0`/`dispext0`, the display pipes, crossbar and DARTs under `arm-io`)
+has a `compatible` and promises silicon the VM does not have, so it stays
+out. The board's phandles (470, 471) would collide with the guest's, so the
+copies get the next free ones.
+
+| | display0 (outer) | display1 (inner) |
+| --- | --- | --- |
+| index, rotation, scale | 0, 0°, 3 | 1, 270°, 3 |
+| `surface-type` | 1 | 2 |
+| corner radii (pt) | 8, 8, 59, 59 | 55 on each corner |
+| special region 0 | `Jindo`, 111 px circle at (1199, 88) | `BlankableRR`, 111 px at (63, 710) |
+| special region 1 | none | `Fold`, a line 1878 px wide at y = 1335 |
+| `has-prox` | 1 | 0 |
+
+The `Fold` region is the crease: y = 1335 is the middle of the inner
+panel's 2670 rows. Each node also carries its own button and camera
+geometry and a `chrome-identifier` (`phone15` outer, `phone14` inner).
+
+**The tree.** 151 nodes become 153, the payload grows from 73,504 to 75,676
+bytes (the two nodes are 1,036 and 1,136), every phandle stays unique, and
+a strict walk of the flat tree ends on its last byte. `ipsw dtree` cannot
+parse the restored tree before the graft or after it ("unexpected EOF"), so
+the walk is our own.
+
+**Booting it.** iBoot and the kernel take the tree; iOS boots to the Lock
+Screen. `device.ioreg` with `plane: IODeviceTree` lists `display0` and
+`display1` under `product`. The hinge works as before: 87.5°, 0° and 180°
+read back exactly, and the window shows each as iOS's angle.
+
+What iOS does with them: on the second boot with the graft, the Lock
+Screen has a black circle at the top right, open and closed, at the place
+and size `display0` gives its `Jindo` region (111 px at 1199, 88 of the
+1398-wide panel, about 92% across and 6% down). The same clone on its
+original tree has none: only the clock and the battery ring there.
+
+| Panels, open | Panels, closed | Original tree (iOS's own screenshot) |
+| --- | --- | --- |
+| ![](../../Documents/duo/research/panels-open.jpg) | ![](../../Documents/duo/research/panels-closed.jpg) | ![](../../Documents/duo/research/panels-control-home.jpg) |
+ The guest display is still 466 × 678 points at 3×, the
+outer panel's; SpringBoard draws no inner layout. So userland reads the
+nodes, but a second panel is not enough to make it use one: the display it
+lays out on is still the one framebuffer, whose identity is the outer's.
+
+**One bad boot.** On the clone's first boot with the graft, the guest agent
+never connected (eight minutes), and the Lock Screen had a black band
+across its middle. On the second boot with the same tree both were fine;
+on the original tree the agent connected 24 seconds after boot. That boot
+was also the clone's first, straight after an AMFI refusal, so it is not
+yet known whether the graft caused it. That is why `--panels` is off by
+default.
+
 ### What could change it
 
 - A Virtualization.framework that allows two displays, or live resizing of
   an iOS guest's display.
-- Answering `display1` from the one display in the guest: adding the
-  `display0`/`display1` nodes from `DeviceTree.v68ap` to the VM's device tree,
-  then making SpringBoard route the inner one to the framebuffer, swapping by
+- Answering `display1` from the one display in the guest: the
+  `display0`/`display1` nodes are now in the tree (above); what is left is
+  making SpringBoard route the inner one to the framebuffer, swapping by
   pose. That needs SpringBoard's display arbitration and the framebuffer's
   identity, neither yet mapped, and is the one route that does not wait on
   Apple.

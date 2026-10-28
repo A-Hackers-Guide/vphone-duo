@@ -110,6 +110,7 @@ public enum CustomFirmwarePostRestoreDeviceTree {
     public static func presentPhoneProduct(
         at url: URL,
         board boardURL: URL,
+        panels: Bool = false,
         dryRun: Bool = false,
         verbose: Bool = true,
     ) throws -> Outcome {
@@ -121,7 +122,7 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         }
         let board = try openDeviceTree(boardData, path: boardURL.path).blob
         return try rewrite(at: url, dryRun: dryRun, verbose: verbose) { blob in
-            let (newBlob, changes, delta) = try withPhoneProduct(blob, board: board)
+            let (newBlob, changes, delta) = try withPhoneProduct(blob, board: board, panels: panels)
             return (newBlob, changes, blob.count + delta)
         }
     }
@@ -406,7 +407,13 @@ public enum CustomFirmwarePostRestoreDeviceTree {
     /// size change with the changes: a filled placeholder trades its value's
     /// padded length for the board's, an added property brings its 36-byte
     /// header too. A tree that already has them comes back unchanged.
-    public static func withPhoneProduct(_ blob: Data, board: Data) throws -> (Data, [Change], Int) {
+    ///
+    /// With `panels`, a foldable's panel nodes are copied as well (see
+    /// `DeviceTreePatcher.presentPanels`). It is off by default while it is
+    /// experimental: a 27.2 Duo guest boots with them and iOS reads them, but
+    /// they have been tried on few boots, and on one the guest agent did not
+    /// connect. See Research/Guest/iphone_duo_fold.md.
+    public static func withPhoneProduct(_ blob: Data, board: Data, panels: Bool = false) throws -> (Data, [Change], Int) {
         func describe(_ value: Data) -> String {
             let text = value.prefix(while: { $0 != 0 })
             if !text.isEmpty, text.count == value.count - 1 || text.count == value.count,
@@ -419,7 +426,7 @@ public enum CustomFirmwarePostRestoreDeviceTree {
         let root = try parseTree(blob, label: "DT")
         let source = try parseTree(board, label: "board DT")
         let changes = DeviceTreePatcher.presentPhoneProduct(in: root, from: source)
-            + DeviceTreePatcher.presentPanels(in: root, from: source)
+            + (panels ? DeviceTreePatcher.presentPanels(in: root, from: source) : [])
         guard !changes.isEmpty else { return (blob, [], 0) }
         let records = changes.map {
             Change(

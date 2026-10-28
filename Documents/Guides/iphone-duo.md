@@ -56,6 +56,24 @@ and touches on the bars are ignored. `VPHONE_DUO_RESIZE=1` also resizes the
 guest display to the lit panel, for testing how an app takes a live display
 change. `VPHONE_DUO_FLAT=1` shows the Duo in the plain window instead.
 
+### Experimental: the Duo's panel nodes
+
+A real Duo's device tree describes both panels, `/product/display0` and
+`/product/display1`; the VM's does not. To give a restored guest those two
+nodes (descriptions only: no driver binds to them), with the VM stopped:
+
+```sh
+vphone-cli cfw patch-dt-iphone-product --panels \
+  <Preboot>/<hash>/usr/standalone/firmware/devicetree.img4 \
+  ~/.vphone/machines/duo/FirmwareOriginals/<IPSW>/Firmware/all_flash/DeviceTree.v68ap.im4p
+```
+
+Try it on a copy of the machine (`cp -c` keeps the copy free on APFS), keep
+the original `devicetree.img4`, and put it back if the guest misbehaves. iOS
+reads the nodes, and draws the outer panel's camera cutout from them, but
+it still lays out for one display. See
+[the research notes](../../Research/Guest/iphone_duo_fold.md#grafting-the-panels-into-the-vms-tree).
+
 ## Requirements
 
 Everything vphone needs (see [Host Setup](host-setup.md)), plus:

@@ -598,6 +598,12 @@ struct VPhoneCustomFirmwarePatchIPhoneProductCommand: ParsableCommand {
     @Argument(help: "Path to the iPhone's DeviceTree.<board>.im4p", transform: URL.init(fileURLWithPath:))
     var board: URL
 
+    @Flag(
+        name: .customLong("panels"),
+        help: "Also copy a foldable's /product/display<N> panel nodes (experimental)",
+    )
+    var panels = false
+
     @Flag(name: .customLong("dry-run"), help: "Report what would change and exit")
     var dryRun = false
 
@@ -605,6 +611,7 @@ struct VPhoneCustomFirmwarePatchIPhoneProductCommand: ParsableCommand {
         try CustomFirmwarePostRestoreDeviceTree.presentPhoneProduct(
             at: deviceTree,
             board: board,
+            panels: panels,
             dryRun: dryRun,
             verbose: true,
         )
