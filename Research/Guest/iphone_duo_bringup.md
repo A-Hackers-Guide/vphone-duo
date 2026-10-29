@@ -150,3 +150,6 @@ The original manifests and device tree were extracted by HTTP ranges with
 the repository's `VPhoneRemoteZip`. Raw logs and scratch artifacts remain
 local; host paths, per-machine identifiers and runtime addresses are not
 included in this research record.
+
+Continued in [iphone_duo_fold.md](iphone_duo_fold.md): the hinge sensor, the
+single display and what iOS does with the angle.

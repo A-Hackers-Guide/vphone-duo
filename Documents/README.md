@@ -11,6 +11,8 @@ Start with the [Launchpad quick start](../README.md#get-started). For terminal u
 | [Compatibility](Guides/compatibility.md) | Verified firmware pairs and what the checks prove |
 | [iPadOS Guests](Guides/ipados.md) | Running iPadOS from an iPad restore IPSW instead of iOS |
 | [Other iPhone Models](Guides/iphone-models.md) | Running iOS from an iPhone 16 Pro, 17, 17 Pro, Air or other model's IPSW |
+| [iPhone Duo](Guides/iphone-duo.md) | The foldable `iPhone19,4` on iOS 27.2: a 3D window with a hinge iOS reads, both panels, keys and finishes |
+| [Duo Setups](Guides/duo-setups.md) | Developer, bootstrap and custom setups for a Duo guest, and its appearance |
 | [Package Environment](Guides/package-environment.md) | Installing and removing a package manager in the VM |
 | [Troubleshooting](Guides/troubleshooting.md) | Launch refusals, restore failures, Home key and app problems |
 | [Launchpad Command Line](Guides/launchpad-cli.md) | Installing and testing a local build with `vphone-launchpad-cli` |

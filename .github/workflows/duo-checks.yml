@@ -1,0 +1,64 @@
+name: duo-checks
+
+# Fast checks for the iPhone Duo work that need no Mac: the scripts parse,
+# the model is a sound USDZ, and no Apple firmware or device identity ever
+# lands in the repository. The full bundle builds on a Mac with Xcode 27;
+# see Documents/Guides/iphone-duo.md.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python tools parse
+        run: |
+          shopt -s nullglob
+          files=()
+          for f in scripts/duo/vphone-duo scripts/duo/*.py Tools/DuoModel/*.py; do
+            if [ -f "$f" ]; then files+=("$f"); fi
+          done
+          if [ ${#files[@]} -eq 0 ]; then echo "no Duo tools yet"; exit 0; fi
+          python3 -c 'import sys; [compile(open(f).read(), f, "exec") for f in sys.argv[1:]]' "${files[@]}"
+
+      - name: Build scripts parse
+        run: |
+          sudo apt-get install -y -qq zsh >/dev/null
+          shopt -s nullglob
+          scripts=(VPhoneExecutable/VPhoneVirtualization/Build/*.sh)
+          if [ ${#scripts[@]} -eq 0 ]; then echo "no build scripts"; exit 0; fi
+          for f in "${scripts[@]}"; do zsh -n "$f"; done
+
+      - name: Model is a sound USDZ
+        run: |
+          model=VPhoneExecutable/VPhoneVirtualization/Resources/DuoModel/DuoModel.usdz
+          [ -f "$model" ] || { echo "no Duo model yet"; exit 0; }
+          unzip -tq "$model"
+          unzip -l "$model" | grep -q '\.usdc$'
+          size=$(stat -c %s "$model")
+          echo "DuoModel.usdz: $size bytes"
+          [ "$size" -lt 20000000 ] || { echo "::error::model over 20 MB"; exit 1; }
+          # OpenUSD's own validators, and every part the window looks up.
+          python3 -m pip install -q usd-core==26.11
+          python3 Tools/DuoModel/check_model.py "$model"
+
+      - name: No firmware, blobs or machine identity
+        run: |
+          set -euo pipefail
+          bad=$(git ls-files | grep -iE '\.(ipsw|shsh2?|im4p|im4m|img4|dmg)$' || true)
+          if [ -n "$bad" ]; then echo "::error::firmware or blobs tracked:"; echo "$bad"; exit 1; fi
+          # A VM's identity and state live in its machine folder, never here.
+          bad=$(git ls-files | grep -E '(^|/)(udid-prediction\.txt|nvram\.bin|SEPStorage|Disk\.img)$' || true)
+          if [ -n "$bad" ]; then echo "::error::VM state tracked:"; echo "$bad"; exit 1; fi
+          if git grep -nI 'machineIdentifier</key>' -- '*.plist' >/dev/null; then
+            echo "::error::a plist with a machine identifier is tracked"; exit 1
+          fi
