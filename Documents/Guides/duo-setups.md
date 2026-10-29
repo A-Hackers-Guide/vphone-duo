@@ -1,7 +1,8 @@
 # Duo setups: developer, jailbreak and custom
 
 A new vphone guest is left empty on purpose: no package manager, no SSH, no
-VNC ([Create and run](create-and-run.md)). `scripts/duo/vphone-duo setup`
+VNC ([Create and run](create-and-run.md)). [Package Environment](package-environment.md)
+is the manual way to add one; these profiles follow the same steps. `scripts/duo/vphone-duo setup`
 does, when you ask, what you would otherwise do by hand on a Duo guest. It
 uses only vphoned's documented methods
 ([guest control](../../Skills/vphone-guest-control/SKILL.md)); it changes
