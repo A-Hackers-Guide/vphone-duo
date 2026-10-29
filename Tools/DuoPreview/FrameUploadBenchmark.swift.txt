@@ -1,0 +1,39 @@
+import Foundation
+import Metal
+import MetalKit
+import CoreGraphics
+import ImageIO
+
+// How long one frame takes to reach the GPU, two ways.
+let url = URL(fileURLWithPath: CommandLine.arguments[1])
+let src = CGImageSourceCreateWithURL(url as CFURL, nil)!
+let image = CGImageSourceCreateImageAtIndex(src, 0, nil)!
+let device = MTLCreateSystemDefaultDevice()!
+let loader = MTKTextureLoader(device: device)
+let queue = device.makeCommandQueue()!
+print("frame \(image.width)x\(image.height) bpc \(image.bitsPerComponent) alpha \(image.alphaInfo.rawValue)")
+
+func time(_ label: String, _ n: Int = 60, _ body: () -> Void) {
+    let start = CFAbsoluteTimeGetCurrent()
+    for _ in 0 ..< n { body() }
+    let ms = (CFAbsoluteTimeGetCurrent() - start) * 1000 / Double(n)
+    print(String(format: "%@: %.2f ms per frame", label, ms))
+}
+
+// 1. What the stream does now: MTKTextureLoader per frame.
+time("MTKTextureLoader") {
+    _ = try! loader.newTexture(cgImage: image, options: [.textureUsage: MTLTextureUsage.shaderRead.rawValue, .textureStorageMode: MTLStorageMode.private.rawValue, .SRGB: true])
+}
+
+// 2. Draw into one reused shared buffer, upload with replace(region:).
+let w = image.width, h = image.height, rowBytes = w * 4
+let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm_srgb, width: w, height: h, mipmapped: false)
+desc.usage = .shaderRead
+desc.storageMode = .shared
+let tex = device.makeTexture(descriptor: desc)!
+let buffer = UnsafeMutableRawPointer.allocate(byteCount: rowBytes * h, alignment: 64)
+let ctx = CGContext(data: buffer, width: w, height: h, bitsPerComponent: 8, bytesPerRow: rowBytes, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)!
+time("reused context + replace") {
+    ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+    tex.replace(region: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0, withBytes: buffer, bytesPerRow: rowBytes)
+}

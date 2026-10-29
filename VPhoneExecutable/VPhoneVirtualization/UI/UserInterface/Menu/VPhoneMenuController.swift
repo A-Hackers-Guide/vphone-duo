@@ -35,6 +35,15 @@ class VPhoneMenuController {
         }
     }
     var watchSideButtonItem: NSMenuItem?
+    /// The Fold menu, shown for an iPhone Duo only.
+    var foldMenuItem: NSMenuItem?
+    let foldMenuDelegate = VPhoneFoldMenuDelegate()
+    weak var duoView: VPhoneDuoView? {
+        didSet {
+            foldMenuDelegate.duoView = duoView
+            foldMenuItem?.isHidden = duoView == nil
+        }
+    }
 
     /// An Apple Watch guest has a side button beside the Digital Crown.
     var showsWatchControls = false {
@@ -166,6 +175,7 @@ class VPhoneMenuController {
         mainMenu.addItem(buildAppsMenu())
         mainMenu.addItem(buildDiagnosticsMenu())
         mainMenu.addItem(buildRecordMenu())
+        mainMenu.addItem(buildFoldMenu())
 
         // Window menu — provides Cmd+W (close) and Cmd+M (minimize) for any key window
         let windowMenuItem = NSMenuItem()

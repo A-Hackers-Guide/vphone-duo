@@ -62,7 +62,7 @@ build_project -project "$root/VPhoneDaemon/VPhoneDaemon.xcodeproj" \
     -sdk appletvos \
     -derivedDataPath "$root/.build/XcodeDaemon" CODE_SIGNING_ALLOWED=NO \
     SUPPORTS_MACCATALYST=NO EFFECTIVE_PLATFORM_NAME=-appletvos \
-    FRAMEWORK_SEARCH_PATHS="$tvos_frameworks" build
+    FRAMEWORK_SEARCH_PATHS="\"$tvos_frameworks\"" build
 
 build_project -project "$root/VPhoneExecutable/VPhoneEscalator/VPhoneEscalator.xcodeproj" \
     -scheme VPhoneEscalator -configuration "$configuration" \
@@ -132,6 +132,7 @@ guest_compatibility_library="$(/usr/bin/xcrun swift-stdlib-tool --print \
 /bin/cp "$guest_products/prefsfix/libprefsfix.dylib" "$guest/libprefsfix.dylib"
 /bin/cp "$guest_products/signinfix/libsigninfix.dylib" "$guest/libsigninfix.dylib"
 /bin/cp "$guest_products/gyroscope/libvphonegyro.dylib" "$guest/libvphonegyro.dylib"
+/bin/cp "$guest_products/hinge/libvphonehinge.dylib" "$guest/libvphonehinge.dylib"
 /bin/cp "$guest_products/accelerometer/libvphoneaccelerometer.dylib" "$guest/libvphoneaccelerometer.dylib"
 /bin/cp "$guest_products/attitude/libvphoneattitude.dylib" "$guest/libvphoneattitude.dylib"
 /bin/cp "$guest_products/cryptexstaging/libvphonecryptexstaging.dylib" "$guest/libvphonecryptexstaging.dylib"
@@ -175,6 +176,13 @@ fi
 /bin/cp "$root/VPhoneExecutable/VPhoneVirtualization/Resources/OpenSEP/OpenSEP.bin" \
     "$root/VPhoneExecutable/VPhoneVirtualization/Resources/OpenSEP/LICENSE" \
     "$resources/OpenSEP/"
+
+# The iPhone Duo's 3D model and the studio light it is shown in, made by
+# Tools/DuoModel/prepare_duo.py and render_previews.py.
+/bin/mkdir -p "$resources/DuoModel"
+/bin/cp "$root/VPhoneExecutable/VPhoneVirtualization/Resources/DuoModel/DuoModel.usdz" \
+    "$root/VPhoneExecutable/VPhoneVirtualization/Resources/DuoModel/DuoStudio.exr" \
+    "$resources/DuoModel/"
 
 # Patch presets. Prewritten plists, read by vphone-cli at patch time to decide
 # which declared patches apply. Nothing generates or edits these.

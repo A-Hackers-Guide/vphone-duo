@@ -52,6 +52,15 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         /// The guest runs watchOS: its side button is a key of its own (consumer
         /// Help), apart from the crown (Home) and the power key.
         var isWatchGuest = false
+        /// A foldable's inner panel. The VM still has one display; the
+        /// window lights one panel or the other as the phone folds.
+        var innerScreen: VPhoneVirtualMachineManifest.ScreenConfig?
+    }
+
+    /// `VPHONE_DUO_FLAT=1` shows a foldable in the plain window, on its
+    /// outer panel, without the 3D phone.
+    nonisolated static var foldableWindowEnabled: Bool {
+        ProcessInfo.processInfo.environment["VPHONE_DUO_FLAT"] != "1"
     }
 
     private struct DeviceIdentity {
@@ -181,6 +190,11 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
                 pixelsPerInch: options.screenPPI,
             ),
         ]
+        if let inner = options.innerScreen {
+            // Virtualization.framework allows one display per VM
+            // (`_maximumAllowedDisplayCount`), so both panels show it.
+            print("[vphone] Inner panel: \(inner.width)x\(inner.height) @ \(inner.pixelsPerInch) PPI (shares the display)")
+        }
         config.graphicsDevices = [gfx]
 
         // Audio
@@ -437,6 +451,14 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         status["link"] = device.attachment == nil ? "down" : "up"
         status["attachment"] = Self.describe(device.attachment)
         return status
+    }
+
+    /// Resizes the guest's display, for a foldable moving between panels.
+    func resizeDisplay(width: Int, height: Int) throws {
+        guard let display = virtualMachine.graphicsDevices.first?.displays.first else {
+            throw VPhoneVirtualMachineError.displayUnavailable
+        }
+        try display.reconfigure(sizeInPixels: CGSize(width: width, height: height))
     }
 
     /// Unplug or replug the guest's cable without stopping it. Down detaches
