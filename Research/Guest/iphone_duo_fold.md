@@ -379,13 +379,24 @@ transformer named "Test Automation" that rewrites the computed pose:
   {0°, 0°, 90°, 180°, 180°} and marks it available.
 
 The service is entitled by `com.apple.springboard.testautomation`, the test
-tools' entitlement; vphoned does not hold it. The script bridge cannot pass
-the struct (`Return values of type '{?=qiii}' are not supported`), so a
-caller must be native. Not done yet:
-- giving vphoned that entitlement;
-- a `display.pose` method;
-- feeding it from the hinge link;
-- watching which policy SpringBoard then resolves.
+tools' entitlement. The script bridge cannot pass the struct (`Return values
+of type '{?=qiii}' are not supported`), so the caller is native:
+vphoned's `display.pose.get` and `display.pose.set` (capability
+`display_pose`), holding that entitlement. The Duo window sends the hinge
+state each time the fold crosses one: 1 below 30°, 2 below 150°, 4 from there.
+
+Measured on the clone, 2026-10-29:
+
+| Tree and framebuffer | Pose | Result |
+| --- | --- | --- |
+| stock tree, 1398 × 2034 | 4 (open), then 1 (closed) | SpringBoard reads each back; the outer layout either way |
+| panels grafted, `display-index = 1`, 1878 × 2670 | 4, and 1 → 2 → 3 → 4 again | SpringBoard reads each back and runs, no crash; the screen stays black |
+
+So the pose reaches SpringBoard, and the black inner display is not for want
+of a hinge. SpringBoard has one display and still gives the inner panel no
+content: what it lacks is the second display itself, or whatever its display
+arbitration matches on to put content there. That arbitration is the next
+thing to read.
 
 ### What could change it
 
