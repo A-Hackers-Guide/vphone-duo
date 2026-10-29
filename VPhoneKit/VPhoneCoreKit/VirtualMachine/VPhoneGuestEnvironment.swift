@@ -19,6 +19,7 @@ public enum VPhoneGuestEnvironment {
         "libprefsfix.dylib",
         "libsigninfix.dylib",
         "libvphonegyro.dylib",
+        "libvphonehinge.dylib",
         "libvphoneaccelerometer.dylib",
         "libvphoneattitude.dylib",
     ]

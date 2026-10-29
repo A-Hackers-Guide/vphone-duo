@@ -561,6 +561,8 @@ extension DeviceTreePatcher {
         let path: String
         let before: Data?
         let after: Data
+        /// `after` is a whole child node, header and all, not a value.
+        var isNode = false
     }
 
     /// Give an iPhone guest's `/product` and `/buttons` the board's values for
@@ -597,6 +599,56 @@ extension DeviceTreePatcher {
         fill(iPhoneAddedProductProperties, node: "product", add: true)
         fill(iPhoneButtonProperties, node: "buttons", add: false)
         return changes
+    }
+
+    /// Give a foldable guest's `/product` the board's panels,
+    /// `/product/display<N>`: one node per screen, with its index, rotation,
+    /// scale, corner radii, button geometry and special regions (the Duo's
+    /// inner panel has a `Fold` region). Every VM has one framebuffer, so
+    /// vphone600 has no such nodes and iOS believes it has a single screen.
+    ///
+    /// The nodes have no `compatible`, so no driver binds to them: they only
+    /// describe the panels to userland. The DCP, display pipes and DARTs
+    /// behind them on the board stay out. Copied only when the board describes
+    /// more than one panel and the guest none; each gets a fresh phandle.
+    static func presentPanels(in root: DTNode, from source: DTNode) -> [PhoneProductChange] {
+        guard
+            let target = optionalChild(of: root, named: "product"),
+            let board = optionalChild(of: source, named: "product")
+        else { return [] }
+        func name(_ node: DTNode) -> String {
+            node.properties.first { $0.name == "name" }
+                .flatMap { String(data: $0.value.prefix(while: { $0 != 0 }), encoding: .utf8) } ?? ""
+        }
+        func isPanel(_ node: DTNode) -> Bool {
+            let name = name(node)
+            return name.hasPrefix("display") && Int(name.dropFirst("display".count)) != nil
+                && !node.properties.contains { $0.name == "compatible" } && node.children.isEmpty
+        }
+        let panels = board.children.filter(isPanel)
+        guard panels.count > 1, !target.children.contains(where: isPanel) else { return [] }
+
+        func maxPhandle(_ node: DTNode) -> UInt32 {
+            let own = node.properties.first { $0.name == "AAPL,phandle" && $0.value.count == 4 }
+                .map { $0.value.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).littleEndian } } ?? 0
+            return node.children.map(maxPhandle).reduce(own, max)
+        }
+        var phandle = maxPhandle(root)
+        return panels.map { panel in
+            let copy = DTNode()
+            copy.properties = panel.properties.map { property in
+                var value = property.value
+                if property.name == "AAPL,phandle" {
+                    phandle += 1
+                    value = withUnsafeBytes(of: phandle.littleEndian) { Data($0) }
+                }
+                return DTProperty(name: property.name, flags: property.flags, value: value, valueOffset: 0)
+            }
+            target.children.append(copy)
+            var change = PhoneProductChange(path: "product/\(name(panel))", before: nil, after: serialize(copy))
+            change.isNode = true
+            return change
+        }
     }
 
     /// The flat encoding of one node and its children, for the patch record.

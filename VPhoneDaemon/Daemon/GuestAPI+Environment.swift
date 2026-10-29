@@ -23,6 +23,7 @@ extension GuestAPI {
         "libprefsfix.dylib",
         "libsigninfix.dylib",
         "libvphonegyro.dylib",
+        "libvphonehinge.dylib",
         "libvphoneaccelerometer.dylib",
         "libvphoneattitude.dylib",
     ]
@@ -111,7 +112,8 @@ extension GuestAPI {
             // backboardd owns the UI's HID connection. Do not restart it here:
             // a new gyro hook (or SystemHook which loads it) needs a reboot.
             "reboot_required": !rootReadOnly || names.contains("launchdhook-vphone.dylib")
-                || names.contains("libvphonegyro.dylib") || names.contains("libvphoneaccelerometer.dylib")
+                || names.contains("libvphonegyro.dylib") || names.contains("libvphonehinge.dylib")
+                || names.contains("libvphoneaccelerometer.dylib")
                 || names.contains("SystemHook-vphone.dylib"),
             "root_read_only": rootReadOnly,
         ]

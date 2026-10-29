@@ -89,6 +89,9 @@ SIGNINFIX_INCLUDES := $(wildcard SignInFix/*.h)
 GYROSCOPE := $(STAGE)/gyroscope/libvphonegyro.dylib
 GYROSCOPE_SOURCES := $(call find_sources,Gyroscope)
 GYROSCOPE_INPUTS := $(call find_headers,Gyroscope) $(call find_folders,Gyroscope)
+HINGE := $(STAGE)/hinge/libvphonehinge.dylib
+HINGE_SOURCES := $(call find_sources,Hinge)
+HINGE_INPUTS := $(call find_headers,Hinge) $(call find_folders,Hinge) Gyroscope/VPhoneGyroscopeHID.h
 ACCELEROMETER := $(STAGE)/accelerometer/libvphoneaccelerometer.dylib
 ACCELEROMETER_SOURCES := $(call find_sources,Accelerometer)
 ACCELEROMETER_INPUTS := $(call find_headers,Accelerometer) $(call find_folders,Accelerometer)
@@ -144,7 +147,7 @@ GPU_DYNAMIC_LOOKUP_SYMS := \
 VIRTIOSOUND := $(STAGE)/virtiosound/VPhoneVirtIOSound.driver
 VIRTIOSOUND_SOURCES := $(wildcard VirtIOSound/*.m VirtIOSound/*.c)
 VIRTIOSOUND_INCLUDES := $(wildcard VirtIOSound/*.h) VirtIOSound/Info.plist VirtIOSound/AudioServerDriver.tbd
-ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(HAPTICSFIX) $(BATTERYHEALTHFIX) $(DEVICEHUBFIX) $(DEVICENAME) $(PREFSFIX) $(SIGNINFIX) $(GYROSCOPE) $(ACCELEROMETER) $(ATTITUDE) $(HOMEPODDISPLAY) $(CRYPTEXSTAGING) $(HOMEPODPERSONA) $(HOMEPODMISFIX) $(HOMEPODSETUP) $(TVSETUPFOCUS) $(GPU_PLUGIN) $(VIRTIOSOUND)
+ARTIFACTS := $(CAMFIX) $(VCAMCAPTURED) $(LAUNCHHOOK) $(SYSTEMHOOK) $(MISFIX) $(HAPTICSFIX) $(BATTERYHEALTHFIX) $(DEVICEHUBFIX) $(DEVICENAME) $(PREFSFIX) $(SIGNINFIX) $(GYROSCOPE) $(HINGE) $(ACCELEROMETER) $(ATTITUDE) $(HOMEPODDISPLAY) $(CRYPTEXSTAGING) $(HOMEPODPERSONA) $(HOMEPODMISFIX) $(HOMEPODSETUP) $(TVSETUPFOCUS) $(GPU_PLUGIN) $(VIRTIOSOUND)
 PLISTS := $(STAGE)/camfix/libcamfix.plist $(STAGE)/vcamcaptured/libvcamcaptured.plist \
 	$(STAGE)/misfix/libmisfix.plist
 GPU_PROVENANCE := $(STAGE)/gpu/README.md
@@ -190,7 +193,7 @@ gpu: $(GPU_PLUGIN)
 
 package: all
 	@rm -f $(ARCHIVE)
-	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix hapticsfix batteryhealthfix devicehubfix devicename prefsfix signinfix gyroscope accelerometer attitude homepoddisplay cryptexstaging homepodpersona homepodmisfix homepodsetup tvsetupfocus gpu virtiosound
+	@/usr/bin/tar -cf $(ARCHIVE) -C $(STAGE) camfix vcamcaptured launchhook systemhook misfix hapticsfix batteryhealthfix devicehubfix devicename prefsfix signinfix gyroscope hinge accelerometer attitude homepoddisplay cryptexstaging homepodpersona homepodmisfix homepodsetup tvsetupfocus gpu virtiosound
 	@echo "Packaged $(ARCHIVE)"
 
 test-loader-links:
@@ -256,7 +259,7 @@ test-vcam-dataplane:
 		-framework CoreGraphics
 	@$(OUT)/VCamDataPlaneTests
 
-$(STAGE)/camfix $(STAGE)/vcamcaptured $(STAGE)/launchhook $(STAGE)/systemhook $(STAGE)/misfix $(STAGE)/hapticsfix $(STAGE)/batteryhealthfix $(STAGE)/devicehubfix $(STAGE)/devicename $(STAGE)/prefsfix $(STAGE)/signinfix $(STAGE)/gyroscope $(STAGE)/accelerometer $(STAGE)/attitude $(STAGE)/gpu $(STAGE)/virtiosound:
+$(STAGE)/camfix $(STAGE)/vcamcaptured $(STAGE)/launchhook $(STAGE)/systemhook $(STAGE)/misfix $(STAGE)/hapticsfix $(STAGE)/batteryhealthfix $(STAGE)/devicehubfix $(STAGE)/devicename $(STAGE)/prefsfix $(STAGE)/signinfix $(STAGE)/gyroscope $(STAGE)/hinge $(STAGE)/accelerometer $(STAGE)/attitude $(STAGE)/gpu $(STAGE)/virtiosound:
 	@mkdir -p $@
 
 $(CAMFIX): $(CAMFIX_SOURCES) $(CAMFIX_INPUTS) | $(STAGE)/camfix
@@ -359,6 +362,13 @@ $(GYROSCOPE): $(GYROSCOPE_SOURCES) $(GYROSCOPE_INPUTS) | $(STAGE)/gyroscope
 	$(CLANG) -arch arm64e -miphoneos-version-min=18.0 -Os -fobjc-arc \
 		-Wall -Wextra -Werror -Wno-unused-parameter -dynamiclib \
 		-install_name /usr/lib/libvphonegyro.dylib -o $@ $(GYROSCOPE_SOURCES) \
+		-framework Foundation -Wl,-not_for_dyld_shared_cache
+	@codesign --force --sign - $@
+
+$(HINGE): $(HINGE_SOURCES) $(HINGE_INPUTS) | $(STAGE)/hinge
+	$(CLANG) -arch arm64e -miphoneos-version-min=18.0 -Os -fobjc-arc \
+		-Wall -Wextra -Werror -Wno-unused-parameter -dynamiclib \
+		-install_name /usr/lib/libvphonehinge.dylib -o $@ $(HINGE_SOURCES) \
 		-framework Foundation -Wl,-not_for_dyld_shared_cache
 	@codesign --force --sign - $@
 
