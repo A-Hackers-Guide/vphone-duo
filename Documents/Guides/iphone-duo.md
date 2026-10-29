@@ -63,6 +63,14 @@ and touches on the bars are ignored. `VPHONE_DUO_RESIZE=1` also resizes the
 guest display to the lit panel, for testing how an app takes a live display
 change. `VPHONE_DUO_FLAT=1` shows the Duo in the plain window instead.
 
+SpringBoard also gets the fold as a device pose. A VM has no hinge sensor
+CoreMotion will open, so the window overrides SpringBoard's pose through its
+test automation service (`display.pose.set`, below 30° closed, below 150°
+partly open, flat from there), the way a foldable's test tools do.
+`vphone-duo rpc display.pose.get` reads SpringBoard's pose back.
+`VPHONE_DUO_POSE=0` leaves the pose alone. On its own it does not change the
+layout: SpringBoard still sees one display.
+
 ### Experimental: the Duo's panel nodes
 
 A real Duo's device tree describes both panels, `/product/display0` and
