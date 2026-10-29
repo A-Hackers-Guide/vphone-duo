@@ -10,6 +10,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: VPhoneVirtualMachineWindowController?
     private var homePodDisplayTask: Task<Void, Never>?
     private var duoHinge: VPhoneDuoHingeLink?
+    private var duoAppearance: VPhoneDuoAppearanceLink?
     private var menuController: VPhoneMenuController?
     private var shellWindowController: VPhoneShellWindowController?
     private var fileWindowController: VPhoneFileWindowController?
@@ -560,6 +561,8 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
         windowController = nil
         duoHinge?.stop()
         duoHinge = nil
+        duoAppearance?.stop()
+        duoAppearance = nil
         menuController = nil
         fileWindowController = nil
         keychainWindowController = nil
@@ -717,6 +720,11 @@ extension VPhoneVirtualMachineAppDelegate {
         duoView.onHingeChange = { angle in hinge.send(angle) }
         hinge.onSettled = { [weak duoView] in duoView?.hingeDelivered() }
         hinge.currentAngle = { [weak duoView] in duoView?.hingeAngle ?? 180 }
+        if VPhoneDuoAppearanceLink.isEnabled {
+            let appearance = VPhoneDuoAppearanceLink(control: control, finish: duoView.finish)
+            duoAppearance = appearance
+            duoView.onFinishChange = { finish in appearance.apply(finish) }
+        }
         duoView.readPublishedAngle = { [weak control] in
             guard let control, control.isConnected, control.supportsHinge,
                   let reply = try? await control.readHinge(), reply.providerRunning

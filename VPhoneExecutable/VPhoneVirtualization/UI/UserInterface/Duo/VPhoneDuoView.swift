@@ -28,6 +28,8 @@ final class VPhoneDuoView: NSView {
     var onButton: ((VPhoneDuoModel.Button, Bool) -> Void)?
     /// The lit panel changed; the guest display should take its size.
     var onActivePanelChange: ((VPhoneDuoModel.Panel) -> Void)?
+    /// A finish was chosen, from the bar, the menu or the socket.
+    var onFinishChange: ((Finish) -> Void)?
     /// The angle iOS's hinge sensor publishes now, or nil when it cannot be read.
     var readPublishedAngle: (() async -> Double?)?
     private var readback: Task<Void, Never>?
@@ -239,6 +241,7 @@ final class VPhoneDuoView: NSView {
     private func applyFinish(_ finish: Finish) {
         model?.setFinish(finish)
         arView.environment.background = .color(Self.backdrop(for: finish))
+        onFinishChange?(finish)
     }
 
     /// Near black behind Star White; a lifted graphite behind Space Black,
