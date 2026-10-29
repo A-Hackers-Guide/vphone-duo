@@ -18,6 +18,8 @@ final class VPhoneDuoHingeLink {
     private var settle: Task<Void, Never>?
     private var connectionWatch: Timer?
     private var wasConnected = false
+    /// The hinge state SpringBoard's pose was last given, or nil when unknown.
+    private var poseState: Int?
     /// The guest has the newest angle: nothing more is waiting to go.
     var onSettled: (() -> Void)?
     /// The angle the window shows, sent whenever the guest (re)connects: the
@@ -50,6 +52,7 @@ final class VPhoneDuoHingeLink {
         defer { wasConnected = connected }
         guard connected, !wasConnected else { return }
         last = nil
+        poseState = nil
         if pending == nil { pending = currentAngle() }
         flush()
     }
@@ -73,12 +76,28 @@ final class VPhoneDuoHingeLink {
         settle?.cancel()
         Task {
             _ = try? await control.setHinge(VPhoneHingeConfiguration(enabled: true, angle: angle, velocity: velocity))
+            await sendPose(for: angle, to: control)
             inFlight = false
             if pending == nil {
                 onSettled?()
                 settleVelocity(at: angle)
             }
             flush()
+        }
+    }
+
+    /// SpringBoard reads no hinge sensor on a VM, so its pose is overridden
+    /// through its test automation each time the fold crosses a hinge state.
+    /// `VPHONE_DUO_POSE=0` leaves SpringBoard's pose alone.
+    private func sendPose(for angle: Double, to control: VPhoneGuestControl) async {
+        guard control.supportsPose, ProcessInfo.processInfo.environment["VPHONE_DUO_POSE"] != "0" else { return }
+        let state = VPhoneGuestControl.poseHingeState(forAngle: angle)
+        guard state != poseState else { return }
+        do {
+            try await control.setPose(hingeState: state)
+            poseState = state
+        } catch {
+            print("[vphone] Duo pose not applied: \(error)")
         }
     }
 

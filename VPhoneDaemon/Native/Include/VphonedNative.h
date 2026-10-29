@@ -189,6 +189,10 @@ BOOL vp_gyro_set(double x, double y, double z, bool enabled);
 /// The configured hinge angle and the injected HID hinge sensor's status.
 NSDictionary * _Null_unspecified vp_hinge_get(void);
 BOOL vp_hinge_set(double angle, double velocity, int state, bool enabled);
+/// SpringBoard's device pose through SBSTestAutomationService; nil or NO
+/// when this base has no such service.
+NSDictionary * _Null_unspecified vp_pose_get(void);
+BOOL vp_pose_set(long long orientation, int device_orientation, int hinge_state, int tabletop);
 /// The backboardd HID gravity provider used by display.rotation.
 NSDictionary * _Nonnull vp_accelerometer_get(void);
 BOOL vp_accelerometer_set_orientation(NSString * _Nonnull spec);
