@@ -29,6 +29,13 @@ foldable) and shows it as a 3D phone you can fold, turn and press.
 - **A Fold menu.** Control-Command-1 to 4 fold to Closed (0°), Tent (70°),
   Laptop (110°) and Open Flat (180°); Control-Command-0 turns the view to
   the lit screen. Star White and Space Black are there too.
+- **iOS follows the finish.** Space Black switches iOS to Dark appearance and
+  Star White to Light, from the bar, the menu or the socket
+  (`VPHONE_DUO_FOLLOW_FINISH=0` turns this off). `vphone-duo appearance
+  dark|light` sets it directly.
+- **Setups.** `vphone-duo setup dev|jb|custom` gives the guest Developer
+  Mode, a bootstrap with Sileo or Zebra, and SSH with your key, when you ask
+  for them; see [Duo setups](duo-setups.md).
 - **Scripting.** The fold, the keys and the finish can be driven from the
   host socket or `scripts/duo/vphone-duo`; see [Scripting](#scripting).
 
@@ -114,9 +121,13 @@ The VM's control socket (`~/.vphone/machines/duo/vphone.sock`) takes:
 {"t":"duo","finish":"black"}
 ```
 
+`finish` also sets iOS's appearance, as above.
+
 `scripts/duo/vphone-duo` wraps them:
 
 ```sh
+scripts/duo/vphone-duo appearance dark
+scripts/duo/vphone-duo setup status
 scripts/duo/vphone-duo fold 87.5
 scripts/duo/vphone-duo fold tent --animate
 scripts/duo/vphone-duo press volume_up
@@ -149,7 +160,17 @@ then open **Settings ▸ Apple Account** and sign in. It applies to apps
 launched after it; `signin block` hides sign-in again. Apple may still refuse
 a virtual device: the VM has its own identity and never borrows a phone's.
 
+## Experimental: the panels in the device tree
+
+`vphone-cli cfw patch-dt-iphone-product --panels` gives a restored guest the
+Duo's two panel descriptions, `/product/display0` and `/product/display1`,
+from `DeviceTree.v68ap`. iOS boots with them and reads them (it draws the
+outer panel's camera cutout from `display0`), but it still lays out for one
+display. It is off by default; how to try it, and what was measured, is in
+[the research notes](../../Research/Guest/iphone_duo_fold.md#grafting-the-panels-into-the-vms-tree).
+
 ## What it does not do
 
-- **Two live panels at once.** See above.
+- **Two live panels at once, or iOS's inner layout.** See above, and the
+  research notes for how far it has been taken.
 - **Face ID.** The PCC research VM has no camera module.

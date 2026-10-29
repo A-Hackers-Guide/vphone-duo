@@ -319,6 +319,74 @@ guest agent drops once. The index alone is not the switch; what else
 `AppleEmbeddedDisplayServices` matches on (the framebuffer's own properties,
 its size, `framebuffer-identifier`) is the next thing to read.
 
+### What decides the layout iOS draws
+
+Measured on 2026-10-28 against the 27.2 shared cache and the clone.
+
+**SpringBoard picks a content mode, not a size.**
+SpringBoardFoundation resolves the display content mode through policies:
+- `SBFSingleIntegratedDisplayContentModeResolutionPolicy`;
+- `SBFFoldingDualDisplayContentModeResolutionPolicy`;
+- `SBFForceCoverDisplayOnlyDisplayContentModeResolutionPolicy`;
+- `SBFFullyClosedDisplayContentModeResolutionPolicy`;
+- `SBFTentModeDisplayContentModeResolutionPolicy`;
+- `SBFYoinkDisplayContentModeResolutionPolicy`.
+
+Their input is `SBFDevicePoseProvider`'s pose. Its type encoding names every field:
+- the orientation for each panel;
+- `hinge` (`isAvailable`, `position`, `state`, the fully closed, closed,
+  partially open and open-flat regions, the transition progress);
+- `uiHingeStatus`;
+- `cmAngle` and `cmMagicPose`, CoreMotion's angle and posture.
+
+**The framebuffer is display 0.** SpringBoard queries MobileGestalt per display
+index ("display-indexed MG query"), and `AppleEmbeddedDisplayServices` reads a
+`display-index`. The VM's framebuffer has none, so it is display 0, the
+outer panel. Marking `/arm-io/gfx` with `display-index = 1` is honoured:
+
+| Framebuffer | Panels in the tree | Result |
+| --- | --- | --- |
+| 1398 × 2034 (outer), no index | yes | the outer layout, as always |
+| 1398 × 2034, `display-index = 1` | yes | black screen, 466 × 678 pt |
+| 1878 × 2670 (inner), `display-index = 1` | yes | black screen, 626 × 890 pt |
+
+iOS treats the screen as the inner panel, then keeps it dark. With no
+hinge, the pose provider leaves the cover-display-only policy in force, and
+the inner display has no content.
+
+**Why there is no hinge.** CoreMotion, inside locationd, opens the hinge
+sensor only when MobileGestalt says the device is neither virtual
+(`IsVirtualDevice`) nor a simulator (`IsSimulator`), and logs "Skipping
+open for physical HID device on VM/Simulator" otherwise. This is deliberate
+on Apple's side, and this project leaves it so: making iOS believe it is not
+a VM is out of scope.
+
+**Not a route here: `CMAngleSimulator`.** locationd's `CMAngleSimulator`
+(start and end angle, duration, delay, options) is a command for the sensor
+processor's firmware (`CLSPUAngleServiceControl`). The VM has no sensor
+processor.
+
+**The route that remains: SpringBoard's test automation.**
+`SBSTestAutomationService` (SpringBoardServices) has `getDevicePose` and
+`setDevicePoseOverride:`. They take `{long long; int; int; int}`.
+SpringBoard's handler, `-[SBTestAutomationService
+systemServiceServer:client:setDevicePoseOverride:]`, registers a pose
+transformer named "Test Automation" that rewrites the computed pose:
+- The first field becomes `orientation`.
+- The three ints build a CoreMotion magic pose (device orientation, hinge
+  state, tabletop pose), stored into `cmMagicPose` and marked available.
+- The hinge state, when below 5, also selects a canned `cmAngle` from
+  {0°, 0°, 90°, 180°, 180°} and marks it available.
+
+The service is entitled by `com.apple.springboard.testautomation`, the test
+tools' entitlement; vphoned does not hold it. The script bridge cannot pass
+the struct (`Return values of type '{?=qiii}' are not supported`), so a
+caller must be native. Not done yet:
+- giving vphoned that entitlement;
+- a `display.pose` method;
+- feeding it from the hinge link;
+- watching which policy SpringBoard then resolves.
+
 ### What could change it
 
 - A Virtualization.framework that allows two displays, or live resizing of
