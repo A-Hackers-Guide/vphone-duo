@@ -24,6 +24,7 @@ extension GuestAPI {
             executeAudioLatency,
             executeGyroscope,
             executeHinge,
+            executePose,
             executeAttitude,
             executeHomePodDisplay,
             executeHomePodDebug,

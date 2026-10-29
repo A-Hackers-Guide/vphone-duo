@@ -20,6 +20,7 @@ struct VPhoneHingeReply: Equatable, Sendable {
 
 extension VPhoneGuestControl {
     var supportsHinge: Bool { guestCapabilities.contains("motion_hinge") }
+    var supportsPose: Bool { guestCapabilities.contains("display_pose") }
 
     func readHinge() async throws -> VPhoneHingeReply {
         guard supportsHinge else { throw ControlError.unsupportedCapability("motion_hinge") }
@@ -32,6 +33,23 @@ extension VPhoneGuestControl {
             "enabled": value.enabled, "angle": value.angle, "velocity": value.velocity,
         ])
         return try hingeReply(result)
+    }
+
+    /// SpringBoard's hinge state for an angle, as vphoned's `display.pose.set`
+    /// picks it: closed below 30°, partly open below 150°, open flat from there.
+    static func poseHingeState(forAngle angle: Double) -> Int {
+        switch angle {
+        case ..<30: 1
+        case ..<150: 2
+        default: 4
+        }
+    }
+
+    /// Overrides SpringBoard's device pose with the hinge state, so it lays
+    /// out for the panel the fold uses.
+    func setPose(hingeState: Int) async throws {
+        guard supportsPose else { throw ControlError.unsupportedCapability("display_pose") }
+        _ = try await call("display.pose.set", params: ["hinge_state": hingeState])
     }
 
     private func hingeReply(_ result: [String: Any]) throws -> VPhoneHingeReply {
