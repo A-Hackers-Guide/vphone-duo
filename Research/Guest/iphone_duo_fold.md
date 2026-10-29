@@ -319,6 +319,31 @@ guest agent drops once. The index alone is not the switch; what else
 `AppleEmbeddedDisplayServices` matches on (the framebuffer's own properties,
 its size, `framebuffer-identifier`) is the next thing to read.
 
+**Why the inner display is black.** SpringBoard's own log (category
+`DisplayContentMode`, captured with `logs.syslog`) shows it, with the panels
+grafted, `display-index = 1` and the inner size:
+
+```
+DCMResolved: FullyClosed→FoldingDual | legacyMain: target pri→aux, resolved pri→aux
+DCMPose: 180.0° (1.00 fold:1.00): openFlat
+COMPLETED:     .cover:aux | 180.0° (1.00 fold:1.00): openFlat
+[Auxiliary Content] keeping .cover inactive for .passiveShield
+```
+
+and folded, `COMPLETED: .cover:pri … fullyClosed`. The pose works: folding
+and unfolding switch the policy between FullyClosed and FoldingDual.
+SpringBoard calls the one display (`CADisplay` "LCD primary", the
+`mainDisplay` scene) the `.cover` surface whatever its `display-index`. Open
+flat, it gives `.cover` auxiliary content (a passive shield, backlight off)
+and moves primary content to an `.inner` surface that does not exist.
+
+The surface comes from `SBFDisplayProxy` (`coverIntegratedDisplayWithIdentifier:`,
+`innerIntegratedDisplayWithIdentifier:`, `defaultIntegratedDisplayWithIdentifier:`)
+and `-[SBFDisplayContentModeResolver _surfaceTypeForWindowScene:]`. What that
+method keys on, the display's identifier or something per display, is the
+next thing to read: making the one display `.inner` while open is what the
+inner layout needs.
+
 ### What decides the layout iOS draws
 
 Measured on 2026-10-28 against the 27.2 shared cache and the clone.
