@@ -296,13 +296,28 @@ outer panel's; SpringBoard draws no inner layout. So userland reads the
 nodes, but a second panel is not enough to make it use one: the display it
 lays out on is still the one framebuffer, whose identity is the outer's.
 
-**One bad boot.** On the clone's first boot with the graft, the guest agent
-never connected (eight minutes), and the Lock Screen had a black band
-across its middle. On the second boot with the same tree both were fine;
-on the original tree the agent connected 24 seconds after boot. That boot
-was also the clone's first, straight after an AMFI refusal, so it is not
-yet known whether the graft caused it. That is why `--panels` is off by
-default.
+**Reliability.** Six boots of the clone with the graft, two without:
+
+| Tree | Boots | Agent connected | Hinge (3 angles) |
+| --- | --- | --- | --- |
+| With panels | 1st | no, in 8 minutes; black band on the Lock Screen | not reachable |
+| With panels | 2nd to 5th | each, after 42 to 76 s | 3 of 3 each time |
+| Original | 2 | each, after about 25 s | 3 of 3 |
+
+The one failure was the clone's first boot ever, straight after an AMFI
+refusal; every boot since has been normal. The graft looks safe, but one
+unexplained failure is why `--panels` stays off by default for now.
+
+**Which panel iOS lays out for.** SpringBoard asks MobileGestalt about each
+display by index ("Invalid data found for display-indexed MG query at index
+%ld; falling back to legacy query" in SpringBoard), and
+`AppleEmbeddedDisplayServices` reads a `display-index` property, so the VM's
+framebuffer, which has none, is display 0: the outer panel. Giving the
+framebuffer node (`/arm-io/gfx`) `display-index = 1` does not make it the
+inner panel: iOS boots to a black screen, still 466 × 678 points, and the
+guest agent drops once. The index alone is not the switch; what else
+`AppleEmbeddedDisplayServices` matches on (the framebuffer's own properties,
+its size, `framebuffer-identifier`) is the next thing to read.
 
 ### What could change it
 
