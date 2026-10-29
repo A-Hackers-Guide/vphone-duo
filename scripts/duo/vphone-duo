@@ -11,6 +11,14 @@
   vphone-duo signin allow|block      let apps launched from now on show Apple Account
                                      sign-in, for signing in to iCloud yourself;
                                      block puts the research guest's suppression back
+  vphone-duo appearance dark|light   iOS's appearance (the window's Space Black and
+                                     Star White set it too)
+  vphone-duo setup dev               Developer Mode, Setup Assistant skipped, Auto-Lock Never
+  vphone-duo setup jb [--manager sileo|zebra] [--ssh-key ~/.ssh/id_ed25519.pub]
+                                     dev, the Irisin bootstrap, then a package manager
+                                     and your SSH key; see Documents/Guides/duo-setups.md
+  vphone-duo setup custom FILE.json  any of those, from a file
+  vphone-duo setup status            what the guest has
 
 The VM is found by name under ~/.vphone/machines (default "duo"); pass
 --vm NAME or --socket PATH to pick another.
@@ -67,12 +75,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--vm", default="duo")
     parser.add_argument("--socket")
-    parser.add_argument("command", choices=["fold", "press", "finish", "shot", "rpc", "signin"])
-    parser.add_argument("args", nargs="*")
+    parser.add_argument("command", choices=["fold", "press", "finish", "shot", "rpc", "signin", "appearance", "setup"])
+    parser.add_argument("args", nargs=argparse.REMAINDER)
     parser.add_argument("--animate", action="store_true")
     parser.add_argument("--ms", type=int, default=120)
     options = parser.parse_args()
     path = options.socket or os.path.expanduser(f"~/.vphone/machines/{options.vm}/vphone.sock")
+
+    if options.command in ("appearance", "setup"):
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import duo_setup
+        duo_setup.run(call, path, (["appearance"] if options.command == "appearance" else []) + options.args)
+        return
 
     request = {"screen": False}
     if options.command == "fold":
