@@ -24,7 +24,7 @@ jobs:
         run: |
           shopt -s nullglob
           files=()
-          for f in scripts/duo/vphone-duo Tools/DuoModel/*.py; do
+          for f in scripts/duo/vphone-duo scripts/duo/*.py Tools/DuoModel/*.py; do
             if [ -f "$f" ]; then files+=("$f"); fi
           done
           if [ ${#files[@]} -eq 0 ]; then echo "no Duo tools yet"; exit 0; fi
