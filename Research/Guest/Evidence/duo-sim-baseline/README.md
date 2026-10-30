@@ -4,11 +4,19 @@ Shared tooling for recording what Apple's own iPhone Duo simulator returns from
 public and private APIs in each fold posture, so vphone-duo (iPhone19,4, iOS 27.1
 24A94425 in a Virtualization.framework VM) can be compared against it.
 
-**In the repository:** the tables (`BASELINE.md`, `<domain>.md`, `vm-notes.md`),
-`tools/`, `probes/` and `smoke.json`. The per-domain record files
-(`<domain>.json`, `vm-<domain>.json`, 2–63 MB each) and the transcripts and
-screenshots under `raw/` (about 1 GB) are not committed; rerunning the probes
-recreates them. Paths to them in these notes refer to that local output.
+**In the repository:**
+
+- the tables: `BASELINE.md`, `<domain>.md`, `vm-notes.md`;
+- the harness in `tools/`, the probes in `probes/`, and `smoke.json`;
+- `src/`: the per-domain drivers, probe generators, the probe app and the VM
+  run scripts, which first lived under `raw/`.
+
+The per-domain record files (`<domain>.json` and `vm-<domain>.json`, 2–63 MB
+each) and the transcripts and screenshots under `raw/` (about 1 GB) were
+deleted on 2026-10-30. The values worth keeping that were not already in these
+tables are now in `Research/Guest/iphone_duo_simulator_reference.md`. Paths to
+`*.json` and `raw/` in these notes name output that rerunning the probes
+recreates.
 
 - Xcode 27.1 (27A9275), runtime iOS 27.1 (24A94425), device type
   `com.apple.CoreSimulator.SimDeviceType.iPhone-Duo` (iPhone19,4).

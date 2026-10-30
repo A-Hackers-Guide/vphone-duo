@@ -39,7 +39,7 @@ $jq -n --argjson runtime "$runtime" --argjson device "$device" --arg xcode "$xco
       apps: {
         Preferences: "com.apple.Preferences",
         MobileSafari: "com.apple.mobilesafari",
-        VPAppKitProbe: "com.vphone.duobaseline.appkitprobe: minimal ObjC UIKit app, all 4 orientations in Info.plist, one window scene, UIDeviceFamily 1; source raw/appkit/probe-app (build.zsh); logs every scene/geometry/trait/screen/hinge callback to Documents/events.jsonl"
+        VPAppKitProbe: "com.vphone.duobaseline.appkitprobe: minimal ObjC UIKit app, all 4 orientations in Info.plist, one window scene, UIDeviceFamily 1; source src/appkit/probe-app (build.zsh); logs every scene/geometry/trait/screen/hinge callback to Documents/events.jsonl"
       },
       scenarios: {
         "launch-closed": "closed (portrait) -> launch app -> book (anchored at closed) -> open (from book) -> closed",
