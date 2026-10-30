@@ -24,7 +24,7 @@ to Launchpad, and Launchpad runs the Duo VM.
    put it in `/Applications`.
 2. **Set up your Mac once:** an Apple Silicon Mac on macOS 15 or newer, with
    the security settings under [Requirements](#requirements).
-3. **Download the Duo bundle** (`VPhone-Duo-2.13.8.zip`) from
+3. **Download the Duo bundle** (`VPhone-Duo-<version>.zip`) from
    [this repository's Releases](https://github.com/A-Hackers-Guide/vphone-duo/releases/latest)
    and unzip it.
 4. **Add it to Launchpad** in Terminal:

@@ -1,0 +1,126 @@
+name: follow-upstream
+
+# Every new vphone-cli release from Lakr233: merge it into the Duo branch,
+# build the Duo bundle and publish it here as release duo-<tag>. If the merge
+# conflicts, open an issue with the files instead, for a person to resolve.
+# GitHub runs schedules every 5 minutes at the fastest.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Upstream tag to follow (default the latest release)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: follow-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: Lakr233/vphone-cli
+  DUO_BRANCH: duo/appearance-and-setups
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      build: ${{ steps.merge.outputs.build }}
+    steps:
+      - name: New upstream release?
+        id: check
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag }}"
+          [ -n "$tag" ] || tag=$(gh release view -R "$UPSTREAM" --json tagName -q .tagName)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "duo-$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "duo-$tag already released"; echo "new=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"Upstream $tag conflicts\" in:title" --json number -q length)
+          if [ "$open" != "0" ]; then
+            echo "conflict issue for $tag still open"; echo "new=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "new=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.check.outputs.new == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DUO_BRANCH }}
+          fetch-depth: 0
+
+      - name: Merge upstream
+        id: merge
+        if: steps.check.outputs.new == 'true'
+        run: |
+          set -euo pipefail
+          tag="${{ steps.check.outputs.tag }}"
+          git config user.name A-Hackers-Guide
+          git config user.email 289517818+A-Hackers-Guide@users.noreply.github.com
+          git fetch -q "https://github.com/$UPSTREAM.git" "refs/tags/$tag:refs/tags/upstream-$tag"
+          if git merge --no-edit -m "Merge vphone-cli $tag" "upstream-$tag"; then
+            git push origin "HEAD:$DUO_BRANCH"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            files=$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')
+            git merge --abort
+            gh issue create -R "$GITHUB_REPOSITORY" --title "Upstream $tag conflicts" --body "$(printf 'Merging vphone-cli %s into `%s` conflicts in:\n\n%s\n\nResolve the merge on that branch, then close this issue: the next run builds and releases `duo-%s`.' "$tag" "$DUO_BRANCH" "$files" "$tag")"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: merge
+    if: needs.merge.outputs.build == 'true'
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DUO_BRANCH }}
+
+      - name: Use Xcode 27
+        run: |
+          set -euo pipefail
+          xcode=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$xcode" ] || { echo "::error::this runner has no Xcode 27"; ls -d /Applications/Xcode*.app; exit 1; }
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+
+      - name: Build VPhone.bundle
+        run: |
+          set -o pipefail
+          xcodebuild -workspace VPhone.xcworkspace -scheme VPhone \
+            -configuration Release -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath .build/XcodeBundle build 2>&1 | tee vphone-build.log | tail -40
+
+      - name: Validate and package
+        run: |
+          set -euo pipefail
+          bundle=.build/XcodeBundle/Build/Products/Release/VPhone.bundle
+          zsh VPhoneExecutable/VPhoneVirtualization/Build/ValidateBundle.sh "$bundle"
+          archs=" $(lipo -archs "$bundle/Contents/MacOS/vphone-escalator") "
+          for arch in arm64e arm64e.x1; do
+            [[ "$archs" == *" $arch "* ]] || { echo "::error::vphone-escalator lacks $arch"; exit 1; }
+          done
+          ditto -c -k --keepParent "$bundle" "VPhone-Duo-${{ needs.merge.outputs.tag }}.zip"
+
+      - name: Publish release
+        run: |
+          set -euo pipefail
+          tag="${{ needs.merge.outputs.tag }}"
+          gh release create "duo-$tag" "VPhone-Duo-$tag.zip" -R "$GITHUB_REPOSITORY" \
+            --target "$DUO_BRANCH" --title "iPhone Duo on vphone-cli $tag" \
+            --notes "The Duo bundle, merged automatically with vphone-cli $tag. Install it as in the README."
+
+      - name: Build log on failure
+        if: failure()
+        run: tail -n 300 vphone-build.log || true
