@@ -407,8 +407,9 @@ The service is entitled by `com.apple.springboard.testautomation`, the test
 tools' entitlement. The script bridge cannot pass the struct (`Return values
 of type '{?=qiii}' are not supported`), so the caller is native:
 vphoned's `display.pose.get` and `display.pose.set` (capability
-`display_pose`), holding that entitlement. The Duo window sends the hinge
-state each time the fold crosses one: 1 below 30°, 2 below 150°, 4 from there.
+`display_pose`), holding that entitlement. The Duo window leaves it alone on
+the cover panel: there a closed pose (hinge state 1) has SpringBoard ignore
+touches (measured 2026-10-29; Clock opens again with the pose untouched).
 
 Measured on the clone, 2026-10-29:
 
