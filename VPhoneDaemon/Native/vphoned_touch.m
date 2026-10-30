@@ -17,7 +17,9 @@
 #import "../../VPhoneGuestComponents/Hinge/VPhonePanelTouch.h"
 
 #include <dlfcn.h>
+#include <errno.h>
 #include <mach/mach_time.h>
+#include <signal.h>
 
 typedef void *IOHIDEventSystemClientRef;
 typedef void *IOHIDEventRef;
@@ -132,8 +134,11 @@ static uint64_t panel_sender(void) {
         NSDictionary *status = CFBridgingRelease(CFPreferencesCopyValue(
             CFSTR(VP_PANEL_TOUCH_STATUS), CFSTR(VP_PANEL_TOUCH_DOMAIN), CFSTR("mobile"), kCFPreferencesAnyHost));
         sender = 0;
-        if ([status isKindOfClass:NSDictionary.class] && [status[@"enumerated"] boolValue] &&
-            [status[@"service_id"] isKindOfClass:NSNumber.class])
+        // Only a status written by the backboardd running now counts.
+        pid_t pid = [status isKindOfClass:NSDictionary.class] && [status[@"pid"] isKindOfClass:NSNumber.class]
+            ? [status[@"pid"] intValue] : 0;
+        BOOL alive = pid > 1 && (kill(pid, 0) == 0 || errno == EPERM);
+        if (alive && [status[@"enumerated"] boolValue] && [status[@"service_id"] isKindOfClass:NSNumber.class])
             sender = [status[@"service_id"] unsignedLongLongValue];
     }
     uint64_t found = sender;

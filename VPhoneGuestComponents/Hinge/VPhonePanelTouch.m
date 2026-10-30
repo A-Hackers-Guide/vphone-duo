@@ -152,7 +152,11 @@ __attribute__((constructor)) static void VPhonePanelTouchStart(void) {
     provider = [VPhonePanelTouchProvider new];
     provider.queue = dispatch_queue_create("com.vphone.panel.touch", DISPATCH_QUEUE_SERIAL);
     dispatch_async(provider.queue, ^{
-        if (VPhonePanelTouchGuestIsDuo())
-            [provider start];
+        if (!VPhonePanelTouchGuestIsDuo())
+            return;
+        // The last boot's status survives in preferences; clear it before
+        // deciding, so vphoned never sends touches under a service that is gone.
+        [provider publishStatus];
+        [provider start];
     });
 }

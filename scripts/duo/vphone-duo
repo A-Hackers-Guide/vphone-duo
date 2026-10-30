@@ -19,6 +19,8 @@
                                      and your SSH key; see Documents/Guides/duo-setups.md
   vphone-duo setup custom FILE.json  any of those, from a file
   vphone-duo setup status            what the guest has
+  vphone-duo panel inner|cover       boot on the inner or the cover panel (machine
+                                     stopped); see Documents/Guides/iphone-duo.md
 
 The VM is found by name under ~/.vphone/machines (default "duo"); pass
 --vm NAME or --socket PATH to pick another.
@@ -75,12 +77,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--vm", default="duo")
     parser.add_argument("--socket")
-    parser.add_argument("command", choices=["fold", "press", "finish", "shot", "rpc", "signin", "appearance", "setup"])
+    parser.add_argument("command", choices=["fold", "press", "finish", "shot", "rpc", "signin", "appearance", "setup", "panel"])
     parser.add_argument("args", nargs=argparse.REMAINDER)
     parser.add_argument("--animate", action="store_true")
     parser.add_argument("--ms", type=int, default=120)
     options = parser.parse_args()
     path = options.socket or os.path.expanduser(f"~/.vphone/machines/{options.vm}/vphone.sock")
+
+    if options.command == "panel":
+        if not options.args or options.args[0] not in ("inner", "cover"):
+            parser.error("panel needs inner or cover")
+        sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+        import duo_panel
+        duo_panel.switch(options.vm, options.args[0])
+        return
 
     if options.command in ("appearance", "setup"):
         sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))

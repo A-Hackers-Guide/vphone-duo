@@ -723,6 +723,7 @@ extension VPhoneVirtualMachineAppDelegate {
             control.sendHIDPress(page: 0x0C, usage: 0x40)
         }
         let hinge = VPhoneDuoHingeLink(control: control)
+        hinge.sendsPose = duoView.framesTurned
         duoHinge = hinge
         duoView.onHingeChange = { angle in hinge.send(angle) }
         hinge.onSettled = { [weak duoView] in duoView?.hingeDelivered() }

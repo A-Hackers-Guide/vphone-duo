@@ -20,6 +20,10 @@ final class VPhoneDuoHingeLink {
     private var wasConnected = false
     /// The hinge state SpringBoard's pose was last given, or nil when unknown.
     private var poseState: Int?
+    /// Whether SpringBoard's pose follows the fold: only for a guest drawing
+    /// for the inner panel. On the cover panel alone, a closed pose (state 1)
+    /// has SpringBoard ignore touches, and the pose changes nothing it draws.
+    var sendsPose = false
     /// The guest has the newest angle: nothing more is waiting to go.
     var onSettled: (() -> Void)?
     /// The angle the window shows, sent whenever the guest (re)connects: the
@@ -90,7 +94,7 @@ final class VPhoneDuoHingeLink {
     /// through its test automation each time the fold crosses a hinge state.
     /// `VPHONE_DUO_POSE=0` leaves SpringBoard's pose alone.
     private func sendPose(for angle: Double, to control: VPhoneGuestControl) async {
-        guard control.supportsPose, ProcessInfo.processInfo.environment["VPHONE_DUO_POSE"] != "0" else { return }
+        guard sendsPose, control.supportsPose, ProcessInfo.processInfo.environment["VPHONE_DUO_POSE"] != "0" else { return }
         let state = VPhoneGuestControl.poseHingeState(forAngle: angle)
         guard state != poseState else { return }
         do {
