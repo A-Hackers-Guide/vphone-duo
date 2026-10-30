@@ -55,11 +55,18 @@ final class VPhoneDuoModel {
     static let metresPerUnit: Float = 0.21045
     static let outerPixels = SIMD2<Int>(1398, 2034)
     static let innerPixels = SIMD2<Int>(1878, 2670)
+    /// The inner panel's `framebuffer-identifier`, as the Duo's device tree
+    /// and the Simulator's iPhone Duo profile give it.
+    static let innerFramebufferIdentifier = "BF0DC480-5EE2-4EC1-B02B-C75E94759832"
     /// Hit zones reach this far past a button, in model units (1.2 mm).
     private static let buttonReach: Float = 0.0012 / metresPerUnit
 
     let root = Entity()
     private(set) var hingeAngle: Double = 180
+    /// The guest draws a quarter turn from upright, as for the inner panel
+    /// (mounted at 270°). The stream turns its frames back; touches and
+    /// points on the panels are turned with them.
+    var framesTurned = false
 
     /// The loaded scene, in model units; everything is measured in its frame.
     private var scene = Entity()
@@ -246,7 +253,8 @@ final class VPhoneDuoModel {
 
     /// Fits frames of `frameSize` to both panels before any has arrived, so
     /// a touch made before the first frame lands where the frame will be.
-    func expectFrames(of frameSize: CGSize) {
+    func expectFrames(of guestSize: CGSize) {
+        let frameSize = framesTurned ? CGSize(width: guestSize.height, height: guestSize.width) : guestSize
         guard frameSize.width > 0, frameSize.height > 0 else { return }
         for (panel, var slot) in panels {
             slot.fit = PanelFit(frame: Float(frameSize.width / frameSize.height), panel: slot.mapping.aspect)
@@ -455,7 +463,8 @@ final class VPhoneDuoModel {
     /// `reference`'s frame: the inverse of a touch.
     func position(of point: CGPoint, on panel: Panel, relativeTo reference: Entity?) -> SIMD3<Float>? {
         guard let slot = panels[panel] else { return nil }
-        let uv = slot.fit.panel(at: SIMD2(Float(point.x), Float(point.y)))
+        let shown = framesTurned ? SIMD2(1 - Float(point.y), Float(point.x)) : SIMD2(Float(point.x), Float(point.y))
+        let uv = slot.fit.panel(at: shown)
         guard let rest = slot.mapping.restPoint(at: uv) else { return nil }
         // The zone on the half that point lies on carries it to where it is now.
         guard let zone = slot.zones.first(where: { zone in
@@ -493,6 +502,10 @@ final class VPhoneDuoModel {
             // Through the fit to the frame; a touch on the bars misses it.
             let frame = slot.fit.frame(at: uv)
             guard (0 ... 1).contains(frame.x), (0 ... 1).contains(frame.y) else { return .body }
+            if framesTurned {
+                // The frame shown is the guest's turned clockwise.
+                return .panel(panel, CGPoint(x: CGFloat(frame.y), y: CGFloat(1 - frame.x)))
+            }
             return .panel(panel, CGPoint(x: CGFloat(frame.x), y: CGFloat(frame.y)))
         }
         return .body

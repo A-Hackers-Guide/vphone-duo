@@ -183,13 +183,16 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
 
         // Display
         let gfx = VZMacGraphicsDeviceConfiguration()
-        gfx.displays = [
-            VZMacGraphicsDisplayConfiguration(
-                widthInPixels: options.screenWidth,
-                heightInPixels: options.screenHeight,
-                pixelsPerInch: options.screenPPI,
-            ),
-        ]
+        let display = VZMacGraphicsDisplayConfiguration(
+            widthInPixels: options.screenWidth,
+            heightInPixels: options.screenHeight,
+            pixelsPerInch: options.screenPPI,
+        )
+        if let identifier = Self.displayIdentifier(diskURL: options.diskURL) {
+            Dynamic(display)._setDisplayIdentifier(identifier as NSString)
+            print("[vphone] Display identifier: \(identifier)")
+        }
+        gfx.displays = [display]
         if let inner = options.innerScreen {
             // Virtualization.framework allows one display per VM
             // (`_maximumAllowedDisplayCount`), so both panels show it.
@@ -568,5 +571,20 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         attachmentWasDisconnectedWithError error: Error,
     ) {
         print("[vphone] Network error: \(error)")
+    }
+}
+
+extension VPhoneVirtualMachine {
+    /// The identifier the guest's display carries, from `display-uuid` in the
+    /// machine folder. The guest's display driver publishes it as `IOMFBUUID`
+    /// (CADisplay's `uniqueId`), and iOS takes the role of a display, the
+    /// iPhone Duo's cover or inner panel, from the panel whose
+    /// `framebuffer-identifier` matches it, as the Simulator's displays do.
+    static func displayIdentifier(diskURL: URL) -> String? {
+        let file = diskURL.deletingLastPathComponent().appendingPathComponent("display-uuid")
+        guard let text = try? String(contentsOf: file, encoding: .utf8),
+              let uuid = UUID(uuidString: text.trimmingCharacters(in: .whitespacesAndNewlines))
+        else { return nil }
+        return uuid.uuidString
     }
 }

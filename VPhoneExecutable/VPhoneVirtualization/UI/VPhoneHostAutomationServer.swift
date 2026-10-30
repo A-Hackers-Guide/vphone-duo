@@ -345,6 +345,18 @@ class VPhoneHostAutomationServer {
                     let hold = min(max(json["ms"] as? Int ?? 120, 30), 10000)
                     await duoView.pressButton(button, holdMilliseconds: hold)
                 }
+                if let path = json["snapshot"] as? String {
+                    guard await duoView.snapshot(to: URL(fileURLWithPath: path)) else {
+                        return Self.reply(ok: false, error: "the window could not be captured")
+                    }
+                    return Self.reply(ok: true, result: ["path": path])
+                }
+                if let point = json["probe"] as? [Double], point.count == 2 {
+                    guard let landed = duoView.probe(CGPoint(x: point[0], y: point[1])) else {
+                        return Self.reply(ok: false, error: "that point is not on the lit panel in view")
+                    }
+                    return Self.reply(ok: true, result: ["x": landed.x, "y": landed.y])
+                }
 
             case "display":
                 guard let virtualMachine else {

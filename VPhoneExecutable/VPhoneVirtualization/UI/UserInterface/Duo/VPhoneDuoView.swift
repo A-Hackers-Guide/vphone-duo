@@ -30,6 +30,14 @@ final class VPhoneDuoView: NSView {
     var onActivePanelChange: ((VPhoneDuoModel.Panel) -> Void)?
     /// A finish was chosen, from the bar, the menu or the socket.
     var onFinishChange: ((Finish) -> Void)?
+    /// The guest draws for the inner panel, a quarter turn from upright.
+    var framesTurned = false {
+        didSet {
+            model?.framesTurned = framesTurned
+            stream?.framesTurned = framesTurned
+            model?.expectFrames(of: guestScreenSize)
+        }
+    }
     /// The angle iOS's hinge sensor publishes now, or nil when it cannot be read.
     var readPublishedAngle: (() async -> Double?)?
     private var readback: Task<Void, Never>?
@@ -139,12 +147,14 @@ final class VPhoneDuoView: NSView {
             pivot.addChild(model.root)
             self.model = model
             model.setFinish(controls.finish)
+            model.framesTurned = framesTurned
             model.expectFrames(of: guestScreenSize)
             model.setHinge(hingeAngle)
             recenter()
             resetView(animated: false)
             let stream = VPhoneDuoPanelStream(model: model)
             stream.frameSource = frameSource
+            stream.framesTurned = framesTurned
             stream.activePanel = activePanel
             stream.start()
             self.stream = stream
@@ -256,6 +266,31 @@ final class VPhoneDuoView: NSView {
         press(button, down: true)
         try? await Task.sleep(for: .milliseconds(holdMilliseconds))
         press(button, down: false)
+    }
+
+    /// Where a click aimed at `point` of the lit panel (the guest's touch
+    /// space) lands, through the window's own projection and hit test: the
+    /// check that touches map back to where they were aimed.
+    func probe(_ point: CGPoint) -> CGPoint? {
+        guard let model, let world = model.position(of: point, on: activePanel, relativeTo: nil),
+              let viewPoint = arView.project(world)
+        else { return nil }
+        guard case let .panel(panel, location)? = target(at: overlay.convert(viewPoint, from: arView)),
+              panel == activePanel
+        else { return nil }
+        return location
+    }
+
+    /// Writes what the window renders to a PNG at `url`.
+    func snapshot(to url: URL) async -> Bool {
+        await withCheckedContinuation { continuation in
+            arView.snapshot(saveToHDR: false) { image in
+                guard let image, let tiff = image.tiffRepresentation,
+                      let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:])
+                else { return continuation.resume(returning: false) }
+                continuation.resume(returning: (try? png.write(to: url)) != nil)
+            }
+        }
     }
 
     /// Keeps the phone, however folded, centred under the camera.

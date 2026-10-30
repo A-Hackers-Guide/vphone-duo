@@ -471,3 +471,63 @@ selects and shows iOS there; what is missing is iOS changing its layout.
   geometry from the one VM display, and switching what it shows by pose, is
   the path to a guest that relays out on unfold. It needs SpringBoard's
   display arbitration and the framebuffer's identity, both unexplored.
+
+### The inner layout, drawn (2026-10-29)
+
+With the Simulator's iPhone Duo profile as the model
+(`/Library/Developer/CoreSimulator/Profiles/DeviceTypes/iPhone Duo.simdevicetype`),
+the guest now draws iOS's own inner-panel layout. That profile lists each
+display with a `framebufferMaskIdentifier` and a `surfaceType`:
+
+| Display | Name | Pixels | Rotation | Surface | Identifier |
+| --- | --- | --- | --- | --- | --- |
+| cover | `LCD` / `primary` | 1398 × 2034 | 0 | 1 | `1C896A2B-F0D7-405C-8D0F-66E4B80AD044` |
+| inner | `LCD-1` / `primary-1` | 2007 × 2853 | 270 | 2 | `BF0DC480-5EE2-4EC1-B02B-C75E94759832` |
+
+**How SpringBoard picks a display's role.**
+`-[SBFDisplayContentModeResolver _surfaceTypeForWindowScene:]` asks
+ShellSceneKit, which takes
+`[[BKSDisplayService sharedInstance] traitsForDisplayUUID:]` for the
+scene's `FBSDisplayConfiguration.hardwareIdentifier`, that is the
+`CADisplay`'s `uniqueId`. backboardd answers from the display's extended
+properties (`BKDisplayGetExtendedProperties`, `DeviceSurfaceType`):
+QuartzCore takes entry N of MobileGestalt's `DisplayExtendedProperties`,
+N being the framebuffer's `primary` index. With no `uniqueId` there are no
+traits, surface 0, and SpringBoard treats the display as its legacy main
+display, the cover.
+
+`uniqueId` is the framebuffer's `IOMFBUUID`. The guest's
+`AppleParavirtDisplay` publishes it from the host; Virtualization.framework
+sets it from `VZMacGraphicsDisplayConfiguration._displayIdentifier`, an
+`NSString` (passing an `NSUUID` there stops the guest from booting;
+`_setUUID:` does not reach the guest).
+
+**What it takes, all on the guest's own terms:**
+- The host gives the display the inner panel's identifier (`display-uuid`
+  in the machine folder, read by vphone-vm).
+- The panels are grafted (`--panels`) with the inner one first
+  (`scripts/duo/duo_inner_tree.py`), since a VM has one framebuffer and so
+  index 0.
+- The screen is the inner panel's 2007 × 2853.
+- The Duo window turns the frame upright (the panel is mounted at 270°)
+  and turns touches with it; its own probe of 81 points lands every one
+  within 0.16 %.
+
+Then `uniqueId` and `hardwareIdentifier` read `BF0DC480-…`, SpringBoard
+lays out the inner panel's two-page home screen with its widget columns,
+and folding no longer blanks it (there is no cover display to hand it to).
+One boot is either panel: a VM has one display.
+
+**Not working yet: touches on it.** backboardd routes a touch to its
+sender's display (`BKIOHIDService.displayUUID`, read from the HID
+service's `displayUUID` property in `_setUpInitialProperties`); on a Duo
+each touchscreen's node names its panel's display service
+(`multi-touch` → `service-display`). The VM's touchscreen,
+Virtualization.framework's USB device, and vphoned's injected events name
+none, which matched the built-in display only while that had no
+identifier: backboardd now logs `unknown displayUUID/systemDisplayIdentifier:(null)`
+and drops them. An injected event cannot name a display itself
+(`ignoring event with non-redirect attribute data`). The ways left: give
+that HID service a `displayUUID`, or a display `systemIdentifiers` entry
+backboardd matches (`BKSDisplayServicesSetSystemIdentifiers`), or
+`<main>` (`BKSDisplayUUIDMainKey`) as a sender's display.

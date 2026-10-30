@@ -24,6 +24,10 @@ final class VPhoneDuoPanelStream {
         didSet { if activePanel != oldValue { attach() } }
     }
 
+    /// Turns each frame a quarter turn clockwise, upright for a guest that
+    /// draws for the inner panel (`VPhoneDuoModel.framesTurned`).
+    var framesTurned = false
+
     private let model: VPhoneDuoModel
     private static let device = MTLCreateSystemDefaultDevice()
     private let queue = VPhoneDuoPanelStream.device?.makeCommandQueue()
@@ -91,7 +95,9 @@ final class VPhoneDuoPanelStream {
     }
 
     private func present(_ image: CGImage) {
-        let shape = Shape(width: image.width, height: image.height)
+        let shape = framesTurned
+            ? Shape(width: image.height, height: image.width)
+            : Shape(width: image.width, height: image.height)
         if shape != self.shape || drawables == nil || staging == nil {
             guard rebuild(for: shape) else { return }
         }
@@ -100,7 +106,14 @@ final class VPhoneDuoPanelStream {
         else { return }
         // Drawing converts whatever the frame's layout is to the staging
         // buffer's BGRA, which the texture then takes as it is.
-        staging.context.draw(image, in: CGRect(x: 0, y: 0, width: shape.width, height: shape.height))
+        staging.context.saveGState()
+        if framesTurned {
+            // Clockwise: the frame's bottom edge becomes the left.
+            staging.context.translateBy(x: 0, y: CGFloat(shape.height))
+            staging.context.rotate(by: -.pi / 2)
+        }
+        staging.context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        staging.context.restoreGState()
         staging.texture.replace(
             region: MTLRegionMake2D(0, 0, shape.width, shape.height), mipmapLevel: 0,
             withBytes: pixels, bytesPerRow: staging.context.bytesPerRow,
