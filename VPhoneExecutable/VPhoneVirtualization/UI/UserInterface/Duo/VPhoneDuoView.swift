@@ -30,6 +30,10 @@ final class VPhoneDuoView: NSView {
     var onActivePanelChange: ((VPhoneDuoModel.Panel) -> Void)?
     /// A finish was chosen, from the bar, the menu or the socket.
     var onFinishChange: ((Finish) -> Void)?
+    /// A swipe up from the inner panel's bottom edge, while the guest draws
+    /// for the inner panel: iOS takes no edge gesture from it there, so the
+    /// window goes Home itself.
+    var onHomeGesture: (() -> Void)?
     /// The guest draws for the inner panel, a quarter turn from upright.
     var framesTurned = false {
         didSet {
@@ -498,6 +502,7 @@ final class VPhoneDuoView: NSView {
     /// swipe: about the normal window's 32 points.
     private static let edgeShare: CGFloat = 0.03
     private var touchEdge = 0
+    private var touchStart = CGPoint.zero
 
     private func touch(phase: Int, at location: CGPoint) {
         if phase == 0 {
@@ -510,6 +515,14 @@ final class VPhoneDuoView: NSView {
             case location.x >= 1 - Self.edgeShare: VPhoneDisplayGeometry.Edge.right.rawValue
             default: 0
             }
+        }
+        if phase == 0 { touchStart = location }
+        // Turned frames: the panel's bottom is the guest frame's right edge,
+        // and up is towards its left.
+        if phase == 3, framesTurned, touchEdge == VPhoneDisplayGeometry.Edge.right.rawValue,
+           touchStart.x - location.x > 0.08
+        {
+            onHomeGesture?()
         }
         lastTouch = location
         _ = virtualMachineView?.sendNormalizedTouch(

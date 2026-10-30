@@ -16,6 +16,29 @@ extension GuestAPI {
             return try typeText(string(params, "text"), delayMS: number(params, "delay_ms", default: 30))
         case "input.paste":
             return try pasteText(string(params, "text"))
+        case "input.tap" where GuestDisplayTouch.isNeeded:
+            return try GuestDisplayTouch.tap(x: requiredNumber(params, "x"), y: requiredNumber(params, "y"))
+        case "input.double_tap" where GuestDisplayTouch.isNeeded:
+            return try GuestDisplayTouch.doubleTap(
+                x: requiredNumber(params, "x"),
+                y: requiredNumber(params, "y"),
+                interval: number(params, "interval", default: 0.1),
+            )
+        case "input.long_press" where GuestDisplayTouch.isNeeded:
+            return try GuestDisplayTouch.longPress(
+                x: requiredNumber(params, "x"),
+                y: requiredNumber(params, "y"),
+                seconds: number(params, "seconds", default: 1),
+            )
+        case "input.swipe" where GuestDisplayTouch.isNeeded:
+            return try GuestDisplayTouch.swipe(
+                x1: requiredNumber(params, "x1"),
+                y1: requiredNumber(params, "y1"),
+                x2: requiredNumber(params, "x2"),
+                y2: requiredNumber(params, "y2"),
+                seconds: number(params, "seconds", default: 0.3),
+                steps: (params["steps"] as? NSNumber)?.intValue ?? 20,
+            )
         case "input.tap":
             return try tap(x: requiredNumber(params, "x"), y: requiredNumber(params, "y"))
         case "input.double_tap":

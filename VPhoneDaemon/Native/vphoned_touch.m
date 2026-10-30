@@ -14,6 +14,7 @@
  */
 
 #import "Include/VphonedNative.h"
+#import "../../VPhoneGuestComponents/Hinge/VPhonePanelTouch.h"
 
 #include <dlfcn.h>
 #include <mach/mach_time.h>
@@ -109,6 +110,41 @@ bool vp_hid_keyboard_hold(uint16_t page, uint16_t usage, bool down) {
     return true;
 }
 
+// The built-in sender vphoned's events carry, as IcliKit's do.
+#define VP_BUILTIN_SENDER 0x8000000817319372ULL
+
+// The panel touchscreen service's ID while it is enumerated, or 0. A guest
+// whose display the host gave an identifier routes touches only through a
+// sender that names that display; the service in backboardd is that sender
+// (VPhoneGuestComponents/Hinge/VPhonePanelTouch.m). Re-read every two seconds,
+// so a backboardd restart is followed.
+static uint64_t panel_sender(void) {
+    static uint64_t sender;
+    static CFAbsoluteTime checked;
+    static NSLock *lock;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ lock = [NSLock new]; });
+    [lock lock];
+    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    if (now - checked > 2) {
+        checked = now;
+        CFPreferencesSynchronize(CFSTR(VP_PANEL_TOUCH_DOMAIN), CFSTR("mobile"), kCFPreferencesAnyHost);
+        NSDictionary *status = CFBridgingRelease(CFPreferencesCopyValue(
+            CFSTR(VP_PANEL_TOUCH_STATUS), CFSTR(VP_PANEL_TOUCH_DOMAIN), CFSTR("mobile"), kCFPreferencesAnyHost));
+        sender = 0;
+        if ([status isKindOfClass:NSDictionary.class] && [status[@"enumerated"] boolValue] &&
+            [status[@"service_id"] isKindOfClass:NSNumber.class])
+            sender = [status[@"service_id"] unsignedLongLongValue];
+    }
+    uint64_t found = sender;
+    [lock unlock];
+    return found;
+}
+
+bool vp_hid_panel_touch_available(void) {
+    return panel_sender() != 0;
+}
+
 // One hand event carrying `count` fingers, dispatched as a single gesture.
 static void dispatch_digitizer_points(const double *xs, const double *ys,
                                       int count, boolean_t range, boolean_t touch,
@@ -135,8 +171,9 @@ static void dispatch_digitizer_points(const double *xs, const double *ys,
     }
 
     IOHIDEventRef strong = (IOHIDEventRef)CFRetain(hand);
+    uint64_t panel = panel_sender();
     dispatch_async(gTouchQueue, ^{
-        pSetSender(strong, 0x8000000817319372);
+        pSetSender(strong, panel ? panel : VP_BUILTIN_SENDER);
         pDispatch(gTouchClient, strong);
         CFRelease(strong);
     });

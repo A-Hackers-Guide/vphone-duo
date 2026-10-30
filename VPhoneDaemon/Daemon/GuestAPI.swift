@@ -326,6 +326,13 @@ enum GuestAPI {
                 vp_hid_touch_edge(touchPhaseCode(phase), number(params, "x"), number(params, "y"), Int32(edge))
                 return ["phase": phase.rawValue, "edge": edge]
             }
+            if GuestDisplayTouch.isNeeded {
+                try GuestDisplayTouch.touch(
+                    touchPhaseCode(phase), x: number(params, "x"), y: number(params, "y"),
+                    normalized: params["normalized"] as? Bool ?? true,
+                )
+                return ["phase": phase.rawValue]
+            }
             return try touch(
                 phase, x: number(params, "x"), y: number(params, "y"),
                 normalized: params["normalized"] as? Bool ?? true,

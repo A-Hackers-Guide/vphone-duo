@@ -110,6 +110,9 @@ void vp_hid_touch2(int phase, double x1, double y1, double x2, double y2);
 /// flags UIKit's screen-edge gestures (home, Control Center) require. `edge` is
 /// the host's `_VZTouch` swipeAim code: 1 top, 2 bottom, 4 right, 8 left.
 /// Phase and coordinates as for vp_hid_touch2.
+/// Whether the panel touchscreen service in backboardd is up, so touches are
+/// sent under it (an iPhone Duo booted on its inner panel).
+bool vp_hid_panel_touch_available(void);
 void vp_hid_touch_edge(int phase, double x, double y, int edge);
 
 /// Turn the display on without pressing a button. False when

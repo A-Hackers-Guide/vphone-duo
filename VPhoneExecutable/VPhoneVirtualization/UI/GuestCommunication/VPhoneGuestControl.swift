@@ -167,11 +167,15 @@ final class VPhoneGuestControl {
         throw refusal
     }
 
+    /// Touches go through vphoned whatever the guest's version: the Duo's
+    /// inner panel takes them only from vphoned's panel touchscreen.
+    var routesTouchesThroughGuest = false
+
     var useGuestTouchInjection: Bool {
         guard isConnected, guestCapabilities.contains("touch"),
               let major = guestIOSVersion.flatMap({ Int($0.split(separator: ".").first ?? "") })
         else { return false }
-        return major < 26
+        return major < 26 || routesTouchesThroughGuest
     }
 
     func connect(device: VZVirtioSocketDevice) {

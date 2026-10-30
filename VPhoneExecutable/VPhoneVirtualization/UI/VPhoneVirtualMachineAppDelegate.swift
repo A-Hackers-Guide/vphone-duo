@@ -717,6 +717,11 @@ extension VPhoneVirtualMachineAppDelegate {
     ) {
         duoView.framesTurned = VPhoneVirtualMachine.displayIdentifier(diskURL: options.diskURL)
             == VPhoneDuoModel.innerFramebufferIdentifier
+        control.routesTouchesThroughGuest = duoView.framesTurned
+        duoView.onHomeGesture = { [weak control] in
+            guard let control, control.isConnected else { return }
+            control.sendHIDPress(page: 0x0C, usage: 0x40)
+        }
         let hinge = VPhoneDuoHingeLink(control: control)
         duoHinge = hinge
         duoView.onHingeChange = { angle in hinge.send(angle) }

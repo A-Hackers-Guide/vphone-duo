@@ -518,16 +518,28 @@ lays out the inner panel's two-page home screen with its widget columns,
 and folding no longer blanks it (there is no cover display to hand it to).
 One boot is either panel: a VM has one display.
 
-**Not working yet: touches on it.** backboardd routes a touch to its
-sender's display (`BKIOHIDService.displayUUID`, read from the HID
-service's `displayUUID` property in `_setUpInitialProperties`); on a Duo
-each touchscreen's node names its panel's display service
-(`multi-touch` → `service-display`). The VM's touchscreen,
-Virtualization.framework's USB device, and vphoned's injected events name
-none, which matched the built-in display only while that had no
-identifier: backboardd now logs `unknown displayUUID/systemDisplayIdentifier:(null)`
-and drops them. An injected event cannot name a display itself
-(`ignoring event with non-redirect attribute data`). The ways left: give
-that HID service a `displayUUID`, or a display `systemIdentifiers` entry
-backboardd matches (`BKSDisplayServicesSetSystemIdentifiers`), or
-`<main>` (`BKSDisplayUUIDMainKey`) as a sender's display.
+**Touches on it.** backboardd routes a touch to its sender's display
+(`BKIOHIDService.displayUUID`, read once from the HID service's
+`displayUUID` property in `_setUpInitialProperties`); on a Duo each
+touchscreen's node names its panel's display service (`multi-touch` →
+`service-display`), and the Simulator gives its touch service one
+(`-[BKIOHIDService initForSimulatorWithDisplayUUID:]`). The VM's
+touchscreen, Virtualization.framework's USB device, and vphoned's injected
+events name none, which matched the built-in display only while that had
+no identifier (backboardd: `unknown displayUUID/systemDisplayIdentifier:(null)`).
+An injected event cannot name a display itself (`ignoring event with
+non-redirect attribute data`).
+
+So the hinge dylib in backboardd also creates, on a Duo guest whose display
+has an identifier, a `HIDVirtualEventService` that is a built-in,
+display-integrated touchscreen with that `displayUUID`
+(`VPhoneGuestComponents/Hinge/VPhonePanelTouch.m`, status in
+`com.apple.backboardd` `VPhonePanelTouchStatus`). vphoned sends its touch
+events under that service's ID while it is up, and routes `input.touch`,
+`tap`, `double_tap`, `long_press` and `swipe` through its own injector then;
+the Duo window sends its touches through vphoned in this mode. Measured:
+taps open the app under them (Weather, Reminders), in the orientation the
+window maps (of the four, only the window's clockwise one does).
+
+iOS takes no Home edge swipe from these touches, whatever the edge flag; the
+window sends Home itself for a swipe up from the inner panel's bottom edge.
