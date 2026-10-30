@@ -698,6 +698,61 @@ opening out of closed is SpringBoard's fold effect on one shared panel; see
 panel". DeviceHub no longer gets the guest's system audio (`0x184`): the VM
 window plays it, and DeviceHub played it again.
 
+## Encoding only when the screen draws
+
+An open DeviceHub viewer cost the host about a core while the guest sat on
+its Home Screen (iPhone19,4, iOS 27.1 24A94425, macOS 27.0.1 on an M5 Pro):
+the VM process at 91%, against 14% with DeviceHub closed. The guest itself
+used about a third of a core (`avconferenced` 17%).
+
+The encoder runs on the host. `avconferenced` calls VideoProcessing's
+`VCPCompressionSessionCreate` directly (AVConference `EncCreateHandle`), and
+that real-time encoder wraps
+`paravirtualized:com.apple.videotoolbox.videoencoder.ave.hevc`, the host's AVE
+hardware. The real-time encoder runs AVE in user-DPB mode
+(`VCPCompressionAllocateDPB`, `kVTEncodeFrameOptionKey_DPB_ReferenceFrames_*`),
+so each encoded frame carries nested reference-frame dictionaries. A host
+`sample` of the VM process showed, per stream, an `AVE_UCRecv` thread at
+about 36% in `VTParavirtualizationHostEncoderSessionEmitEncodedFrame →
+VTParavirtualizationCreateSerializedAtomDataBlockBufferForSampleBuffer →
+CFPropertyListCreateData` and about 22% more in a synchronous wait for the
+guest's reply, plus the `AppleM2ScalerDevice` queue at about 39%. No guest
+setting leaves user-DPB mode: it is how the real-time encoder controls its
+rate. The Mac decodes with `VCPDec`, about 1.2 ms a frame.
+
+The cost scales with the frame rate, and the rate did not follow the screen.
+The Mac's `avconferenced` logs each stream's input rate
+(`[VCPDecStatsMonitor] … Input_fps=`): the idle Home Screen streamed about
+42 fps on each of the Duo's two displays. The capture is FigVirtualDisplay's
+writeback clone of each lit display in backboardd
+(`IOMFBDisplay::clone_update`); after the screen draws it keeps writing frames
+back at the capture rate for about a second, and a still screen sends nothing
+(Settings left alone dropped to 0 fps, with or without the change below). The
+live Clock icon on the Home Screen draws about ten times a second
+(`CARenderServerGetFrameCounterByIndex(0, 0)`, the main display), so that
+second never ends.
+
+`libdevicehubfix` (`VPScreenCaptureIdle.c`) replaces
+`-[VCScreenCaptureFigCaptureController
+screenCaptureController:didReceiveSampleBuffer:transformFlags:]` in
+`avconferenced`: a frame passes when the main display's frame counter moved
+since the stream's last frame, and otherwise once every 250 ms. A frame that
+carries a change can arrive after the counter moved; the 250 ms frame bounds
+that delay and lets the encoder refine a still image. On the Duo the main
+display is the panel the inner display is shown on, so one counter covers both
+streams.
+
+| sbdisplay-duo, DeviceHub open | before | after |
+|---|---|---|
+| idle Home Screen, input rate per display | 41–45 fps | 10 fps |
+| idle Home Screen, host VM process | 91% | 46–50% |
+| idle Home Screen, guest `avconferenced` | 17% | 7% |
+| scrolling Settings, input rate per display | 58–60 fps | 54–60 fps |
+| Settings left alone | 0 fps after ~1 s | 4 fps for ~1 s, then 0 |
+
+A first version also passed eight frames after each change; with the Clock
+icon changing every 100 ms that never ran out (30 fps with two frames).
+
 ## Other open items
 
 - iPadOS 27 refuses pairing (see Validation), so DeviceHub is untested there.
@@ -707,6 +762,10 @@ window plays it, and DeviceHub played it again.
 - The band-read barrier was tested on the 27.0.1 iPhone only. It depends on
   two private `VCPSideCarMetal` method names; if they change, the library logs
   that they were not found and banded streams can deadlock again.
+- The idle-frame filter depends on the private
+  `VCScreenCaptureFigCaptureController` callback and
+  `CARenderServerGetFrameCounterByIndex`; if either is missing, the library
+  logs it and every captured frame is encoded, as before.
 
 ## Measuring
 

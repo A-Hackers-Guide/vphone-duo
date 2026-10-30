@@ -4,7 +4,8 @@
 // dtremotedisplayd. On a vphone guest it needs four fixes, one per process:
 // cryptexd mounts the DDI, dtremotedisplayd reports media stream features,
 // dtdeviceinfod supplies the framebuffer mask, and avconferenced keeps a
-// banded stream from deadlocking the host GPU.
+// banded stream from deadlocking the host GPU. avconferenced also encodes a
+// frame only when the screen drew (VPScreenCaptureIdle.c in this folder).
 //
 // ## cryptexd: the DDI does not mount on iOS 27
 //
@@ -117,10 +118,11 @@
 // ones: dyld binds their imports through the interposing table.
 // CoreDeviceUtilities is on the DDI and not in the SDK, so its two symbols are
 // weak flat-namespace imports; outside dtremotedisplayd they resolve to nothing
-// and dyld skips those entries. VideoProcessing is in the shared cache, so the
-// band reads are replaced through the Objective-C runtime instead. The spawn
-// hooks insert this into those four processes only — `vpIsDeviceHubFixTarget`
-// in Shared/InjectionEnvironment.h.
+// and dyld skips those entries. VideoProcessing and AVConference are in the
+// shared cache, so the band reads and the capture callback are replaced
+// through the Objective-C runtime instead. The spawn hooks insert this into
+// those four processes only — `vpIsDeviceHubFixTarget` in
+// Shared/InjectionEnvironment.h.
 
 #include <dlfcn.h>
 #include <errno.h>
@@ -359,7 +361,7 @@ __attribute__((constructor)) static void vpInstallScalerBarrier(void) {
     vpLog("VCPSideCarMetal band reads %s, %s", "found", "they wait for the scaler");
 }
 
-int vphone_devicehubfix_version(void) { return 6; }
+int vphone_devicehubfix_version(void) { return 7; }
 
 // The CMAngleManager stand-in for dtdeviceinfod lives in VPCMAngleManager.m
 // (same dylib): it swaps the manager's whole ObjC surface and feeds the
