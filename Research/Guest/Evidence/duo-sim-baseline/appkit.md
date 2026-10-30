@@ -13,7 +13,7 @@ Xcode 27.1. All values are as observed; enums are listed in `appkit.json` `meta.
 | `probes/appkit-introspect.lldb`, `probes/appkit-hinge-classes.lldb` | getter enumeration (`class_copyMethodList` / properties / ivars) used to choose the getters; output in `raw/appkit/introspect-*.txt` |
 | `probes/appkit-run.zsh` | driver: posture, launch, probe, screenshots, callback log per state |
 | `probes/appkit-merge.zsh` | builds `appkit.json` from `raw/appkit/<app>/<scenario>/records.jsonl` |
-| `raw/appkit/probe-app/` | VPAppKitProbe source (`main.m`, `Info.plist`, `build.zsh`) |
+| `src/appkit/probe-app/` | VPAppKitProbe source (`main.m`, `Info.plist`, `build.zsh`) |
 | `raw/appkit/<app>/<scenario>/` | per state `NN-<label>.txt` (transcript), `.json` (probe output), `.posture.json`, `shots/NN-<label>-d{1,3}.png`, `posture/` (posture.zsh artifacts), `events.jsonl` (VPAppKitProbe callback log) |
 
 Apps: Preferences (SwiftUI `SettingsNavigationSplitView`), MobileSafari, and

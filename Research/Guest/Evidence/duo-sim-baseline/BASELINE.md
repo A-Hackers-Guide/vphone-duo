@@ -83,13 +83,18 @@ panel's 120 Hz" (in this branch), not from the alignment change.
 
 ## Data files
 
+These files were deleted on 2026-10-30, after the values worth keeping were
+moved into this table, the domain notes and
+`Research/Guest/iphone_duo_simulator_reference.md`. Rerunning the probes
+recreates them (README.md).
+
 | file | records | scope | notes |
 |---|---|---|---|
 | `smoke.json` | 60 | harness smoke run | |
 | `display.json` + `display.md` | 46085 | backboardd CADisplay / CAWindowServer / BKS, SpringBoard UIScreen / FBS display configurations, digitizers | getters enumerated at runtime; extra field `capture` |
 | `springboard.json` + `springboard.md` | 37408 | content-mode coordinator and resolver, window scenes, traits pipeline, continuous fold, backlight, auto-lock | 45 steps, all four device orientations |
 | `sensors.json` + `sensors.md` | 10932 | CMMagicPose / CMDeviceStateEvent tables, hinge HID, SBFDevicePoseProvider, UIDevice, 527 MobileGestalt keys | `sim_note` marks 2578 sim-only or synthetic values; do not align to them |
-| `appkit.json` + `appkit.md` | 20829 | Preferences, MobileSafari, VPAppKitProbe: scenes, geometry, traits, safe area, migration callbacks | probe app source in `raw/appkit/probe-app` |
+| `appkit.json` + `appkit.md` | 20829 | Preferences, MobileSafari, VPAppKitProbe: scenes, geometry, traits, safe area, migration callbacks | probe app source in `src/appkit/probe-app` |
 | `chrome.json` + `chrome.md` | 127674 | status bar, icon grid, dock, quick actions, notification list, clock, wallpaper | `meta.skipped_getters` lists getters that throw |
 | `vm-springboard.json`, `vm-display.json`, `vm-sensors.json`, `vm-chrome.json`, `vm-appkit.json` + `vm-notes.md` | see `vm-notes.md` | the same probes on duobase-01 | `meta.vm`, `meta.steps` (per-step display.pose, orientation, screenshot size and lit/dark, SpringBoard pid); extra fields `probe`, `step`. Second pass (2026-10-30): records with `bundle` 2.14.0-local.9064efca and `step` `fx-<label>`, described in `meta.fix` |
 

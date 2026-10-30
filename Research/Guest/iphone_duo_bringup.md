@@ -4844,9 +4844,10 @@ Apple's iPhone Duo simulator (Xcode 27.1, iOS 27.1 24A94425, device type
 `LCD-1` 2007×2853 rotation 270 surface type 2) was probed over lldb in every
 posture, through SpringBoard's own display-swap coordinator (the internal
 suiatool path), and the same calls were run on a two-display guest
-(`duobase-01`) through the guest's debugserver. The harness, the per-domain
-records and the table are in `Research/Guest/Evidence/duo-sim-baseline/`
-(`BASELINE.md`). Three of the differences had one cause each:
+(`duobase-01`) through the guest's debugserver. The harness and the table are
+in `Research/Guest/Evidence/duo-sim-baseline/` (`BASELINE.md`). The
+simulator's fold tuning settings and MobileGestalt answers are in
+`iphone_duo_simulator_reference.md`. Three of the differences had one cause each:
 
 - **MobileGestalt saw one display.** libMobileGestalt computes
   `MGGetLogicalDeviceDisplayCount` and `DisplayExtendedProperties` live from

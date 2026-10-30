@@ -74,7 +74,7 @@ snap() {
       value: ($shots | split("\n") | map(split(" ") | {path: (.[0] | sub($rootp; "")), state: .[1]})), error: null} | tag),
     (if $app_is_probe then
       {api: "VPAppKitProbe.callbackSequence", kind: "public",
-       call: "UIWindowSceneDelegate / UISceneDelegate / UIViewController / UIHingeInteraction / NSNotification callbacks logged by raw/appkit/probe-app since the posture change started (t_rel seconds after posture.zsh was invoked; the swap itself begins after its lldb detach, ~3-4 s later)",
+       call: "UIWindowSceneDelegate / UISceneDelegate / UIViewController / UIHingeInteraction / NSNotification callbacks logged by src/appkit/probe-app since the posture change started (t_rel seconds after posture.zsh was invoked; the swap itself begins after its lldb detach, ~3-4 s later)",
        value: $ev, error: (if ($ev | length) == 0 then "no callbacks since the posture change started" else null end)} | tag
      else empty end)
   ' --argjson app_is_probe $([[ $app == VPAppKitProbe ]] && print true || print false) >> $dir/records.jsonl

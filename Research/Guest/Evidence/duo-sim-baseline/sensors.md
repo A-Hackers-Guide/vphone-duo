@@ -21,7 +21,7 @@ the value is synthetic or sim-only). Raw transcripts: `raw/sensors/snap/`.
 | `probes/sensors-backboardd.lldb` | group `hid`: backboardd's HID services, the hinge-angle service and its last events, event processors |
 | `probes/sensors-app-hinge-register.lldb` | not a record source: registers a no-op hinge observer in Preferences (see "App side") |
 | `probes/sensors-discover-*.lldb` | discovery dumps (method/ivar/property lists, class scans) → `raw/sensors/discovery/` |
-| `raw/sensors/run-sensors.zsh` | runner: `posture`, `snapshot`, `assemble` |
+| `src/sensors/run-sensors.zsh` | runner: `posture`, `snapshot`, `assemble` |
 | `raw/sensors/sim-notes.jq` | the rules that set `sim_note` |
 | `raw/sensors/identity/` | the device type's `capabilities.plist` / `profile.plist` as JSON (the source of many MobileGestalt answers), and the MG key list |
 | `raw/sensors/snap/<nn>-<posture>/` | per snapshot: transcripts (`<process>-<probe>.txt` and `.raw.txt`), `records.jsonl`, `posture.json` |

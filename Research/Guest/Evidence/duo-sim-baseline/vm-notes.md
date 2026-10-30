@@ -76,10 +76,10 @@ Preferences was killed once on purpose (tfix).
   have no `stateControl`), `+[BKDisplayBrightnessController sharedInstance]` and
   `+[BKDisplayRenderOverlayManager sharedInstance]` not called (both EXC_BAD_INSTRUCTION
   0xdac1a7fe, the same unlowered PAuth_LR code). Found with
-  `raw/vm/display/iterate-vm.zsh` (the VM version of `raw/display/iterate.zsh`: reads the
+  `src/vm/display/iterate-vm.zsh` (the VM version of `src/display/iterate.zsh`: reads the
   guest's `/var/tmp/vptrace.txt`) and, because the last traced getter is not always the
   culprit (it walks backwards through the getter list when the fault comes later), a debug
-  copy that traces every record add (`raw/vm/display/dbg.lldb`). backboardd survived every
+  copy that traces every record add (`src/vm/display/dbg.lldb`). backboardd survived every
   interrupted expression (pid 61 throughout).
 
 ## How the VM column was measured
@@ -94,8 +94,8 @@ Preferences was killed once on purpose (tfix).
   90 landscape-right, 270 landscape-left).
 - Each step: `probes/vm-run.zsh snap` (screen.unlock, display.pose, display.orientation,
   device.screen, a screen.screenshot with its size and lit/dark, the SpringBoard pid, then the
-  probes), driven by `raw/vm/run-plan.zsh` (phases postures, rotations, safari, preferences),
-  `raw/vm/run-autolock.zsh` and `raw/vm/run-lockchrome.zsh`. Step order: `raw/vm/steps/ORDER`.
+  probes), driven by `src/vm/run-plan.zsh` (phases postures, rotations, safari, preferences),
+  `src/vm/run-autolock.zsh` and `src/vm/run-lockchrome.zsh`. Step order: `raw/vm/steps/ORDER`.
   `probes/vm-retag.zsh` rebuilds each step's `records.jsonl` from the transcripts;
   `probes/vm-merge.zsh` writes `vm-<domain>.json`. Helpers used to read the results:
   `probes/vm-summary.zsh` (posture table), `vm-chrome-keys.zsh`, `vm-app-keys.zsh`,
@@ -201,12 +201,12 @@ were measured; BASELINE.md marks them "2026-10-30" and keeps the first-pass valu
 
 ### Method
 
-- Driver `raw/vm/run-fix.zsh` (phases respring, postures, postures2, statusbar, coremotion,
+- Driver `src/vm/run-fix.zsh` (phases respring, postures, postures2, statusbar, coremotion,
   safari, lock, final), same probes as before. Every lldb attach waits until 45 s have passed
   since the previous one ended, postures settle 20 s and rotations 25 s before any attach,
   and the SpringBoard pid is read before and after each attach. Steps are
   `raw/vm/steps/fx-<label>/`, in order in `raw/vm/steps/ORDER.fix-9064efca`; logs
-  `raw/vm/plan-fix-*.log`. `raw/vm/merge-fix.zsh` appends them to `vm-*.json` with
+  `raw/vm/plan-fix-*.log`. `src/vm/merge-fix.zsh` appends them to `vm-*.json` with
   `"bundle": "2.14.0-local.9064efca"` and `step` `fx-<label>` (meta: `meta.fix`, and the
   step snapshots in `meta.steps` carry the bundle). Re-running it replaces the fx records.
 - `display.pose` reads SpringBoard's test-automation snapshot, which this bundle no longer
