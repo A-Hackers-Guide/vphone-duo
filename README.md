@@ -14,6 +14,30 @@ Run a virtual iPhone on an Apple Silicon Mac.
 >
 > ![The iPhone Duo half open](Documents/duo/half-open.jpg)
 
+## Download and use the Duo
+
+The Duo is a **bundle for vphone-launchpad**, not a standalone app: you add it
+to Launchpad, and Launchpad runs the Duo VM.
+
+1. **Get vphone-launchpad** (2.13 or newer) from
+   [vphone-cli's releases](https://github.com/Lakr233/vphone-cli/releases) and
+   put it in `/Applications`.
+2. **Set up your Mac once:** an Apple Silicon Mac on macOS 15 or newer, with
+   the security settings under [Requirements](#requirements).
+3. **Download the Duo bundle** (`VPhone-Duo-2.13.8.zip`) from
+   [this repository's Releases](https://github.com/A-Hackers-Guide/vphone-duo/releases/latest)
+   and unzip it.
+4. **Add it to Launchpad** in Terminal:
+
+   ```sh
+   /Applications/vphone-launchpad.app/Contents/MacOS/vphone-launchpad-cli bundle install-local ~/Downloads/VPhone.bundle --keep-default
+   ```
+
+   macOS asks once for your password, so Launchpad can allow the bundle's VM.
+5. **Create the Duo** with that bundle, as in the
+   [iPhone Duo guide](Documents/Guides/iphone-duo.md). It downloads the iPhone
+   Duo firmware and restores iOS 27.2.
+
 > [!WARNING]
 > This project has never issued or authorized any cryptocurrency or token, and does not accept cryptocurrency payments or donations. Any cryptocurrency or token issued or promoted in this project's name, or claiming any affiliation with it, is a scam.
 
