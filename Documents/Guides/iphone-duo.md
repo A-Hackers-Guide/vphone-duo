@@ -63,13 +63,40 @@ and touches on the bars are ignored. `VPHONE_DUO_RESIZE=1` also resizes the
 guest display to the lit panel, for testing how an app takes a live display
 change. `VPHONE_DUO_FLAT=1` shows the Duo in the plain window instead.
 
-SpringBoard also gets the fold as a device pose. A VM has no hinge sensor
-CoreMotion will open, so the window overrides SpringBoard's pose through its
-test automation service (`display.pose.set`, below 30° closed, below 150°
-partly open, flat from there), the way a foldable's test tools do.
-`vphone-duo rpc display.pose.get` reads SpringBoard's pose back.
-`VPHONE_DUO_POSE=0` leaves the pose alone. On its own it does not change the
-layout: SpringBoard still sees one display.
+### Experimental: booting on the inner panel
+
+A VM has one display, so iOS lays out for one panel per boot. To boot an
+iPhone Duo guest on its inner panel, with the inner panel's own layout (the
+two-page home screen with widget columns), stop it and run:
+
+```sh
+scripts/duo/vphone-duo --vm duo panel inner    # back with: panel cover
+```
+
+That does what the Simulator's iPhone Duo profile describes: both panels go
+into the guest's device tree with the inner one first, the display gets the
+inner panel's identifier (`display-uuid` in the machine folder, which
+vphone-vm hands Virtualization.framework), and the screen becomes the inner
+panel's 2007 × 2853. The first `panel inner` saves the machine's device tree
+as `devicetree.cover.img4`; `panel cover` puts it back. `cfw
+update-environment` rebuilds the tree, so run `panel inner` again after it.
+
+In this mode the window shows the frame turned upright on the inner panel,
+overrides SpringBoard's device pose with the fold (`display.pose.set`; read
+it back with `display.pose.get`, `VPHONE_DUO_POSE=0` to leave it alone), and
+sends touches through vphoned under a touchscreen service that names the
+inner display (backboardd routes a touch to its sender's display). A swipe up
+from the inner panel's bottom edge sends Home. Folded shut, the inner layout
+stays: there is no cover display to hand it to.
+
+Status: the layout and the window are reliable. Touches reach SpringBoard,
+and in one boot taps opened apps, but in later boots SpringBoard handed them
+to its auxiliary-content window instead; this is not solved yet. The research
+notes ([iphone_duo_fold.md](../../Research/Guest/iphone_duo_fold.md)) have
+the details.
+
+On the cover panel (the default) the window leaves SpringBoard's pose alone:
+there a closed pose has SpringBoard ignore touches.
 
 ### Experimental: the Duo's panel nodes
 

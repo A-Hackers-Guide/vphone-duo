@@ -543,3 +543,15 @@ window maps (of the four, only the window's clockwise one does).
 
 iOS takes no Home edge swipe from these touches, whatever the edge flag; the
 window sends Home itself for a swipe up from the inner panel's bottom edge.
+
+**Reliability of inner-panel touches (2026-10-29, later boots).** After the
+first boot where taps opened Weather and Reminders, fresh boots of the same
+tree (byte-identical, written by `vphone-duo panel inner`) deliver touches to
+backboardd under the panel touchscreen and on to SpringBoard, but SpringBoard
+dispatches them to `_UISystemGestureWindow` and
+`SBWindowSceneAuxiliaryContentWindow` (an exclusive full-screen hit-test
+region) rather than the home screen, and its `DisplayContentMode` log shows
+no transitions as the pose changes. Neither a respring, Low Power Mode, nor
+hinge states 0, 2, 3 or 4 changed it. Next: what puts the inner surface's
+content mode in auxiliary, starting from `SBFDisplayContentModeResolver`'s
+state at boot.
