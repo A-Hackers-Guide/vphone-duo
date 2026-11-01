@@ -60,7 +60,7 @@ invalid-request error, read the source named there instead of guessing keys.
 | `display.auto_lock` | none | Auto-Lock in seconds (`never` when it is Never) and the Lock Screen timeout vphoned sets to match |
 | `screen.unlock` | `passcode?`, `timeout?` (10) | Display on and Lock Screen passed, from any state; `guest unlock <machine>` calls it. `passcode` only for a guest that has one, entered once |
 | `device.ioreg` | `plane` | e.g. `IODeviceTree` |
-| `display.pose.get`, `display.pose.set` | `hinge_state` (0-4) or `angle` (0-180); `orientation?`, `device_orientation?` (1), `tabletop?` (0) | iPhone Duo: SpringBoard's device pose, overridden through its test automation service (capability `display_pose`). Answers the pose SpringBoard reads back |
+| `display.posture`, `display.pose` | `position` (`closed`, `book`, `open` or 0-1), `duration?`, `profile?`; or `hinge` (name or 0-4), `orientation?` | iPhone Duo: fold the guest as Apple's Duo tools do (capability `device_pose`); `display.pose` reads SpringBoard's pose back |
 
 ## Input
 
