@@ -31,7 +31,7 @@ extension GuestAPI {
                 throw GuestAPIError.operationFailed("Could not publish the hinge configuration")
             }
         }
-        var reply = vp_hinge_get()
+        var reply = vp_hinge_get() as? [String: Any] ?? [:]
         reply["velocity"] = 0.0
         return reply
     }
