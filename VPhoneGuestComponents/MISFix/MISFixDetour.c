@@ -20,6 +20,7 @@
 // ±4GB of each other.
 
 #include "MISFixDetour.h"
+#include "MISFixConditionalBranch.h"
 
 #include "MISFixConfig.h"
 
@@ -36,7 +37,7 @@
 #define kDetourBytes (kDetourWords * 4u)
 
 /// Room for one trampoline: four displaced instructions, each of which may
-/// expand to four words when it has to be rewritten, plus the four-word jump
+/// expand to five words when it has to be rewritten, plus the four-word jump
 /// back.
 #define kTrampolineBytes 128u
 
@@ -121,7 +122,7 @@ static unsigned vpRelocate(uint32_t insn, uint64_t pc, uint32_t *out) {
     // (0x18000000). A prologue normally contains none of them; when one turns
     // up, the log says so and nothing is written.
     if ((insn & 0xFC000000u) == 0x94000000u  // BL
-        || (insn & 0xFF000010u) == 0x54000000u  // B.cond
+        || (insn & 0xFF000000u) == 0x54000000u  // B.cond/BC.cond (ordinary B.cond handled by caller)
         || (insn & 0x7E000000u) == 0x34000000u  // CBZ/CBNZ/TBZ/TBNZ
         || (insn & 0x3B000000u) == 0x18000000u) // LDR/LDRSW literal, PRFM literal
     {
@@ -196,11 +197,11 @@ MISFixDetourResult MISFixDetour(
     for (unsigned index = 0; index < kDetourWords; index += 1) {
         if (index + 1 < kDetourWords && vpIsTerminator(displaced[index]))
             return MISFixDetourTooShort;
-        unsigned written = vpRelocate(
-            displaced[index],
-            (uint64_t)(uintptr_t)target + index * 4u,
-            body + words
-        );
+        uint64_t start = (uint64_t)(uintptr_t)target;
+        uint64_t pc = start + index * 4u;
+        unsigned written = (displaced[index] & 0xFF000010u) == 0x54000000u
+            ? vpRelocateConditionalBranch(displaced[index], pc, start, start + kDetourBytes, body + words)
+            : vpRelocate(displaced[index], pc, body + words);
         if (written == 0)
             return MISFixDetourUnrelocatable;
         words += written;

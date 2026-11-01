@@ -118,6 +118,7 @@ enum GuestAPI {
                 "display",
                 "display_orientation",
                 "display_auto_lock",
+                "device_pose",
                 "screen_unlock",
                 "audio",
                 "input_gestures",
@@ -151,7 +152,6 @@ enum GuestAPI {
                 "motion_gyroscope",
                 "motion_gyroscope_toggle",
                 "motion_hinge",
-                "display_pose",
                 "motion_attitude",
             ] + pointerCapabilities() + scriptCapabilities() + GuestHomePodDisplay.capabilities
                 + GuestHomePodDebug.capabilities,

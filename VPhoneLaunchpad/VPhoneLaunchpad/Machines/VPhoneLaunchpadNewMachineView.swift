@@ -872,7 +872,7 @@ struct VPhoneLaunchpadNewMachineView: View {
     /// preset, and each version declares its own patches.
     private func loadPatchCatalog() async {
         let version = bundleVersion
-        let requested = patches.preset
+        let requested = patches.presetArgument
         do {
             let catalog = try await VPhoneLaunchpadPatchCatalog.read(
                 using: version.flatMap(model.bundles.commandLine(version:)),
@@ -880,15 +880,24 @@ struct VPhoneLaunchpadNewMachineView: View {
                 preset: requested,
             )
             // A second switch may have overtaken this read.
-            guard requested == patches.preset, version == bundleVersion else {
+            guard requested == patches.presetArgument, version == bundleVersion else {
                 return
             }
+            patches.adoptFile(from: catalog)
             // Overrides naming a patch this version does not declare are dropped.
             patches.normalize(against: catalog)
             patchCatalog = catalog
             patchCatalogError = nil
         } catch {
-            guard requested == patches.preset, version == bundleVersion else {
+            guard requested == patches.presetArgument, version == bundleVersion else {
+                return
+            }
+            // A preset file the bundle cannot read: back to the device's
+            // preset, saying why.
+            if patches.presetFile != nil {
+                patches = VPhoneLaunchpadPatchSelection(preset: VPhoneLaunchpadPatchSelection.defaultPreset(forDevice: guestProductType))
+                await loadPatchCatalog()
+                patchCatalogError = VPhoneLaunchpadError.message(for: error)
                 return
             }
             // The first read after a version change: that version may not

@@ -94,6 +94,15 @@ public enum VPhoneDisplayOrientation: Int, CaseIterable, Sendable {
         return CGPoint(x: turned.x + panel.width / 2, y: turned.y + panel.height / 2)
     }
 
+    /// Full guest screenshots are upright, with a top-left origin. HID
+    /// touches use the fixed panel, also top-left. Keep this inverse shared
+    /// by windowed and headless automation; swapping dimensions is not enough.
+    public func panelPoint(fromScreenshot point: CGPoint, panel: CGSize) -> CGPoint {
+        let screen = displayedSize(panel: panel)
+        let fixed = panelPoint(fromScreen: CGPoint(x: point.x, y: screen.height - point.y), panel: panel)
+        return CGPoint(x: fixed.x, y: panel.height - fixed.y)
+    }
+
     // MARK: - Turning
 
     /// The largest size with the panel's aspect ratio whose box, turned by
@@ -146,5 +155,38 @@ public enum VPhoneDisplayOrientation: Int, CaseIterable, Sendable {
             rect.origin.y = min(max(rect.minY, visible.minY), visible.maxY - rect.height)
         }
         return rect
+    }
+}
+
+/// An active top-left viewport inside a fixed portrait framebuffer. Input
+/// pixels refer to the upright cropped image; HID remains framebuffer-based.
+public struct VPhoneDisplayViewport: Equatable, Sendable {
+    public let panel: CGSize
+    public let active: CGSize
+    public let orientation: VPhoneDisplayOrientation
+
+    public init?(panel: CGSize, active: CGSize, orientation: VPhoneDisplayOrientation) {
+        guard panel.width.isFinite, panel.height.isFinite, active.width.isFinite, active.height.isFinite,
+              panel.width > 0, panel.height > 0, active.width > 0, active.height > 0,
+              active.width <= panel.width, active.height <= panel.height else { return nil }
+        self.panel = panel
+        self.active = active
+        self.orientation = orientation
+    }
+
+    public var screenshotSize: CGSize { orientation.displayedSize(panel: active) }
+
+    public func panelPoint(fromScreenshot point: CGPoint) -> CGPoint {
+        orientation.panelPoint(fromScreenshot: point, panel: active)
+    }
+
+    /// Crop in the upright full-frame image's top-left pixel coordinates.
+    public var screenshotCrop: CGRect {
+        switch orientation {
+        case .portrait: CGRect(origin: .zero, size: active)
+        case .landscapeLeft: CGRect(x: panel.height - active.height, y: 0, width: active.height, height: active.width)
+        case .upsideDown: CGRect(x: panel.width - active.width, y: panel.height - active.height, width: active.width, height: active.height)
+        case .landscapeRight: CGRect(x: 0, y: panel.width - active.width, width: active.height, height: active.width)
+        }
     }
 }

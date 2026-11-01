@@ -97,6 +97,20 @@ extension VPhoneMenuController {
         keyboardItem.toolTip = VPhoneLocalization.text("Changing the hardware keyboard requires restarting the virtual machine.")
         hardwareKeyboardItem = keyboardItem
         menu.addItem(keyboardItem)
+        // Simulator's I/O > Keyboard item, without its Command-K: a plain
+        // Command-letter is the guest's (Command-K is Add Link in Notes). It
+        // flips the guest's keyboard mode in place, so it needs no restart.
+        let softwareKeyboard = makeItem(
+            "Toggle Software Keyboard",
+            action: #selector(toggleSoftwareKeyboard),
+            symbol: "keyboard.chevron.compact.down",
+        )
+        softwareKeyboard.isEnabled = false
+        softwareKeyboard.toolTip = VPhoneLocalization.text(
+            "Shows or hides the guest's software keyboard while the hardware keyboard stays attached. Restarting SpringBoard returns to the hardware keyboard.",
+        )
+        softwareKeyboardItem = softwareKeyboard
+        menu.addItem(softwareKeyboard)
         // Trackpad scroll and pinch arrive as ordinary NSEvents; the view turns
         // them into guest touches. Off hands both back to AppKit untouched.
         let trackpadItem = makeItem(
@@ -226,6 +240,47 @@ extension VPhoneMenuController {
                         style: .warning,
                     )
                 }
+            }
+        }
+    }
+
+    // MARK: - Software Keyboard
+
+    /// Without a virtual USB keyboard the guest already uses its software
+    /// keyboard, so the item only applies while one is attached. Only iPhone and
+    /// iPad guests were measured: tvOS draws its own on-screen keyboard, and a
+    /// watch or HomePod guest was not tried, so those never get it.
+    func updateSoftwareKeyboardAvailability(available: Bool) {
+        let measured = !showsTVControls && !showsWatchControls && !control.isHomePodGuest
+        softwareKeyboardItem?.isEnabled = available && measured && vm?.usesHardwareKeyboard == true
+    }
+
+    /// GraphicsServices keeps the guest's hardware keyboard in the state of the
+    /// `GSEventHardwareKeyboardAttached` Darwin notification: bit 0 attached,
+    /// bits 8–15 the country code, bits 16 and up the keyboard type. Posting it
+    /// with bit 0 flipped is what the guest does when a keyboard comes or goes,
+    /// so the guest switches to or from its software keyboard while the USB
+    /// keyboard stays attached. SpringBoard sets bit 0 again when it restarts.
+    @objc func toggleSoftwareKeyboard() {
+        guard softwareKeyboardItem?.isEnabled == true else { return }
+        let name = "GSEventHardwareKeyboardAttached"
+        Task {
+            do {
+                let reply = try await control.call("notify.state", params: ["name": name])
+                guard let state = (reply["state"] as? NSNumber)?.uint64Value else {
+                    throw VPhoneGuestControl.ControlError.protocolError("notify.state returned no state for \(name)")
+                }
+                let toggled = state ^ 1
+                // A decimal string keeps all 64 bits, which a JSON double does not.
+                _ = try await control.call("notify.post", params: ["name": name, "state": String(toggled)])
+                print("[keyboard] Software keyboard \(toggled & 1 == 0 ? "shown" : "hidden"), state 0x\(String(toggled, radix: 16))")
+            } catch {
+                print("[keyboard] Software keyboard toggle failed: \(error)")
+                VPhoneAlert.present(
+                    title: "Unable to Toggle Software Keyboard",
+                    message: "Check that the guest agent is connected, then try again.",
+                    style: .warning,
+                )
             }
         }
     }

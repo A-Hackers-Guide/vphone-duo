@@ -229,6 +229,9 @@ struct VPhoneCustomFirmwareInstaller {
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodSetupBypass), device.family != .homePod {
             throw ValidationError("The HomePod setup-completion patch is supported only for a HomePod guest.")
         }
+        if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodAirPlayVM), device.family != .homePod {
+            throw ValidationError("The HomePod AirPlay patch is supported only for a HomePod guest.")
+        }
         if effectiveEnabled.contains(FirmwareGuestSystemPatchSet.homePodAudioProduct), device.family != .homePod {
             throw ValidationError("The HomePod audio-product patch is supported only for a HomePod guest.")
         }
@@ -580,6 +583,13 @@ struct VPhoneCustomFirmwareInstaller {
         if device.family != .homePod {
             notApplicableGuest.insert(FirmwareGuestSystemPatchSet.homePodAudioProduct)
         }
+        if !Self.isFoldable(device) {
+            notApplicableGuest.insert(FirmwareGuestSystemPatchSet.prebootFoldableVMSubtype)
+            notApplicableGuest.insert(FirmwareGuestSystemPatchSet.prebootFoldableProductId)
+            notApplicableGuest.insert(FirmwareGuestSystemPatchSet.prebootFoldableDisplays)
+            notApplicableGuest.insert(FirmwareGuestSystemPatchSet.hinge)
+            notApplicableGuest.insert(FirmwareGuestSystemPatchSet.foldGuard)
+        }
         if !device.usesTVOS {
             notApplicableGuest.insert(FirmwareGuestSystemPatchSet.tvTPRO)
         }
@@ -870,7 +880,10 @@ struct VPhoneCustomFirmwareInstaller {
             ?? VPhoneVirtualMachinePatchSelection()
         let plan = readPatchPlan(in: bundleDirectory)
         if let pristine = try firmwareOriginalsKernelcache(in: bundleDirectory),
-           let preset = VPhonePatchPresetStore.preset(named: selection.presetIdentifier),
+           let preset = VPhonePatchPresetStore.preset(
+               named: selection.presetIdentifier,
+               vmCopy: try? bundleDirectory.readData(VPhonePatchPresetStore.vmPresetFileName),
+           ),
            !preset.patchSets.contains(where: {
                if case .external = $0 {
                    true
@@ -1294,6 +1307,8 @@ struct VPhoneCustomFirmwareInstaller {
                     && identifier != FirmwareGuestSystemPatchSet.gyroscope
                     && identifier != FirmwareGuestSystemPatchSet.accelerometer
                     && identifier != FirmwareGuestSystemPatchSet.attitude
+                    && identifier != FirmwareGuestSystemPatchSet.hinge
+                    && identifier != FirmwareGuestSystemPatchSet.foldGuard
             }
             guard plan.isEnabled(identifier) else {
                 print("  [·] \(identifier): off in preset \(plan.presetIdentifier)")
@@ -1423,6 +1438,23 @@ struct VPhoneCustomFirmwareInstaller {
             try requireX1Bootstrap()
         }
 
+        // CIBarcode is a standalone Core Image plug-in, outside the shared cache.
+        // Lower it ahead of time rather than relying on an application's inherited
+        // exception handler to translate these instructions at runtime.
+        // The normal Mach-O path keeps a pristine backup and re-seals the bundle;
+        // deselecting the declaration restores it on the next environment update.
+        if version.hasPrefix("27.1.") || version == "27.1"
+            || priorGuest.contains(FirmwareGuestSystemPatchSet.arm64eX1CIBarcode)
+        {
+            machO(
+                FirmwareGuestSystemPatchSet.arm64eX1CIBarcode,
+                path: FirmwareGuestSystemPatchSet.ciBarcodeExecutablePath,
+                verbs: ["patch-arm64e-x1"],
+                preserveEntitlements: true,
+                bundle: FirmwareGuestSystemPatchSet.ciBarcodeBundlePath,
+            )
+        }
+
         // 0. A cache whose span alone overruns the guest kernel's shared region
         //    maps at no slide, and the guest panics on first boot. Refuse before
         //    the redeploy and the cache patches. A header this check cannot read
@@ -1455,7 +1487,10 @@ struct VPhoneCustomFirmwareInstaller {
         } catch let overflow as DyldSharedCacheMaxSlidePatcher.RegionOverflow {
             throw overflow
         } catch {
-            print("  [!] shared region check skipped: \(error)")
+            // Expected: the preflight looks for the plain arm64e cache file,
+            // and every iOS 27 guest ships a chunked X1 cache the later cache
+            // stage measures directly. Nothing to report.
+            print("  [·] shared region check skipped: the cache is not a plain \(cacheArchitecture) file")
         }
 
         if guestDevice.hasPlainArm64Userland {
@@ -1556,6 +1591,21 @@ struct VPhoneCustomFirmwareInstaller {
         } else {
             try system.removeItem(setupPath)
         }
+        // The same helper sets AirPlay's VM override as mobile and restarts the
+        // AirPlay daemons when the value changed; removing the marker restores it.
+        let airPlay = FirmwareGuestSystemPatchSet.homePodAirPlayVM
+        let airPlayPath = String(FirmwareGuestSystemPatchSet.homePodAirPlayVMPath.dropFirst())
+        if plan?.isEnabled(airPlay) == true {
+            guard guestDevice.family == .homePod else {
+                throw ValidationError("HomePod AirPlay on a VM requires a HomePod guest.")
+            }
+            _ = try system.directory("usr/share/vphone", create: true, mode: 0o755)
+            let policy = try PropertyListSerialization.data(fromPropertyList: ["Enabled": true], format: .binary, options: 0)
+            try system.writeFile(airPlayPath, contents: policy, mode: 0o644, owner: Self.guestOwner)
+            live.insert(airPlay)
+        } else {
+            try system.removeItem(airPlayPath)
+        }
         let speech = FirmwareGuestSystemPatchSet.homePodSiriSpeech
         let speechPath = String(FirmwareGuestSystemPatchSet.homePodSiriSpeechPath.dropFirst())
         if plan?.isEnabled(speech) == true {
@@ -1607,10 +1657,23 @@ struct VPhoneCustomFirmwareInstaller {
             (FirmwareGuestSystemPatchSet.gyroscope, "libvphonegyro.dylib"),
             (FirmwareGuestSystemPatchSet.accelerometer, "libvphoneaccelerometer.dylib"),
             (FirmwareGuestSystemPatchSet.attitude, "libvphoneattitude.dylib"),
+            (FirmwareGuestSystemPatchSet.hinge, "libvphonehinge.dylib"),
+            (FirmwareGuestSystemPatchSet.foldGuard, "libvphonefoldguard.dylib"),
+            (FirmwareGuestSystemPatchSet.foldDisplay, "libvphonefolddisplay.dylib"),
         ] {
             isolate([identifier]) {
                 let path = "usr/lib/" + library
-                if on(identifier) {
+                // The hinge serves a foldable guest's CoreMotion, the guard
+                // exists only beside the foldable identity, and the display
+                // pad answers the fold layouts' two-display gate; on any other
+                // guest they would publish hooks nobody reads or a no-op that
+                // is not installed at all.
+                let foldOnly = identifier == FirmwareGuestSystemPatchSet.hinge
+                    || identifier == FirmwareGuestSystemPatchSet.foldGuard
+                    || identifier == FirmwareGuestSystemPatchSet.foldDisplay
+                let wanted = on(identifier)
+                    && (!foldOnly || Self.isFoldable(guestDevice))
+                if wanted {
                     try system.replaceFile(path, fromFileAt: VPhoneGuestBinaries.resolve(library),
                                            mode: 0o755, owner: Self.guestOwner)
                     live.insert(identifier)
@@ -1628,6 +1691,7 @@ struct VPhoneCustomFirmwareInstaller {
         if version.hasPrefix("27.") {
             dyld += [
                 (FirmwareGuestSystemPatchSet.arm64eX1CacheBootstrap, "patch-arm64e-x1-bootstrap-cache", [dsc]),
+                (FirmwareGuestSystemPatchSet.arm64eX1CacheRemaining, "patch-arm64e-x1-cache", [dsc]),
                 ("dyld-boot-iomfb_force_kern", "patch-iomfb-force-kern", [dsc]),
                 ("dyld-boot-maxslide", "patch-dsc-maxslide", [dsc]),
                 ("dyld-boot-lsd_embedded_reg", "patch-lsd-embedded-reg", [dsc]),
@@ -1855,14 +1919,17 @@ struct VPhoneCustomFirmwareInstaller {
             }
         }
 
-        // The VirtualAudio HAL plugin: four sub-patches ride one staged copy
+        // The VirtualAudio HAL plugin: five sub-patches ride one staged copy
         // (`patchMachO` stages from the pristine backup, so two calls would not
         // compose). On when any is on; reverted from `.bak` when all are off.
+        // The device-state early publish reports "nothing to do" on the non-X1
+        // plugins, so sharing the stage costs them nothing.
         let virtualAudio: [(id: String, verb: String)] = [
             (FirmwareGuestSystemPatchSet.virtualAudioSpeakerRouteThrows, "patch-virtualaudio"),
             (FirmwareGuestSystemPatchSet.virtualAudioMuteSetThrow, "patch-virtualaudio-mute"),
             (FirmwareGuestSystemPatchSet.virtualAudioSpeakerProtectionGate, "patch-virtualaudio-sp-gate"),
             (FirmwareGuestSystemPatchSet.virtualAudioVolumeModePrecondition, "patch-virtualaudio-volume-gate"),
+            (FirmwareGuestSystemPatchSet.virtualAudioDeviceStateNullGate, "patch-virtualaudio-device-state-null-gate"),
         ]
         let virtualAudioBundle = "Library/Audio/Plug-Ins/HAL/VirtualAudio.plugin"
         let virtualAudioBinary = "\(virtualAudioBundle)/VirtualAudio"
@@ -2152,6 +2219,11 @@ struct VPhoneCustomFirmwareInstaller {
         return live
     }
 
+    /// A guest whose board has an Apple VM sub-type for its fold pose.
+    static func isFoldable(_ device: VPhoneGuestDevice) -> Bool {
+        CustomFirmwarePostRestoreDeviceTree.foldableVMSubtypes.keys.contains(device.deviceClass.uppercased())
+    }
+
     /// Idempotent dyld patches whose receipts cannot identify stale implementations.
     private static let dyldPatchesRerunWhenLive: Set<String> = [
         "dyld-boot-maxslide",
@@ -2320,7 +2392,10 @@ struct VPhoneCustomFirmwareInstaller {
             .flatMap { try? PropertyListDecoder().decode(VPhoneVirtualMachinePatchSelection.self, from: $0) }
             ?? VPhoneVirtualMachinePatchSelection()
         guard
-            let preset = VPhonePatchPresetStore.preset(named: plan.presetIdentifier),
+            let preset = VPhonePatchPresetStore.preset(
+                named: plan.presetIdentifier,
+                vmCopy: try? bundleDirectory.readData(VPhonePatchPresetStore.vmPresetFileName),
+            ),
             let resolved = try? VPhonePatchPlan.resolve(
                 preset: preset,
                 patchSets: FirmwarePatchSetCatalog.bundled,
@@ -3225,6 +3300,21 @@ struct VPhoneCustomFirmwareInstaller {
                 repairGroup.append((FirmwareGuestSystemPatchSet.homePodCryptexClass, "patch-dt-homepod-cryptex-class", []))
             }
             repairGroup.append((FirmwareGuestSystemPatchSet.homePodAudioProduct, "patch-dt-homepod-audio-product",
+                                boardDeviceTree.map { [$0.path] } ?? []))
+        }
+        if Self.isFoldable(guestDevice) {
+            // Keep the repair in the inverse composition even with no donor
+            // when it is off: restoring the clean backup needs no source tree.
+            if enabled(FirmwareGuestSystemPatchSet.prebootFoldableProductId), boardDeviceTree == nil {
+                throw ValidationError("Foldable product identity needs the board's own device tree.")
+            }
+            if enabled(FirmwareGuestSystemPatchSet.prebootFoldableDisplays), boardDeviceTree == nil {
+                throw ValidationError("Foldable panel nodes need the board's own device tree.")
+            }
+            repairGroup.append((FirmwareGuestSystemPatchSet.prebootFoldableVMSubtype, "patch-dt-foldable-vm-subtype", []))
+            repairGroup.append((FirmwareGuestSystemPatchSet.prebootFoldableProductId, "patch-dt-foldable-product-id",
+                                boardDeviceTree.map { [$0.path] } ?? []))
+            repairGroup.append((FirmwareGuestSystemPatchSet.prebootFoldableDisplays, "patch-dt-foldable-displays",
                                 boardDeviceTree.map { [$0.path] } ?? []))
         }
         repairGroup.append((FirmwareGuestSystemPatchSet.prebootHaptics, "patch-dt-haptics", []))

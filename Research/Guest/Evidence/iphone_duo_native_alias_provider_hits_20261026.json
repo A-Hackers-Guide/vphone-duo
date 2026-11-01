@@ -1,0 +1,141 @@
+{
+  "STUIStatusBarVisualProvider_AxisAlignableSplit2007": {
+    "actualProviderClass": "STUIStatusBarVisualProvider_AxisAlignableSplit2007",
+    "targetScreenEmbedded": false,
+    "foregroundFrame": [
+      581,
+      0,
+      88,
+      123.66666666666667
+    ],
+    "managerDefaultFrame": [
+      615,
+      0,
+      54,
+      951
+    ]
+  },
+  "STUIStatusBarVisualProvider_DynamicSplitSmallIsland": {
+    "actualProviderClass": "STUIStatusBarVisualProvider_DynamicSplitSmallIsland",
+    "targetScreenEmbedded": true,
+    "foregroundFrame": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "managerDefaultFrame": [
+      615,
+      0,
+      54,
+      951
+    ]
+  },
+  "touchHits": [
+    {
+      "window": "SBHomeScreenWindow",
+      "phase": 0,
+      "windowBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "point": [
+        495.3333333333333,
+        466
+      ],
+      "screenBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "hitViewBounds": [
+        0,
+        0,
+        60,
+        74
+      ],
+      "scene": "SB-main",
+      "hitViewFrame": [
+        463.6666666666667,
+        436,
+        60,
+        74
+      ],
+      "hitView": "SBIconView",
+      "windowRole": "other"
+    },
+    {
+      "window": "SBHomeScreenWindow",
+      "phase": 0,
+      "windowBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "point": [
+        387.3333333333333,
+        701.6666666666666
+      ],
+      "screenBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "hitViewBounds": [
+        0,
+        0,
+        60,
+        74
+      ],
+      "scene": "SB-main",
+      "hitViewFrame": [
+        357.6666666666667,
+        672,
+        60,
+        74
+      ],
+      "hitView": "SBIconView",
+      "windowRole": "other"
+    },
+    {
+      "window": "SBFloatingDockWindow",
+      "phase": 0,
+      "windowBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "point": [
+        220,
+        896.6666666666666
+      ],
+      "screenBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "hitViewBounds": [
+        0,
+        0,
+        60,
+        60
+      ],
+      "scene": "SB-main",
+      "hitViewFrame": [
+        16,
+        16,
+        60,
+        60
+      ],
+      "hitView": "SBIconView",
+      "windowRole": "other"
+    }
+  ]
+}

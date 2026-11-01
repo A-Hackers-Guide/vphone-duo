@@ -1,0 +1,52 @@
+{
+  "native_status": {
+    "clientDisplayType": 7,
+    "interfaceOrientation": 1,
+    "systemArbitratedInterfaceOrientation": 1,
+    "_effectiveUISettings": 1,
+    "_effectiveUIClientSettings": 1,
+    "connectedDisplayCount": 1,
+    "caDisplayObjectCount": 6,
+    "surfaceType": 2
+  },
+  "native_status_landscape": {
+    "clientDisplayType": 7,
+    "interfaceOrientation": 1,
+    "systemArbitratedInterfaceOrientation": 3,
+    "_effectiveUISettings": 3,
+    "_effectiveUIClientSettings": 1,
+    "connectedDisplayCount": 1,
+    "caDisplayObjectCount": 6,
+    "surfaceType": 2
+  },
+  "native_status_portrait_return": {
+    "clientDisplayType": 7,
+    "interfaceOrientation": 1,
+    "systemArbitratedInterfaceOrientation": 1,
+    "_effectiveUISettings": 1,
+    "_effectiveUIClientSettings": 1,
+    "connectedDisplayCount": 1,
+    "caDisplayObjectCount": 6,
+    "surfaceType": 2
+  },
+  "restored": {
+    "clientDisplayType": 0,
+    "interfaceOrientation": 1,
+    "systemArbitratedInterfaceOrientation": 1,
+    "_effectiveUISettings": 1,
+    "_effectiveUIClientSettings": 1,
+    "connectedDisplayCount": 1,
+    "caDisplayObjectCount": 6,
+    "surfaceType": 2
+  },
+  "final": {
+    "clientDisplayType": 0,
+    "interfaceOrientation": 1,
+    "systemArbitratedInterfaceOrientation": 1,
+    "_effectiveUISettings": 1,
+    "_effectiveUIClientSettings": 1,
+    "connectedDisplayCount": 1,
+    "caDisplayObjectCount": 6,
+    "surfaceType": 0
+  }
+}

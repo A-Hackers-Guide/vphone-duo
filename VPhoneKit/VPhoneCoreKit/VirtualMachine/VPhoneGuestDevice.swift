@@ -148,8 +148,10 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
     public static let iPhone19_2 = iPhone("iPhone19,2", "v63ap", "iPhone 18 Pro", width: 1206, height: 2622)
 
     /// iPhone Duo (V68AP): the 5.4-inch outer panel, 1398x2034 at 460 ppi, is
-    /// the device tree's display 0; the 7.6-inch inner panel, 1878x2670 at 430
-    /// ppi in its native portrait (mounted at 270 degrees), is its display 1.
+    /// the device tree's display 0 and the VM's panel; the 7.6-inch inner
+    /// panel, 1878x2670 at 430 ppi in its native portrait (mounted at 270
+    /// degrees), is its display 1, which the guest publishes as a second,
+    /// virtual display while the device is open (libvphonefolddisplay).
     /// Apple's published panels.
     public static let iPhone19_4 = VPhoneGuestDevice(
         family: .iPhone,
@@ -253,7 +255,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         screen: .init(width: 320, height: 320, pixelsPerInch: 72, scale: 1.0),
     )
 
-    /// Apple Watch Series 11 (GPS), 46 mm: 416x496 at 330 ppi, 208x248 points.
+    /// Apple Watch Series 11 (GPS), 46 mm: 416x496 at 326 ppi, 208x248 points.
     /// The research board's kernel boots it with the watchOS kexts of its IPSW
     /// (the `watch` kernelcache recipe); N227b's device tree supplies the watch
     /// idiom and 2x identity.
@@ -262,7 +264,7 @@ public struct VPhoneGuestDevice: Sendable, Equatable {
         productType: "Watch7,18",
         deviceClass: "n227bap",
         productName: "Apple Watch Series 11 (GPS)",
-        screen: .init(width: 416, height: 496, pixelsPerInch: 330, scale: 2.0),
+        screen: .init(width: 416, height: 496, pixelsPerInch: 326, scale: 2.0),
     )
 
     /// Whether the guest's userland is plain arm64 rather than arm64e: only

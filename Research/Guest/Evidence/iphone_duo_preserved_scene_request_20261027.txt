@@ -1,0 +1,75 @@
+viewport workspace finalized preview: role=1 entity=<SBDeviceApplicationSceneEntity: 0x6635aec60; ID: sceneID:com.apple.Preferences-default; layoutRole: primary> {
+    supportedRoles = primary;
+    layoutAttributes = none;
+} from={(
+    <SBDeviceApplicationSceneEntity: 0x6635ad950; ID: sceneID:com.apple.Preferences-default; layoutRole: primary> {
+    supportedRoles = primary;
+    layoutAttributes = none;
+}
+)} to={(
+    <SBDeviceApplicationSceneEntity: 0x6635aec60; ID: sceneID:com.apple.Preferences-default; layoutRole: primary> {
+    supportedRoles = primary;
+    layoutAttributes = none;
+}
+)} context=<SBWorkspaceApplicationSceneTransitionContext: 0x657884900; animationDisabled: NO; background: NO; waitForScenes: YES; display: Main; layoutState: <SBMainDisplayLayoutState: 0x65788d7c0; elements: 1> {
+    elements = {
+        <SBLayoutElement: 0x662d91500; uniqueIdentifier: sceneID:com.apple.Preferences-default; layoutRole: primary>;
+    }
+    interfaceOrientation = UIInterfaceOrientationPortrait;
+    primaryElementInterfaceOrientation = UIInterfaceOrientationPortrait;
+    interfaceOrientationByLayoutElement = {
+        sceneID:com.apple.Preferences-default = Pu;
+    }
+    spaceConfiguration = full;
+    layoutAttributes = {
+        sceneID:com.apple.Preferences-default = <SBDisplayItemLayoutAttributes: 0x65a0fb200; contentOrientation: "unknown (0)"; lastInteractionTime: never; sizingPolicy: maximized; size: unspecified; center: unspecified; tileConfiguration: "tile-role-none customSize={1.7976931348623157e+308, 1.7976931348623157e+308}"; slideOverConfiguration: "slideover-corner-top-left yOffsetFromCorner=0.000000 size={0, 0} isActive=NO isStashed=NO dodgesDock=NO"; cascaded: NO; splitConfiguration: "split-role-full isActive=NO"; occlusionState: unknown; userConfiguredSizeBeforeOverlapping: unspecified; positionIsSystemManaged: YES; unoccludedPeekingCenter: unspecified; splitIdentifierBytes: "{length = 16, bytes = 0x00000000000000000000000000000000}"; version: 1000>;
+    }
+    floatingConfiguration = undefined;
+    centerConfiguration = undefined;
+    peekConfiguration = undefined;
+    unlockedEnvironmentMode = application;
+    unlockedEnvironmentState = <SBUnlockedEnvironmentState: 0x659eb6bc0; leadingEnvironmentMode: application; trailingEnvironmentMode: application; unlockedEnvironmentModeRepresentation: application>;
+    bundleIDShowingAppExpose = 0x0;
+    floatingSwitcherVisible = No;
+    windowPickerRole = undefined;
+    displayOrdinal = 0;
+    isDisplayExternal = NO;
+    continuousExposeIdentifier = com.apple.Preferences;
+}; previousLayoutState: <SBMainDisplayLayoutState: 0x657e8d2c0; elements: 1> {
+    elements = {
+        <SBLayoutElement: 0x65a31a460; uniqueIdentifier: sceneID:com.apple.Preferences-default; layoutRole: primary>;
+    }
+    interfaceOrientation = UIInterfaceOrientationPortrait;
+    primaryElementInterfaceOrientation = UIInterfaceOrientationPortrait;
+    interfaceOrientationByLayoutElement = {
+        sceneID:com.apple.Preferences-default = Pu;
+    }
+    spaceConfiguration = full;
+    layoutAttributes = {
+        sceneID:com.apple.Preferences-default = <SBDisplayItemLayoutAttributes: 0x6638d21c0; contentOrientation: "portrait (1)"; lastInteractionTime: 1; sizingPolicy: maximized; size: unspecified; center: unspecified; tileConfiguration: "tile-role-none customSize={1.7976931348623157e+308, 1.7976931348623157e+308}"; slideOverConfiguration: "slideover-corner-top-left yOffsetFromCorner=0.000000 size={0, 0} isActive=NO isStashed=NO dodgesDock=NO"; cascaded: NO; splitConfiguration: "split-role-full isActive=NO"; occlusionState: unknown; userConfiguredSizeBeforeOverlapping: unspecified; positionIsSystemManaged: YES; unoccludedPeekingCenter: unspecified; splitIdentifierBytes: "{length = 16, bytes = 0x00000000000000000000000000000000}"; version: 1000>;
+    }
+    floatingConfiguration = undefined;
+    centerConfiguration = undefined;
+    peekConfiguration = undefined;
+    unlockedEnvironmentMode = application;
+    unlockedEnvironmentState = <SBUnlockedEnvironmentState: 0x663157d00; leadingEnvironmentMode: application; trailingEnvironmentMode: application; unlockedEnvironmentModeRepresentation: application>;
+    bundleIDShowingAppExpose = 0x0;
+    floatingSwitcherVisible = No;
+    windowPickerRole = undefined;
+    displayOrdinal = 0;
+    isDisplayExternal = NO;
+    continuousExposeIdentifier = com.apple.Preferences;
+}; delegate: <SBMainWorkspaceTransitionRequest: 0x65788d860>> {
+    entities = {
+        SBLayoutRolePrimary = <SBDeviceApplicationSceneEntity: 0x6635aec60; ID: sceneID:com.apple.Preferences-default; layoutRole: primary> {
+            supportedRoles = primary;
+            layoutAttributes = none;
+        };
+    }
+    previousEntities = {
+        SBLayoutRolePrimary = <SBDeviceApplicationSceneEntity: 0x6635ad950; ID: sceneID:com.apple.Preferences-default; layoutRole: primary> {
+            supportedRoles = primary;
+            layoutAttributes = none;
+        };
+    }
+}

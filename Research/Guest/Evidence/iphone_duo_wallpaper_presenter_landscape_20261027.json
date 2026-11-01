@@ -1,0 +1,13 @@
+{
+  "machine": "duotest-m5",
+  "bundle": "2.12.1-local.03837ba0",
+  "landscape": {
+    "display_orientation_degrees": 90,
+    "wallpaper_window_frame_pt": [0,0,951,669],
+    "wallpaper_container_frame_pt": [0,0,951,669],
+    "wallpaper_presenter_view_frame_pt": [0,0,951,669],
+    "root_wallpaper_view_frame_pt": [0,0,951,669],
+    "transforms": "identity"
+  },
+  "result": "Presenter and wallpaper frames now match the landscape scene; live screenshot after reasserting rotation fills the viewport without the prior solid black vertical band."
+}

@@ -1,0 +1,354 @@
+[
+  {
+    "window": "_UISystemGestureWindow",
+    "phase": 0,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      495.3333333333333,
+      466
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": null,
+    "hitView": "nil"
+  },
+  {
+    "window": "SBStatusBarWindow",
+    "phase": 0,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      495.3333333333333,
+      466
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": "SB-main",
+    "hitView": "STUIStatusBarForegroundView"
+  },
+  {
+    "window": "_UISystemGestureWindow",
+    "phase": 3,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      495.3333333333333,
+      466
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": null,
+    "hitView": "nil"
+  },
+  {
+    "window": "SBStatusBarWindow",
+    "phase": 3,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      495.3333333333333,
+      466
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": "SB-main",
+    "hitView": "STUIStatusBarForegroundView"
+  },
+  {
+    "window": "_UISystemGestureWindow",
+    "phase": 0,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      387.3333333333333,
+      466
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": null,
+    "hitView": "nil"
+  },
+  {
+    "window": "SBStatusBarWindow",
+    "phase": 0,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      387.3333333333333,
+      466
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": "SB-main",
+    "hitView": "STUIStatusBarForegroundView"
+  },
+  {
+    "window": "_UISystemGestureWindow",
+    "phase": 3,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      387.3333333333333,
+      466
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": null,
+    "hitView": "nil"
+  },
+  {
+    "window": "SBStatusBarWindow",
+    "phase": 3,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      387.3333333333333,
+      466
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": "SB-main",
+    "hitView": "STUIStatusBarForegroundView"
+  },
+  {
+    "window": "_UISystemGestureWindow",
+    "phase": 0,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      387.3333333333333,
+      701.6666666666666
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": null,
+    "hitView": "nil"
+  },
+  {
+    "window": "SBStatusBarWindow",
+    "phase": 0,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      387.3333333333333,
+      701.6666666666666
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": "SB-main",
+    "hitView": "STUIStatusBarForegroundView"
+  },
+  {
+    "window": "_UISystemGestureWindow",
+    "phase": 3,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      387.3333333333333,
+      701.6666666666666
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": null,
+    "hitView": "nil"
+  },
+  {
+    "window": "SBStatusBarWindow",
+    "phase": 3,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      387.3333333333333,
+      701.6666666666666
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": "SB-main",
+    "hitView": "STUIStatusBarForegroundView"
+  },
+  {
+    "window": "_UISystemGestureWindow",
+    "phase": 0,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      220,
+      896.6666666666666
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": null,
+    "hitView": "nil"
+  },
+  {
+    "window": "SBStatusBarWindow",
+    "phase": 0,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      220,
+      896.6666666666666
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": "SB-main",
+    "hitView": "STUIStatusBarForegroundView"
+  },
+  {
+    "window": "_UISystemGestureWindow",
+    "phase": 3,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      220,
+      896.6666666666666
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": null,
+    "hitView": "nil"
+  },
+  {
+    "window": "SBStatusBarWindow",
+    "phase": 3,
+    "windowBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "point": [
+      220,
+      896.6666666666666
+    ],
+    "screenBounds": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "scene": "SB-main",
+    "hitView": "STUIStatusBarForegroundView"
+  }
+]

@@ -1,0 +1,1685 @@
+{
+  "bundle": "2.12.1-local.0d172c0d",
+  "detour": {
+    "screen": 0,
+    "global": 2,
+    "globalReason": "MISFixDetourUnrelocatable"
+  },
+  "states": [
+    {
+      "name": "before",
+      "state": {
+        "_continuousFoldHolderCount": 0,
+        "screenScreenType": 32,
+        "_effectiveUIClientSettings": 1,
+        "identity.isMainRootDisplay": true,
+        "caDisplayObjectCount": 6,
+        "viewportGeneration": 0,
+        "_isDevicePoseOverridingOrientationLock": 0,
+        "_continuousFoldPinnedDeviceOrientation": 0,
+        "statusManagerClass": "SBWindowSceneStatusBarManager",
+        "application.statusBarOrientation": 1,
+        "sceneScreenType": 32,
+        "identity.isMainDisplay": true,
+        "application.activeInterfaceOrientation": 1,
+        "continuousFoldPinnedInterfaceOrientation": 0,
+        "deviceOrientationForSystemSpaceOrientation:": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "systemArbitratedDeviceOrientation": 1,
+        "serverHostedIdentifier": null,
+        "identity.isRootIdentity": true,
+        "elapsedMs": 5.127072334289551,
+        "globalScreenType": 32,
+        "roots": [
+          {
+            "orientation": 1,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "identifier": "SB-main"
+          },
+          {
+            "orientation": 1,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "identifier": "SB-systemApertureCurtain"
+          },
+          {
+            "orientation": 1,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "identifier": "SB-systemAperture"
+          }
+        ],
+        "configurationBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "screenTraitUserInterfaceIdiom": 0,
+        "systemSpaceOrientationForDeviceOrientation:": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "systemArbitratedInterfaceOrientation": 1,
+        "effectiveGeometryOrientation": 1,
+        "_isCoversheetPresented": 0,
+        "providerDirections": [
+          1,
+          1,
+          1
+        ],
+        "clientDisplayType": 0,
+        "clientDisplayIdentifier": null,
+        "identity.isAlwaysConnected": true,
+        "windows": [
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": null,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "native.orientation": 1,
+            "native._sbStatusBarWindowShouldRotate": true,
+            "class": "SBStatusBarWindow",
+            "orientation": 1,
+            "rootClass": null,
+            "native._sbStatusBarWindowSupportedOrientations": 30
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": null,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBStatusBarReusePoolWindow",
+            "orientation": 1,
+            "rootClass": null
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBAssistantIslandStagePlaceholderWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "UIViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": null,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBAlertItemWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBAlertItemRootViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBRecordingIndicatorWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "SBRecordingIndicatorViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "controller.effectiveOrientation": 1,
+            "class": "SBHomeScreenWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "SBHomeScreenViewController",
+            "controller.orientation": 1
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "UIViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "UIViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBFolderWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBFolderPresentingViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBFloatingDockWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBFloatingDockRootViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBMainSwitcherWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "SBSwitcherViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBControlCenterWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBBarSwipeAffordanceViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "_SBWallpaperSecureWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "_SBWallpaperWindowRootViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": null,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBSecureWindow",
+            "orientation": 1,
+            "rootClass": null
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBCoverSheetWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBCoverSheetPrimarySlidingViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBCoverSheetGrabberWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "SBCoverSheetGrabberViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SSScreenshotsWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SSScreenshotsWindowRootViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "UITextEffectsWindow",
+            "controller.supportedInterfaceOrientations": 26,
+            "orientation": 1,
+            "rootClass": "UITrackingElementWindowController"
+          }
+        ],
+        "scene.isMainDisplayWindowScene": true,
+        "scene": "SB-main",
+        "pid": 293,
+        "identity.isUIKitMainLike": true,
+        "application.statusBarOrientationForEmbeddedDisplay": 1,
+        "screenBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "screenUserInterfaceIdiom": 0,
+        "statusManagerEmbedded": true,
+        "statusManagerHidden": false,
+        "deferringOrientation": false,
+        "coordinateBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "_arbiterRunningUpdatesCount": 0,
+        "serverDisplayIdentifier": null,
+        "surfaceType": 0,
+        "_settingUpPipeline": 0,
+        "connectedDisplayCount": 1,
+        "_isContinuousFoldSettleWindowActive": 0,
+        "interfaceOrientation": 1,
+        "time": 814718048.293561,
+        "_effectiveUISettings": 1,
+        "uiConfigurationIdentifier": null,
+        "screenNativeBounds": [
+          0,
+          0,
+          2007,
+          2853
+        ],
+        "scene.isLegacyMainEmbeddedScene": true
+      }
+    },
+    {
+      "name": "cover",
+      "state": {
+        "_continuousFoldHolderCount": 0,
+        "screenScreenType": 31,
+        "_effectiveUIClientSettings": 1,
+        "identity.isMainRootDisplay": true,
+        "caDisplayObjectCount": 6,
+        "viewportGeneration": 1,
+        "_isDevicePoseOverridingOrientationLock": 0,
+        "_continuousFoldPinnedDeviceOrientation": 0,
+        "statusManagerClass": "SBWindowSceneStatusBarManager",
+        "application.statusBarOrientation": 1,
+        "sceneScreenType": 31,
+        "identity.isMainDisplay": true,
+        "application.activeInterfaceOrientation": 1,
+        "continuousFoldPinnedInterfaceOrientation": 0,
+        "deviceOrientationForSystemSpaceOrientation:": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "systemArbitratedDeviceOrientation": 1,
+        "serverHostedIdentifier": null,
+        "identity.isRootIdentity": true,
+        "elapsedMs": 2.2590160369873047,
+        "globalScreenType": 32,
+        "roots": [
+          {
+            "orientation": 1,
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "identifier": "SB-main"
+          },
+          {
+            "orientation": 1,
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "identifier": "SB-systemApertureCurtain"
+          },
+          {
+            "orientation": 1,
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "identifier": "SB-systemAperture"
+          }
+        ],
+        "configurationBounds": [
+          0,
+          0,
+          466,
+          678
+        ],
+        "screenTraitUserInterfaceIdiom": 0,
+        "systemSpaceOrientationForDeviceOrientation:": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "systemArbitratedInterfaceOrientation": 1,
+        "effectiveGeometryOrientation": 1,
+        "_isCoversheetPresented": 0,
+        "providerDirections": [
+          1,
+          1,
+          1
+        ],
+        "clientDisplayType": 0,
+        "clientDisplayIdentifier": null,
+        "identity.isAlwaysConnected": true,
+        "windows": [
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": false,
+            "rootFrame": null,
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "native.orientation": 1,
+            "native._sbStatusBarWindowShouldRotate": false,
+            "class": "SBStatusBarWindow",
+            "orientation": 1,
+            "rootClass": null,
+            "native._sbStatusBarWindowSupportedOrientations": 2
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": null,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBStatusBarReusePoolWindow",
+            "orientation": 1,
+            "rootClass": null
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "class": "SBAssistantIslandStagePlaceholderWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "UIViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": null,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBAlertItemWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBAlertItemRootViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "class": "SBRecordingIndicatorWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "SBRecordingIndicatorViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "controller.effectiveOrientation": 1,
+            "class": "SBHomeScreenWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "SBHomeScreenViewController",
+            "controller.orientation": 1
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "class": "SBWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "UIViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "class": "SBWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "UIViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "class": "SBFolderWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBFolderPresentingViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "class": "SBFloatingDockWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBFloatingDockRootViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "class": "SBMainSwitcherWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "SBSwitcherViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "class": "SBControlCenterWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBBarSwipeAffordanceViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "class": "_SBWallpaperSecureWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "_SBWallpaperWindowRootViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": null,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBSecureWindow",
+            "orientation": 1,
+            "rootClass": null
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "class": "SBCoverSheetWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBCoverSheetPrimarySlidingViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "class": "SBCoverSheetGrabberWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "SBCoverSheetGrabberViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "class": "SSScreenshotsWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SSScreenshotsWindowRootViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "frame": [
+              0,
+              0,
+              466,
+              678
+            ],
+            "class": "UITextEffectsWindow",
+            "controller.supportedInterfaceOrientations": 26,
+            "orientation": 1,
+            "rootClass": "UITrackingElementWindowController"
+          }
+        ],
+        "scene.isMainDisplayWindowScene": true,
+        "scene": "SB-main",
+        "pid": 293,
+        "identity.isUIKitMainLike": true,
+        "application.statusBarOrientationForEmbeddedDisplay": 1,
+        "screenBounds": [
+          0,
+          0,
+          466,
+          678
+        ],
+        "screenUserInterfaceIdiom": 0,
+        "statusManagerEmbedded": true,
+        "statusManagerHidden": false,
+        "deferringOrientation": false,
+        "coordinateBounds": [
+          0,
+          0,
+          466,
+          678
+        ],
+        "_arbiterRunningUpdatesCount": 0,
+        "serverDisplayIdentifier": null,
+        "surfaceType": 0,
+        "_settingUpPipeline": 0,
+        "connectedDisplayCount": 1,
+        "_isContinuousFoldSettleWindowActive": 0,
+        "interfaceOrientation": 1,
+        "time": 814718055.300925,
+        "_effectiveUISettings": 1,
+        "uiConfigurationIdentifier": null,
+        "screenNativeBounds": [
+          0,
+          0,
+          1398,
+          2034
+        ],
+        "scene.isLegacyMainEmbeddedScene": true
+      }
+    },
+    {
+      "name": "restored",
+      "state": {
+        "_continuousFoldHolderCount": 0,
+        "screenScreenType": 32,
+        "_effectiveUIClientSettings": 1,
+        "identity.isMainRootDisplay": true,
+        "caDisplayObjectCount": 6,
+        "viewportGeneration": 2,
+        "_isDevicePoseOverridingOrientationLock": 0,
+        "_continuousFoldPinnedDeviceOrientation": 0,
+        "statusManagerClass": "SBWindowSceneStatusBarManager",
+        "application.statusBarOrientation": 1,
+        "sceneScreenType": 32,
+        "identity.isMainDisplay": true,
+        "application.activeInterfaceOrientation": 1,
+        "continuousFoldPinnedInterfaceOrientation": 0,
+        "deviceOrientationForSystemSpaceOrientation:": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "systemArbitratedDeviceOrientation": 1,
+        "serverHostedIdentifier": null,
+        "identity.isRootIdentity": true,
+        "elapsedMs": 3.8580894470214844,
+        "globalScreenType": 32,
+        "roots": [
+          {
+            "orientation": 1,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "identifier": "SB-main"
+          },
+          {
+            "orientation": 1,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "identifier": "SB-systemApertureCurtain"
+          },
+          {
+            "orientation": 1,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "identifier": "SB-systemAperture"
+          }
+        ],
+        "configurationBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "screenTraitUserInterfaceIdiom": 0,
+        "systemSpaceOrientationForDeviceOrientation:": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "systemArbitratedInterfaceOrientation": 1,
+        "effectiveGeometryOrientation": 1,
+        "_isCoversheetPresented": 0,
+        "providerDirections": [
+          1,
+          1,
+          1
+        ],
+        "clientDisplayType": 0,
+        "clientDisplayIdentifier": null,
+        "identity.isAlwaysConnected": true,
+        "windows": [
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": null,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "native.orientation": 1,
+            "native._sbStatusBarWindowShouldRotate": true,
+            "class": "SBStatusBarWindow",
+            "orientation": 1,
+            "rootClass": null,
+            "native._sbStatusBarWindowSupportedOrientations": 30
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": null,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBStatusBarReusePoolWindow",
+            "orientation": 1,
+            "rootClass": null
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBAssistantIslandStagePlaceholderWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "UIViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": null,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBAlertItemWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBAlertItemRootViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBRecordingIndicatorWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "SBRecordingIndicatorViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "controller.effectiveOrientation": 1,
+            "class": "SBHomeScreenWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "SBHomeScreenViewController",
+            "controller.orientation": 1
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "UIViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "UIViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBFolderWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBFolderPresentingViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBFloatingDockWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBFloatingDockRootViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBMainSwitcherWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "SBSwitcherViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBControlCenterWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBBarSwipeAffordanceViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "_SBWallpaperSecureWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "_SBWallpaperWindowRootViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": null,
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBSecureWindow",
+            "orientation": 1,
+            "rootClass": null
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": true,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBCoverSheetWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SBCoverSheetPrimarySlidingViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SBCoverSheetGrabberWindow",
+            "controller.supportedInterfaceOrientations": 2,
+            "orientation": 1,
+            "rootClass": "SBCoverSheetGrabberViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "SSScreenshotsWindow",
+            "controller.supportedInterfaceOrientations": 30,
+            "orientation": 1,
+            "rootClass": "SSScreenshotsWindowRootViewController"
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false,
+            "rootFrame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "UITextEffectsWindow",
+            "controller.supportedInterfaceOrientations": 26,
+            "orientation": 1,
+            "rootClass": "UITrackingElementWindowController"
+          }
+        ],
+        "scene.isMainDisplayWindowScene": true,
+        "scene": "SB-main",
+        "pid": 293,
+        "identity.isUIKitMainLike": true,
+        "application.statusBarOrientationForEmbeddedDisplay": 1,
+        "screenBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "screenUserInterfaceIdiom": 0,
+        "statusManagerEmbedded": true,
+        "statusManagerHidden": false,
+        "deferringOrientation": false,
+        "coordinateBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "_arbiterRunningUpdatesCount": 0,
+        "serverDisplayIdentifier": null,
+        "surfaceType": 0,
+        "_settingUpPipeline": 0,
+        "connectedDisplayCount": 1,
+        "_isContinuousFoldSettleWindowActive": 0,
+        "interfaceOrientation": 1,
+        "time": 814718061.953821,
+        "_effectiveUISettings": 1,
+        "uiConfigurationIdentifier": null,
+        "screenNativeBounds": [
+          0,
+          0,
+          2007,
+          2853
+        ],
+        "scene.isLegacyMainEmbeddedScene": true
+      }
+    }
+  ],
+  "outcome": "Per-screen native family becomes31 on cover; global remains32; visual layout still fails"
+}

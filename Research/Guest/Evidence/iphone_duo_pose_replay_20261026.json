@@ -1,0 +1,40 @@
+{
+  "bundle": "2.12.1-local.290da141",
+  "cases": [
+    {
+      "name": "portrait",
+      "before": {
+        "available": true,
+        "device_orientation": 1,
+        "hinge": 1,
+        "orientation": 1,
+        "tabletop": 0
+      },
+      "after": {
+        "available": true,
+        "device_orientation": 1,
+        "hinge": 1,
+        "orientation": 1,
+        "tabletop": 0
+      }
+    },
+    {
+      "name": "landscape-left",
+      "before": {
+        "available": true,
+        "device_orientation": 3,
+        "hinge": 1,
+        "orientation": 3,
+        "tabletop": 0
+      },
+      "after": {
+        "available": true,
+        "device_orientation": 3,
+        "hinge": 1,
+        "orientation": 3,
+        "tabletop": 0
+      }
+    }
+  ],
+  "scope": "SBS pose lifecycle only; not logical panel switching or rendering acceptance"
+}

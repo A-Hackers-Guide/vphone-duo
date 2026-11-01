@@ -1,0 +1,181 @@
+{
+  "bundle": "2.12.1-local.2f446502",
+  "method": "CUA native-window clicks, no status pulse",
+  "settingsForeground": {
+    "bundle_id": "com.apple.Preferences",
+    "name": "Settings",
+    "pid": 323,
+    "source": "runningboard",
+    "verified": true
+  },
+  "touches": [
+    {
+      "hitViewFrame": null,
+      "sceneOrientation": 1,
+      "hitView": "nil",
+      "phase": 0,
+      "windowBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "touchType": 0,
+      "screenBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "window": "_UISystemGestureWindow",
+      "sceneCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "point": [
+        387.66666666666663,
+        702.3333333333333
+      ],
+      "windowRole": "other",
+      "screenCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "hitViewBounds": null,
+      "scene": null
+    },
+    {
+      "hitViewFrame": [
+        357.6666666666667,
+        672,
+        60,
+        74
+      ],
+      "sceneOrientation": 1,
+      "hitView": "SBIconView",
+      "phase": 0,
+      "windowBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "touchType": 0,
+      "screenBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "window": "SBHomeScreenWindow",
+      "sceneCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "point": [
+        387.66666666666663,
+        702.3333333333333
+      ],
+      "windowRole": "other",
+      "screenCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "hitViewBounds": [
+        0,
+        0,
+        60,
+        74
+      ],
+      "scene": "SB-main"
+    },
+    {
+      "hitViewFrame": null,
+      "sceneOrientation": 1,
+      "hitView": "nil",
+      "phase": 3,
+      "windowBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "touchType": 0,
+      "screenBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "window": "_UISystemGestureWindow",
+      "sceneCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "point": [
+        387.66666666666663,
+        702.3333333333333
+      ],
+      "windowRole": "other",
+      "screenCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "hitViewBounds": null,
+      "scene": null
+    },
+    {
+      "hitViewFrame": null,
+      "sceneOrientation": 1,
+      "hitView": "nil",
+      "phase": 3,
+      "windowBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "touchType": 0,
+      "screenBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "window": "SBHomeScreenWindow",
+      "sceneCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "point": [
+        387.66666666666663,
+        702.3333333333333
+      ],
+      "windowRole": "other",
+      "screenCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "hitViewBounds": null,
+      "scene": "SB-main"
+    }
+  ],
+  "visibleAcceptance": "Settings rendered; second native click opened About",
+  "scope": "Inner portrait GUI; outer/rotation not yet accepted"
+}

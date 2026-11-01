@@ -1,0 +1,17 @@
+{
+  "machine": "duotest-m5",
+  "bundle": "2.12.1-local.dc6752cc",
+  "guest": {
+    "display_orientation_degrees": 90,
+    "configuration_bounds_pt": [669, 951],
+    "active_bounds_pt": [951, 669],
+    "springboard_pid": 37
+  },
+  "host_gui": {
+    "window": "landscape",
+    "notifications": "landscape horizontal cards",
+    "status_bar": "battery/cellular on landscape right",
+    "touch": ["flashlight hit", "camera hit"]
+  },
+  "result": "Host orientation, notification layout, status-bar side, and touch direction agree with the live landscape guest. Wallpaper crop/black band remains a separate presentation issue."
+}

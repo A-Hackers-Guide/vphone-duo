@@ -9,6 +9,10 @@ import VphonedNative
 extension GuestAPI {
     static func executeProcess(_ method: String, _ params: [String: Any]) throws -> [String: Any]? {
         switch method {
+        case "process.spawn":
+            return try spawnProcess(params)
+        case "poster.inspect":
+            return try inspectPoster(params)
         case "processes.list":
             return try processList(filter: optionalString(params, "filter"))
         case "processes.kill":
@@ -31,6 +35,89 @@ extension GuestAPI {
             return ["memory": memoryPressure()]
         default:
             return nil
+        }
+    }
+
+    /// Read-only poster probe plumbing. The signed helper is intentionally
+    /// optional until the guest payload is installed; callers get an explicit
+    /// unavailable result rather than a synthetic scene snapshot.
+    private static func inspectPoster(_ params: [String: Any]) throws -> [String: Any] {
+        let pid = try integer(params, "pid")
+        guard pid > 1 else { throw GuestAPIError.invalidRequest("pid must be a positive process id") }
+        let helper = "/usr/libexec/vphone-poster-inspect"
+        guard access(helper, X_OK) == 0 else {
+            return ["available": false, "pid": pid, "reason": "poster instrumented helper is not installed"]
+        }
+        // Helper execution is deliberately not enabled until its payload hash
+        // and target identity checks are wired into the guest manifest.
+        return ["available": false, "pid": pid, "reason": "poster helper is present but not admitted"]
+    }
+
+    // This is deliberately a small diagnostic surface. It is not a general
+    // shell: every executable has a fixed path and arguments are passed
+    // directly to posix_spawn (there is no shell expansion).
+    private static func spawnProcess(_ params: [String: Any]) throws -> [String: Any] {
+        guard let name = params["executable"] as? String,
+              let executable = GuestProcessSpawnPolicy.executables[name] else { throw GuestAPIError.invalidRequest("executable must be one of " + GuestProcessSpawnPolicy.executables.keys.sorted().joined(separator: ", ")) }
+        let arguments = params["arguments"] as? [String] ?? []
+        let timeout = (params["timeout_seconds"] as? NSNumber).map { $0.doubleValue } ?? 3.0
+        if let error = GuestProcessSpawnPolicy.validate(executable: name, arguments: arguments, timeout: timeout) { throw GuestAPIError.invalidRequest(error) }
+
+        var stdoutPipe: [Int32] = [0, 0]
+        var stderrPipe: [Int32] = [0, 0]
+        guard pipe(&stdoutPipe) == 0, pipe(&stderrPipe) == 0 else {
+            throw GuestAPIError.operationFailed("pipe: " + String(cString: strerror(errno)))
+        }
+        defer {
+            close(stdoutPipe[0]); close(stdoutPipe[1]); close(stderrPipe[0]); close(stderrPipe[1])
+        }
+
+        var argv = [UnsafeMutablePointer<CChar>?](repeating: nil, count: arguments.count + 2)
+        argv[0] = strdup(executable)
+        for (index, argument) in arguments.enumerated() { argv[index + 1] = strdup(argument) }
+        defer { for value in argv where value != nil { free(value) } }
+        var actions: posix_spawn_file_actions_t?
+        vp_spawn_file_actions_init(&actions)
+        defer { vp_spawn_file_actions_destroy(&actions) }
+        vp_spawn_file_actions_adddup2(&actions, stdoutPipe[1], STDOUT_FILENO)
+        vp_spawn_file_actions_adddup2(&actions, stderrPipe[1], STDERR_FILENO)
+        vp_spawn_file_actions_addclose(&actions, stdoutPipe[0])
+        vp_spawn_file_actions_addclose(&actions, stderrPipe[0])
+        var pid: pid_t = 0
+        let spawnError = vp_spawn(&pid, executable, &actions, nil, &argv, environ)
+        guard spawnError == 0 else { throw GuestAPIError.operationFailed("posix_spawn: " + String(cString: strerror(spawnError))) }
+        close(stdoutPipe[1]); close(stderrPipe[1])
+
+        fcntl(stdoutPipe[0], F_SETFL, O_NONBLOCK)
+        fcntl(stderrPipe[0], F_SETFL, O_NONBLOCK)
+        var output = Data(); var errorOutput = Data(); var status: Int32 = 0
+        let deadline = Date().addingTimeInterval(timeout)
+        var exited = false
+        while Date() < deadline {
+            drainSpawnPipe(stdoutPipe[0], into: &output)
+            drainSpawnPipe(stderrPipe[0], into: &errorOutput)
+            if waitpid(pid, &status, WNOHANG) == pid { exited = true; break }
+            usleep(10_000)
+        }
+        if !exited {
+            kill(pid, SIGKILL)
+            _ = waitpid(pid, &status, 0)
+        }
+        drainSpawnPipe(stdoutPipe[0], into: &output); drainSpawnPipe(stderrPipe[0], into: &errorOutput)
+        return [
+            "executable": executable, "arguments": arguments, "pid": Int(pid),
+            "timed_out": !exited, "exit_code": exited && (status & 0x7f) == 0 ? Int((status >> 8) & 0xff) : NSNull(),
+            "signal": exited && (status & 0x7f) != 0 ? Int(status & 0x7f) : NSNull(),
+            "stdout": String(decoding: output, as: UTF8.self), "stderr": String(decoding: errorOutput, as: UTF8.self),
+        ]
+    }
+
+    private static func drainSpawnPipe(_ fd: Int32, into data: inout Data) {
+        guard data.count < GuestProcessSpawnPolicy.outputLimit else { return }
+        var buffer = [UInt8](repeating: 0, count: min(4096, GuestProcessSpawnPolicy.outputLimit - data.count))
+        while true {
+            let count = read(fd, &buffer, buffer.count)
+            if count > 0 { data.append(contentsOf: buffer[0..<count]) } else { break }
         }
     }
 

@@ -253,7 +253,7 @@ struct VPhoneVirtualMachineTemplateFindCommand: ParsableCommand {
     var ipswCache: String?
     @Option(help: ArgumentHelp("Guest device, when the IPSW covers several models", valueName: "product-type"))
     var device: String?
-    @Option(name: .customLong("preset"), help: "Patch preset (default standard)") var preset: String?
+    @Option(name: .customLong("preset"), help: "Patch preset name or preset plist path (default standard)") var preset: String?
     @Option(name: .shortAndLong, help: "Disk size (GB, default 64)") var diskSize: UInt64?
     @Option(name: .customLong("block"), help: ArgumentHelp("A patch the preset turns on, turned off", valueName: "id"))
     var blocked: [String] = []
@@ -277,7 +277,7 @@ struct VPhoneVirtualMachineTemplateFindCommand: ParsableCommand {
                 device: builds.device,
                 ios: builds.ios,
                 cloudOS: builds.cloudOS,
-                preset: preset ?? VPhonePatchPreset.standardIdentifier,
+                preset: VPhonePatchPresetStore.resolve(preset ?? VPhonePatchPreset.standardIdentifier).preset,
                 blocked: blocked,
                 allowed: allowed,
                 diskSizeGB: diskSize ?? 64,

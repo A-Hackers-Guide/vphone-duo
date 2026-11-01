@@ -41,6 +41,44 @@ static IOHIDEventSystemClientRef gTouchClient;
 static dispatch_queue_t gTouchQueue;
 static bool gTouchUnavailableLogged;
 
+NSDictionary<NSString *, id> *vp_hid_input_devices(void) {
+    void *ioKit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW);
+    IOHIDEventSystemClientRef (*create)(CFAllocatorRef) = ioKit ? dlsym(ioKit, "IOHIDEventSystemClientCreate") : NULL;
+    CFArrayRef (*copyServices)(IOHIDEventSystemClientRef) = ioKit ? dlsym(ioKit, "IOHIDEventSystemClientCopyServices") : NULL;
+    CFTypeRef (*copyProperty)(const void *, CFStringRef) = ioKit ? dlsym(ioKit, "IOHIDServiceClientCopyProperty") : NULL;
+    CFTypeRef (*registryID)(const void *) = ioKit ? dlsym(ioKit, "IOHIDServiceClientGetRegistryID") : NULL;
+    if (!create || !copyServices || !copyProperty) return @{@"available": @NO, @"reason": @"HID service APIs unavailable"};
+    IOHIDEventSystemClientRef client = create(kCFAllocatorDefault);
+    if (!client) return @{@"available": @NO, @"reason": @"HID read client unavailable"};
+    CFArrayRef services = copyServices(client);
+    NSMutableArray *rows = [NSMutableArray array];
+    NSArray *keys = @[@"Product", @"Transport", @"VendorID", @"ProductID", @"PrimaryUsagePage", @"PrimaryUsage",
+        @"DeviceUsagePairs", @"DisplayIntegrated", @"DisplayID", @"DisplayIdentifier", @"DisplayUUID",
+        @"PixelWidth", @"PixelHeight", @"DigitizerSurfaceDimensions", @"DisplaySurfaceDimensions",
+        @"DigitizerSurfaceWidth", @"DigitizerSurfaceHeight", @"PhysicalMaxX", @"PhysicalMaxY",
+        @"LogicalMaxX", @"LogicalMaxY", @"MinX", @"MinY", @"MaxX", @"MaxY", @"ReportDescriptor"];
+    for (CFIndex index = 0; services && index < CFArrayGetCount(services) && index < 64; index++) {
+        const void *service = CFArrayGetValueAtIndex(services, index);
+        NSMutableDictionary *row = [NSMutableDictionary dictionaryWithObject:@(index) forKey:@"index"];
+        CFTypeRef identifier = registryID ? registryID(service) : NULL;
+        if (identifier && CFGetTypeID(identifier) == CFNumberGetTypeID()) row[@"registryID"] = (__bridge NSNumber *)identifier;
+        for (NSString *key in keys) {
+            CFTypeRef copied = copyProperty(service, (__bridge CFStringRef)key);
+            if (!copied) continue;
+            id value = CFBridgingRelease(copied);
+            if ([value isKindOfClass:NSData.class]) {
+                NSData *data = value;
+                row[key] = @{@"byteCount": @(data.length), @"base64": [[data subdataWithRange:NSMakeRange(0, MIN(data.length, 4096))] base64EncodedStringWithOptions:0]};
+            } else if ([NSJSONSerialization isValidJSONObject:@[value]]) row[key] = value;
+        }
+        [rows addObject:row];
+    }
+    NSUInteger count = services ? (NSUInteger)CFArrayGetCount(services) : 0;
+    if (services) CFRelease(services);
+    CFRelease(client);
+    return @{@"available": @YES, @"serviceCount": @(count), @"services": rows};
+}
+
 // Digitizer event-mask bits and transducer types (IOHIDEventTypes.h).
 #define VP_DIG_RANGE 0x00000001u
 #define VP_DIG_TOUCH 0x00000002u

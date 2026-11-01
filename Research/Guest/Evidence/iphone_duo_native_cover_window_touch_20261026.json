@@ -1,0 +1,221 @@
+{
+  "bundle": "2.12.1-local.22357146",
+  "nativeWindow": true,
+  "coverGeometry": {
+    "capture_pixels": [
+      2007,
+      2853
+    ],
+    "configured_pixels": [
+      2007,
+      2853
+    ],
+    "input_orientation": 0,
+    "screenshot_pixels": [
+      1398,
+      2034
+    ],
+    "view": {
+      "display_rect": [
+        0,
+        0,
+        508.1637168141593,
+        722.3672566371681
+      ],
+      "graphics_pixels": [
+        2007,
+        2853
+      ],
+      "is_flipped": false,
+      "mouse_uses_pointer": false,
+      "screen_orientation": 0,
+      "view_bounds": [
+        0,
+        0,
+        508.1637168141593,
+        722.3672566371681
+      ],
+      "view_rotation": 0
+    },
+    "windowed": true
+  },
+  "touches": [
+    {
+      "hitViewFrame": null,
+      "sceneOrientation": 1,
+      "hitView": "nil",
+      "phase": 0,
+      "windowBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "touchType": 0,
+      "screenBounds": [
+        0,
+        0,
+        466,
+        678
+      ],
+      "window": "_UISystemGestureWindow",
+      "sceneCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "point": [
+        233,
+        578
+      ],
+      "windowRole": "other",
+      "screenCoordinateBounds": [
+        0,
+        0,
+        466,
+        678
+      ],
+      "hitViewBounds": null,
+      "scene": null
+    },
+    {
+      "hitViewFrame": [
+        203,
+        548,
+        60,
+        74
+      ],
+      "sceneOrientation": 1,
+      "hitView": "SBIconView",
+      "phase": 0,
+      "windowBounds": [
+        0,
+        0,
+        466,
+        678
+      ],
+      "touchType": 0,
+      "screenBounds": [
+        0,
+        0,
+        466,
+        678
+      ],
+      "window": "SBHomeScreenWindow",
+      "sceneCoordinateBounds": [
+        0,
+        0,
+        466,
+        678
+      ],
+      "point": [
+        233,
+        578
+      ],
+      "windowRole": "other",
+      "screenCoordinateBounds": [
+        0,
+        0,
+        466,
+        678
+      ],
+      "hitViewBounds": [
+        0,
+        0,
+        60,
+        74
+      ],
+      "scene": "SB-main"
+    },
+    {
+      "hitViewFrame": null,
+      "sceneOrientation": 1,
+      "hitView": "nil",
+      "phase": 3,
+      "windowBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "touchType": 0,
+      "screenBounds": [
+        0,
+        0,
+        466,
+        678
+      ],
+      "window": "_UISystemGestureWindow",
+      "sceneCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "point": [
+        233,
+        578
+      ],
+      "windowRole": "other",
+      "screenCoordinateBounds": [
+        0,
+        0,
+        466,
+        678
+      ],
+      "hitViewBounds": null,
+      "scene": null
+    },
+    {
+      "hitViewFrame": null,
+      "sceneOrientation": 1,
+      "hitView": "nil",
+      "phase": 3,
+      "windowBounds": [
+        0,
+        0,
+        466,
+        678
+      ],
+      "touchType": 0,
+      "screenBounds": [
+        0,
+        0,
+        466,
+        678
+      ],
+      "window": "SBHomeScreenWindow",
+      "sceneCoordinateBounds": [
+        0,
+        0,
+        466,
+        678
+      ],
+      "point": [
+        233,
+        578
+      ],
+      "windowRole": "other",
+      "screenCoordinateBounds": [
+        0,
+        0,
+        466,
+        678
+      ],
+      "hitViewBounds": null,
+      "scene": "SB-main"
+    }
+  ],
+  "foreground": {
+    "bundle_id": "com.apple.Preferences",
+    "name": "Settings",
+    "pid": 343,
+    "source": "runningboard",
+    "verified": true
+  },
+  "limitations": [
+    "Foreground Settings retained cover scene size after timed inner restore",
+    "Rotation and persistent fold control not yet accepted"
+  ]
+}

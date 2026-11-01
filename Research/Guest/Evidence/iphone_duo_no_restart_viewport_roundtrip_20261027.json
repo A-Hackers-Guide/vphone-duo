@@ -1,0 +1,11 @@
+{
+  "machine": "duotest-m5",
+  "bundle": "2.12.1-local.3803cc4d",
+  "springboard_pid": 37,
+  "sequence": [
+    {"posture":"open","bounds_pt":[669,951],"configuration_bounds_pt":[669,951],"scale":3,"viewport_generation":3},
+    {"posture":"closed","bounds_pt":[466,678],"configuration_bounds_pt":[466,678],"scale":3,"viewport_generation":4},
+    {"posture":"open","bounds_pt":[669,951],"configuration_bounds_pt":[669,951],"scale":3,"viewport_generation":5}
+  ],
+  "result": "Both native Duo viewports were applied at runtime; SpringBoard PID stayed 37 throughout and no guest restart was issued."
+}

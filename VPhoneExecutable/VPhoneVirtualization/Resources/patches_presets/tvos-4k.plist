@@ -76,6 +76,7 @@
 			<string>system-tv-exp-legacy_setup</string>
 			<string>system-homepod-exp-top_cap</string>
 			<string>system-homepod-exp-setup_bypass</string>
+			<string>system-homepod-exp-airplay_vm</string>
 			<string>system-homepod-exp-welcome</string>
 			<string>system-homepod-exp-siri_speech</string>
 			<string>system-homepod-exp-ota_userland</string>
@@ -108,12 +109,17 @@
 			<string>dyld-boot-arm64e_x1_bootstrap</string>
 			<string>dyld-boot-iomfb_swapend</string>
 			<string>dyld-cfw-camera</string>
+			<string>dyld-cfw-arm64e_x1_cache</string>
+			<string>system-cibarcode-cfw-arm64e_x1</string>
 			<string>kernel-boot-arm64e_x1</string>
 			<string>kernel-boot-cssc_emulation</string>
 			<string>preboot-cfw-devicetree_board_audio</string>
 			<string>preboot-cfw-devicetree_haptics</string>
 			<string>preboot-cfw-devicetree_iphone_product</string>
+			<string>preboot-cfw-devicetree_foldable_vm_subtype</string>
 			<string>preboot-cfw-devicetree_microphone_array</string>
+			<string>preboot-cfw-devicetree_foldable_product_id</string>
+			<string>preboot-cfw-devicetree_foldable_displays</string>
 			<string>restoreramdisk-boot-apfs_sha3_hash</string>
 			<string>system-apps-cfw-attitude</string>
 			<string>system-apps-cfw-signin_sheets</string>
@@ -121,6 +127,9 @@
 			<string>system-backboardd-cfw-gyroscope</string>
 			<string>system-backboardd-cfw-accelerometer</string>
 			<string>system-campo-cfw-entitlements</string>
+			<string>system-backboardd-cfw-hinge</string>
+			<string>system-springboard-cfw-fold_guard</string>
+			<string>system-springboard-cfw-fold_display</string>
 			<string>system-debugserver-cfw-install</string>
 			<string>system-dyld-boot-arm64e_x1_bootstrap</string>
 			<string>system-diskimagesiod-cfw-is_mount_complete</string>
@@ -137,6 +146,7 @@
 			<string>system-systemhook-cfw-metal_cache_reuse</string>
 			<string>system-systemversion-cfw-build_version</string>
 			<string>system-virtiosound-cfw-hal_plugin</string>
+			<string>system-virtualaudio-cfw-device_state_null_gate</string>
 			<string>system-virtualaudio-cfw-microphone_graph_chains</string>
 			<string>system-virtualaudio-cfw-mute_set_throw</string>
 			<string>system-virtualaudio-cfw-speaker_graph_chains</string>

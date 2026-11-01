@@ -1,0 +1,189 @@
+{
+  "STUIStatusBarVisualProvider_AxisAlignableSplit2007": {
+    "actualProviderClass": "STUIStatusBarVisualProvider_AxisAlignableSplit2007",
+    "foregroundFrame": [
+      581,
+      0,
+      88,
+      123.66666666666667
+    ],
+    "targetScreenEmbedded": true,
+    "targetScreenMatchesScene": 1
+  },
+  "STUIStatusBarVisualProvider_DynamicSplitSmallIsland": {
+    "actualProviderClass": "STUIStatusBarVisualProvider_DynamicSplitSmallIsland",
+    "foregroundFrame": [
+      0,
+      0,
+      669,
+      951
+    ],
+    "targetScreenEmbedded": true,
+    "targetScreenMatchesScene": 1
+  },
+  "touches": [
+    {
+      "hitViewFrame": [
+        463.6666666666667,
+        436,
+        60,
+        74
+      ],
+      "sceneOrientation": 1,
+      "hitView": "SBIconView",
+      "phase": 0,
+      "windowBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "touchType": 0,
+      "screenBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "window": "SBHomeScreenWindow",
+      "sceneCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "point": [
+        495.3333333333333,
+        466
+      ],
+      "windowRole": "other",
+      "screenCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "hitViewBounds": [
+        0,
+        0,
+        60,
+        74
+      ],
+      "scene": "SB-main"
+    },
+    {
+      "hitViewFrame": [
+        357.6666666666667,
+        672,
+        60,
+        74
+      ],
+      "sceneOrientation": 1,
+      "hitView": "SBIconView",
+      "phase": 0,
+      "windowBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "touchType": 0,
+      "screenBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "window": "SBHomeScreenWindow",
+      "sceneCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "point": [
+        387.3333333333333,
+        701.6666666666666
+      ],
+      "windowRole": "other",
+      "screenCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "hitViewBounds": [
+        0,
+        0,
+        60,
+        74
+      ],
+      "scene": "SB-main"
+    },
+    {
+      "hitViewFrame": [
+        16,
+        16,
+        60,
+        60
+      ],
+      "sceneOrientation": 1,
+      "hitView": "SBIconView",
+      "phase": 0,
+      "windowBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "touchType": 0,
+      "screenBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "window": "SBFloatingDockWindow",
+      "sceneCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "point": [
+        220,
+        896.6666666666666
+      ],
+      "windowRole": "other",
+      "screenCoordinateBounds": [
+        0,
+        0,
+        669,
+        951
+      ],
+      "hitViewBounds": [
+        0,
+        0,
+        60,
+        60
+      ],
+      "scene": "SB-main"
+    }
+  ],
+  "base_sb": {
+    "pid": 290,
+    "start_time": 1793018091.874274
+  },
+  "base_bbd": {
+    "pid": 61,
+    "start_time": 1793018083.973711
+  },
+  "after_sb": {
+    "pid": 290,
+    "start_time": 1793018091.874274
+  },
+  "after_bbd": {
+    "pid": 61,
+    "start_time": 1793018083.973711
+  }
+}

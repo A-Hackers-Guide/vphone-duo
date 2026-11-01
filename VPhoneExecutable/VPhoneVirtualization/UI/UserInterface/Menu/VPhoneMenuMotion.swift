@@ -9,6 +9,7 @@ extension VPhoneMenuController {
         menu.autoenablesItems = false
         menu.addItem(makePanelItem(.gyroscope, "3D Gyroscope", keyEquivalent: "", symbol: "gyroscope"))
         menu.addItem(makePanelItem(.attitude, "Device Attitude", keyEquivalent: "", symbol: "rotate.3d"))
+        menu.addItem(makePanelItem(.foldPosture, "Fold Posture", keyEquivalent: "", symbol: "book.closed"))
         item.submenu = menu
         return item
     }

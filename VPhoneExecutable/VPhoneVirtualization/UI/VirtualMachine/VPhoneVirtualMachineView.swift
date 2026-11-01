@@ -540,7 +540,12 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     /// A view point as `input.pointer` takes it: 0...1 of the interface as the
     /// window shows it, from the top-left corner.
     private func interfacePoint(_ localPoint: NSPoint) -> CGPoint {
-        let panel = normalizeCoordinate(localPoint)
+var panel = normalizeCoordinate(localPoint)
+        if let active = activePanelPixels, let backing = recordingGraphicsDisplay?.sizeInPixels,
+           active.width > 0, active.height > 0 {
+            panel.x *= backing.width / active.width
+            panel.y *= backing.height / active.height
+        }
         let unit = CGSize(width: 1, height: 1)
         let screen = screenOrientation.screenPoint(fromPanel: CGPoint(x: panel.x, y: 1 - panel.y), panel: unit)
         return CGPoint(x: min(max(screen.x, 0), 1), y: min(max(1 - screen.y, 0), 1))
@@ -629,7 +634,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     /// How the window shows the panel: this view is turned with the guest's
     /// interface, and keeps its portrait bounds.
     private var screenOrientation: VPhoneDisplayOrientation {
-        VPhoneDisplayOrientation(viewRotation: frameCenterRotation)
+        VPhoneDisplayOrientation(viewRotation: enclosingDisplayRotation ?? frameCenterRotation)
     }
 
     /// Where to press the synthetic finger: the pointer, except for an upward
@@ -938,6 +943,24 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
 
     // MARK: - Programmatic Touch (for automation)
 
+    var enclosingDisplayRotation: CGFloat?
+    var activePanelPixels: CGSize?
+    var displayedOrientation: VPhoneDisplayOrientation { screenOrientation }
+
+    /// Read-only diagnostic: use the same geometry as real mouse/touch input.
+    func inputGeometryReport() -> [String: Any] {
+        let pixels = recordingGraphicsDisplay?.sizeInPixels ?? .zero
+        func rect(_ value: CGRect) -> [Double] {
+            [Double(value.minX), Double(value.minY), Double(value.width), Double(value.height)]
+        }
+        return [
+            "graphics_pixels": [Double(pixels.width), Double(pixels.height)],
+            "view_bounds": rect(bounds), "display_rect": rect(displayGeometry.displayRect),
+            "view_rotation": Double(enclosingDisplayRotation ?? frameCenterRotation), "screen_orientation": screenOrientation.rawValue,
+            "is_flipped": isFlipped, "mouse_uses_pointer": clicksWithGuestPointer,
+        ]
+    }
+
     /// Convert screenshot pixel coordinates to NSView local coordinates.
     private func pixelToLocal(pixelX: Double, pixelY: Double, screenWidth: Int, screenHeight: Int) -> NSPoint {
         displayGeometry.viewPoint(normalized: CGPoint(
@@ -1121,20 +1144,10 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
                     x2: Double(normalized[1].x), y2: Double(normalized[1].y),
                 )
             } else {
-                var point = normalized[0]
-                // UIKit only accepts an edge touch that begins within a few
-                // points of the edge; the 32pt mouse zone rarely gets there.
-                // Start it on the edge, like a finger sliding in.
-                if phase == 0, control.supportsEdgeTouch {
-                    let inset: CGFloat = 0.001
-                    switch swipeAim {
-                    case VPhoneDisplayGeometry.Edge.top.rawValue: point.y = inset
-                    case VPhoneDisplayGeometry.Edge.bottom.rawValue: point.y = 1 - inset
-                    case VPhoneDisplayGeometry.Edge.right.rawValue: point.x = 1 - inset
-                    case VPhoneDisplayGeometry.Edge.left.rawValue: point.x = inset
-                    default: break
-                    }
-                }
+                // Edge flags must not move an ordinary tap onto the edge.
+                // Deliberate trackpad home gestures select their edge start
+                // in snappedScrollStart; pointer/tap coordinates stay exact.
+                let point = normalized[0]
                 control.sendTouch(
                     phase: phase, x: Double(point.x), y: Double(point.y), edge: swipeAim,
                 )
@@ -1195,9 +1208,43 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
     /// so touches are measured against it rather than `bounds`.
     private var displayGeometry: VPhoneDisplayGeometry {
         VPhoneDisplayGeometry(
-            viewBounds: bounds,
-            displaySize: recordingGraphicsDisplay?.sizeInPixels ?? .zero,
+            viewBounds: touchViewportBounds,
+            displaySize: touchViewportSize,
             isFlipped: isFlipped,
+        )
+    }
+
+    /// The visible activity surface inside the fixed backing framebuffer.
+    /// Duo keeps one physical Main/backing surface and clips it to the current
+    /// outer or inner viewport. Input must be measured against that clipped
+    /// rectangle; using the full backing bounds makes outer-screen touches
+    /// land in the hidden part of the framebuffer.
+    /// Use the panel's fraction of the backing framebuffer in view coordinates
+    /// to account for window scaling.
+    private var touchViewportSize: CGSize {
+        if let active = activePanelPixels,
+           let backing = recordingGraphicsDisplay?.sizeInPixels,
+           active.width > 0, active.height > 0,
+           backing.width > 0, backing.height > 0 {
+            return CGSize(
+                width: bounds.width * active.width / backing.width,
+                height: bounds.height * active.height / backing.height,
+            )
+        }
+        return bounds.size
+    }
+
+    private var touchViewportBounds: CGRect {
+        let size = touchViewportSize
+        guard size.width > 0, size.height > 0 else { return bounds }
+        // VPhoneDisplayContainerView bottom-aligns the full backing view inside
+        // the clipped viewport, so the active surface occupies the bottom-left
+        // portion of the VM view's local coordinates.
+        return CGRect(
+            x: 0,
+            y: max(0, bounds.height - size.height),
+            width: min(bounds.width, size.width),
+            height: min(bounds.height, size.height),
         )
     }
 

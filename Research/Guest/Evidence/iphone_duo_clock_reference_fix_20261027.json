@@ -1,0 +1,93 @@
+{
+  "bundle": "2.12.1-local.4e40b3b6",
+  "stages": [
+    {
+      "name": "before",
+      "source": {
+        "_dateTimeProvider": "<SBFOverridableDateProvider: 0xad930a800>",
+        "_dateTimeProviderToken": "0",
+        "_shortTimeItemDateFormatter": "<NSDateFormatter: 0xad8f2e5b0>",
+        "allButBatteryCloaked": false,
+        "_timeItemDateFormatter": "<NSDateFormatter: 0xad8f2e760>",
+        "timeCloaked": false,
+        "telephonyAndBluetoothCloaked": false,
+        "_timeItemTimeString": "2:11 AM",
+        "nativeDate": "2026-10-26 18:11:51 +0000",
+        "_timeItemDateFormatterConfig": {
+          "dateStyle": 0,
+          "timeStyle": 1,
+          "locale": "en_US",
+          "nativeFormattedDate": "2:11 AM",
+          "format": "h:mm a"
+        },
+        "_shortTimeItemDateFormatterConfig": {
+          "dateStyle": 0,
+          "timeStyle": 0,
+          "locale": "en_US",
+          "nativeFormattedDate": "2:11",
+          "format": "h:mm"
+        }
+      },
+      "visibleTime": null
+    },
+    {
+      "name": "applied",
+      "source": {
+        "_dateTimeProvider": "<SBFOverridableDateProvider: 0xad930a800>",
+        "_dateTimeProviderToken": "0",
+        "_shortTimeItemDateFormatter": "<NSDateFormatter: 0xad8f2e5b0>",
+        "allButBatteryCloaked": false,
+        "_timeItemDateFormatter": "<NSDateFormatter: 0xad8f2e760>",
+        "timeCloaked": false,
+        "telephonyAndBluetoothCloaked": false,
+        "_timeItemTimeString": "2:11 AM",
+        "nativeDate": "2026-10-26 18:11:53 +0000",
+        "_timeItemDateFormatterConfig": {
+          "dateStyle": 0,
+          "timeStyle": 1,
+          "locale": "en_US",
+          "nativeFormattedDate": "2:11 AM",
+          "format": "h:mm a"
+        },
+        "_shortTimeItemDateFormatterConfig": {
+          "dateStyle": 0,
+          "timeStyle": 0,
+          "locale": "en_US",
+          "nativeFormattedDate": "2:11",
+          "format": "h:mm"
+        }
+      },
+      "visibleTime": null
+    },
+    {
+      "name": "settled",
+      "source": {
+        "_dateTimeProvider": "<SBFOverridableDateProvider: 0xad930a800>",
+        "_dateTimeProviderToken": "0",
+        "_shortTimeItemDateFormatter": "<NSDateFormatter: 0xad8f2e5b0>",
+        "allButBatteryCloaked": false,
+        "_timeItemDateFormatter": "<NSDateFormatter: 0xad8f2e760>",
+        "timeCloaked": false,
+        "telephonyAndBluetoothCloaked": false,
+        "_timeItemTimeString": "2:12 AM",
+        "nativeDate": "2026-10-26 18:12:01 +0000",
+        "_timeItemDateFormatterConfig": {
+          "dateStyle": 0,
+          "timeStyle": 1,
+          "locale": "en_US",
+          "nativeFormattedDate": "2:12 AM",
+          "format": "h:mm a"
+        },
+        "_shortTimeItemDateFormatterConfig": {
+          "dateStyle": 0,
+          "timeStyle": 0,
+          "locale": "en_US",
+          "nativeFormattedDate": "2:12",
+          "format": "h:mm"
+        }
+      },
+      "visibleTime": "    timeEntry = <STStatusBarDataStringEntry: 0xad863eb20; enabled: YES; stringValue: \"2:12 AM\">;\n"
+    }
+  ],
+  "limitation": "Time becomes visible at minute update; immediate initial data delivery and landscape wallpaper still require validation"
+}

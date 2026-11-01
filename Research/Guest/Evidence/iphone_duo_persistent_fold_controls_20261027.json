@@ -1,0 +1,235 @@
+{
+  "bundle": "2.12.1-local.e4c3c421",
+  "driver": "Native Fold Posture panel; no experimental notifications or once flags",
+  "states": [
+    {
+      "name": "before",
+      "geometry": {
+        "available": true,
+        "bounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "configurationBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "coordinateBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "deviceOrientations": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "generatedUptime": 32.22195741666667,
+        "interfaceOrientation": 1,
+        "persistentViewport": true,
+        "pid": 37,
+        "scale": 3,
+        "scene": "SB-main",
+        "surfaceType": 0,
+        "version": 1,
+        "viewportGeneration": 1
+      }
+    },
+    {
+      "name": "closed",
+      "geometry": {
+        "available": true,
+        "bounds": [
+          0,
+          0,
+          466,
+          678
+        ],
+        "configurationBounds": [
+          0,
+          0,
+          466,
+          678
+        ],
+        "coordinateBounds": [
+          0,
+          0,
+          466,
+          678
+        ],
+        "deviceOrientations": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "generatedUptime": 124.81685633333333,
+        "interfaceOrientation": 1,
+        "persistentViewport": true,
+        "pid": 37,
+        "scale": 3,
+        "scene": "SB-main",
+        "surfaceType": 0,
+        "version": 1,
+        "viewportGeneration": 2
+      }
+    },
+    {
+      "name": "held",
+      "geometry": {
+        "available": true,
+        "bounds": [
+          0,
+          0,
+          466,
+          678
+        ],
+        "configurationBounds": [
+          0,
+          0,
+          466,
+          678
+        ],
+        "coordinateBounds": [
+          0,
+          0,
+          466,
+          678
+        ],
+        "deviceOrientations": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "generatedUptime": 178.37641233333335,
+        "interfaceOrientation": 1,
+        "persistentViewport": true,
+        "pid": 37,
+        "scale": 3,
+        "scene": "SB-main",
+        "surfaceType": 0,
+        "version": 1,
+        "viewportGeneration": 2
+      }
+    },
+    {
+      "name": "open",
+      "geometry": {
+        "available": true,
+        "bounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "configurationBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "coordinateBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "deviceOrientations": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "generatedUptime": 223.429422125,
+        "interfaceOrientation": 1,
+        "persistentViewport": true,
+        "pid": 37,
+        "scale": 3,
+        "scene": "SB-main",
+        "surfaceType": 0,
+        "version": 1,
+        "viewportGeneration": 3
+      }
+    },
+    {
+      "name": "book",
+      "geometry": {
+        "available": true,
+        "bounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "configurationBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "coordinateBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "deviceOrientations": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "generatedUptime": 271.907064375,
+        "interfaceOrientation": 1,
+        "persistentViewport": true,
+        "pid": 37,
+        "scale": 3,
+        "scene": "SB-main",
+        "surfaceType": 0,
+        "version": 1,
+        "viewportGeneration": 3
+      }
+    }
+  ],
+  "apps": [
+    {
+      "name": "closed",
+      "foreground": {
+        "bundle_id": "com.apple.Preferences",
+        "name": "Settings",
+        "pid": 306,
+        "source": "runningboard",
+        "verified": true
+      }
+    },
+    {
+      "name": "open",
+      "foreground": {
+        "bundle_id": "com.apple.Preferences",
+        "name": "Settings",
+        "pid": 306,
+        "source": "runningboard",
+        "verified": true
+      }
+    }
+  ],
+  "bookPose": {
+    "available": true,
+    "device_orientation": 1,
+    "hinge": 2,
+    "orientation": 1,
+    "tabletop": 0
+  },
+  "remaining": [
+    "Rotation and repeated-cycle acceptance",
+    "SpringBoard restart and cold closed boot restore",
+    "Cleanup retired diagnostic controls"
+  ]
+}

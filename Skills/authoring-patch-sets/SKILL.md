@@ -193,7 +193,15 @@ Presets are prewritten and reviewed. Nothing in the tool writes one; a VM record
 only which boxes its owner changed, and those compose on top.
 
 `standard` is what every VM gets. Any other preset must be asked for with
-`--preset`. The shipped presets name every set but the restore image and differ only in their
+`--preset`, which takes a preset name or a path to a preset plist (a value
+with a `/` or a `.plist` suffix). A preset given as a file is copied into the
+VM as `PatchPreset.plist`, so later steps — root `cfw install` included —
+resolve it without the original; naming a preset again removes the copy. Its
+identifier may not be a shipped one, nor contain `/` or end in `.plist`. Under
+root the file must be a single-link regular file owned by the sudo user.
+`fw export-preset` writes such a file from a VM's choice (`<vm>`) or from
+`--preset/--block/--allow`, with the overrides folded into the selection as
+`VPhonePatchPlan.resolve` composes them; the file's name is its identifier. The shipped presets name every set but the restore image and differ only in their
 selection:
 
 ```xml
@@ -220,11 +228,12 @@ fails if they drift.
 
 ### What a VM Records
 
-A VM carries three patch records, each with its own writers:
+A VM carries up to four patch records, each with its own writers:
 
 | File | What it says | Written by |
 | --- | --- | --- |
 | `<vm>/PatchSelection.plist` | what the owner wants: a preset plus the boxes they changed | `fw set-patches`; `vm create` (preset only); `fw patch` (rewrites it with what it ran, `--preset` included) |
+| `<vm>/PatchPreset.plist` | the preset, when `--preset` named a file | `vm create`, `fw set-patches`, `fw patch` |
 | `<vm>/PatchPlan.plist` | what the last `fw patch` resolved | `fw patch` |
 | `<vm>/PatchReceipt.plist` | what is live in the guest, part by part | each step that puts patched bytes into the guest |
 

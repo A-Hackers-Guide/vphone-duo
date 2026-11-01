@@ -164,6 +164,11 @@ static int vpExecve(const char *path, char *const argv[], char *const envp[]) {
 #define VP_GYROSCOPE_HOOK "/usr/lib/libvphonegyro.dylib"
 #define VP_HINGE_HOOK "/usr/lib/libvphonehinge.dylib"
 #define VP_ACCELEROMETER_HOOK "/usr/lib/libvphoneaccelerometer.dylib"
+#define VP_HINGE_HOOK "/usr/lib/libvphonehinge.dylib"
+#define VP_FOLD_GUARD "/usr/lib/libvphonefoldguard.dylib"
+// The Duo's inner display: published by backboardd, resolved and shown by
+// SpringBoard. See FoldDisplay/libvphonefolddisplay.m.
+#define VP_FOLD_DISPLAY "/usr/lib/libvphonefolddisplay.dylib"
 #define VP_ATTITUDE_HOOK "/usr/lib/libvphoneattitude.dylib"
 #define VP_AVFOUNDATION "/System/Library/Frameworks/AVFoundation.framework/AVFoundation"
 // The haptics fix rides the same route and needs no loader of its own. See
@@ -263,6 +268,8 @@ __attribute__((constructor)) static void vpLogProcess(void) {
         vpLoadLibrary("gyroscope-hook", VP_GYROSCOPE_HOOK);
         vpLoadLibrary("hinge-hook", VP_HINGE_HOOK);
         vpLoadLibrary("accelerometer-hook", VP_ACCELEROMETER_HOOK);
+        vpLoadLibrary("hinge-hook", VP_HINGE_HOOK);
+        vpLoadLibrary("fold-display", VP_FOLD_DISPLAY);
         return;
     }
     // SpringBoard needs the haptics swizzle before UIKit first asks for an
@@ -270,6 +277,10 @@ __attribute__((constructor)) static void vpLogProcess(void) {
     if (vpIsSpringBoard(path)) {
         vpLoadLibrary("haptics-fix", VP_HAPTICS_FIX);
         vpLoadLibrary("accelerometer-hook", VP_ACCELEROMETER_HOOK);
+        // Inert without the foldable product identity; with it, the guard
+        // keeps the secure-indicator raise from crash-looping SpringBoard.
+        vpLoadLibrary("fold-guard", VP_FOLD_GUARD);
+        vpLoadLibrary("fold-display", VP_FOLD_DISPLAY);
     }
     // Loaded before the app gate too: the swizzle must be in place before
     // Settings builds its follow-up section.

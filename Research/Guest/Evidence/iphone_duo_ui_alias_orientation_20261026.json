@@ -1,0 +1,356 @@
+{
+  "native_portrait": {
+    "clientDisplayType": 0,
+    "clientDisplayIdentifier": null,
+    "interfaceOrientation": 1,
+    "systemArbitratedInterfaceOrientation": 1,
+    "_effectiveUISettings": 1,
+    "_effectiveUIClientSettings": 1,
+    "roots": [
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-main"
+      },
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-systemAperture"
+      },
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-systemApertureCurtain"
+      }
+    ],
+    "surfaceType": 2,
+    "connectedDisplayCount": 1,
+    "caDisplayObjectCount": 6,
+    "configurationBounds": [
+      0,
+      0,
+      678,
+      951
+    ],
+    "screenNativeBounds": [
+      0,
+      0,
+      2034,
+      2853
+    ]
+  },
+  "native_landscape": {
+    "clientDisplayType": 0,
+    "clientDisplayIdentifier": null,
+    "interfaceOrientation": 3,
+    "systemArbitratedInterfaceOrientation": 3,
+    "_effectiveUISettings": 1,
+    "_effectiveUIClientSettings": 3,
+    "roots": [
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-main"
+      },
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-systemAperture"
+      },
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-systemApertureCurtain"
+      }
+    ],
+    "surfaceType": 2,
+    "connectedDisplayCount": 1,
+    "caDisplayObjectCount": 6,
+    "configurationBounds": [
+      0,
+      0,
+      678,
+      951
+    ],
+    "screenNativeBounds": [
+      0,
+      0,
+      2034,
+      2853
+    ]
+  },
+  "alias_before_sync": {
+    "clientDisplayType": 7,
+    "clientDisplayIdentifier": "vphone-duo-ui-preview",
+    "interfaceOrientation": 3,
+    "systemArbitratedInterfaceOrientation": 3,
+    "_effectiveUISettings": 1,
+    "_effectiveUIClientSettings": 3,
+    "roots": [
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-main"
+      },
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-systemAperture"
+      },
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-systemApertureCurtain"
+      }
+    ],
+    "surfaceType": 2,
+    "connectedDisplayCount": 1,
+    "caDisplayObjectCount": 6,
+    "configurationBounds": [
+      0,
+      0,
+      678,
+      951
+    ],
+    "screenNativeBounds": [
+      0,
+      0,
+      2034,
+      2853
+    ]
+  },
+  "alias_after_sync": {
+    "clientDisplayType": 7,
+    "clientDisplayIdentifier": "vphone-duo-ui-preview",
+    "interfaceOrientation": 3,
+    "systemArbitratedInterfaceOrientation": 3,
+    "_effectiveUISettings": 3,
+    "_effectiveUIClientSettings": 3,
+    "roots": [
+      {
+        "orientation": 3,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-main"
+      },
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-systemAperture"
+      },
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-systemApertureCurtain"
+      }
+    ],
+    "surfaceType": 2,
+    "connectedDisplayCount": 1,
+    "caDisplayObjectCount": 6,
+    "configurationBounds": [
+      0,
+      0,
+      678,
+      951
+    ],
+    "screenNativeBounds": [
+      0,
+      0,
+      2034,
+      2853
+    ]
+  },
+  "restored": {
+    "clientDisplayType": 0,
+    "clientDisplayIdentifier": null,
+    "interfaceOrientation": 3,
+    "systemArbitratedInterfaceOrientation": 3,
+    "_effectiveUISettings": 1,
+    "_effectiveUIClientSettings": 3,
+    "roots": [
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-main"
+      },
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-systemAperture"
+      },
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-systemApertureCurtain"
+      }
+    ],
+    "surfaceType": 2,
+    "connectedDisplayCount": 1,
+    "caDisplayObjectCount": 6,
+    "configurationBounds": [
+      0,
+      0,
+      678,
+      951
+    ],
+    "screenNativeBounds": [
+      0,
+      0,
+      2034,
+      2853
+    ]
+  },
+  "final": {
+    "clientDisplayType": 0,
+    "clientDisplayIdentifier": null,
+    "interfaceOrientation": 1,
+    "systemArbitratedInterfaceOrientation": 1,
+    "_effectiveUISettings": 1,
+    "_effectiveUIClientSettings": 1,
+    "roots": [
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-systemApertureCurtain"
+      },
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-systemAperture"
+      },
+      {
+        "orientation": 1,
+        "frame": [
+          0,
+          0,
+          678,
+          951
+        ],
+        "identifier": "SB-main"
+      }
+    ],
+    "surfaceType": 0,
+    "connectedDisplayCount": 1,
+    "caDisplayObjectCount": 6,
+    "configurationBounds": [
+      0,
+      0,
+      678,
+      951
+    ],
+    "screenNativeBounds": [
+      0,
+      0,
+      2034,
+      2853
+    ]
+  },
+  "base_sb": [
+    {
+      "pid": 292,
+      "start_time": 1793007445.879537
+    }
+  ],
+  "base_bbd": [
+    {
+      "pid": 61,
+      "start_time": 1793007410.980807
+    }
+  ],
+  "after_sb": [
+    {
+      "pid": 292,
+      "start_time": 1793007445.879537
+    }
+  ],
+  "after_bbd": [
+    {
+      "pid": 61,
+      "start_time": 1793007410.980807
+    }
+  ]
+}

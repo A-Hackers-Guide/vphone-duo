@@ -76,6 +76,26 @@ struct CustomFirmwareArm64eX1Tests {
         }
     }
 
+    @Test func `standalone bundle lowering attests code and is idempotent`() throws {
+        var (image, hashOffset) = Self.signedFixture()
+        // Core Image filters use MH_BUNDLE rather than the boot executables'
+        // MH_EXECUTE. Recompute the fixture signature after changing its header.
+        image.replaceSubrange(12 ..< 16, with: ARM64.encodeU32(8))
+        image.replaceSubrange(
+            hashOffset ..< hashOffset + 32,
+            with: Data(SHA256.hash(data: image.prefix(0x400))),
+        )
+        let identifier = FirmwareGuestSystemPatchSet.arm64eX1CIBarcode
+        let first = try CustomFirmwareArm64eX1.lowerAndReattest(&image, identifier: identifier)
+        #expect(first.result.records.count == 2)
+        #expect(first.slots.count == 1)
+        #expect(image.loadLE(UInt32.self, at: 12) == 8)
+        let patched = image
+        let second = try CustomFirmwareArm64eX1.lowerAndReattest(&image, identifier: identifier)
+        #expect(second.result.records.isEmpty)
+        #expect(image == patched)
+    }
+
     static func universal(_ first: Data, _ second: Data, wide: Bool = false) -> Data {
         func be<T: FixedWidthInteger>(_ value: T) -> Data { withUnsafeBytes(of: value.bigEndian) { Data($0) } }
         var data = be(UInt32(wide ? 0xCAFE_BABF : 0xCAFE_BABE)) + be(UInt32(2))

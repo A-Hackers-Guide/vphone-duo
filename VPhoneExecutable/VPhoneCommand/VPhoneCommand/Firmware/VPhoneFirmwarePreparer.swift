@@ -119,7 +119,7 @@ enum VPhoneFirmwarePreparer {
         // configuration with the GPU disabled must not restore another PCC VM
         // merely to recover a driver that will never be installed.
         let selection = VPhonePatchPresetStore.selection(forVM: bundle.url)
-        guard let preset = VPhonePatchPresetStore.preset(named: selection.presetIdentifier) else {
+        guard let preset = VPhonePatchPresetStore.preset(named: selection.presetIdentifier, forVM: bundle.url) else {
             let available = VPhonePatchPresetStore.availablePresets().map(\.identifier)
             throw ValidationError("Unknown patch preset '\(selection.presetIdentifier)'. Available: \(available.joined(separator: ", "))")
         }

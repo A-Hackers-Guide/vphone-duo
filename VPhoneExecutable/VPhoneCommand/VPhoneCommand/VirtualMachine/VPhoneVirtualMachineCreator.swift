@@ -190,6 +190,7 @@ public struct VPhoneVirtualMachineCreator {
         let v = options.verbosity
         // `fw prepare` stages what the selection needs (the GPU driver, the seal
         // tool), so the preset has to be on record before it runs.
+        try VPhonePatchPresetStore.writePresetFile(options.patchPresetFile, forVM: bundleURL)
         try VPhonePatchPresetStore.write(
             VPhoneVirtualMachinePatchSelection(presetIdentifier: options.patchPreset),
             forVM: bundleURL,
@@ -255,6 +256,7 @@ public struct VPhoneVirtualMachineCreator {
         guard slimming.problems.isEmpty else {
             throw ValidationError("Cannot build this template: \(slimming.problems.joined(separator: "; ")). Pass --trim none.")
         }
+        let preset = try options.patchPresetFile ?? VPhonePatchPresetStore.resolve(options.patchPreset).preset
         // Resolved as vm template find resolves it: from the IPSWs when they
         // are local or cached, else from a template recorded with the same
         // sources. Nothing is downloaded unless no template matches and one
@@ -271,7 +273,7 @@ public struct VPhoneVirtualMachineCreator {
                 device: builds.device,
                 ios: builds.ios,
                 cloudOS: builds.cloudOS,
-                preset: options.patchPreset,
+                preset: preset,
                 diskSizeGB: options.diskSizeGB,
                 slimming: slimming,
             )
@@ -296,7 +298,7 @@ public struct VPhoneVirtualMachineCreator {
             device: sources.device.productType,
             ios: .init(version: sources.phone.version, build: sources.phone.build),
             cloudOS: .init(version: sources.cloud.version, build: sources.cloud.build),
-            preset: options.patchPreset,
+            preset: preset,
             diskSizeGB: options.diskSizeGB,
             slimming: slimming,
         )
@@ -525,7 +527,7 @@ public struct VPhoneVirtualMachineCreator {
         verbosity v: VPhoneVerbosity,
     ) throws {
         trace("in-process FirmwarePipeline.patchAll variant=jb preset=\(presetIdentifier)", v)
-        guard let preset = VPhonePatchPresetStore.preset(named: presetIdentifier) else {
+        guard let preset = VPhonePatchPresetStore.preset(named: presetIdentifier, forVM: bundleURL) else {
             let available = VPhonePatchPresetStore.availablePresets().map(\.identifier)
             throw ValidationError(
                 "Unknown patch preset '\(presetIdentifier)'. Available: \(available.joined(separator: ", "))",

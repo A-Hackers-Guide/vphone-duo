@@ -12,9 +12,16 @@ nonisolated struct VPhoneLaunchpadPatchCatalog: Decodable, Sendable {
         let identifier: String
         let title: String
         let summary: String
+        let patchSets: [String]?
 
         var id: String {
             identifier
+        }
+
+        /// Whether it merges the restore image, which only a root `fw patch`
+        /// before the restore does (`com.vphone.patchset.restore.image`).
+        var customisesRestoredSystem: Bool {
+            patchSets?.contains("com.vphone.patchset.restore.image") == true
         }
 
         /// The bundle writes its built-in presets in English. Launchpad
@@ -308,34 +315,68 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
     }
 
     var preset = defaultPreset
+    /// A preset plist chosen with Other…, passed to `--preset` in place of
+    /// `preset`; `vphone-cli` keeps a copy in the machine. Once the bundle has
+    /// read it, `preset` is the identifier it declares (``adoptFile(from:)``).
+    var presetFile: String?
     /// Patches the preset turns on that this VM leaves off.
     var blocked: Set<String> = []
     /// Patches the preset leaves off that this VM turns on.
     var allowed: Set<String> = []
+    /// Whether the file's preset customises the system before the restore,
+    /// from the bundle's catalog.
+    var fileCustomisesRestoredSystem = false
+
+    /// `--preset <file>` for `vphone-cli` 2.14 and later.
+    static func isPresetFile(_ value: String) -> Bool {
+        value.contains("/") || value.hasSuffix(".plist")
+    }
 
     var hasOverrides: Bool {
         !blocked.isEmpty || !allowed.isEmpty
     }
 
     var isDefault: Bool {
-        preset == Self.defaultPreset && !hasOverrides
+        presetFile == nil && preset == Self.defaultPreset && !hasOverrides
+    }
+
+    /// What `--preset` is given: the file, else the preset's identifier.
+    var presetArgument: String {
+        presetFile ?? preset
     }
 
     /// `fw set-patches` arguments, without the VM name or library root. Each run
     /// writes the whole record, so an empty list clears that half of it.
     var setPatchesArguments: [String] {
-        ["--preset", preset]
+        ["--preset", presetArgument]
             + blocked.sorted().flatMap { ["--block", $0] }
             + allowed.sorted().flatMap { ["--allow", $0] }
     }
 
-    /// The `--preset` flag `fw patch` and `fw patches` carry, if any.
     var customisesRestoredSystem: Bool {
-        preset == Self.minimalPreset || preset == Self.watchOSPreset
+        presetFile != nil ? fileCustomisesRestoredSystem : preset == Self.minimalPreset || preset == Self.watchOSPreset
     }
 
+    /// The `--preset` flag `fw patch` and `fw patches` carry, if any.
     var presetArguments: [String] {
+        presetFile == nil && preset == Self.defaultPreset ? [] : ["--preset", presetArgument]
+    }
+
+    /// The `--preset` flag for a step on a machine that already keeps the
+    /// preset: `fw set-patches` before `fw prepare` copies a file into it
+    /// with ``presetArguments``, and a clone has its template's copy. Once the
+    /// bundle has read the file, `preset` is its identifier, so a later step
+    /// or a retry does not need the file again.
+    var machinePresetArguments: [String] {
         preset == Self.defaultPreset ? [] : ["--preset", preset]
+    }
+
+    /// Takes what the bundle read from ``presetFile``: the identifier it
+    /// declares, and whether it customises the system before the restore.
+    mutating func adoptFile(from catalog: VPhoneLaunchpadPatchCatalog) {
+        guard presetFile != nil else { return }
+        preset = catalog.activePreset
+        fileCustomisesRestoredSystem = catalog.preset(catalog.activePreset)?.customisesRestoredSystem ?? false
     }
 
     func isOn(_ patch: VPhoneLaunchpadPatchCatalog.Patch) -> Bool {
@@ -373,6 +414,17 @@ nonisolated struct VPhoneLaunchpadPatchSelection: Hashable, Sendable {
 }
 
 /// So the inspector can present the editor with the choice it opens on.
+extension VPhoneLaunchpadPatchSelection {
+    /// The preset pickers' Other… item, which chooses a preset plist.
+    static let otherPresetTag = "\u{1}other"
+
+    /// A preset plist, with no overrides. `preset` holds the path until the
+    /// bundle has read the file.
+    init(presetFile: String) {
+        self.init(preset: presetFile, presetFile: presetFile)
+    }
+}
+
 extension VPhoneLaunchpadPatchSelection: Identifiable {
     var id: Self {
         self

@@ -20,7 +20,39 @@ Creation runs prepare → firmware patch → online DFU restore → host-mounted
 
 By default that pipeline builds a [template](#templates) rather than the VM itself, and the VM is cloned from it. The next `vm create` for the same device, iOS and cloudOS builds, preset and disk size clones from the same template instead of restoring again. Pass `--no-template` to build the VM on its own, as before.
 
+`--iphone-version` or `--iphone-build` instead of `--iphone-source` resolves the IPSW as `fw prepare` does, for `--device` (iPhone17,3 by default). Without `--cloudos-source` the cloudOS is the one the catalog recommends for that release, as `fw catalog` lists it.
+
 `--cpu`, `--memory`, `--network` and `--unlock-at-startup` set those `vm config` settings on the new VM (defaults: 8 cores, 8192 MB, nat, off). `--skip-first-boot` leaves out the final boot, for a caller that boots the VM itself.
+
+## Many machines
+
+`vm create-bulk <list.plist>` creates every machine a plist describes. Each key is a `vm create` option's long name, with its value: a string or integer, `true` for a flag, an array for `keep-apps`. `defaults` apply to every machine, a machine's own keys win, and `false` clears a default. Relative paths resolve against the plist's folder. `library-root` puts the machines in another library; `-l` on the command line overrides it.
+
+```xml
+<dict>
+	<key>version</key>        <integer>1</integer>
+	<key>defaults</key>
+	<dict>
+		<key>library-root</key>   <string>~/vphone-lab</string>
+		<key>iphone-version</key> <string>26.1</string>
+		<key>preset</key>         <string>presets/lab.plist</string>
+		<key>cpu</key>            <integer>4</integer>
+	</dict>
+	<key>machines</key>
+	<array>
+		<dict><key>name</key> <string>ci-1</string></dict>
+		<dict><key>name</key> <string>ci-2</string></dict>
+		<dict>
+			<key>name</key>         <string>fuzz</string>
+			<key>iphone-build</key> <string>23F77</string>
+			<key>iphone-version</key> <false/>
+			<key>no-template</key>  <true/>
+		</dict>
+	</array>
+</dict>
+```
+
+Every machine must name its firmware (`iphone-version`, `iphone-build`, or `iphone-source` with `cloudos-source`) or a `template`, so nothing prompts. All machines are checked as `vm create` checks them before the first is made, and `--dry-run` prints each one's `vm create` command. A name that exists is an error. `--skip-existing` skips it, so a run that stopped can be run again for the rest; a machine that failed is left as it stopped, so delete it first or it is skipped too. `--force-override` deletes that VM just before its machine is created, and refuses one that is running or a folder that is not a VM. Machines are created in order, so those with one template key clone the template the first one built, and the first failure stops the run. Run it with `sudo` when a machine needs a build, as `vm create`.
 
 `fw prepare` creates a temporary vphone VM with no network device, starts it in DFU, and restores the selected cloudOS IPSW using this project's restore backend. It mounts the restored System volume read-only, extracts the GPU bundle, then removes the temporary VM. This first restore supplies the GPU driver for the second, hybrid iPhone restore. The extracted bundle is cached per cloudOS build in `~/.vphone/gpu-drivers/`, so later machines on the same cloudOS skip the temporary restore. `vm create` and `fw prepare` also accept `--gpu-driver-bundle /path/to/AppleParavirtGPUMetalIOGPUFamily.bundle` to reuse a previously extracted bundle without the temporary restore. The CLI checks its iPhoneOS platform version against the selected cloudOS version. Each restore obtains its own ticket online.
 
@@ -51,7 +83,7 @@ The guest follows the Mac's time zone and clock. `vphone-vm` sends the Mac's zon
 
 ## Templates
 
-A template is a complete machine kept in `<library>/.templates/<id>/`. It boots once while it is built, its setup boot, and never again once it is frozen. `vm create` without `--no-template` works out the template key from its options and the two IPSWs before anything is restored: the guest device, the iOS and cloudOS versions and builds, the patch preset and the boot-chain patches it resolves to, the bundle series (`2.9` for 2.9.x), the disk size, what is trimmed from the guest's System volume (`--trim`), and the slimming switches below. Then:
+A template is a complete machine kept in `<library>/.templates/<id>/`. It boots once while it is built, its setup boot, and never again once it is frozen. `vm create` without `--no-template` works out the template key from its options and the two IPSWs before anything is restored: the guest device, the iOS and cloudOS versions and builds, the patch preset and the boot-chain patches it resolves to (every patch it resolves to, guest ones included, for a preset the bundle does not ship: a preset file or one in `~/.vphone/patches_presets` can change under the same identifier, and a clone keeps its template's guest patches), the bundle series (`2.9` for 2.9.x), the disk size, what is trimmed from the guest's System volume (`--trim`), and the slimming switches below. Then:
 
 - If a template with that key exists, the VM is cloned from it with a new identity, given the requested CPU, memory and network, and booted once to check vphoned. This takes seconds and needs neither root nor the IPSWs; nothing is downloaded. The builds come from the IPSWs when they are local files or already in the IPSW cache, and otherwise from a template recorded with the same two sources, as [`vm template find`](#finding-a-template) works them out; a local IPSW that has been deleted counts as not there.
 - Otherwise the IPSWs are downloaded if they are not there, and the full pipeline runs into a staging folder, `.templates/.building-<id>-<uuid>/`: `cfw install`, the offline trim, then the setup boot; the result is frozen and renamed to `.templates/<id>/` in one step, and the VM is cloned from it. The restore tree is removed before the freeze whatever `--keep-artifacts` says: a template never keeps it, because its ~11 GB would stay pinned for as long as the template lives and no clone can use it. `--keep-artifacts` keeps it only with `--no-template`, and `vm template adopt` removes it too. A second `vm create` with the same key waits for the first instead of restoring a second copy. A failed build stays in its staging folder for inspection.

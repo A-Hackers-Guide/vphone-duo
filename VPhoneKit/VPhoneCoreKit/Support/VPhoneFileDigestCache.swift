@@ -1,8 +1,9 @@
 import CryptoKit
 import Foundation
 
-/// The SHA-256 of one file, hashed again only when the file's identity, size
-/// or modification time changes.
+/// The SHA-256 of one file, hashed again only when the file's identity or
+/// metadata changes. The change time is included so an in-place rewrite is
+/// noticed even when it keeps the same size and modification timestamp.
 ///
 /// `vphone-vm` compares the bundled vphoned with the guest's on every health
 /// probe, every three seconds while connected. Reading and hashing the 9 MB
@@ -13,9 +14,10 @@ public struct VPhoneFileDigestCache: Sendable {
         var path: String
         var device: UInt64
         var inode: UInt64
-        var size: Int64
         var modifiedSeconds: Int
         var modifiedNanoseconds: Int
+        var changedSeconds: Int
+        var changedNanoseconds: Int
     }
 
     private var stamp: Stamp?
@@ -55,9 +57,10 @@ public struct VPhoneFileDigestCache: Sendable {
             path: url.path,
             device: UInt64(bitPattern: Int64(info.st_dev)),
             inode: UInt64(info.st_ino),
-            size: Int64(info.st_size),
             modifiedSeconds: Int(info.st_mtimespec.tv_sec),
             modifiedNanoseconds: Int(info.st_mtimespec.tv_nsec),
+            changedSeconds: Int(info.st_ctimespec.tv_sec),
+            changedNanoseconds: Int(info.st_ctimespec.tv_nsec),
         )
     }
 }

@@ -184,7 +184,7 @@ nonisolated struct VPhoneLaunchpadControlCommand: Sendable {
             "root", "bundle", "iphone-source", "cloudos-source", "device", "cpu", "memory", "disk-size", "network", "preset", "from", "ipsw", "kmutil-ssh",
             "slim", "trim", "keep-languages", "service-profile", "remove-apps", "keep-apps",
         ], flags: ["keep-artifacts", "no-wait", "no-template", "accounts-off"], repeated: ["block", "allow"],
-        summary: "Create a machine through every step, as New Machine does, bound to --bundle (default: the default bundle): cloned from a template, built first when missing, or restored on its own with --no-template. --block and --allow turn one patch of --preset off or on, as New Machine's patch list and vphone-cli fw set-patches do: boot-chain ones go into the template, guest ones are applied to the clone. --slim, --trim, --keep-languages, --service-profile, --remove-apps, --keep-apps and --accounts-off shape the template, as in vphone-cli vm create. --ipsw <path> is the ipsw a 2.12.0 bundle stages a kernelcache mix with, as New Machine's ipsw field; a 2.12.1 bundle extracts natively and needs none. --kmutil-ssh <user@host> links an iOS 18 guest's kernel-first mix on that Mac over ssh, as New Machine's macOS builder field, with the password (for ssh and sudo there) from this tool's VPHONE_KMUTIL_SSH_PASSWORD. --from <step> retries a failed creation from that step, with the options it started with."),
+        summary: "Create a machine through every step, as New Machine does, bound to --bundle (default: the default bundle): cloned from a template, built first when missing, or restored on its own with --no-template. --preset takes a preset name or the path of a preset plist. --block and --allow turn one patch of --preset off or on, as New Machine's patch list and vphone-cli fw set-patches do: boot-chain ones go into the template, guest ones are applied to the clone. --slim, --trim, --keep-languages, --service-profile, --remove-apps, --keep-apps and --accounts-off shape the template, as in vphone-cli vm create. --ipsw <path> is the ipsw a 2.12.0 bundle stages a kernelcache mix with, as New Machine's ipsw field; a 2.12.1 bundle extracts natively and needs none. --kmutil-ssh <user@host> links an iOS 18 guest's kernel-first mix on that Mac over ssh, as New Machine's macOS builder field, with the password (for ssh and sudo there) from this tool's VPHONE_KMUTIL_SSH_PASSWORD. --from <step> retries a failed creation from that step, with the options it started with."),
         Self(name: "vm.set-bundle", arguments: ["name", "version"], options: ["root"], flags: ["update-environment"],
              summary: "Bind a machine to another installed version; its host programs change at the next start. --update-environment also redeploys that version's guest environment into the stopped machine. The boot chain stays as created."),
         Self(name: "vm.leases", arguments: [], options: [], flags: ["release"],
@@ -324,6 +324,10 @@ extension VPhoneLaunchpadControlRequest {
         }
         if let root = request.options["root"] {
             request.options["root"] = URL(fileURLWithPath: root).standardizedFileURL.path
+        }
+        // A preset file, as `VPhoneLaunchpadPatchSelection.isPresetFile` tells it from a name.
+        if let preset = request.options["preset"], preset.contains("/") || preset.hasSuffix(".plist") {
+            request.options["preset"] = URL(fileURLWithPath: (preset as NSString).expandingTildeInPath).standardizedFileURL.path
         }
         request.arguments = positional
         if !repeated.isEmpty {

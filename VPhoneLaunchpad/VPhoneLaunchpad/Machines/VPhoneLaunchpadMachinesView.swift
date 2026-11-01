@@ -123,19 +123,6 @@ struct VPhoneLaunchpadMachinesView: View {
         }
         // So New Machine opens on the catalog rather than loading it.
         .task(id: model.bundles.defaultVersion) { await VPhoneLaunchpadNewMachineView.prefetchCatalog(model) }
-        // A CFW install or update started here shows its progress at once.
-        // Another sheet open keeps its place; the inspector offers the
-        // progress then. A run already over by the time the list is back
-        // on screen does not open.
-        .onChange(of: library.maintenanceSheetRequest, initial: true) {
-            guard let machine = library.maintenanceSheetRequest else {
-                return
-            }
-            library.maintenanceSheetRequest = nil
-            if sheet == nil, library.maintenance[machine]?.isRunning == true {
-                sheet = .maintenance(machine)
-            }
-        }
         .onChange(of: model.deletionRequest, initial: true) {
             if !model.deletionRequest.isEmpty {
                 deletion = model.deletionRequest

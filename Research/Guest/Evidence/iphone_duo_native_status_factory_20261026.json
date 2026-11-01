@@ -1,0 +1,62 @@
+{
+  "nativeFactoryChoices": [
+    {
+      "inputExclusionRect": [
+        152.33333333333334,
+        11.333333333333334,
+        125.33333333333333,
+        36.666666666666664
+      ],
+      "STUIStatusBarVisualProvider_iOS": "STUIStatusBarVisualProvider_DynamicSplitSmallIsland",
+      "referencePixelWidth": 2034,
+      "STUIStatusBarVisualProvider_AxisAlignableSplit": "nil",
+      "syntheticProfileSizeOnly": false
+    },
+    {
+      "inputExclusionRect": [
+        152.33333333333334,
+        11.333333333333334,
+        125.33333333333333,
+        36.666666666666664
+      ],
+      "STUIStatusBarVisualProvider_iOS": "STUIStatusBarVisualProvider_DynamicSplitSmallIsland",
+      "referencePixelWidth": 2007,
+      "STUIStatusBarVisualProvider_AxisAlignableSplit": "nil",
+      "syntheticProfileSizeOnly": false
+    },
+    {
+      "inputExclusionRect": [
+        0,
+        0,
+        37,
+        37
+      ],
+      "STUIStatusBarVisualProvider_iOS": "STUIStatusBarVisualProvider_AxisAlignableSplit2007",
+      "referencePixelWidth": 2007,
+      "STUIStatusBarVisualProvider_AxisAlignableSplit": "STUIStatusBarVisualProvider_AxisAlignableSplit2007",
+      "syntheticProfileSizeOnly": true
+    }
+  ],
+  "scale": 3,
+  "referenceNativeWidth": 2007,
+  "previewOnly": true,
+  "referenceScale": 3,
+  "referenceNotchSize": [
+    37,
+    37
+  ],
+  "nativeScale": 3,
+  "nativeDisplayBounds": [
+    0,
+    0,
+    2034,
+    2853
+  ],
+  "exclusionClass": "UISDisplaySingleRectShape",
+  "exclusionRect": [
+    152.33333333333334,
+    11.333333333333334,
+    125.33333333333333,
+    36.666666666666664
+  ]
+}

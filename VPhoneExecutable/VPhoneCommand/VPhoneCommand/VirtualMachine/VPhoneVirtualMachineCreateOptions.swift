@@ -31,6 +31,8 @@ public extension VPhoneVirtualMachineCreator {
         /// Which patch preset the new VM is built with. Individual patches are
         /// turned on or off per VM afterwards, through its patch selection.
         public var patchPreset: String
+        /// The preset when `--preset` named a file; kept in the machine.
+        public var patchPresetFile: VPhonePatchPreset?
         public var cpuCount: UInt
         public var memoryMB: UInt64
         public var diskSizeGB: UInt64
@@ -61,6 +63,7 @@ public extension VPhoneVirtualMachineCreator {
             otaSource: String? = nil,
             otaKey: String? = nil,
             patchPreset: String = VPhonePatchPreset.standardIdentifier,
+            patchPresetFile: VPhonePatchPreset? = nil,
             cpuCount: UInt = 8,
             memoryMB: UInt64 = 8192,
             diskSizeGB: UInt64 = 64,
@@ -82,6 +85,7 @@ public extension VPhoneVirtualMachineCreator {
             self.otaSource = otaSource
             self.otaKey = otaKey
             self.patchPreset = patchPreset
+            self.patchPresetFile = patchPresetFile
             self.cpuCount = cpuCount
             self.memoryMB = memoryMB
             self.diskSizeGB = diskSizeGB

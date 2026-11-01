@@ -14,6 +14,7 @@ enum VPhoneGuestPanel: CaseIterable {
     case controls
     case gyroscope
     case attitude
+    case foldPosture
 
     /// The `/v1/health` capability an agent must report before the panel can
     /// talk to it. Older agents answer "Unknown method" for everything else.
@@ -26,6 +27,7 @@ enum VPhoneGuestPanel: CaseIterable {
         case .controls: "display"
         case .gyroscope: "motion_gyroscope_toggle"
         case .attitude: "motion_attitude"
+        case .foldPosture: "device_pose"
         }
     }
 }
@@ -140,6 +142,14 @@ final class VPhoneGuestPanelsWindowController {
                 size: NSSize(width: 480, height: 520),
                 minSize: NSSize(width: 440, height: 480),
             ) { VPhoneMotionView(model: model, sensor: .attitude, connected: { control.isConnected }, attitudeDials: dials) }
+        case .foldPosture:
+            let model = VPhoneFoldModel(control: control)
+            return VPhoneGuestToolWindow(
+                title: String(localized: "Fold Posture", bundle: VPhoneLocalization.bundle),
+                autosaveName: "vphone-panel-fold-posture",
+                size: NSSize(width: 440, height: 560),
+                minSize: NSSize(width: 400, height: 480),
+            ) { VPhoneFoldView(model: model) }
         }
     }
 }

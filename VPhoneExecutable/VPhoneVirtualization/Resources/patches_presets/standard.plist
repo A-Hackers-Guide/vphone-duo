@@ -75,6 +75,7 @@
 		<array>
 			<string>system-homepod-exp-top_cap</string>
 			<string>system-homepod-exp-setup_bypass</string>
+			<string>system-homepod-exp-airplay_vm</string>
 			<string>system-homepod-exp-welcome</string>
 			<string>system-homepod-exp-siri_speech</string>
 			<string>system-homepod-exp-ota_userland</string>

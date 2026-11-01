@@ -127,6 +127,46 @@ final class VPhoneGuestControl {
         orientationObservers.append(observer)
     }
 
+    /// The fold's settled angle in degrees (0 closed … 180 open), published
+    /// by a successful `display.posture`; nil while none is known, and again
+    /// after a disconnect. `foldSweepSeconds` is how long the guest took to
+    /// reach it, so a viewer can animate its own fold in step.
+    var foldAngle: Double? {
+        didSet {
+            guard foldAngle != oldValue else { return }
+            for observer in foldObservers {
+                observer(foldAngle, foldSweepSeconds)
+            }
+        }
+    }
+
+    var foldSweepSeconds: Double = 0
+
+    /// The position the last posture named, for callers that size something
+    /// by screen state (the fold's boot-time panel) rather than by angle.
+    var foldPosition: VPhoneFoldPosition? {
+        didSet {
+            guard foldPosition != oldValue else { return }
+            for observer in foldPositionObservers {
+                observer(foldPosition)
+            }
+        }
+    }
+
+    /// Folds this window asked for that have not answered yet.
+    @ObservationIgnored var foldRequestsInFlight = 0
+
+    @ObservationIgnored private var foldObservers: [(Double?, Double) -> Void] = []
+    @ObservationIgnored private var foldPositionObservers: [(VPhoneFoldPosition?) -> Void] = []
+
+    func observeFoldAngle(_ observer: @escaping (Double?, Double) -> Void) {
+        foldObservers.append(observer)
+    }
+
+    func observeFoldPosition(_ observer: @escaping (VPhoneFoldPosition?) -> Void) {
+        foldPositionObservers.append(observer)
+    }
+
     /// True while the guest will show Setup Assistant, from `/v1/health`.
     /// False when disconnected.
     private(set) var isSetupAssistantPending = false {
@@ -288,6 +328,9 @@ final class VPhoneGuestControl {
         onGuestIPAddressChange?(nil)
         guestIOSVersion = nil
         interfaceOrientation = nil
+        foldAngle = nil
+        foldPosition = nil
+        foldSweepSeconds = 0
         isSetupAssistantPending = false
         if wasConnected {
             onDisconnect?()
@@ -552,6 +595,41 @@ final class VPhoneGuestControl {
     func callAfterQueuedInput(_ method: String, params: [String: Any] = [:]) async throws -> [String: Any] {
         await orderedInput?.value
         return try await call(method, params: params)
+    }
+
+    /// Runs one of vphoned's fixed, non-shell diagnostic commands. The guest
+    /// enforces the executable and argument limits; this wrapper keeps the
+    /// response typed enough for process discovery without hiding raw output.
+    func spawnDiagnostic(executable: String, arguments: [String] = [], timeout: Double = 3) async throws -> [String: Any] {
+        try await call("process.spawn", params: [
+            "executable": executable,
+            "arguments": arguments,
+            "timeout_seconds": timeout,
+        ])
+    }
+
+    /// Finds poster wallpaper extension processes from a fresh process list.
+    /// The returned rows are intentionally raw: scene/display inspection must
+    /// happen in the extension process in a later, instrumented step.
+    func discoverPosterExtensionProcesses() async throws -> [[String: Any]] {
+        let result = try await spawnDiagnostic(
+            executable: "ps",
+            arguments: ["-axo", "pid=,ppid=,args="],
+        )
+        guard let text = result["stdout"] as? String else { return [] }
+        return text.split(whereSeparator: \.isNewline).compactMap { line in
+            let fields = line.split(maxSplits: 2, whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
+            guard fields.count == 3, let pid = Int(fields[0]), let ppid = Int(fields[1]) else { return nil }
+            let command = fields[2]
+            guard command.localizedCaseInsensitiveContains("poster") || command.localizedCaseInsensitiveContains("wallpaper") else { return nil }
+            return ["pid": pid, "ppid": ppid, "command": command]
+        }
+    }
+
+    /// Requests one read-only FBScene/display sample from the admitted guest
+    /// helper. Unavailable is a normal result until the helper payload exists.
+    func inspectPosterExtension(pid: Int) async throws -> [String: Any] {
+        try await call("poster.inspect", params: ["pid": pid])
     }
 
     /// `callAfterQueuedInput`, but a refusal from vphoned is thrown as

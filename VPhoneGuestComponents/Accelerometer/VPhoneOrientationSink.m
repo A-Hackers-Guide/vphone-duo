@@ -70,9 +70,12 @@ static void vpOrientationDeliver(void) {
             // accepting a raw device orientation. Source 1 is the accelerometer
             // path; source 0 is treated as a non-raw interface update.
             ((void (*)(id, SEL, NSInteger, NSInteger))objc_msgSend)(manager, selector, orientation, 1);
-            SEL refresh = sel_registerName("refreshEffectiveDeviceOrientation");
-            if ([manager respondsToSelector:refresh])
-                ((void (*)(id, SEL))objc_msgSend)(manager, refresh);
+            // The high-level update already recomputes effective orientation.
+            // On 24A94425, refreshEffectiveDeviceOrientation instead starts a
+            // CMDeviceOrientationManager, performs deviceOrientationBlocking,
+            // and posts that hardware sample back. A virtual guest has no
+            // physical sample: that poll erased our injected direction with
+            // Unknown (0). Do not replace virtual input with a hardware poll.
         } else
             ((void (*)(id, SEL, NSInteger))objc_msgSend)(manager, selector, orientation);
         dispatch_queue_t statusQueue;

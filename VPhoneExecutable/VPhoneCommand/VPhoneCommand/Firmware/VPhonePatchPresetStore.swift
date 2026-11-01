@@ -1,6 +1,6 @@
 // VPhonePatchPresetStore.swift — Finding presets, and remembering a VM's choice.
 //
-// Three files matter here.
+// Four files matter here.
 //
 // `VPhone.bundle/Contents/Resources/patches_presets/*.plist` are the presets the
 // bundle ships. They are prewritten and reviewed; nothing in the tool writes one.
@@ -13,7 +13,11 @@
 // boot chain is patched. `cfw install` reads it so the guest half of the install
 // applies the same selection the boot chain was built with, without resolving the
 // preset a second time against versions that may since have changed.
+//
+// `<vm>/PatchPreset.plist` is a preset given to `--preset` as a file, kept so
+// later steps, root ones included, resolve it without the original.
 
+import ArgumentParser
 import FirmwarePatcher
 import Foundation
 import VPhoneCoreKit
@@ -266,15 +270,7 @@ public enum VPhonePatchPresetStore {
     /// outside it. A user preset cannot shadow a shipped one — an identifier
     /// already claimed is ignored, so nothing can redefine `standard`.
     public static func availablePresets() -> [VPhonePatchPreset] {
-        var presets: [VPhonePatchPreset] = []
-        if let directory = presetsDirectory(),
-           let shipped = try? VPhonePatchPreset.readAll(fromDirectory: directory),
-           !shipped.isEmpty
-        {
-            presets = shipped
-        } else {
-            presets = FirmwarePatchSetCatalog.builtInPresets
-        }
+        var presets = shippedPresets()
         let claimed = Set(presets.map(\.identifier))
         if let user = try? VPhonePatchPreset.readAll(fromDirectory: userPresetsDirectory()) {
             presets.append(contentsOf: user.filter { !claimed.contains($0.identifier) })
@@ -288,9 +284,115 @@ public enum VPhonePatchPresetStore {
             .appendingPathComponent(VPhonePatchPreset.resourceDirectoryName, isDirectory: true)
     }
 
+    static func shippedPresets() -> [VPhonePatchPreset] {
+        if let directory = presetsDirectory(),
+           let shipped = try? VPhonePatchPreset.readAll(fromDirectory: directory),
+           !shipped.isEmpty
+        {
+            return shipped
+        }
+        return FirmwarePatchSetCatalog.builtInPresets
+    }
+
+    /// Whether the bundle ships a preset with this identifier. Only then does
+    /// the identifier alone say what the preset turns on: a user's preset or
+    /// a preset file can change under the same one.
+    static func isShipped(_ identifier: String) -> Bool {
+        shippedPresets().contains { $0.identifier == identifier }
+    }
+
     /// The preset with this identifier, or nil.
     public static func preset(named identifier: String) -> VPhonePatchPreset? {
         availablePresets().first { $0.identifier == identifier }
+    }
+
+    /// The preset with this identifier for one VM: its own copy
+    /// (``vmPresetFileName``) when that is the one named, else ``preset(named:)``.
+    public static func preset(named identifier: String, forVM directory: URL) -> VPhonePatchPreset? {
+        preset(named: identifier, vmCopy: vmCopyData(forVM: directory))
+    }
+
+    /// As ``preset(named:forVM:)``, from the VM copy's bytes, for a reader
+    /// that opens the VM folder itself.
+    public static func preset(named identifier: String, vmCopy data: Data?) -> VPhonePatchPreset? {
+        vmCopy(named: identifier, data: data) ?? preset(named: identifier)
+    }
+
+    private static func vmCopyData(forVM directory: URL) -> Data? {
+        try? Data(contentsOf: directory.appendingPathComponent(vmPresetFileName))
+    }
+
+    /// The VM's copy, when it is the preset named. Never a shipped identifier.
+    private static func vmCopy(named identifier: String, data: Data?) -> VPhonePatchPreset? {
+        guard let data, let copy = try? VPhonePatchPreset.decode(data), copy.identifier == identifier,
+              !isShipped(identifier)
+        else { return nil }
+        return copy
+    }
+
+    // MARK: Preset Files
+
+    /// A preset given to `--preset` as a file, kept in the VM so every later
+    /// step resolves the same preset without the original file.
+    public static let vmPresetFileName = FirmwarePatchWorkspace.presetFileName
+
+    /// `--preset` names a file when it has a path separator or a `.plist` suffix.
+    public static func isPresetFile(_ argument: String) -> Bool {
+        argument.contains("/") || argument.hasSuffix(".plist")
+    }
+
+    /// A `--preset` value: a preset file, or a name resolved for `directory`
+    /// when given. `file` is the preset the VM keeps a copy of: one read from a
+    /// file, or the VM's existing copy when the name is its identifier.
+    public static func resolve(
+        _ argument: String,
+        forVM directory: URL? = nil,
+    ) throws -> (preset: VPhonePatchPreset, file: VPhonePatchPreset?) {
+        if isPresetFile(argument) {
+            let preset = try readPresetFile(argument)
+            return (preset, preset)
+        }
+        if let directory, let copy = vmCopy(named: argument, data: vmCopyData(forVM: directory)) {
+            return (copy, copy)
+        }
+        guard let found = preset(named: argument) else {
+            let available = availablePresets().map(\.identifier)
+            throw ValidationError("Unknown patch preset '\(argument)'. Available: \(available.joined(separator: ", "))")
+        }
+        return (found, nil)
+    }
+
+    /// Reads a preset file, as ``VPhoneInvokingUserFile`` allows under root.
+    static func readPresetFile(_ path: String) throws -> VPhonePatchPreset {
+        let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+        let data = try VPhoneInvokingUserFile.read(url, kind: "preset file")
+        let preset: VPhonePatchPreset
+        do {
+            preset = try VPhonePatchPreset.decode(data)
+        } catch {
+            throw ValidationError("Preset file \(url.path) is not a valid preset: \(error)")
+        }
+        // The VM records the identifier, and reading it back must not take it for a path.
+        if isPresetFile(preset.identifier) {
+            throw ValidationError("Preset file \(url.path) has the identifier '\(preset.identifier)'; an identifier has no '/' and no .plist suffix.")
+        }
+        // As for ~/.vphone/patches_presets: nothing can redefine a shipped preset.
+        if isShipped(preset.identifier) {
+            throw ValidationError("Preset file \(url.path) uses the identifier '\(preset.identifier)' of a shipped preset; give it its own.")
+        }
+        return preset
+    }
+
+    /// Keeps `file` as the VM's preset copy, or removes the copy when nil.
+    public static func writePresetFile(_ file: VPhonePatchPreset?, forVM directory: URL) throws {
+        let url = directory.appendingPathComponent(vmPresetFileName)
+        guard let file else {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+            return
+        }
+        try file.encodedPlist().write(to: url, options: .atomic)
     }
 
     /// `Contents/Resources/patches_presets` beside the running executable.

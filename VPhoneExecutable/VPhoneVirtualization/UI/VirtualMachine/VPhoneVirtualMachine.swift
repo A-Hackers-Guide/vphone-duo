@@ -52,6 +52,9 @@ class VPhoneVirtualMachine: NSObject, VZVirtualMachineDelegate {
         /// The guest runs watchOS: its side button is a key of its own (consumer
         /// Help), apart from the crown (Home) and the power key.
         var isWatchGuest = false
+        /// The guest is a foldable whose panel is sized per posture at boot;
+        /// its window persists the position for the next start.
+        var isFoldableGuest = false
         /// A foldable's inner panel. The VM still has one display; the
         /// window lights one panel or the other as the phone folds.
         var innerScreen: VPhoneVirtualMachineManifest.ScreenConfig?

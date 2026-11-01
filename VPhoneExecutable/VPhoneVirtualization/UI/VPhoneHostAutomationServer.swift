@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import ImageIO
+import Virtualization
 import VPhoneCoreKit
 
 // MARK: - Host Control Socket
@@ -66,11 +67,13 @@ class VPhoneHostAutomationServer {
     private enum HostControlError: Error, CustomStringConvertible {
         case guestNotConnected
         case guestTouchUnavailable
+        case inputGeometryUnavailable
 
         var description: String {
             switch self {
             case .guestNotConnected: "guest not connected"
             case .guestTouchUnavailable: "no VM window, and the guest does not support touch input"
+            case .inputGeometryUnavailable: "the current input display geometry is unavailable"
             }
         }
     }
@@ -207,7 +210,7 @@ class VPhoneHostAutomationServer {
                 return Self.reply(ok: true)
 
             case "screenshot":
-                let image = try await connectedControl().screenshotJPEG()
+                let image = try await automationScreenshot()
                 let url = if let outputPath = json["path"] as? String {
                     try screenRecorder.saveScreenshot(jpegData: image, to: URL(fileURLWithPath: outputPath))
                 } else {
@@ -218,6 +221,19 @@ class VPhoneHostAutomationServer {
                     .flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
                     .flatMap(compactJPEG)
                 return Self.reply(ok: true, path: url.path, image: compact)
+
+            case "display.geometry":
+                var result: [String: Any] = [
+                    "configured_pixels": [screenWidth, screenHeight], "windowed": windowedView != nil,
+                ]
+                if let frame = await captureScreenImage() { result["capture_pixels"] = [frame.width, frame.height] }
+                if let view = windowedView { result["view"] = view.inputGeometryReport() }
+                if let geometry = try? await automationInputGeometry() {
+                    let upright = geometry.screenshotSize
+                    result["screenshot_pixels"] = [Double(upright.width), Double(upright.height)]
+                    result["input_orientation"] = geometry.orientation.rawValue
+                }
+                return Self.reply(ok: true, result: result)
 
             case "tap":
                 guard let x = json["x"] as? Double, let y = json["y"] as? Double else {
@@ -399,12 +415,14 @@ class VPhoneHostAutomationServer {
     // MARK: - Touch
 
     private func tap(x: Double, y: Double) async throws {
+        let geometry = try await automationInputGeometry()
+        let panelPoint = geometry.panelPoint(fromScreenshot: CGPoint(x: x, y: y))
         if let view = windowedView {
-            view.injectTap(pixelX: x, pixelY: y, screenWidth: screenWidth, screenHeight: screenHeight)
+            view.injectTap(pixelX: panelPoint.x, pixelY: panelPoint.y, screenWidth: Int(geometry.panel.width), screenHeight: Int(geometry.panel.height))
             return
         }
         let control = try touchControl()
-        let point = normalizedPoint(pixelX: x, pixelY: y)
+        let point = normalizedPoint(pixelX: panelPoint.x, pixelY: panelPoint.y, panel: geometry.panel)
         control.sendTouch(phase: 0, x: point.x, y: point.y)
         try? await Task.sleep(for: .milliseconds(80))
         control.sendTouch(phase: 3, x: point.x, y: point.y)
@@ -412,22 +430,25 @@ class VPhoneHostAutomationServer {
 
     /// Returns once the swipe has finished, in either mode.
     private func swipe(x1: Double, y1: Double, x2: Double, y2: Double, durationMs: Int) async throws {
+        let geometry = try await automationInputGeometry()
+        let first = geometry.panelPoint(fromScreenshot: CGPoint(x: x1, y: y1))
+        let last = geometry.panelPoint(fromScreenshot: CGPoint(x: x2, y: y2))
         if let view = windowedView {
             view.injectSwipe(
-                fromX: x1,
-                fromY: y1,
-                toX: x2,
-                toY: y2,
-                screenWidth: screenWidth,
-                screenHeight: screenHeight,
+                fromX: first.x,
+                fromY: first.y,
+                toX: last.x,
+                toY: last.y,
+                screenWidth: Int(geometry.panel.width),
+                screenHeight: Int(geometry.panel.height),
                 durationMs: durationMs,
             )
             try? await Task.sleep(for: .milliseconds(durationMs))
             return
         }
         let control = try touchControl()
-        let start = normalizedPoint(pixelX: x1, pixelY: y1)
-        let end = normalizedPoint(pixelX: x2, pixelY: y2)
+        let start = normalizedPoint(pixelX: first.x, pixelY: first.y, panel: geometry.panel)
+        let end = normalizedPoint(pixelX: last.x, pixelY: last.y, panel: geometry.panel)
         // Same step count and spacing as `injectSwipe`.
         let steps = max(10, durationMs / 16)
         let stepInterval = Double(durationMs) / Double(steps)
@@ -449,11 +470,44 @@ class VPhoneHostAutomationServer {
         return control
     }
 
-    /// Screenshot pixel coordinates to the 0...1 range `input.touch` takes.
-    private func normalizedPoint(pixelX: Double, pixelY: Double) -> (x: Double, y: Double) {
+    private func automationInputGeometry() async throws -> VPhoneDisplayViewport {
+        let view = windowedView
+        let panel = view?.recordingGraphicsDisplay?.sizeInPixels ?? CGSize(width: screenWidth, height: screenHeight)
+        guard panel.width > 0, panel.height > 0 else { throw HostControlError.inputGeometryUnavailable }
+        if let control, control.isConnected,
+           let result = try? await control.rpcAfterQueuedInput("display.orientation"),
+           let degrees = (result["degrees"] as? NSNumber)?.intValue,
+           let orientation = VPhoneDisplayOrientation(degrees: degrees) {
+            return VPhoneDisplayViewport(panel: panel, active: panel, orientation: orientation)!
+        }
+        // A native VM view can still receive input while vphoned starts.
+        if let view { return VPhoneDisplayViewport(panel: panel, active: panel, orientation: view.displayedOrientation)! }
+        throw HostControlError.inputGeometryUnavailable
+    }
+
+    private func automationScreenshot() async throws -> Data {
+        let before = try await automationInputGeometry()
+        let jpeg = try await connectedControl().screenshotJPEG()
+        let after = try await automationInputGeometry()
+        guard before == after else { throw HostControlError.inputGeometryUnavailable }
+        guard before.active != before.panel else { return jpeg }
+        guard let source = CGImageSourceCreateWithData(jpeg as CFData, nil),
+              let full = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            throw HostControlError.inputGeometryUnavailable
+        }
+        let expected = before.orientation.displayedSize(panel: before.panel)
+        guard full.width == Int(expected.width), full.height == Int(expected.height),
+              let cropped = full.cropping(to: before.screenshotCrop),
+              let result = NSBitmapImageRep(cgImage: cropped).representation(using: .jpeg, properties: [.compressionFactor: 1])
+        else { throw HostControlError.inputGeometryUnavailable }
+        return result
+    }
+
+    /// Fixed-panel pixels to the 0...1 range `input.touch` takes.
+    private func normalizedPoint(pixelX: Double, pixelY: Double, panel: CGSize) -> (x: Double, y: Double) {
         (
-            max(0, min(1, pixelX / Double(screenWidth))),
-            max(0, min(1, pixelY / Double(screenHeight))),
+            max(0, min(1, pixelX / Double(panel.width))),
+            max(0, min(1, pixelY / Double(panel.height))),
         )
     }
 

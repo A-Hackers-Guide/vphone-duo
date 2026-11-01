@@ -1,0 +1,45 @@
+{
+  "rootMatchesOriginal": true,
+  "isAlwaysConnected": true,
+  "connectedCountAfter": 1,
+  "uniqueIdentifier": "vphone-duo-ui-preview",
+  "isUIKitMainLike": true,
+  "copiedHostedIdentity": "vphone-duo-ui-preview",
+  "renderAccessorAvailable": 1,
+  "originalFrame": [
+    0,
+    0,
+    678,
+    951
+  ],
+  "type": 7,
+  "isMainDisplay": false,
+  "isRootIdentity": false,
+  "originalHostedIdentity": null,
+  "bounds": [
+    0,
+    0,
+    678,
+    951
+  ],
+  "rootIdentity": null,
+  "sameRenderDisplay": 1,
+  "connectedCountBefore": 1,
+  "isExternal": false,
+  "isMainRootDisplay": false,
+  "connectionType": 0,
+  "copiedFrame": [
+    0,
+    0,
+    678,
+    951
+  ],
+  "published": false,
+  "displayID": 1,
+  "caDisplayObjectCountBefore": 6,
+  "caDisplayObjectCountAfter": 6,
+  "machine": "duotest-m5",
+  "guestEnvironmentBundle": "2.12.1-local.116c3c42",
+  "capturedAt": "2026-10-26T15:02:33+08:00",
+  "scope": "Native objects and a distinct scene-settings copy only; not published."
+}

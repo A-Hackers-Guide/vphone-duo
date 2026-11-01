@@ -1,0 +1,163 @@
+{
+  "bundle": "2.12.1-local.7e87cc74",
+  "normal": {
+    "scene": "SB-main",
+    "barsSceneThenEmbedded": [
+      {
+        "serverUpdatesDisabled": false,
+        "bar": "0x6591bc300 STUIStatusBar_Wrapper",
+        "provider": null,
+        "server": "<UIStatusBarServer: 0x65934bac0>",
+        "bounds": [
+          0,
+          0,
+          669,
+          951
+        ]
+      },
+      {
+        "serverUpdatesDisabled": false,
+        "bar": "0x6591bc300 STUIStatusBar_Wrapper",
+        "provider": null,
+        "server": "<UIStatusBarServer: 0x65934bac0>",
+        "bounds": [
+          0,
+          0,
+          669,
+          951
+        ]
+      }
+    ],
+    "wallpaper": {
+      "activeVariant": "1",
+      "_wallpaperContainerView": {
+        "frame": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "class": "UIView",
+        "bounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "hidden": false
+      },
+      "_wallpaperPresenter": {
+        "frame": null,
+        "class": "PBUIPosterWallpaperRemoteViewController",
+        "bounds": null,
+        "hidden": null
+      },
+      "activeOrientationSource": "3",
+      "activeInterfaceOrientationSourcesDescriptions": "(\n    LockScreen,\n    HomeScreen\n)",
+      "isWallpaperRequired": "0",
+      "_isTraitsArbiterWallpaperActive": "0",
+      "_wallpaperWindow": {
+        "frame": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "class": "_SBWallpaperSecureWindow",
+        "bounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "hidden": false
+      },
+      "_rootWallpaperViewController": {
+        "frame": null,
+        "class": "_SBWallpaperWindowRootViewController",
+        "bounds": null,
+        "hidden": null
+      }
+    }
+  },
+  "experiment": {
+    "scene": "SB-main",
+    "barsSceneThenEmbedded": [
+      {
+        "serverUpdatesDisabled": false,
+        "bar": "0x659625800 STUIStatusBar_Wrapper",
+        "provider": null,
+        "server": "<UIStatusBarServer: 0x659658620>",
+        "bounds": [
+          0,
+          0,
+          951,
+          669
+        ]
+      },
+      {
+        "serverUpdatesDisabled": false,
+        "bar": "0x6591d8300 STUIStatusBar_Wrapper",
+        "provider": null,
+        "server": "<UIStatusBarServer: 0x6591fa760>",
+        "bounds": [
+          0,
+          0,
+          669,
+          54
+        ]
+      }
+    ],
+    "wallpaper": {
+      "activeVariant": "1",
+      "_wallpaperContainerView": {
+        "frame": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "class": "UIView",
+        "bounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "hidden": false
+      },
+      "_wallpaperPresenter": {
+        "frame": null,
+        "class": "PBUIPosterWallpaperRemoteViewController",
+        "bounds": null,
+        "hidden": null
+      },
+      "activeOrientationSource": "2",
+      "activeInterfaceOrientationSourcesDescriptions": "(\n    HomeScreen\n)",
+      "isWallpaperRequired": "0",
+      "_isTraitsArbiterWallpaperActive": "0",
+      "_wallpaperWindow": {
+        "frame": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "class": "_SBWallpaperSecureWindow",
+        "bounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "hidden": false
+      },
+      "_rootWallpaperViewController": {
+        "frame": null,
+        "class": "_SBWallpaperWindowRootViewController",
+        "bounds": null,
+        "hidden": null
+      }
+    }
+  }
+}

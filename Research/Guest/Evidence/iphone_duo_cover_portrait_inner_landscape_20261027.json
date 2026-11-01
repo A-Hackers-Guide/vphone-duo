@@ -1,0 +1,10 @@
+{
+  "machine": "duotest-m5",
+  "bundle": "2.12.1-local.13a68168",
+  "sequence": [
+    {"posture":"closed","surfaceType":1,"bounds_pt":[466,678],"configurationBounds_pt":[466,678],"interfaceOrientation":1},
+    {"posture":"open","surfaceType":2,"bounds_pt":[951,669],"configurationBounds_pt":[669,951],"interfaceOrientation":4,"displayOrientationDegrees":90}
+  ],
+  "springboard_pid": 38,
+  "result": "Closed starts on the portrait cover; opening switches the same running SpringBoard to the landscape inner presentation without a restart."
+}

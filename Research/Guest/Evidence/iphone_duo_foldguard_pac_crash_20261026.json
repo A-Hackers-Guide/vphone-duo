@@ -1,0 +1,64 @@
+{
+  "procName": "SpringBoard",
+  "pid": 294,
+  "captureTime": "2026-10-26 21:06:04.6442 +0800",
+  "procLaunch": "2026-10-26 21:06:02.1981 +0800",
+  "exception": {
+    "codes": "0x0000000000000105, 0x00000000dac11950",
+    "rawCodes": [
+      261,
+      3670088016
+    ],
+    "type": "EXC_BAD_ACCESS",
+    "signal": "SIGKILL",
+    "subtype": "EXC_ARM_PAC_FAIL at 0x00000000dac11950"
+  },
+  "termination": {
+    "namespace": "PAC_EXCEPTION",
+    "flags": 2,
+    "code": 261
+  },
+  "faultingFrames": [
+    {
+      "symbol": "objc_msgSend",
+      "symbolLocation": 24,
+      "image": "libobjcMsgSend.dylib"
+    },
+    {
+      "symbol": "vpGuardedCopyRender",
+      "symbolLocation": 84,
+      "image": "libvphonefoldguard.dylib"
+    },
+    {
+      "symbol": "invocation function for block in CA::Context::commit_transaction(CA::Transaction*, double, double*)",
+      "symbolLocation": 172,
+      "image": "QuartzCore"
+    },
+    {
+      "symbol": "CA::Layer::commit_if_needed(CA::Transaction*, void (CA::Layer*, unsigned int, unsigned int) block_pointer)",
+      "symbolLocation": 200,
+      "image": "QuartzCore"
+    },
+    {
+      "symbol": "CA::Layer::commit_if_needed(CA::Transaction*, void (CA::Layer*, unsigned int, unsigned int) block_pointer)",
+      "symbolLocation": 452,
+      "image": "QuartzCore"
+    },
+    {
+      "symbol": "CA::Layer::commit_if_needed(CA::Transaction*, void (CA::Layer*, unsigned int, unsigned int) block_pointer)",
+      "symbolLocation": 452,
+      "image": "QuartzCore"
+    },
+    {
+      "symbol": "CA::Layer::commit_if_needed(CA::Transaction*, void (CA::Layer*, unsigned int, unsigned int) block_pointer)",
+      "symbolLocation": 452,
+      "image": "QuartzCore"
+    },
+    {
+      "symbol": "CA::Layer::commit_if_needed(CA::Transaction*, void (CA::Layer*, unsigned int, unsigned int) block_pointer)",
+      "symbolLocation": 452,
+      "image": "QuartzCore"
+    }
+  ],
+  "finding": "ARC-managed id return in vpGuardedCopyRender retained an unmanaged CA::Render::Layer pointer"
+}

@@ -45,6 +45,10 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
     @Argument(help: "new VM name") var name: String
     @Option(name: .shortAndLong, help: "iPhone IPSW URL or local path") var iphoneSource: String?
     @Option(name: .shortAndLong, help: "cloudOS IPSW URL or local path") var cloudosSource: String?
+    @Option(help: "iPhone version to resolve to an IPSW; the cloudOS defaults to its recommended one")
+    var iphoneVersion: String?
+    @Option(help: "iPhone build to resolve to an IPSW; the cloudOS defaults to its recommended one")
+    var iphoneBuild: String?
     @Option(help: "GPU driver bundle from the same cloudOS build, for offline AEA recovery")
     var gpuDriverBundle: String?
     @Option(help: "Directory for downloaded IPSWs, shared by every VM (default: ~/.vphone/ipsws or $VPHONE_ROOT/ipsws)")
@@ -64,7 +68,7 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
     @Option(name: .shortAndLong, help: "Disk size (GB, default 64)") var diskSize: UInt64?
     @Option(
         name: .customLong("preset"),
-        help: "Patch preset for the new VM. Defaults to standard; run `fw patches` to see what each one applies.",
+        help: "Patch preset name, or path to a preset plist, for the new VM. Defaults to standard; run `fw patches` to see what each one applies.",
     )
     var preset: String?
     @Option(name: .long, help: "CPU cores (default 8)") var cpu: UInt?
@@ -114,8 +118,12 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
     /// offline trim and the setup boot of a template write the System volume,
     /// which would break that system's seal.
     private var customisesRestoredSystem: Bool {
-        VPhonePatchPresetStore.preset(named: preset ?? defaultPreset)?.patchSets
+        (try? resolvedPreset().preset)?.patchSets
             .contains { $0.identifier == FirmwareRestoreImagePatchSet.identifier } ?? false
+    }
+
+    private func resolvedPreset() throws -> (preset: VPhonePatchPreset, file: VPhonePatchPreset?) {
+        try VPhonePatchPresetStore.resolve(preset ?? defaultPreset)
     }
 
     /// An Apple TV takes the TV preset; one whose userland comes from an OTA
@@ -147,6 +155,9 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
             inferredProductType = VPhoneIPSWCache.guestDevice(for: archive)?.productType
         }
 
+        if iphoneSource != nil, iphoneVersion != nil || iphoneBuild != nil {
+            throw ValidationError("Use either --iphone-source or --iphone-version/--iphone-build.")
+        }
         if template != nil, noTemplate {
             throw ValidationError("--template and --no-template exclude each other.")
         }
@@ -180,6 +191,8 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
             let firmware = [
                 ("--iphone-source", iphoneSource != nil),
                 ("--cloudos-source", cloudosSource != nil),
+                ("--iphone-version", iphoneVersion != nil),
+                ("--iphone-build", iphoneBuild != nil),
                 ("--gpu-driver-bundle", gpuDriverBundle != nil),
                 ("--ipsw-cache", ipswCache != nil),
                 ("--keep-artifacts", keepArtifacts),
@@ -190,13 +203,28 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
         }
     }
 
-    func run() throws {
-        let resources = VPhoneResources.resolve()
+    /// The checks run makes before any work, which validate leaves to it.
+    func checkOptions() throws -> (
+        patchPreset: (preset: VPhonePatchPreset, file: VPhonePatchPreset?),
+        networkMode: VPhoneVirtualMachineManifest.NetworkConfig.NetworkMode?,
+        unlocks: Bool?,
+    ) {
         if let device, VPhoneGuestDevice.named(device) == nil {
             throw ValidationError("vphone runs \(VPhoneGuestDevice.known.map(\.productType).joined(separator: ", ")) guests, not \(device).")
         }
-        let networkMode = try network.map(VPhoneVirtualMachineConfigCommand.parseMode)
-        let unlocks = try unlockAtStartup.map { try VPhoneVirtualMachineConfigCommand.parseSwitch($0, option: "--unlock-at-startup") }
+        if let template {
+            _ = try VPhoneMachineTemplates.template(template, in: lib.library)
+        }
+        return try (
+            resolvedPreset(),
+            network.map(VPhoneVirtualMachineConfigCommand.parseMode),
+            unlockAtStartup.map { try VPhoneVirtualMachineConfigCommand.parseSwitch($0, option: "--unlock-at-startup") },
+        )
+    }
+
+    func run() throws {
+        let resources = VPhoneResources.resolve()
+        let (patchPreset, networkMode, unlocks) = try checkOptions()
         let templateUse: VPhoneVirtualMachineCreator.TemplateUse = if let template {
             .identifier(template)
         } else if noTemplate || usesTVOS || customisesRestoredSystem {
@@ -217,9 +245,32 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
 
         var sources = VPhoneFirmwareSources(iphoneSource: nil, cloudosSource: nil)
         if templateUse == .none || templateUse == .automatic {
+            var iphone = iphoneSource
+            var cloudos = cloudosSource
+            if iphoneVersion != nil || iphoneBuild != nil {
+                let lookup = VPhoneFirmwareSourceSelection.lookupDevice(selectedDevice)
+                let release = try VPhoneFirmwareSourceSelection.release(
+                    device: lookup,
+                    version: iphoneVersion,
+                    build: iphoneBuild,
+                    readme: VPhoneFirmwareSourceSelection.compatibilityGuide(resources),
+                    downloadURLs: VPhoneFirmwareSourceSelection.restoreURLs(forDevice: lookup),
+                )
+                iphone = release.url
+                print("[+] IPSW: \(release.version) (\(release.build)) \(release.url)")
+                if cloudos == nil {
+                    let recommended = VPhoneFirmwareCatalog.recommendedCloudOS(
+                        forDevice: selectedDevice ?? VPhoneFirmwareCatalog.device,
+                        version: release.version,
+                        url: release.url,
+                    )
+                    cloudos = recommended.url
+                    print("[+] cloudOS: \(recommended.name), recommended for \(release.version)")
+                }
+            }
             // Prompt for any firmware component not supplied on the command line,
             // from the guest device's builds.
-            sources = try VPhoneFirmwareSourceSelection.resolve(iphone: iphoneSource, cloudos: cloudosSource, device: selectedDevice)
+            sources = try VPhoneFirmwareSourceSelection.resolve(iphone: iphone, cloudos: cloudos, device: selectedDevice)
             guard sources.iphoneSource != nil, sources.cloudosSource != nil else {
                 throw ValidationError("Specify both --iphone-source and --cloudos-source when running without a terminal.")
             }
@@ -238,7 +289,8 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
             device: selectedDevice,
             otaSource: otaSource,
             otaKey: otaKey,
-            patchPreset: preset ?? defaultPreset,
+            patchPreset: patchPreset.preset.identifier,
+            patchPresetFile: patchPreset.file,
             cpuCount: cpu ?? 8,
             memoryMB: memory ?? 8192,
             diskSizeGB: diskSize ?? 64,
@@ -249,7 +301,7 @@ struct VPhoneVirtualMachineCreateCommand: ParsableCommand {
             template: templateUse,
             templateRequest: VPhoneMachineTemplateRequest(
                 device: device,
-                patchPreset: preset,
+                patchPreset: preset == nil ? nil : patchPreset.preset.identifier,
                 diskSizeGB: diskSize,
                 slimming: slimming.request.isEmpty ? nil : slimming.resolve(),
             ),

@@ -1,0 +1,335 @@
+{
+  "bundle": "2.12.1-local.7eda0424",
+  "cases": [
+    {
+      "name": "duo-wallpaper-traits-trial",
+      "geometry": {
+        "available": true,
+        "bounds": [
+          0,
+          0,
+          951,
+          669
+        ],
+        "configurationBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "coordinateBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "deviceOrientations": [
+          3,
+          4,
+          2,
+          1
+        ],
+        "generatedUptime": 57.846241250000006,
+        "interfaceOrientation": 4,
+        "persistentViewport": true,
+        "pid": 305,
+        "scale": 3,
+        "scene": "SB-main",
+        "surfaceType": 2,
+        "version": 1,
+        "viewportGeneration": 1
+      },
+      "presentation": {
+        "scene": "SB-main",
+        "mainStateSource": {
+          "_dateTimeProvider": "<SBFOverridableDateProvider: 0x65937c180>",
+          "_dateTimeProviderToken": "0",
+          "_shortTimeItemDateFormatter": "<NSDateFormatter: 0x658e960d0>",
+          "allButBatteryCloaked": false,
+          "_timeItemDateFormatter": "<NSDateFormatter: 0x658e95fe0>",
+          "timeCloaked": false,
+          "telephonyAndBluetoothCloaked": false,
+          "_timeItemTimeString": "2:50 AM",
+          "nativeDate": "2026-10-26 18:50:36 +0000",
+          "_timeItemDateFormatterConfig": {
+            "dateStyle": 0,
+            "timeStyle": 1,
+            "locale": "en_US",
+            "nativeFormattedDate": "2:50 AM",
+            "format": "h:mm a"
+          },
+          "_shortTimeItemDateFormatterConfig": {
+            "dateStyle": 0,
+            "timeStyle": 0,
+            "locale": "en_US",
+            "nativeFormattedDate": "2:50",
+            "format": "h:mm"
+          }
+        },
+        "wallpaper": {
+          "activeVariant": "1",
+          "_wallpaperContainerView": {
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "UIView",
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false
+          },
+          "_wallpaperPresenter": {
+            "frame": null,
+            "class": "PBUIPosterWallpaperRemoteViewController",
+            "bounds": null,
+            "hidden": null
+          },
+          "activeOrientationSource": "2",
+          "activeInterfaceOrientationSourcesDescriptions": "(\n    HomeScreen\n)",
+          "isWallpaperRequired": "0",
+          "_isTraitsArbiterWallpaperActive": "1",
+          "_wallpaperWindow": {
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "_SBWallpaperSecureWindow",
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false
+          },
+          "_rootWallpaperViewController": {
+            "frame": null,
+            "class": "_SBWallpaperWindowRootViewController",
+            "bounds": null,
+            "hidden": null
+          }
+        },
+        "barsSceneThenEmbedded": [
+          {
+            "bar": "0x658959b00 STUIStatusBar_Wrapper",
+            "provider": null,
+            "server": "<UIStatusBarServer: 0x659c97da0>",
+            "registered": true,
+            "enabledParts": null,
+            "currentData": null,
+            "foreground": true,
+            "disabledParts": null,
+            "homeItemsDisabled": false,
+            "serverUpdatesDisabled": false,
+            "additionalDataDelegate": null,
+            "serverClient": "0x658959b00 STUIStatusBar_Wrapper",
+            "currentAggregatedData": null,
+            "bounds": [
+              0,
+              0,
+              951,
+              669
+            ],
+            "hidden": false
+          },
+          {
+            "bar": "0x658d6c300 STUIStatusBar_Wrapper",
+            "provider": null,
+            "server": "<UIStatusBarServer: 0x6598bf260>",
+            "registered": false,
+            "enabledParts": null,
+            "currentData": null,
+            "foreground": true,
+            "disabledParts": null,
+            "homeItemsDisabled": false,
+            "serverUpdatesDisabled": false,
+            "additionalDataDelegate": null,
+            "serverClient": null,
+            "currentAggregatedData": null,
+            "bounds": [
+              0,
+              0,
+              669,
+              54
+            ],
+            "hidden": true
+          }
+        ]
+      },
+      "visual": "Wallpaper remains black"
+    },
+    {
+      "name": "duo-wallpaper-hardware-role-trial",
+      "geometry": {
+        "available": true,
+        "bounds": [
+          0,
+          0,
+          951,
+          669
+        ],
+        "configurationBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "coordinateBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "deviceOrientations": [
+          3,
+          4,
+          2,
+          1
+        ],
+        "generatedUptime": 487.9414915416667,
+        "interfaceOrientation": 4,
+        "persistentViewport": true,
+        "pid": 483,
+        "scale": 3,
+        "scene": "SB-main",
+        "surfaceType": 2,
+        "version": 1,
+        "viewportGeneration": 1
+      },
+      "presentation": {
+        "scene": "SB-main",
+        "mainStateSource": {
+          "_dateTimeProvider": "<SBFOverridableDateProvider: 0xa61389e40>",
+          "_dateTimeProviderToken": "0",
+          "_shortTimeItemDateFormatter": "<NSDateFormatter: 0xa60ef0390>",
+          "allButBatteryCloaked": false,
+          "_timeItemDateFormatter": "<NSDateFormatter: 0xa60ef0120>",
+          "timeCloaked": false,
+          "telephonyAndBluetoothCloaked": false,
+          "_timeItemTimeString": "2:57 AM",
+          "nativeDate": "2026-10-26 18:57:46 +0000",
+          "_timeItemDateFormatterConfig": {
+            "dateStyle": 0,
+            "timeStyle": 1,
+            "locale": "en_US",
+            "nativeFormattedDate": "2:57 AM",
+            "format": "h:mm a"
+          },
+          "_shortTimeItemDateFormatterConfig": {
+            "dateStyle": 0,
+            "timeStyle": 0,
+            "locale": "en_US",
+            "nativeFormattedDate": "2:57",
+            "format": "h:mm"
+          }
+        },
+        "wallpaper": {
+          "activeVariant": "1",
+          "_wallpaperContainerView": {
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "UIView",
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false
+          },
+          "_wallpaperPresenter": {
+            "frame": null,
+            "class": "PBUIPosterWallpaperRemoteViewController",
+            "bounds": null,
+            "hidden": null
+          },
+          "activeOrientationSource": "2",
+          "activeInterfaceOrientationSourcesDescriptions": "(\n    HomeScreen\n)",
+          "isWallpaperRequired": "0",
+          "_isTraitsArbiterWallpaperActive": "1",
+          "_wallpaperWindow": {
+            "frame": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "class": "_SBWallpaperSecureWindow",
+            "bounds": [
+              0,
+              0,
+              669,
+              951
+            ],
+            "hidden": false
+          },
+          "_rootWallpaperViewController": {
+            "frame": null,
+            "class": "_SBWallpaperWindowRootViewController",
+            "bounds": null,
+            "hidden": null
+          }
+        },
+        "barsSceneThenEmbedded": [
+          {
+            "bar": "0xa60915b00 STUIStatusBar_Wrapper",
+            "provider": null,
+            "server": "<UIStatusBarServer: 0xa61cac240>",
+            "registered": true,
+            "enabledParts": null,
+            "currentData": null,
+            "foreground": true,
+            "disabledParts": null,
+            "homeItemsDisabled": false,
+            "serverUpdatesDisabled": false,
+            "additionalDataDelegate": null,
+            "serverClient": "0xa60915b00 STUIStatusBar_Wrapper",
+            "currentAggregatedData": null,
+            "bounds": [
+              0,
+              0,
+              951,
+              669
+            ],
+            "hidden": false
+          },
+          {
+            "bar": "0xa60d78300 STUIStatusBar_Wrapper",
+            "provider": null,
+            "server": "<UIStatusBarServer: 0xa61268300>",
+            "registered": false,
+            "enabledParts": null,
+            "currentData": null,
+            "foreground": true,
+            "disabledParts": null,
+            "homeItemsDisabled": false,
+            "serverUpdatesDisabled": false,
+            "additionalDataDelegate": null,
+            "serverClient": null,
+            "currentAggregatedData": null,
+            "bounds": [
+              0,
+              0,
+              669,
+              54
+            ],
+            "hidden": true
+          }
+        ]
+      },
+      "visual": "Wallpaper remains black"
+    }
+  ]
+}

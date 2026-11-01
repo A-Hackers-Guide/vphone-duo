@@ -22,6 +22,7 @@ class VPhoneMenuController {
     }
 
     var hardwareKeyboardItem: NSMenuItem?
+    var softwareKeyboardItem: NSMenuItem?
     var tvControlCenterItem: NSMenuItem?
     var tvRemoteItem: NSMenuItem?
     lazy var tvRemoteWindowController = VPhoneTVRemoteWindowController(control: control)

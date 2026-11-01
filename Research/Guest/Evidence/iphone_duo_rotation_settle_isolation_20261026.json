@@ -1,0 +1,32 @@
+{
+  "pose_only": {
+    "interfaceOrientation": 4,
+    "systemArbitratedDeviceOrientation": 1,
+    "systemArbitratedInterfaceOrientation": 4,
+    "_effectiveUIClientSettings": 4
+  },
+  "after_api": {
+    "interfaceOrientation": 4,
+    "systemArbitratedDeviceOrientation": 1,
+    "systemArbitratedInterfaceOrientation": 4,
+    "_effectiveUIClientSettings": 4
+  },
+  "afterSettlingAPI": {
+    "ok": true,
+    "result": {
+      "accelerometer_degrees": 0,
+      "degrees": 90,
+      "device_orientation": 0,
+      "locked": false,
+      "name": "landscape-left",
+      "physical_pose": {
+        "available": true,
+        "device_orientation": 1,
+        "hinge": 3,
+        "orientation": 1,
+        "tabletop": 0
+      },
+      "requested": 90
+    }
+  }
+}

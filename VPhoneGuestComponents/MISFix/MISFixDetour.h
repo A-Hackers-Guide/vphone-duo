@@ -22,8 +22,10 @@
 //   - The displaced instructions must survive being moved. `adr` and `adrp`
 //     are rewritten to materialise the same absolute address, and an
 //     unconditional `b` becomes an absolute jump. Anything else PC-relative —
-//     `bl`, `b.cond`, `cbz`, `tbz`, a literal load — is **refused**, because a
+//     `bl`, `cbz`, `tbz`, a literal load — is **refused**, because a
 //     wrong relocation is a corrupted daemon and a refusal is a log line.
+//     Ordinary B.cond is supported only to destinations outside the four
+//     overwritten words, by inverting the condition around an absolute jump.
 //   - The target must be at least four instructions long. A function that
 //     returns or jumps away sooner is *shorter* than the patch, so writing it
 //     would scribble on whoever follows. A terminator in the first three words

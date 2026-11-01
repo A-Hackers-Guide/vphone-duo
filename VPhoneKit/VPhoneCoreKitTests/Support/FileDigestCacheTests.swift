@@ -28,6 +28,20 @@ struct FileDigestCacheTests {
         #expect(cache.hashCount == 2)
     }
 
+    @Test func `a same-size rewrite with the same modification time is hashed again`() throws {
+        let url = try Self.makeFile(Data("old build".utf8))
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let originalDate = try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
+        var cache = VPhoneFileDigestCache()
+        _ = cache.sha256(of: url)
+        try Data("new build".utf8).write(to: url)
+        if let originalDate {
+            try FileManager.default.setAttributes([.modificationDate: originalDate], ofItemAtPath: url.path)
+        }
+        #expect(cache.sha256(of: url) == Self.hex(Data("new build".utf8)))
+        #expect(cache.hashCount == 2)
+    }
+
     @Test func `a file replaced by a rename is hashed again`() throws {
         let url = try Self.makeFile(Data("A".utf8))
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }

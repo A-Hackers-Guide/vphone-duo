@@ -49,12 +49,6 @@ final class VPhoneLaunchpadMachineLibrary {
     /// The last `cfw install` or update run on each machine this session,
     /// kept once it ends so its sheet and the inspector can say how it went.
     private(set) var maintenance: [Path: VPhoneLaunchpadMaintenanceRun] = [:]
-    /// Machines whose maintenance sheet is open: their failures show there,
-    /// not as an alert.
-    var showsMaintenance: Set<Path> = []
-    /// A run that has just started from Launchpad itself, for the machines
-    /// view to open its sheet. It clears this once it has.
-    var maintenanceSheetRequest: Path?
     private var isRefreshing = false
     private var timer: Timer?
 
@@ -644,13 +638,11 @@ final class VPhoneLaunchpadMachineLibrary {
     /// Runs one of the helper's maintenance commands with the machine shown
     /// busy. Each line goes to the machine's console log, as it always has,
     /// to the run's own log, which its sheet follows, and to `forward`; the
-    /// few that mark a step or a warning reach the run itself. `presents`
-    /// asks the machines view to open the sheet. A failure is recorded on the
+    /// few that mark a step or a warning reach the run itself. A failure is recorded on the
     /// run in the words its sheet and an alert use; what the helper throws is
     /// thrown on.
     func runMaintenance(
         _ run: VPhoneLaunchpadMaintenanceRun,
-        presents: Bool,
         forward: (@Sendable (String) -> Void)? = nil,
         _ command: (@escaping @Sendable (String) -> Void) async throws -> Int32,
     ) async throws -> Int32 {
@@ -658,9 +650,6 @@ final class VPhoneLaunchpadMachineLibrary {
         maintenance[machine] = run
         activities[machine] = run.kind.activity
         defer { activities[machine] = nil }
-        if presents {
-            maintenanceSheetRequest = machine
-        }
         let banner = "$ vphone-cli \(run.kind.command) \(machine.name)"
         appendConsoleLog(machine, banner)
         run.log.write(banner)
@@ -691,9 +680,8 @@ final class VPhoneLaunchpadMachineLibrary {
         }
     }
 
-    /// `runMaintenance` for a button or a menu item: its sheet opens, and a
-    /// failure, reworded by `explain`, becomes `actionError` unless that
-    /// sheet is open to show it. True once the command has succeeded.
+    /// `runMaintenance` for a button or a menu item: a failure,
+    /// reworded by `explain`, becomes `actionError`. True once the command has succeeded.
     @discardableResult
     private func performMaintenance(
         _ kind: VPhoneLaunchpadMaintenanceRun.Kind,
@@ -702,14 +690,12 @@ final class VPhoneLaunchpadMachineLibrary {
         _ command: (@escaping @Sendable (String) -> Void) async throws -> Int32,
     ) async -> Bool {
         let run = VPhoneLaunchpadMaintenanceRun(kind: kind, machine: machine)
-        if (try? await runMaintenance(run, presents: true, command)) == 0 {
+        if (try? await runMaintenance(run, command)) == 0 {
             return true
         }
         if let failure = run.failure {
             run.failure = explain(failure)
-            if !showsMaintenance.contains(machine) {
-                actionError = run.failure
-            }
+            actionError = run.failure
         }
         return false
     }

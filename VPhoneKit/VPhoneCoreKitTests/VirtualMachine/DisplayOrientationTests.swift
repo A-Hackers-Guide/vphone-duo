@@ -6,6 +6,25 @@ struct DisplayOrientationTests {
     static let panel = CGSize(width: 393, height: 852)
     static let screen = CGRect(x: 0, y: 0, width: 1512, height: 944)
 
+    @Test func `Duo screenshot pixels map into each fixed panel in every orientation`() {
+        for panel in [CGSize(width: 1398, height: 2034), CGSize(width: 2007, height: 2853)] {
+            for (orientation, expected) in [
+                (VPhoneDisplayOrientation.portrait, CGPoint(x: 0.2, y: 0.3)),
+                (.landscapeLeft, CGPoint(x: 0.3, y: 0.8)),
+                (.upsideDown, CGPoint(x: 0.8, y: 0.7)),
+                (.landscapeRight, CGPoint(x: 0.7, y: 0.2)),
+            ] {
+                let screen = orientation.displayedSize(panel: panel)
+                let point = orientation.panelPoint(fromScreenshot: CGPoint(x: screen.width * 0.2, y: screen.height * 0.3), panel: panel)
+                #expect(abs(point.x / panel.width - expected.x) < 0.000001)
+                #expect(abs(point.y / panel.height - expected.y) < 0.000001)
+                let restored = orientation.screenPoint(fromPanel: CGPoint(x: point.x, y: panel.height - point.y), panel: panel)
+                #expect(abs(restored.x - screen.width * 0.2) < 0.000001)
+                #expect(abs(screen.height - restored.y - screen.height * 0.3) < 0.000001)
+            }
+        }
+    }
+
     // MARK: - Degrees
 
     @Test func `vphoned degrees map to orientations`() {
@@ -166,5 +185,32 @@ struct DisplayOrientationTests {
         let portrait = CGRect(x: 400, y: 50, width: 393, height: 852)
         let rect = VPhoneDisplayOrientation.portrait.contentRect(from: portrait, panel: Self.panel, within: Self.screen)
         #expect(rect == portrait)
+    }
+}
+
+@Suite struct DisplayViewportTests {
+    @Test func `cover crop and input agree through every rotation`() {
+        let panel = CGSize(width: 2007, height: 2853)
+        let active = CGSize(width: 1398, height: 2034)
+        for orientation in VPhoneDisplayOrientation.allCases {
+            let viewport = VPhoneDisplayViewport(panel: panel, active: active, orientation: orientation)!
+            let cropped = CGPoint(x: viewport.screenshotSize.width * 0.2, y: viewport.screenshotSize.height * 0.3)
+            let full = CGPoint(x: viewport.screenshotCrop.minX + cropped.x, y: viewport.screenshotCrop.minY + cropped.y)
+            let fromCrop = viewport.panelPoint(fromScreenshot: cropped)
+            let fromFull = orientation.panelPoint(fromScreenshot: full, panel: panel)
+            #expect(abs(fromCrop.x - fromFull.x) < 0.000001)
+            #expect(abs(fromCrop.y - fromFull.y) < 0.000001)
+            #expect(viewport.screenshotCrop.size == viewport.screenshotSize)
+            #expect(CGRect(origin: .zero, size: orientation.displayedSize(panel: panel)).contains(viewport.screenshotCrop))
+        }
+    }
+
+    @Test func `invalid viewport cannot escape its backing`() {
+        let panel = CGSize(width: 2007, height: 2853)
+        for active in [CGSize.zero, CGSize(width: -1, height: 10), CGSize(width: 2008, height: 2853), CGSize(width: CGFloat.infinity, height: 10)] {
+            #expect(VPhoneDisplayViewport(panel: panel, active: active, orientation: .portrait) == nil)
+        }
+        let full = VPhoneDisplayViewport(panel: panel, active: panel, orientation: .landscapeLeft)!
+        #expect(full.screenshotCrop.origin == .zero)
     }
 }

@@ -1,4 +1,4 @@
-// Run as mobile by launchd: the donor SoundBoard writes current-user values,
+// Run as mobile by launchd: the donor SoundBoard and AirPlay read current-user values,
 // and SetupAssistant's launch sentinel is a per-user POSIX named semaphore.
 #import "HomePodSetupState.h"
 #import "HomePodSetupProcesses.h"
@@ -8,18 +8,18 @@
 #import <signal.h>
 #import <unistd.h>
 
-int main(void) {
+static NSString *const VPStateDirectory = @"/var/mobile/Library/Application Support/vphone";
+
+// The setup completion: SetupAssistant's two keys, its native sentinel, and the
+// end of a pending HPSetup session.
+static BOOL VPRunSetup(void) {
     @autoreleasepool {
-        if (getuid() != 501 || geteuid() != 501) {
-            NSLog(@"HomePod setup maintenance must run as mobile (501).");
-            return 1;
-        }
-        NSString *directory = @"/var/mobile/Library/Application Support/vphone";
+        NSString *directory = VPStateDirectory;
         NSURL *journal = [NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"HomePodSetupOriginal.plist"]];
         NSDictionary *policy = [NSDictionary dictionaryWithContentsOfFile:@"/usr/share/vphone/HomePodSetup.plist"];
         BOOL enabled = [policy[@"Enabled"] isEqual:@YES];
         BOOL hadJournal = [NSFileManager.defaultManager fileExistsAtPath:journal.path];
-        if (!enabled && !hadJournal) return 0;
+        if (!enabled && !hadJournal) return YES;
 
         void *framework = dlopen("/System/Library/PrivateFrameworks/SetupAssistant.framework/SetupAssistant", RTLD_NOW);
         void (*prepare)(void) = framework ? dlsym(framework, "BYSetupAssistantPrepareLaunchSentinel") : NULL;
@@ -89,14 +89,89 @@ int main(void) {
                 }
             }
         }
-        [NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES
-                                               attributes:@{NSFilePosixPermissions: @0700} error:NULL];
         NSMutableDictionary *status = [@{@"Enabled": @(enabled), @"Succeeded": @(success), @"Updated": NSDate.date} mutableCopy];
         if (needsSetup) status[@"NeedsSetup"] = @(needsSetup());
         if (completed) status[@"CompletedInitialRun"] = @(completed());
         if (error) status[@"Error"] = error.localizedDescription;
         [status writeToFile:[directory stringByAppendingPathComponent:@"HomePodSetupStatus.plist"] atomically:YES];
         NSLog(@"HomePod setup maintenance: %@", status);
-        return success ? 0 : 1;
+        return success;
+    }
+}
+
+// AirPlay's own VM override, useWiFiAndAWDLOnVirtualMachine in mobile's
+// com.apple.airplay. AirPlaySupport reads it once per process, so the AirPlay
+// daemons restart only when this run changed the value.
+static BOOL VPRunAirPlay(void) {
+    @autoreleasepool {
+        NSString *directory = VPStateDirectory;
+        NSURL *journal = [NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"HomePodAirPlayOriginal.plist"]];
+        NSDictionary *policy = [NSDictionary dictionaryWithContentsOfFile:@"/usr/share/vphone/HomePodAirPlay.plist"];
+        BOOL enabled = [policy[@"Enabled"] isEqual:@YES];
+        BOOL hadJournal = [NSFileManager.defaultManager fileExistsAtPath:journal.path];
+        if (!enabled && !hadJournal) return YES;
+
+        CFStringRef domain = CFSTR("com.apple.airplay");
+        CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        NSMutableDictionary *current = [NSMutableDictionary dictionary];
+        for (NSString *key in VPHomePodAirPlayKeys()) {
+            id value = CFBridgingRelease(CFPreferencesCopyValue((__bridge CFStringRef)key, domain,
+                kCFPreferencesCurrentUser, kCFPreferencesAnyHost));
+            if (value) current[key] = value;
+        }
+        NSMutableDictionary *values = [NSMutableDictionary dictionary];
+        for (NSString *key in VPHomePodAirPlayKeys()) values[key] = @1;
+        NSError *error = nil;
+        BOOL success = VPHomePodPreferenceUpdate(VPHomePodAirPlayKeys(), values, enabled, journal, current,
+            ^(NSString *key, id value) {
+                CFPreferencesSetValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, domain,
+                    kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            }, ^BOOL {
+                return CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            }, &error);
+        BOOL changed = NO;
+        NSUInteger restarted = 0;
+        if (success) {
+            for (NSString *key in VPHomePodAirPlayKeys()) {
+                id now = CFBridgingRelease(CFPreferencesCopyValue((__bridge CFStringRef)key, domain,
+                    kCFPreferencesCurrentUser, kCFPreferencesAnyHost));
+                if (!(now == current[key] || [now isEqual:current[key]])) changed = YES;
+            }
+            if (changed) {
+                void *processLibrary = dlopen("/usr/lib/libproc.dylib", RTLD_NOW);
+                VPHomePodSetupProcessAPI api = {
+                    .listPIDs = processLibrary ? dlsym(processLibrary, "proc_listpids") : NULL,
+                    .processPath = processLibrary ? dlsym(processLibrary, "proc_pidpath") : NULL,
+                    .signalProcess = kill,
+                };
+                success = VPHomePodRestartProcesses(api, getuid(), VPHomePodAirPlayExecutables(), &restarted, &error);
+            }
+            // The journal goes only once the restored value is in place.
+            if (success && !enabled) success = [NSFileManager.defaultManager removeItemAtURL:journal error:&error];
+        }
+        NSMutableDictionary *status = [@{@"Enabled": @(enabled), @"Succeeded": @(success), @"Changed": @(changed),
+                                         @"Restarted": @(restarted), @"Updated": NSDate.date} mutableCopy];
+        if (error) status[@"Error"] = error.localizedDescription;
+        [status writeToFile:[directory stringByAppendingPathComponent:@"HomePodAirPlayStatus.plist"] atomically:YES];
+        NSLog(@"HomePod AirPlay maintenance: %@", status);
+        return success;
+    }
+}
+
+int main(void) {
+    @autoreleasepool {
+        if (getuid() != 501 || geteuid() != 501) {
+            NSLog(@"HomePod setup maintenance must run as mobile (501).");
+            return 1;
+        }
+        // Both journals live here and are written before any preference, so
+        // the directory must exist before either half runs.
+        [NSFileManager.defaultManager createDirectoryAtPath:VPStateDirectory withIntermediateDirectories:YES
+                                               attributes:@{NSFilePosixPermissions: @0700} error:NULL];
+        // Independent: a failure of one is retried by launchd without
+        // leaving the other undone.
+        BOOL setup = VPRunSetup();
+        BOOL airPlay = VPRunAirPlay();
+        return setup && airPlay ? 0 : 1;
     }
 }

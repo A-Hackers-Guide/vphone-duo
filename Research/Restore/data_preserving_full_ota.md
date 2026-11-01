@@ -306,11 +306,9 @@ removal dates. The temporary launchd jobs were then unloaded.
 Validation: complete Debug `VPhone` bundle build/admission passed; all ten
 `OTAUpdateTests` passed, including absent/placeholder/reinstalled distinctions,
 old-daemon rejection, corrupt-backup rejection and rollback/commit coverage.
-The maintenance script passed all 148 Swift policy checks and 13 APFS C parser
-checks with AddressSanitizer/UndefinedBehaviorSanitizer. The shared native
-header now explicitly marks legacy pointers `_Null_unspecified`, preserving
-their Swift import while satisfying nullability completeness under `-Werror`;
-no warning was disabled. No full OTA or cold reboot was performed
+The maintenance script passed its 148 Swift policy checks; its separate APFS C
+parser build was blocked by existing mixed nullability declarations in the
+shared native header under `-Werror`. No full OTA or cold reboot was performed
 on these business machines for this repair. The new bundle was built locally;
 the production repair did not publish or replace their bundle.
 

@@ -19,7 +19,8 @@ enum VPhoneLaunchpadHelperAuthorization {
             "class": "user",
             "group": "admin",
             "authenticate-user": true,
-            "timeout": 300,
+            // Omit timeout to reuse the credential for the login session,
+            // unless it is explicitly destroyed. Zero would require reauthentication.
             "shared": false,
             "version": 1,
             "comment": comment,
@@ -47,7 +48,7 @@ enum VPhoneLaunchpadHelperAuthorization {
     }
 
     /// True when the stored rule still asks for an administrator with no
-    /// shared credential.
+    /// shared credential and retains the login-session lifetime.
     private static func ruleIsIntact() -> Bool {
         var stored: CFDictionary?
         guard AuthorizationRightGet(right, &stored) == errAuthorizationSuccess,
@@ -57,7 +58,8 @@ enum VPhoneLaunchpadHelperAuthorization {
             && rule["group"] as? String == "admin"
             && rule["authenticate-user"] as? Bool != false
             && rule["shared"] as? Bool == false
-            && (rule["timeout"] as? Int).map { $0 <= 300 } == true
+            // authd normalizes an omitted timeout to INT_MAX on readback.
+            && (rule["timeout"] == nil || (rule["timeout"] as? Int) == Int(Int32.max))
             && rule["rule"] == nil
             && rule["allow-root"] as? Bool != true
     }

@@ -1,0 +1,21 @@
+{
+  "DeviceUsagePairs": [
+    {
+      "DeviceUsage": 4,
+      "DeviceUsagePage": 13
+    }
+  ],
+  "DisplayIntegrated": true,
+  "index": 3,
+  "PrimaryUsage": 4,
+  "PrimaryUsagePage": 13,
+  "Product": "Virtual USB Touch Screen",
+  "ProductID": 33032,
+  "registryID": 4294968016,
+  "ReportDescriptor": {
+    "base64": "BQ0JBKEBBQ0JIqECCTh1BpUBgQIJMgkzFQAlAXUBlQKBAgUBCTAJMRUAJv9/dRCVAoECwAUNCSKhAgk4dQaVAYECCTIJMxUAJQF1AZUCgQIFAQkwCTEVACb/f3UQlQKBAsAFDQkioQIJOHUGlQGBAgkyCTMVACUBdQGVAoECBQEJMAkxFQAm/391EJUCgQLABQ0JIqECCTh1BpUBgQIJMgkzFQAlAXUBlQKBAgUBCTAJMRUAJv9/dRCVAoECwMA=",
+    "byteCount": 191
+  },
+  "Transport": "USB",
+  "VendorID": 1452
+}

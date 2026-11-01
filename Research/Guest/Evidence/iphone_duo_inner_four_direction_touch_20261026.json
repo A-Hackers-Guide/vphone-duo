@@ -1,0 +1,1014 @@
+{
+  "bundle": "2.12.1-local.db26a8cc",
+  "panel": "inner",
+  "panelPixels": [
+    2007,
+    2853
+  ],
+  "expectedScreenshotPixel": [
+    60,
+    1050
+  ],
+  "expectedHomePoint": [
+    20,
+    350
+  ],
+  "trials": [
+    {
+      "degrees": 0,
+      "rotation": {
+        "accelerometer_degrees": 270,
+        "degrees": 0,
+        "device_orientation": 0,
+        "locked": false,
+        "name": "portrait",
+        "physical_pose": {
+          "available": true,
+          "device_orientation": 3,
+          "hinge": 3,
+          "orientation": 3,
+          "tabletop": 0
+        },
+        "requested": 0
+      },
+      "geometry": {
+        "capture_pixels": [
+          2007,
+          2853
+        ],
+        "configured_pixels": [
+          2007,
+          2853
+        ],
+        "input_orientation": 0,
+        "screenshot_pixels": [
+          2007,
+          2853
+        ],
+        "view": {
+          "display_rect": [
+            0,
+            0,
+            420.6750788643533,
+            598
+          ],
+          "graphics_pixels": [
+            2007,
+            2853
+          ],
+          "is_flipped": false,
+          "mouse_uses_pointer": false,
+          "screen_orientation": 0,
+          "view_bounds": [
+            0,
+            0,
+            420.6750788643533,
+            598
+          ],
+          "view_rotation": 0
+        },
+        "windowed": true
+      },
+      "homeTouchEvents": [
+        {
+          "hitViewFrame": [
+            669,
+            0,
+            669,
+            951
+          ],
+          "sceneOrientation": 1,
+          "hitView": "SBIconListView",
+          "phase": 0,
+          "windowBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "hitViewBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "scene": "SB-main"
+        },
+        {
+          "hitViewFrame": [
+            669,
+            0,
+            669,
+            951
+          ],
+          "sceneOrientation": 1,
+          "hitView": "SBIconListView",
+          "phase": 3,
+          "windowBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "hitViewBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "scene": "SB-main"
+        },
+        {
+          "hitViewFrame": [
+            669,
+            0,
+            669,
+            951
+          ],
+          "sceneOrientation": 1,
+          "hitView": "SBIconListView",
+          "phase": 0,
+          "windowBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "hitViewBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "scene": "SB-main"
+        },
+        {
+          "hitViewFrame": [
+            669,
+            0,
+            669,
+            951
+          ],
+          "sceneOrientation": 1,
+          "hitView": "SBIconListView",
+          "phase": 3,
+          "windowBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "hitViewBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "scene": "SB-main"
+        }
+      ]
+    },
+    {
+      "degrees": 90,
+      "rotation": {
+        "accelerometer_degrees": 0,
+        "degrees": 90,
+        "device_orientation": 0,
+        "locked": false,
+        "name": "landscape-left",
+        "physical_pose": {
+          "available": true,
+          "device_orientation": 1,
+          "hinge": 3,
+          "orientation": 1,
+          "tabletop": 0
+        },
+        "requested": 90
+      },
+      "geometry": {
+        "capture_pixels": [
+          2007,
+          2853
+        ],
+        "configured_pixels": [
+          2007,
+          2853
+        ],
+        "input_orientation": 90,
+        "screenshot_pixels": [
+          2853,
+          2007
+        ],
+        "view": {
+          "display_rect": [
+            0,
+            0,
+            420.6750788643533,
+            598
+          ],
+          "graphics_pixels": [
+            2007,
+            2853
+          ],
+          "is_flipped": false,
+          "mouse_uses_pointer": false,
+          "screen_orientation": 90,
+          "view_bounds": [
+            0,
+            0,
+            420.6750788643533,
+            598
+          ],
+          "view_rotation": -90.00000000000001
+        },
+        "windowed": true
+      },
+      "homeTouchEvents": [
+        {
+          "hitViewFrame": [
+            -70,
+            -53,
+            475.6666666666667,
+            669
+          ],
+          "sceneOrientation": 4,
+          "hitView": "BSUIScrollView",
+          "phase": 0,
+          "windowBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "hitViewBounds": [
+            0,
+            0,
+            475.6666666666667,
+            669
+          ],
+          "scene": "SB-main"
+        },
+        {
+          "hitViewFrame": null,
+          "sceneOrientation": 4,
+          "hitView": "nil",
+          "phase": 3,
+          "windowBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "hitViewBounds": null,
+          "scene": "SB-main"
+        },
+        {
+          "hitViewFrame": [
+            -70,
+            -53,
+            475.6666666666667,
+            669
+          ],
+          "sceneOrientation": 4,
+          "hitView": "BSUIScrollView",
+          "phase": 0,
+          "windowBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "hitViewBounds": [
+            0,
+            0,
+            475.6666666666667,
+            669
+          ],
+          "scene": "SB-main"
+        },
+        {
+          "hitViewFrame": null,
+          "sceneOrientation": 4,
+          "hitView": "nil",
+          "phase": 3,
+          "windowBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "hitViewBounds": null,
+          "scene": "SB-main"
+        }
+      ]
+    },
+    {
+      "degrees": 180,
+      "rotation": {
+        "accelerometer_degrees": 90,
+        "degrees": 180,
+        "device_orientation": 0,
+        "locked": false,
+        "name": "upside-down",
+        "physical_pose": {
+          "available": true,
+          "device_orientation": 4,
+          "hinge": 3,
+          "orientation": 4,
+          "tabletop": 0
+        },
+        "requested": 180
+      },
+      "geometry": {
+        "capture_pixels": [
+          2007,
+          2853
+        ],
+        "configured_pixels": [
+          2007,
+          2853
+        ],
+        "input_orientation": 180,
+        "screenshot_pixels": [
+          2007,
+          2853
+        ],
+        "view": {
+          "display_rect": [
+            0,
+            0,
+            420.6750788643533,
+            598
+          ],
+          "graphics_pixels": [
+            2007,
+            2853
+          ],
+          "is_flipped": false,
+          "mouse_uses_pointer": false,
+          "screen_orientation": 180,
+          "view_bounds": [
+            0,
+            0,
+            420.6750788643533,
+            598
+          ],
+          "view_rotation": 180
+        },
+        "windowed": true
+      },
+      "homeTouchEvents": [
+        {
+          "hitViewFrame": [
+            669,
+            0,
+            669,
+            951
+          ],
+          "sceneOrientation": 2,
+          "hitView": "SBIconListView",
+          "phase": 0,
+          "windowBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "hitViewBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "scene": "SB-main"
+        },
+        {
+          "hitViewFrame": [
+            669,
+            0,
+            669,
+            951
+          ],
+          "sceneOrientation": 2,
+          "hitView": "SBIconListView",
+          "phase": 3,
+          "windowBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "hitViewBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "scene": "SB-main"
+        },
+        {
+          "hitViewFrame": [
+            669,
+            0,
+            669,
+            951
+          ],
+          "sceneOrientation": 2,
+          "hitView": "SBIconListView",
+          "phase": 0,
+          "windowBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "hitViewBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "scene": "SB-main"
+        },
+        {
+          "hitViewFrame": [
+            669,
+            0,
+            669,
+            951
+          ],
+          "sceneOrientation": 2,
+          "hitView": "SBIconListView",
+          "phase": 3,
+          "windowBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "hitViewBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "scene": "SB-main"
+        }
+      ]
+    },
+    {
+      "degrees": 270,
+      "rotation": {
+        "accelerometer_degrees": 180,
+        "degrees": 270,
+        "device_orientation": 0,
+        "locked": false,
+        "name": "landscape-right",
+        "physical_pose": {
+          "available": true,
+          "device_orientation": 2,
+          "hinge": 3,
+          "orientation": 2,
+          "tabletop": 0
+        },
+        "requested": 270
+      },
+      "geometry": {
+        "capture_pixels": [
+          2007,
+          2853
+        ],
+        "configured_pixels": [
+          2007,
+          2853
+        ],
+        "input_orientation": 270,
+        "screenshot_pixels": [
+          2853,
+          2007
+        ],
+        "view": {
+          "display_rect": [
+            0,
+            0,
+            420.6750788643533,
+            598
+          ],
+          "graphics_pixels": [
+            2007,
+            2853
+          ],
+          "is_flipped": false,
+          "mouse_uses_pointer": false,
+          "screen_orientation": 270,
+          "view_bounds": [
+            0,
+            0,
+            420.6750788643533,
+            598
+          ],
+          "view_rotation": 90
+        },
+        "windowed": true
+      },
+      "homeTouchEvents": [
+        {
+          "hitViewFrame": [
+            -70,
+            -53,
+            475.6666666666667,
+            669
+          ],
+          "sceneOrientation": 3,
+          "hitView": "BSUIScrollView",
+          "phase": 0,
+          "windowBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "hitViewBounds": [
+            0,
+            0,
+            475.6666666666667,
+            669
+          ],
+          "scene": "SB-main"
+        },
+        {
+          "hitViewFrame": null,
+          "sceneOrientation": 3,
+          "hitView": "nil",
+          "phase": 3,
+          "windowBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "hitViewBounds": null,
+          "scene": "SB-main"
+        },
+        {
+          "hitViewFrame": [
+            -70,
+            -53,
+            475.6666666666667,
+            669
+          ],
+          "sceneOrientation": 3,
+          "hitView": "BSUIScrollView",
+          "phase": 0,
+          "windowBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "hitViewBounds": [
+            0,
+            0,
+            475.6666666666667,
+            669
+          ],
+          "scene": "SB-main"
+        },
+        {
+          "hitViewFrame": null,
+          "sceneOrientation": 3,
+          "hitView": "nil",
+          "phase": 3,
+          "windowBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "touchType": 0,
+          "screenBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "window": "SBHomeScreenWindow",
+          "sceneCoordinateBounds": [
+            0,
+            0,
+            669,
+            951
+          ],
+          "point": [
+            20,
+            350
+          ],
+          "windowRole": "other",
+          "screenCoordinateBounds": [
+            0,
+            0,
+            951,
+            669
+          ],
+          "hitViewBounds": null,
+          "scene": "SB-main"
+        }
+      ]
+    }
+  ],
+  "springBoardBeforeAfter": [
+    [
+      {
+        "pid": 363,
+        "start_time": 1793023069.980664
+      }
+    ],
+    [
+      {
+        "pid": 363,
+        "start_time": 1793023069.980664
+      }
+    ]
+  ],
+  "limitations": [
+    "First trial rotation90 timed out; recheck added 3 seconds settling before matrix. Timing reliability remains open.",
+    "Outer panel not runtime verified.",
+    "Single near-edge point only; not full-area acceptance.",
+    "Default-off native status pulse and single-inner preparation used; restored afterward."
+  ]
+}

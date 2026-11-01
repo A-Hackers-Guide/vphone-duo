@@ -84,6 +84,21 @@ struct VPhoneLaunchpadNewMachineAdvancedView: View {
                     ForEach(patchCatalog.presets) { preset in
                         Text(verbatim: preset.displayTitle).tag(preset.identifier)
                     }
+                    Divider()
+                    Text("Other…").tag(VPhoneLaunchpadPatchSelection.otherPresetTag)
+                }
+                if let presetFile = patches.presetFile {
+                    LabeledContent("Preset File") {
+                        Text(verbatim: presetFile)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(presetFile)
+                    }
+                }
+                if let patchCatalogError {
+                    Label(patchCatalogError, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
                 LabeledContent("Patches") {
                     Button("Patch Settings…") { showsPatchSettings = true }
@@ -144,6 +159,13 @@ struct VPhoneLaunchpadNewMachineAdvancedView: View {
         Binding(
             get: { patches.preset },
             set: { identifier in
+                if identifier == VPhoneLaunchpadPatchSelection.otherPresetTag {
+                    VPhoneLaunchpadPresetFilePanel.choose { path in
+                        patches = VPhoneLaunchpadPatchSelection(presetFile: path)
+                        reloadPatches()
+                    }
+                    return
+                }
                 guard identifier != patches.preset else {
                     return
                 }

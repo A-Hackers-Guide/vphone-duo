@@ -1,0 +1,149 @@
+{
+  "bundle": "2.12.1-local.a81fcd09",
+  "stages": [
+    {
+      "name": "before",
+      "geometry": {
+        "available": true,
+        "bounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "configurationBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "coordinateBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "deviceOrientations": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "generatedUptime": 46.895214833333334,
+        "interfaceOrientation": 1,
+        "pid": 299,
+        "scale": 3,
+        "scene": "SB-main",
+        "surfaceType": 0,
+        "version": 1,
+        "viewportGeneration": 0
+      },
+      "foreground": {
+        "bundle_id": "com.apple.Preferences",
+        "name": "Settings",
+        "pid": 317,
+        "source": "runningboard",
+        "verified": true
+      }
+    },
+    {
+      "name": "cover",
+      "geometry": {
+        "available": true,
+        "bounds": [
+          0,
+          0,
+          466,
+          678
+        ],
+        "configurationBounds": [
+          0,
+          0,
+          466,
+          678
+        ],
+        "coordinateBounds": [
+          0,
+          0,
+          466,
+          678
+        ],
+        "deviceOrientations": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "generatedUptime": 53.32633154166667,
+        "interfaceOrientation": 1,
+        "pid": 299,
+        "scale": 3,
+        "scene": "SB-main",
+        "surfaceType": 0,
+        "version": 1,
+        "viewportGeneration": 1
+      },
+      "foreground": {
+        "bundle_id": "com.apple.Preferences",
+        "name": "Settings",
+        "pid": 317,
+        "source": "runningboard",
+        "verified": true
+      }
+    },
+    {
+      "name": "restored",
+      "geometry": {
+        "available": true,
+        "bounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "configurationBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "coordinateBounds": [
+          0,
+          0,
+          669,
+          951
+        ],
+        "deviceOrientations": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "generatedUptime": 59.70342316666667,
+        "interfaceOrientation": 1,
+        "pid": 299,
+        "scale": 3,
+        "scene": "SB-main",
+        "surfaceType": 0,
+        "version": 1,
+        "viewportGeneration": 2
+      },
+      "foreground": {
+        "bundle_id": "com.apple.Preferences",
+        "name": "Settings",
+        "pid": 317,
+        "source": "runningboard",
+        "verified": true
+      }
+    }
+  ],
+  "submission": [
+    "12:12:53 AM viewport workspace refresh: submitted=1 same entity=sceneID:com.apple.Preferences-default",
+    "12:12:59 AM viewport workspace refresh: submitted=1 same entity=sceneID:com.apple.Preferences-default"
+  ],
+  "visual": "Same Settings process changes narrow cover layout then returns to full inner dual-column; no black unused app area after return",
+  "limitations": [
+    "Controlled manual notifications only",
+    "Persistent fold control and rotation acceptance pending"
+  ]
+}

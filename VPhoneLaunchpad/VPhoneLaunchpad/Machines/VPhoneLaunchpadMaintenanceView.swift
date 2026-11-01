@@ -33,14 +33,6 @@ final class VPhoneLaunchpadMaintenanceRun {
             }
         }
 
-        var finished: String {
-            switch self {
-            case .installCustomFirmware: String(localized: "Custom firmware installed.")
-            case .updateGuestEnvironment: String(localized: "Guest environment updated.")
-            case .updateKernel: String(localized: "Kernel updated.")
-            }
-        }
-
         var failure: String {
             switch self {
             case .installCustomFirmware: String(localized: "Unable to install custom firmware. Check the log for details.")
@@ -109,9 +101,8 @@ final class VPhoneLaunchpadMaintenanceRun {
 
 // MARK: - Sheet
 
-/// A maintenance run's progress: the step under way, how long it has taken,
-/// the steps that warned, and its output as it arrives. It follows the
-/// machine's latest run, so it stays useful when another one starts.
+/// A maintenance run's output as it arrives. It follows the machine's latest
+/// run, so it stays useful when another one starts.
 struct VPhoneLaunchpadMaintenanceView: View {
     let machine: VPhoneLaunchpadMachinePath
     @Environment(VPhoneLaunchpadModel.self) private var model
@@ -128,12 +119,6 @@ struct VPhoneLaunchpadMaintenanceView: View {
             width: VPhoneLaunchpadSheetSize.wide,
         ) {
             VStack(alignment: .leading, spacing: 12) {
-                if let run {
-                    summary(run)
-                    if !run.progress.warnings.isEmpty {
-                        warnings(run.progress)
-                    }
-                }
                 VPhoneLaunchpadLogTerminal(url: VPhoneLaunchpadMachineLibrary.consoleLog(machine, suffix: "-maintenance"))
                     .frame(maxWidth: .infinity, minHeight: 420, maxHeight: .infinity)
             }
@@ -150,64 +135,6 @@ struct VPhoneLaunchpadMaintenanceView: View {
         } actions: {
             Button("Close") { dismiss() }
                 .keyboardShortcut(.cancelAction)
-        }
-        // A failure shown here is not raised as an alert as well.
-        .onAppear { library.showsMaintenance.insert(machine) }
-        .onDisappear { library.showsMaintenance.remove(machine) }
-    }
-
-    private func summary(_ run: VPhoneLaunchpadMaintenanceRun) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            VPhoneLaunchpadStatusIcon(status: run.status)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: headline(run))
-                if let stage = run.progress.stage, run.isRunning || !run.succeeded {
-                    Text(verbatim: stage)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(stage)
-                }
-                if let detail = run.failure?.detail {
-                    Text(verbatim: detail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .lineLimit(6)
-                }
-            }
-            Spacer(minLength: 16)
-            VPhoneLaunchpadMaintenanceElapsed(run: run)
-        }
-    }
-
-    private func headline(_ run: VPhoneLaunchpadMaintenanceRun) -> String {
-        if run.isRunning {
-            return run.kind.activity
-        }
-        if run.succeeded {
-            return run.kind.finished
-        }
-        return run.failure?.message ?? String(localized: "Unable to Complete Action")
-    }
-
-    private func warnings(_ progress: VPhoneLaunchpadMaintenanceProgress) -> some View {
-        DisclosureGroup {
-            ScrollView {
-                Text(verbatim: progress.warnings.joined(separator: "\n"))
-                    .font(.caption.monospaced())
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxHeight: 120)
-        } label: {
-            Label {
-                Text("^[\(progress.warningCount) warning](inflect: true)")
-            } icon: {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.yellow)
-            }
         }
     }
 }

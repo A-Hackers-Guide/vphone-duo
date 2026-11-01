@@ -182,6 +182,9 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                     .resolvingSymlinksInPath()
                     .path,
                 homePodGuest: options.isHomePodGuest,
+                // The 3D window folds with its own slider; Lakr233's fold
+                // button and posture panel are for the flat window.
+                foldableGuest: options.isFoldableGuest && options.innerScreen == nil,
                 duo: options.innerScreen != nil,
             )
             if let duoView = wc.duoView, let inner = options.innerScreen {
@@ -335,6 +338,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
                 mc?.updateRestartAvailability(available: caps.contains("system_control"))
                 mc?.updateShutDownAvailability(available: caps.contains("system_shutdown"))
                 mc?.updateUDIDAvailability(available: caps.contains("udid_override"))
+                mc?.updateSoftwareKeyboardAvailability(available: true)
                 mc?.updatePanelAvailability(capabilities: caps)
                 if caps.contains("location") {
                     mc?.updateLocationCapability(available: true)
@@ -362,6 +366,7 @@ class VPhoneVirtualMachineAppDelegate: NSObject, NSApplicationDelegate {
             }
             control.onDisconnect = { [weak mc, weak provider = locationProvider, weak timeZoneSync, weak clockSync, weak hostAudioLatencySync] in
                 mc?.updateConnectAvailability(available: false)
+                mc?.updateSoftwareKeyboardAvailability(available: false)
                 mc?.updateInstallAvailability(available: false)
                 mc?.updateBootstrapAvailability(available: false)
                 mc?.updateBootstrapUninstallAvailability(available: false)

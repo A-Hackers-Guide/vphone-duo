@@ -1,11 +1,54 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Angle" : {
+
+    },
+    "Animate the fold (sweep)" : {
+
+    },
     "Apple TV Remote" : {
+    },
+    "Book" : {
+
     },
     "Click or hold. Arrow keys navigate.\nReturn selects. Esc goes back." : {
     },
+    "Closed uses the cover screen. Book and Open use the inner screen. Screen changes apply while the device is running." : {
+
+    },
+    "Closed" : {
+
+    },
     "Down" : {
+    },
+    "Duration" : {
+
+    },
+    "Fold Posture" : {
+
+    },
+    "Folded to %@ — %lld°." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Folded to %1$@ — %2$lld°."
+          }
+        }
+      }
+    },
+    "Folding…" : {
+
+    },
+    "Hinge Sensor" : {
+
+    },
+    "Hinge Service" : {
+
+    },
+    "Hinge State" : {
+
     },
     "Left" : {
     },
@@ -13,11 +56,35 @@
     },
     "Right" : {
     },
+    "Screen State" : {
+
+    },
     "Select" : {
+    },
+    "Set Again" : {
+
     },
     "Siri" : {
     },
+    "Sweep Again" : {
+
+    },
+    "Sweep" : {
+
+    },
     "TV / Control Center" : {
+    },
+    "The hinge service is off; only the pose changed." : {
+
+    },
+    "The pose reaches SpringBoard and the virtual hinge sensor (CoreMotion, CoreDevice). The screen's own layout follows the displays the guest registers, so a single-display guest keeps one full-screen layout." : {
+
+    },
+    "The pose reaches SpringBoard and the virtual hinge sensor (CoreMotion, CoreDevice). The window folds with it, and the guest's real panel follows the posture at the next start — the host does not resize a running display. A single-display guest keeps one full-screen layout." : {
+
+    },
+    "Unable to fold. %@" : {
+
     },
     "Up" : {
     },
@@ -684,6 +751,111 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "更改硬件键盘需要重新启动虚拟机。"
+          }
+        }
+      }
+    },
+    "Toggle Software Keyboard" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Software Keyboard"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ソフトウェアキーボードを切り替え"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "소프트웨어 키보드 전환"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bật/tắt bàn phím phần mềm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换软件键盘"
+          }
+        }
+      }
+    },
+    "Shows or hides the guest's software keyboard while the hardware keyboard stays attached. Restarting SpringBoard returns to the hardware keyboard." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows or hides the guest's software keyboard while the hardware keyboard stays attached. Restarting SpringBoard returns to the hardware keyboard."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ハードウェアキーボードを接続したまま、ゲストのソフトウェアキーボードを表示または非表示にします。SpringBoard を再起動するとハードウェアキーボードに戻ります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "하드웨어 키보드를 연결한 채로 게스트의 소프트웨어 키보드를 표시하거나 숨깁니다. SpringBoard를 재시동하면 하드웨어 키보드로 돌아갑니다."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hiện hoặc ẩn bàn phím phần mềm của máy khách trong khi bàn phím phần cứng vẫn được kết nối. Khởi động lại SpringBoard sẽ quay về bàn phím phần cứng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在硬件键盘保持连接的情况下显示或隐藏客户机的软件键盘。重启 SpringBoard 后会恢复为硬件键盘。"
+          }
+        }
+      }
+    },
+    "Unable to Toggle Software Keyboard" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to Toggle Software Keyboard"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ソフトウェアキーボードを切り替えられません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "소프트웨어 키보드를 전환할 수 없음"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể bật/tắt bàn phím phần mềm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法切换软件键盘"
           }
         }
       }

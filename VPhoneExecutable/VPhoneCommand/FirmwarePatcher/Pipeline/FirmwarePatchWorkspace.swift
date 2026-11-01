@@ -41,7 +41,9 @@ public struct FirmwarePatchWorkspace {
         do {
             let entries = try source.entries()
             treeNames = entries.filter { $0.contains("Restore") || $0 == VPhoneBundleOperations.firmwareOriginalsDirectoryName }
-            let roots = entries.filter { $0 == "config.plist" || $0 == "PatchSelection.plist" || $0 == "OpenAVB.bin" || Self.isAppleROM($0) }
+            let roots = entries.filter {
+                $0 == "config.plist" || $0 == "PatchSelection.plist" || $0 == Self.presetFileName || $0 == "OpenAVB.bin" || Self.isAppleROM($0)
+            }
             for name in treeNames + roots {
                 try Self.copyInput(name, from: source, into: privateMachine, owner: owner.uid)
             }
@@ -50,6 +52,9 @@ public struct FirmwarePatchWorkspace {
             throw error
         }
     }
+
+    /// A VM's copy of a preset given to `--preset` as a file.
+    public static let presetFileName = "PatchPreset.plist"
 
     static func isAppleROM(_ name: String) -> Bool {
         name.hasPrefix("AVPBooter") && name.hasSuffix(".bin")
@@ -85,10 +90,14 @@ public struct FirmwarePatchWorkspace {
     public func publish() throws {
         let names = try privateMachine.entries().filter {
             treeNames.contains($0) || $0 == VPhoneBundleOperations.firmwareOriginalsDirectoryName
-                || $0 == "PatchSelection.plist" || $0 == "PatchPlan.plist" || Self.isAppleROM($0)
+                || $0 == "PatchSelection.plist" || $0 == "PatchPlan.plist" || $0 == Self.presetFileName || Self.isAppleROM($0)
         }
         for name in names {
             try publish(name, from: privateMachine, to: source, relative: name)
+        }
+        // A named --preset dropped the VM's preset copy.
+        if !names.contains(Self.presetFileName), try source.status(Self.presetFileName) != nil {
+            try source.removeItem(Self.presetFileName)
         }
     }
 
