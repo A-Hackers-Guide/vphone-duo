@@ -2,6 +2,9 @@
 
 # vphone-cli
 
+[![Download vphone-duo](https://img.shields.io/sourceforge/dt/vphone-duo.svg?label=SourceForge%20downloads)](https://sourceforge.net/projects/vphone-duo/files/latest/download) [![Download vphone-duo](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/vphone-duo/files/latest/download)
+
+
 Run a virtual iPhone on an Apple Silicon Mac.
 
 > [!NOTE]
