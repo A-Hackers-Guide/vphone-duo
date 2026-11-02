@@ -2,7 +2,8 @@ name: follow-upstream
 
 # Every new vphone-cli release from Lakr233: merge it into the Duo branch,
 # build the Duo bundle and publish it here as release duo-<tag>. If the merge
-# conflicts, open an issue with the files instead, for a person to resolve.
+# conflicts, or the bundle cannot be built here, open an issue instead, for a
+# person to resolve; while it is open, the release is not tried again.
 # GitHub runs schedules every 5 minutes at the fastest.
 
 on:
@@ -45,9 +46,10 @@ jobs:
           if gh release view "duo-$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "duo-$tag already released"; echo "new=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"Upstream $tag conflicts\" in:title" --json number -q length)
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"Upstream $tag\" in:title" --json title \
+            -q "[.[] | select(.title | startswith(\"Upstream $tag \"))] | length")
           if [ "$open" != "0" ]; then
-            echo "conflict issue for $tag still open"; echo "new=false" >> "$GITHUB_OUTPUT"; exit 0
+            echo "an issue for $tag is still open"; echo "new=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
           echo "new=true" >> "$GITHUB_OUTPUT"
 
@@ -88,14 +90,28 @@ jobs:
           ref: ${{ env.DUO_BRANCH }}
 
       - name: Use Xcode 27
+        id: xcode
         run: |
           set -euo pipefail
-          xcode=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)
-          [ -n "$xcode" ] || { echo "::error::this runner has no Xcode 27"; ls -d /Applications/Xcode*.app; exit 1; }
+          xcode=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -z "$xcode" ]; then
+            echo "::warning::this runner has no Xcode 27; leaving the build to a Mac"
+            ls -d /Applications/Xcode*.app || true
+            echo "available=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           sudo xcode-select -s "$xcode"
           xcodebuild -version
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: No Xcode 27 here
+        if: steps.xcode.outputs.available == 'false'
+        run: |
+          set -euo pipefail
+          tag="${{ needs.merge.outputs.tag }}"
+          gh issue create -R "$GITHUB_REPOSITORY" --title "Upstream $tag needs a Mac build" --body "$(printf 'vphone-cli %s is merged into `%s`, but GitHub'"'"'s Mac runners have no Xcode 27. On a Mac with Xcode 27, build the bundle as in the README, zip it as `VPhone-Duo-%s.zip` and publish it:\n\n```sh\ngh release create duo-%s VPhone-Duo-%s.zip --target %s --latest\n```\n\nThen close this issue.' "$tag" "$DUO_BRANCH" "$tag" "$tag" "$tag" "$DUO_BRANCH")"
 
       - name: Build VPhone.bundle
+        if: steps.xcode.outputs.available == 'true'
         run: |
           set -o pipefail
           xcodebuild -workspace VPhone.xcworkspace -scheme VPhone \
@@ -103,6 +119,7 @@ jobs:
             -derivedDataPath .build/XcodeBundle build 2>&1 | tee vphone-build.log | tail -40
 
       - name: Validate and package
+        if: steps.xcode.outputs.available == 'true'
         run: |
           set -euo pipefail
           bundle=.build/XcodeBundle/Build/Products/Release/VPhone.bundle
@@ -114,6 +131,7 @@ jobs:
           ditto -c -k --keepParent "$bundle" "VPhone-Duo-${{ needs.merge.outputs.tag }}.zip"
 
       - name: Publish release
+        if: steps.xcode.outputs.available == 'true'
         run: |
           set -euo pipefail
           tag="${{ needs.merge.outputs.tag }}"
@@ -124,3 +142,10 @@ jobs:
       - name: Build log on failure
         if: failure()
         run: tail -n 300 vphone-build.log || true
+
+      - name: Open an issue on failure
+        if: failure()
+        run: |
+          tag="${{ needs.merge.outputs.tag }}"
+          gh issue create -R "$GITHUB_REPOSITORY" --title "Upstream $tag build failed" \
+            --body "The Duo bundle for vphone-cli $tag did not build: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. Fix it on \`$DUO_BRANCH\`, then close this issue to try again."
